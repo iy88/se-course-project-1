@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-15T20:58:12+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-17T02:40:15+08:00
 -->
 
 # 用例分析索引
@@ -12,4 +12,4 @@ Version-Datetime: 2026-10-15T20:58:12+08:00
 
 详细说明文件按 `draft-UC-编号-名称.md` 命名，补齐参与者、触发、前置、正常／异常流程、结果、规则、验收、频率依据。详细用例建议 3—5 个体现闭环，其余需求仍须覆盖。未来产生文件后再填真实链接。
 
-[用户需求章节](../draft-02-用户需求.md) · [统一图索引](../../models/draft-index.md)
+[用户故事索引](../user-stories/draft-index.md) · [用户需求章节](../draft-02-用户需求.md) · [统一图索引](../../models/draft-index.md)
