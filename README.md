@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.13
-Version-Datetime: 2026-10-17T02:40:15+08:00
+Version: 0.1.14
+Version-Datetime: 2026-10-17T11:47:19+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -74,4 +74,4 @@ Version-Datetime: 2026-10-17T02:40:15+08:00
 - [附录与附件索引](docs/appendices/draft-index.md)
 - [需求分析质量验证报告](docs/draft-需求分析质量验证报告.md)
 - [AI 智能体使用验证报告](docs/draft-AI智能体使用验证报告.md)
-- [分类证据索引 E-01—E-06](docs/evidence/index.md)
+- [分类证据索引 E-01—E-07](docs/evidence/index.md)
