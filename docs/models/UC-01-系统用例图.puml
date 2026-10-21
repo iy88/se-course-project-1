@@ -1,0 +1,63 @@
+' UC-01 系统用例图
+' 系统边界、主要角色与核心用户目标；用例编号对应 docs/requirements/use-cases/draft-index.md
+' Version: 0.1.0
+' Version-Datetime: 2026-10-21T18:30:00+08:00
+@startuml
+left to right direction
+skinparam defaultFontName "Microsoft YaHei"
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam nodesep 22
+skinparam ranksep 38
+skinparam defaultTextAlignment center
+skinparam usecase {
+  BackgroundColor #F7F7FF
+  BorderColor #4A4A8A
+}
+skinparam actor {
+  BackgroundColor #EEF3FF
+  BorderColor #4A4A8A
+}
+
+actor "R-01 校园用户" as A1
+actor "R-02 买方" as A2
+actor "R-03 卖方" as A3
+actor "R-04 平台管理员" as A4
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase "UC-C01 账户生命周期" as UC01
+  usecase "UC-C02 发布与维护商品" as UC02
+  usecase "UC-C03 检索商品" as UC03
+  usecase "UC-C04 收藏与咨询" as UC04
+  usecase "UC-C05 请求与确认交易" as UC05
+  usecase "UC-C06 记录线下交付" as UC06
+  usecase "UC-C07 评价与举报" as UC07
+  usecase "UC-C08 审核与处置沟通" as UC08
+  usecase "UC-C09 了解商品状态" as UC09
+  usecase "UC-C10 查看管理统计" as UC10
+  usecase "UC-C11 接收通知与待办" as UC11
+  usecase "UC-C12 管理本人业务" as UC12
+  usecase "UC-C13 维护商品分类" as UC13
+  usecase "UC-C14 处理异常交易" as UC14
+}
+
+A1 -- UC01
+A1 -- UC03
+A1 -- UC04
+A1 -- UC07
+A1 -- UC09
+A1 -- UC11
+A1 -- UC12
+A2 -- UC04
+A2 -- UC05
+A2 -- UC06
+A3 -- UC02
+A3 -- UC04
+A3 -- UC05
+A3 -- UC06
+A3 -- UC09
+A4 -- UC08
+A4 -- UC10
+A4 -- UC13
+A4 -- UC14
+@enduml
