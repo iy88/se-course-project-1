@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentStyleType="text/css" height="379px" preserveAspectRatio="none" style="width:502px;height:379px;background:#FFFFFF;" version="1.1" viewBox="0 0 502 379" width="502px" zoomAndPan="magnify">
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-21T22:30:00+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-21T21:50:00+08:00
 图编号与关联: P-04 发布与商品维护 / SC-02-01、02-02、02-05—02-10
 性质: 纸面原型（低保真线框），仅表达页面元素与可见信息，不代表已实现。
 生成方式: 由同名 .puml 源文件经 PlantUML 1.2024.8 导出，请勿直接编辑本文件。

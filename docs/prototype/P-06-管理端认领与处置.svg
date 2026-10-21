@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" contentStyleType="text/css" height="378px" preserveAspectRatio="none" style="width:524px;height:378px;background:#FFFFFF;" version="1.1" viewBox="0 0 524 378" width="524px" zoomAndPan="magnify">
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-21T22:30:00+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-21T21:50:00+08:00
 图编号与关联: P-06 管理后台认领与处置 / SC-02-04、SC-06-03、SC-07-05—07-11、SC-09-03—09-05、SC-01-07
 性质: 纸面原型（低保真线框），仅表达页面元素与可见信息，不代表已实现。
 生成方式: 由同名 .puml 源文件经 PlantUML 1.2024.8 导出，请勿直接编辑本文件。
