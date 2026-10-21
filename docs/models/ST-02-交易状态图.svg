@@ -1,0 +1,46 @@
+<!-- ST-02 交易状态图 导出图；源文件 ST-02-交易状态图.mmd；Version: 0.1.0；Version-Datetime: 2026-10-21T19:18:20+08:00 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="620" viewBox="0 0 1420 620">
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a5568"/></marker></defs>
+<rect width="1420" height="620" fill="#ffffff"/>
+<text x="20" y="30" font-family="Microsoft YaHei,sans-serif" font-size="16" font-weight="bold" fill="#1a202c">ST-02 交易状态图（候选）</text>
+<path d="M231.8,112.0 L488.3,220.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="360.0" y="160.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">接受 TR-12</text>
+<path d="M170.0,112.0 L170.0,200.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="170.0" y="150.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">拒绝 TR-13</text>
+<path d="M80.0,86.0 L40.0,86.0 L40.0,366.0 L80.0,366.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="100.0" y="318.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">撤回 TR-14</text>
+<path d="M80.0,86.0 L20.0,86.0 L20.0,506.0 L80.0,506.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="100.0" y="458.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">关闭 TR-13</text>
+<path d="M550.0,220.0 L550.0,112.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="550.0" y="160.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">双方确认 TR-16</text>
+<path d="M611.8,220.0 L868.3,112.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="740.0" y="160.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">发起争议 TR-17</text>
+<path d="M640.0,246.0 L840.0,246.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="740.0" y="240.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">超时 7 天 TR-15</text>
+<path d="M640.0,261.0 L1180.0,351.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="910.0" y="300.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">协商终止 TR-18</text>
+<path d="M868.3,112.0 Q728.4,138.4 611.8,220.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="770.0" y="132.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">解决恢复 TR-21</text>
+<path d="M961.6,112.0 L1238.4,340.0" fill="none" stroke="#4a5568" stroke-width="1.4" marker-end="url(#ar)"/>
+<text x="1100.0" y="220.0" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#2d3748" paint-order="stroke" stroke="#ffffff" stroke-width="4">共同终止 TR-20</text>
+<rect x="80" y="60" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="170" y="91" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">待接受</text>
+<rect x="80" y="200" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="170" y="231" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">已拒绝</text>
+<rect x="80" y="340" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="170" y="371" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">已撤回</text>
+<rect x="80" y="480" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="170" y="511" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">已关闭</text>
+<rect x="460" y="220" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="550" y="251" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">进行中</text>
+<rect x="460" y="60" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="550" y="91" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">已完成</text>
+<rect x="840" y="60" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="930" y="91" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">有争议</text>
+<rect x="840" y="220" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="930" y="251" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">异常交易</text>
+<rect x="1180" y="340" width="180" height="52" rx="8" fill="#f7fafc" stroke="#2d3748" stroke-width="1.6"/>
+<text x="1270" y="371" text-anchor="middle" font-family="Microsoft YaHei,sans-serif" font-size="13" fill="#1a202c">已终止</text>
+<text x="20" y="589" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#4a5568">注：确认进度与处置冻结是进行中交易的标记，不是状态；争议中禁止直接完成（TR-19 已撤销）。</text>
+<text x="20" y="604" font-family="Microsoft YaHei,sans-serif" font-size="11" fill="#4a5568">异常交易后续路径待 P-21；拒绝、撤回、关闭不计入已接受交易的失败数。</text>
+</svg>
