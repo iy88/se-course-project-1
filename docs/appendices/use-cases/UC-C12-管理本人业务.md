@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:47:36+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-23T03:47:37+08:00
 -->
 
 # UC-C12 管理本人业务
@@ -46,4 +46,4 @@ Version-Datetime: 2026-10-23T03:47:36+08:00
 
 [US-04 收藏与咨询](../user-stories/US-04-收藏与咨询.md)、[US-07 评价与举报](../user-stories/US-07-评价与举报.md)、[US-08 审核与处置沟通](../user-stories/US-08-审核与处置沟通.md)、[US-11 接收通知与待办](../user-stories/US-11-接收通知与待办.md)、[US-12 管理本人业务](../user-stories/US-12-管理本人业务.md)。主故事为US-12；相关故事通过上述业务流程协作，验收条件见各故事的AC编号。
 
-[用例索引](index.md) · [子用例清单](子用例分解.md) · [用户故事索引](../user-stories/index.md) · 场景索引 · [现行规则](../../requirements/04-规则与权限.md)
+[用例索引](index.md) · [子用例清单](子用例分解.md) · [用户故事索引](../user-stories/index.md) · [场景索引](../scenarios/index.md) · [现行规则](../../requirements/04-规则与权限.md)
