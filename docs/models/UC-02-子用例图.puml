@@ -1,0 +1,106 @@
+' UC-02 子用例图（5 个代表性详细用例）
+' 语义模型：主用例与子用例的包含／扩展关系。展示图 UC-02-子用例图.svg 采用左右分组簇状排布：
+' 左侧参与者的主用例在左、子用例列在其右；管理员的主用例在右、子用例列在其左，连线只走空白通道、不穿过用例。
+' 子用例编号与关系见 docs/requirements/use-cases/draft-子用例分解.md。
+' Version: 0.3.0
+' Version-Datetime: 2026-10-22T02:20:00+08:00
+@startuml
+left to right direction
+skinparam defaultFontName "Microsoft YaHei"
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam nodesep 18
+skinparam ranksep 34
+skinparam defaultTextAlignment center
+
+actor "R-01 校园用户" as A1
+actor "R-02 买方" as A2
+actor "R-03 卖方" as A3
+actor "R-04 平台管理员" as A4
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase "UC-C02 发布与维护商品" as C02
+  usecase "UC-C02-01 提交商品发布" as C0201
+  usecase "UC-C02-02 查看审核结果" as C0202
+  usecase "UC-C02-03 修改后重提" as C0203
+  usecase "UC-C02-04 信息微调" as C0204
+  usecase "UC-C02-05 主动下架" as C0205
+  usecase "UC-C02-06 重新上架" as C0206
+
+  usecase "UC-C04 收藏与咨询" as C04
+  usecase "UC-C04-01 收藏商品" as C0401
+  usecase "UC-C04-02 取消收藏" as C0402
+  usecase "UC-C04-03 查看收藏清单" as C0403
+  usecase "UC-C04-04 发表商品评论" as C0404
+  usecase "UC-C04-05 卖方回复评论" as C0405
+  usecase "UC-C04-06 删除本人评论" as C0406
+  usecase "UC-C04-07 发起咨询会话" as C0407
+  usecase "UC-C04-08 发送会话消息" as C0408
+
+  usecase "UC-C05 请求与确认交易" as C05
+  usecase "UC-C05-01 发起交易请求" as C0501
+  usecase "UC-C05-02 接受请求" as C0502
+  usecase "UC-C05-03 拒绝请求" as C0503
+  usecase "UC-C05-04 撤回请求" as C0504
+  usecase "UC-C05-05 提交完成确认" as C0505
+  usecase "UC-C05-06 发起争议" as C0506
+  usecase "UC-C05-07 协商终止" as C0507
+
+  usecase "UC-C14 处理异常交易" as C14
+  usecase "UC-C14-01 识别单方确认超时" as C1401
+  usecase "UC-C14-02 转交与认领" as C1402
+  usecase "UC-C14-03 记录结论并恢复" as C1403
+
+  usecase "UC-C08 审核与处置沟通" as C08
+  usecase "UC-C08-01 处置告知与申辩" as C0801
+  usecase "UC-C08-02 认领待处理事项" as C0802
+  usecase "UC-C08-03 核查与内容处置" as C0803
+  usecase "UC-C08-04 封禁与解除" as C0804
+  usecase "UC-C08-05 冻结与恢复" as C0805
+}
+
+A3 -- C02
+A2 -- C04
+A1 -- C04
+A3 -- C04
+A2 -- C05
+A3 -- C05
+A4 -- C14
+A4 -- C08
+
+C02 ..> C0201 : <<include>>
+C02 ..> C0202 : <<include>>
+C02 ..> C0203 : <<extend>>
+C02 ..> C0204 : <<extend>>
+C02 ..> C0205 : <<extend>>
+C02 ..> C0206 : <<extend>>
+
+C04 ..> C0401 : <<include>>
+C04 ..> C0402 : <<include>>
+C04 ..> C0403 : <<include>>
+C04 ..> C0404 : <<include>>
+C04 ..> C0405 : <<extend>>
+C04 ..> C0406 : <<extend>>
+C04 ..> C0407 : <<include>>
+C04 ..> C0408 : <<include>>
+
+C05 ..> C0501 : <<include>>
+C05 ..> C0502 : <<extend>>
+C05 ..> C0503 : <<extend>>
+C05 ..> C0504 : <<extend>>
+C05 ..> C0505 : <<include>>
+C05 ..> C0506 : <<extend>>
+C05 ..> C0507 : <<extend>>
+
+C14 ..> C1401 : <<include>>
+C14 ..> C1402 : <<include>>
+C14 ..> C1403 : <<include>>
+
+C08 ..> C0801 : <<include>>
+C08 ..> C0802 : <<include>>
+C08 ..> C0803 : <<include>>
+C08 ..> C0804 : <<extend>>
+C08 ..> C0805 : <<extend>>
+
+C14 ..> C05 : <<extend>>
+@enduml
