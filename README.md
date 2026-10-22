@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.14
-Version-Datetime: 2026-10-17T11:47:19+08:00
+Version: 0.1.15
+Version-Datetime: 2026-10-23T03:47:24+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -16,15 +16,15 @@ Version-Datetime: 2026-10-17T11:47:19+08:00
 | 位置 | 存放内容与命名 |
 |---|---|
 | `docs/requirements/` | 需求正文章节，采用 `draft-01-项目概述.md`、`draft-02-用户需求.md` 等序号加名称 |
-| `docs/requirements/user-stories/` | 用户故事及验收条件，入口 [用户故事索引](docs/requirements/user-stories/draft-index.md)，与用例分开维护 |
-| `docs/requirements/use-cases/` | 详细用例与覆盖材料，入口 [用例索引](docs/requirements/use-cases/draft-index.md)；图仍放 models |
-| `docs/requirements/class-analysis/` | 详细类分析材料，入口 [类分析索引](docs/requirements/class-analysis/draft-index.md)；图仍放 models |
-| `docs/appendices/` | 附录及附件组织入口 [附录索引](docs/appendices/draft-index.md)，引用现有材料，不复制另一套正文／证据 |
+| `docs/requirements/user-stories/` | 用户故事及验收条件，入口 [用户故事索引](docs/appendices/user-stories/index.md)，与用例分开维护 |
+| `docs/requirements/use-cases/` | 详细用例与覆盖材料，入口 [用例索引](docs/appendices/use-cases/index.md)；图仍放 models |
+| `docs/requirements/class-analysis/` | 详细类分析材料，入口 [类分析索引](docs/appendices/class-analysis/index.md)；图仍放 models |
+| `docs/appendices/` | 附录及附件组织入口 [附录索引](docs/appendices/index.md)，引用现有材料，不复制另一套正文／证据 |
 | `docs/draft-需求分析质量验证报告.md` | A 报告，汇总确认、模型检查、场景走查及问题复核记录 |
 | `docs/draft-AI智能体使用验证报告.md` | B 报告，汇总实质 AI 贡献、人工取舍、核验与证据索引 |
 | `docs/models/` | 所有报告图（用例、活动、类、状态、上下文图等）的唯一存储目录，集中保存可编辑源文件及同名导出图，例如 `UC-01-系统用例图.mmd`、`UC-01-系统用例图.svg` |
-| `docs/evidence/` | 业务决定及讨论依据、实际形成的验证证据；入口 [证据索引](docs/evidence/index.md)，E 编号及 D 决定保持唯一 |
-| `docs/ai-usage/` | AI 关键分析贡献、人工取舍及证据引用、填写模板，索引见 [index.md](docs/ai-usage/index.md)，填写规则见 [AGENTS.md](AGENTS.md) |
+| `docs/evidence/` | 业务决定及讨论依据、实际形成的验证证据；入口 [证据索引](docs/appendices/evidence/index.md)，E 编号及 D 决定保持唯一 |
+| `docs/ai-usage/` | AI 关键分析贡献、人工取舍及证据引用、填写模板，索引见 [index.md](docs/appendices/ai-usage/index.md)，填写规则见 [AGENTS.md](AGENTS.md) |
 | `docs/prototype/`（选做） | 纸面或可点击原型、查看或启动说明；开展时再创建 |
 | `bits/` | 项目 notes：计划分工、任务交接、开放问题及分析检查；文件不加 draft-，未决／待验证在正文注明，实际贡献按事实记录 |
 
@@ -46,7 +46,7 @@ Version-Datetime: 2026-10-17T11:47:19+08:00
 - 所有报告图及其可编辑源文件统一放在 `docs/models/`，不散落到章节目录；证据截图、原始资料仍放 `docs/evidence/`，选做原型材料放 `docs/prototype/`。
 - 图文件采用“编号-名称”，源文件与导出图同名，例如 `UC-01-系统用例图.puml` 与 `UC-01-系统用例图.svg`。
 - Markdown 正文使用图片语法和相对路径直接展示导出图，不只提供文件链接或图代码。例如需求章节中使用 `![UC-01 系统用例图](../models/UC-01-系统用例图.svg)`；该例仅说明语法，当前未生成该图，实际引用须待文件存在后加入。
-- [图索引](docs/models/draft-index.md) 预留图编号、名称、源文件、导出图、正文位置、关联证据 evidence，以及可选关联项目／分析项。索引内容可在后续出图时补齐，链接必须定位实际文件或条目。
+- [图索引](docs/appendices/models/index.md) 预留图编号、名称、源文件、导出图、正文位置、关联证据 evidence，以及可选关联项目／分析项。索引内容可在后续出图时补齐，链接必须定位实际文件或条目。
 - 不交付数据字典，不开展传统数据建模；保留领域类分析、职责、关联、状态和必要业务概念。不得据此省略业务规则、权限或隐私约束。
 
 ## 草稿与版本规范
@@ -62,7 +62,7 @@ Version-Datetime: 2026-10-17T11:47:19+08:00
 
 ## 当前阶段工作入口
 
-- [阶段工作基线 WB-01](docs/requirements/draft-08-基线与人机协作.md)：指定共同输入版本，区分已采纳规则与待验证工作设定。
+- [阶段工作基线 WB-01](docs/requirements/08-需求基线.md)：指定共同输入版本，区分已采纳规则与待验证工作设定。
 - [未决问题与复核清单](bits/未决问题与复核清单.md)：统一维护开放问题、责任与处理状态。
 - [阶段任务与交接](bits/阶段任务与交接.md)：成员首轮产物、交接及并行方式。
 
@@ -70,8 +70,8 @@ Version-Datetime: 2026-10-17T11:47:19+08:00
 
 ## 报告入口
 
-- [需求规格说明书](docs/requirements/draft-需求规格说明书.md)
-- [附录与附件索引](docs/appendices/draft-index.md)
+- [需求规格说明书](docs/需求规格说明书.md)
+- [附录与附件索引](docs/appendices/index.md)
 - [需求分析质量验证报告](docs/draft-需求分析质量验证报告.md)
 - [AI 智能体使用验证报告](docs/draft-AI智能体使用验证报告.md)
-- [分类证据索引 E-01—E-07](docs/evidence/index.md)
+- [分类证据索引 E-01—E-07](docs/appendices/evidence/index.md)
