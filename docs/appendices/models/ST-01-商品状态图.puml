@@ -1,0 +1,41 @@
+/'
+Version: 0.1.1
+Version-Datetime: 2026-10-23T03:48:01+08:00
+'/
+@startuml
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam nodesep 35
+skinparam ranksep 45
+hide empty members
+title ST-01 商品状态图
+state "待审核" as Pending
+state "审核未通过" as Rejected
+state "公开可交易" as Public
+state "交易中" as InTrade
+state "已下架" as OffShelf
+[*] --> Pending : 卖方提交发布
+Pending --> Public : 认领管理员审核通过（TR-01）
+Pending --> Rejected : 审核不通过（TR-02）
+Rejected --> Pending : 修改重提（TR-03）
+Public --> Public : 信息编辑，保留历史（TR-04）
+Public --> InTrade : 卖方接受请求（TR-05）
+InTrade --> OffShelf : 完成／终止，默认下架（TR-06、TR-07）
+InTrade --> Public : 结束且卖方明确继续，资格允许（TR-08）
+Public --> OffShelf : 无锁单，卖方主动下架（BR-02、BR-14）
+OffShelf --> Public : 原审核有效且当前账户及商品限制允许（BR-14）
+note right of Public
+展示资格独立校验：
+违规撤销访问（TR-09）；
+解除仅恢复原资格（TR-10）。
+end note
+note right of InTrade
+交易中仍按资格提供详情／评论，拒绝新请求。
+同一发布可先后交易，下一笔记录与分支独立。
+end note
+note right of OffShelf
+无公开详情入口，授权本人历史／事项仍可读。
+解除处置不自动将原下架商品变为在售。
+end note
+@enduml

@@ -1,0 +1,37 @@
+/'
+Version: 0.1.1
+Version-Datetime: 2026-10-23T03:48:01+08:00
+'/
+@startuml
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam nodesep 35
+skinparam ranksep 45
+hide empty members
+title ST-03 进行中交易的约定阶段与确认进度
+state "首次约定待确认" as AwaitAgreement
+state "约定已确认、待完成" as AwaitCompletion
+[*] --> AwaitAgreement : 卖方接受请求
+AwaitAgreement --> AwaitAgreement : 提案拒绝，交易与锁单保持
+AwaitAgreement --> AwaitCompletion : 对方明确同意完整交付及支付安排
+AwaitCompletion --> AwaitCompletion : 变更须对方同意，未同意保留原约定
+note left of AwaitAgreement
+约定前买方可直接取消；
+卖方申请取消须买方同意。
+普通完成确认须先有有效约定。
+end note
+note right of AwaitCompletion
+任一方的一次确认同时声明交付及支付完成。
+单方只记进度，双方确认后普通完成（TR-15）。
+单方确认后7天未回应转异常（TR-14）。
+约定后取消须双方同意。
+end note
+note bottom of AwaitCompletion
+争议解决或管理恢复进行中：
+有效约定未调整则保留；清空当前完成确认、保留历史。
+无有效约定回待约定，有效约定则回已确认待完成。
+恢复不启动计时；重新单方确认后才开始完整等待。恢复本身不自动解除冻结。
+上述两项为进行中内部阶段，不增加交易生命周期状态。
+end note
+@enduml

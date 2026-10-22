@@ -1,0 +1,56 @@
+/'
+Version: 0.1.1
+Version-Datetime: 2026-10-23T03:48:01+08:00
+'/
+@startuml
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam nodesep 35
+skinparam ranksep 45
+hide empty members
+title ST-02 交易生命周期
+state "待接受" as Pending
+state "已拒绝" as Refused
+state "已撤回" as Withdrawn
+state "已关闭" as Closed
+state "进行中" as Ongoing
+state "有争议" as Disputed
+state "异常交易" as Abnormal
+state "已终止" as Terminated
+state "已完成" as Completed
+[*] --> Pending : 有效购买请求
+Pending --> Ongoing : 卖方接受 TR-11
+Pending --> Refused : 拒绝 TR-12
+Pending --> Withdrawn : 撤回 TR-13
+Pending --> Closed : 锁单关闭／下架 BR-02
+Ongoing --> Completed : 有效约定后双确认 TR-15
+Ongoing --> Terminated : 按阶段取消 TR-17
+Ongoing --> Disputed : 发起争议 TR-16
+Ongoing --> Abnormal : 单方确认超时 TR-14
+Disputed --> Ongoing : 已解决 TR-19
+Disputed --> Terminated : 双方同意取消 TR-18
+Abnormal --> Ongoing : 管理恢复 BR-08
+Abnormal --> Completed : 管理完成 BR-08
+Abnormal --> Terminated : 管理终止 BR-08
+note left of Pending
+待接受请求无自动有效期。
+拒绝、撤回和关闭分别保留原因。
+end note
+note right of Ongoing
+约定阶段与完成进度见ST-03。
+争议结束原计时；恢复清当前确认、保留历史。
+冻结为限制标记，不新增生命周期状态。
+end note
+note right of Abnormal
+单方确认后7天未回应。
+冻结限制双方推进，管理沟通保留。
+管理调整须由认领人留据并通知。
+end note
+note bottom of Completed
+完成／终止解本笔冻结及锁单、分支归档；
+商品默认下架，卖方可按资格明确继续上架。
+其他有效限制保留。管理调整可涉及全部状态，
+本图绘制常见出口，完整约束见BR-08及4.15。
+end note
+@enduml

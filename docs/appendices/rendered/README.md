@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-23T03:47:53+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-23T03:48:01+08:00
 -->
 
 # 图源渲染索引
@@ -24,5 +24,8 @@ PNG 使用单一字体 PingFang SC（苹方），中文与西文均按该字体�
 | CL-02-账户与商品类图 | [PlantUML](../../appendices/models/CL-02-账户与商品类图.puml) | [PNG](CL-02-账户与商品类图.png) | 1752 × 1808 | 200 |
 | CL-03-交易与沟通类图 | [PlantUML](../../appendices/models/CL-03-交易与沟通类图.puml) | [PNG](CL-03-交易与沟通类图.png) | 3308 × 1975 | 200 |
 | CL-04-治理与通知类图 | [PlantUML](../../appendices/models/CL-04-治理与通知类图.puml) | [PNG](CL-04-治理与通知类图.png) | 3581 × 2299 | 200 |
+| ST-01-商品状态图 | [PlantUML](../../appendices/models/ST-01-商品状态图.puml) | [PNG](ST-01-商品状态图.png) | 2196 × 1162 | 200 |
+| ST-02-交易状态图 | [PlantUML](../../appendices/models/ST-02-交易状态图.puml) | [PNG](ST-02-交易状态图.png) | 2208 × 1465 | 200 |
+| ST-03-交易约定与确认进度 | [PlantUML](../../appendices/models/ST-03-交易约定与确认进度.puml) | [PNG](ST-03-交易约定与确认进度.png) | 2017 × 1058 | 200 |
 | UC-01-系统用例图 | [PlantUML](../../appendices/models/UC-01-系统用例图.puml) | [PNG](UC-01-系统用例图.png) | 1988 × 2036 | 200 |
 | UC-02-子用例图 | [PlantUML](../../appendices/models/UC-02-子用例图.puml) | [PNG](UC-02-子用例图.png) | 2879 × 2635 | 200 |
