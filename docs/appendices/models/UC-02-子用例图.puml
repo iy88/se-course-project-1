@@ -1,106 +1,91 @@
-' UC-02 子用例图（5 个代表性详细用例）
-' 语义模型：主用例与子用例的包含／扩展关系。展示图 UC-02-子用例图.svg 采用左右分组簇状排布：
-' 左侧参与者的主用例在左、子用例列在其右；管理员的主用例在右、子用例列在其左，连线只走空白通道、不穿过用例。
-' 子用例编号与关系见 docs/requirements/use-cases/draft-子用例分解.md。
-' Version: 0.3.0
-' Version-Datetime: 2026-10-22T02:20:00+08:00
+/'
+Version: 0.3.1
+Version-Datetime: 2026-10-23T03:47:39+08:00
+'/
 @startuml
-left to right direction
-skinparam defaultFontName "Microsoft YaHei"
+skinparam defaultFontName "PingFang SC"
 skinparam shadowing false
 skinparam packageStyle rectangle
-skinparam nodesep 18
-skinparam ranksep 34
-skinparam defaultTextAlignment center
-
-actor "R-01 校园用户" as A1
-actor "R-02 买方" as A2
-actor "R-03 卖方" as A3
-actor "R-04 平台管理员" as A4
-
-rectangle "校园二手交易与物品流转平台" {
-  usecase "UC-C02 发布与维护商品" as C02
-  usecase "UC-C02-01 提交商品发布" as C0201
-  usecase "UC-C02-02 查看审核结果" as C0202
-  usecase "UC-C02-03 修改后重提" as C0203
-  usecase "UC-C02-04 信息微调" as C0204
-  usecase "UC-C02-05 主动下架" as C0205
-  usecase "UC-C02-06 重新上架" as C0206
-
-  usecase "UC-C04 收藏与咨询" as C04
-  usecase "UC-C04-01 收藏商品" as C0401
-  usecase "UC-C04-02 取消收藏" as C0402
-  usecase "UC-C04-03 查看收藏清单" as C0403
-  usecase "UC-C04-04 发表商品评论" as C0404
-  usecase "UC-C04-05 卖方回复评论" as C0405
-  usecase "UC-C04-06 删除本人评论" as C0406
-  usecase "UC-C04-07 发起咨询会话" as C0407
-  usecase "UC-C04-08 发送会话消息" as C0408
-
-  usecase "UC-C05 请求与确认交易" as C05
-  usecase "UC-C05-01 发起交易请求" as C0501
-  usecase "UC-C05-02 接受请求" as C0502
-  usecase "UC-C05-03 拒绝请求" as C0503
-  usecase "UC-C05-04 撤回请求" as C0504
-  usecase "UC-C05-05 提交完成确认" as C0505
-  usecase "UC-C05-06 发起争议" as C0506
-  usecase "UC-C05-07 协商终止" as C0507
-
-  usecase "UC-C14 处理异常交易" as C14
-  usecase "UC-C14-01 识别单方确认超时" as C1401
-  usecase "UC-C14-02 转交与认领" as C1402
-  usecase "UC-C14-03 记录结论并恢复" as C1403
-
-  usecase "UC-C08 审核与处置沟通" as C08
-  usecase "UC-C08-01 处置告知与申辩" as C0801
-  usecase "UC-C08-02 认领待处理事项" as C0802
-  usecase "UC-C08-03 核查与内容处置" as C0803
-  usecase "UC-C08-04 封禁与解除" as C0804
-  usecase "UC-C08-05 冻结与恢复" as C0805
+skinparam nodesep 20
+skinparam ranksep 30
+top to bottom direction
+title UC-02 关键用例能力分组
+package "UC-C02 发布与维护商品" as P02 {
+ usecase "UC-C02-01\n提交商品发布" as UCC0201
+ usecase "UC-C02-02\n查看审核结果与拒绝原因" as UCC0202
+ usecase "UC-C02-03\n修改后重新提交审核" as UCC0203
+ usecase "UC-C02-04\n信息微调" as UCC0204
+ usecase "UC-C02-05\n主动下架" as UCC0205
+ usecase "UC-C02-06\n重新上架" as UCC0206
+ UCC0201 -[hidden]down- UCC0202
+ UCC0202 -[hidden]down- UCC0203
+ UCC0203 -[hidden]down- UCC0204
+ UCC0204 -[hidden]down- UCC0205
+ UCC0205 -[hidden]down- UCC0206
 }
-
-A3 -- C02
-A2 -- C04
-A1 -- C04
-A3 -- C04
-A2 -- C05
-A3 -- C05
-A4 -- C14
-A4 -- C08
-
-C02 ..> C0201 : <<include>>
-C02 ..> C0202 : <<include>>
-C02 ..> C0203 : <<extend>>
-C02 ..> C0204 : <<extend>>
-C02 ..> C0205 : <<extend>>
-C02 ..> C0206 : <<extend>>
-
-C04 ..> C0401 : <<include>>
-C04 ..> C0402 : <<include>>
-C04 ..> C0403 : <<include>>
-C04 ..> C0404 : <<include>>
-C04 ..> C0405 : <<extend>>
-C04 ..> C0406 : <<extend>>
-C04 ..> C0407 : <<include>>
-C04 ..> C0408 : <<include>>
-
-C05 ..> C0501 : <<include>>
-C05 ..> C0502 : <<extend>>
-C05 ..> C0503 : <<extend>>
-C05 ..> C0504 : <<extend>>
-C05 ..> C0505 : <<include>>
-C05 ..> C0506 : <<extend>>
-C05 ..> C0507 : <<extend>>
-
-C14 ..> C1401 : <<include>>
-C14 ..> C1402 : <<include>>
-C14 ..> C1403 : <<include>>
-
-C08 ..> C0801 : <<include>>
-C08 ..> C0802 : <<include>>
-C08 ..> C0803 : <<include>>
-C08 ..> C0804 : <<extend>>
-C08 ..> C0805 : <<extend>>
-
-C14 ..> C05 : <<extend>>
+package "UC-C04 收藏与咨询" as P04 {
+ usecase "UC-C04-01\n收藏商品" as UCC0401
+ usecase "UC-C04-02\n取消收藏" as UCC0402
+ usecase "UC-C04-03\n查看本人收藏清单" as UCC0403
+ usecase "UC-C04-04\n发表商品评论" as UCC0404
+ usecase "UC-C04-05\n卖方回复评论" as UCC0405
+ usecase "UC-C04-06\n删除本人评论" as UCC0406
+ usecase "UC-C04-07\n发起私聊咨询" as UCC0407
+ usecase "UC-C04-08\n发送与查看会话消息" as UCC0408
+ UCC0401 -[hidden]down- UCC0402
+ UCC0402 -[hidden]down- UCC0403
+ UCC0403 -[hidden]down- UCC0404
+ UCC0404 -[hidden]down- UCC0405
+ UCC0405 -[hidden]down- UCC0406
+ UCC0406 -[hidden]down- UCC0407
+ UCC0407 -[hidden]down- UCC0408
+}
+package "UC-C05 请求与确认交易" as P05 {
+ usecase "UC-C05-01\n发起交易请求" as UCC0501
+ usecase "UC-C05-02\n接受请求" as UCC0502
+ usecase "UC-C05-03\n拒绝请求" as UCC0503
+ usecase "UC-C05-04\n撤回请求" as UCC0504
+ usecase "UC-C05-05\n提交完成确认" as UCC0505
+ usecase "UC-C05-06\n发起争议" as UCC0506
+ usecase "UC-C05-07\n协商终止" as UCC0507
+ usecase "UC-C05-08\n提出与确认首次交易约定" as UCC0508
+ usecase "UC-C05-09\n变更已确认交易约定" as UCC0509
+ UCC0501 -[hidden]down- UCC0502
+ UCC0502 -[hidden]down- UCC0503
+ UCC0503 -[hidden]down- UCC0504
+ UCC0504 -[hidden]down- UCC0505
+ UCC0505 -[hidden]down- UCC0506
+ UCC0506 -[hidden]down- UCC0507
+ UCC0507 -[hidden]down- UCC0508
+ UCC0508 -[hidden]down- UCC0509
+}
+package "UC-C08 审核与处置沟通" as P08 {
+ usecase "UC-C08-01\n处置告知与申辩" as UCC0801
+ usecase "UC-C08-02\n认领待处理事项" as UCC0802
+ usecase "UC-C08-03\n核查举报与内容处置" as UCC0803
+ usecase "UC-C08-04\n封禁与解除账户限制" as UCC0804
+ usecase "UC-C08-05\n冻结交易与恢复" as UCC0805
+ usecase "UC-C08-06\n审核商品并告知结果" as UCC0806
+ UCC0801 -[hidden]down- UCC0802
+ UCC0802 -[hidden]down- UCC0803
+ UCC0803 -[hidden]down- UCC0804
+ UCC0804 -[hidden]down- UCC0805
+ UCC0805 -[hidden]down- UCC0806
+}
+package "UC-C14 处理异常交易" as P14 {
+ usecase "UC-C14-01\n识别单方确认超时" as UCC1401
+ usecase "UC-C14-02\n异常交易转交与认领" as UCC1402
+ usecase "UC-C14-03\n记录处理结论并恢复" as UCC1403
+ UCC1401 -[hidden]down- UCC1402
+ UCC1402 -[hidden]down- UCC1403
+}
+P02 -[hidden]right- P04
+P02 -[hidden]down- P05
+P04 -[hidden]down- P08
+P05 -[hidden]right- P08
+P05 -[hidden]down- P14
+legend bottom
+分组表达同一业务目标下的独立操作与分支，非每次必经顺序。
+角色与主用例关系见UC-01，条件及类协作见各详细用例。
+endlegend
 @enduml

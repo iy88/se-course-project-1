@@ -1,12 +1,12 @@
 ' UC-01 系统用例图
-' 语义模型：参与者与用例的关联、用例间的包含与扩展关系。展示图 UC-01-系统用例图.svg 按 UML 用例图惯例直排：
+' 语义模型：参与者与用例的关联、用例间的包含与扩展关系。展示图 UC-01-系统用例图.png（docs/appendices/rendered） 按 UML 用例图惯例直排：
 ' 参与者分置系统边界两侧、用例两列排布、关系线用虚线标注 <<include>>／<<extend>>；修改关系时须同步重绘展示图。
-' 本项目付款与交付在平台外完成，无外部系统或设备参与者。用例编号对应 docs/requirements/use-cases/draft-index.md。
-' Version: 0.3.0
-' Version-Datetime: 2026-10-21T22:40:00+08:00
+' 本项目付款与交付在平台外完成，无外部系统或设备参与者。用例编号对应 docs/appendices/use-cases/index.md。
+' Version: 0.3.1
+' Version-Datetime: 2026-10-23T03:47:39+08:00
 @startuml
 left to right direction
-skinparam defaultFontName "Microsoft YaHei"
+skinparam defaultFontName "PingFang SC"
 skinparam shadowing false
 skinparam packageStyle rectangle
 skinparam nodesep 22
@@ -36,25 +36,27 @@ rectangle "校园二手交易与物品流转平台" {
   usecase "UC-C14 处理异常交易" as UC14
 }
 
-A1 -- UC01
-A1 -- UC03
-A1 -- UC04
-A1 -- UC07
-A1 -- UC09
-A1 -- UC11
-A1 -- UC12
-A2 -- UC05
-A2 -- UC06
-A3 -- UC02
-A3 -- UC05
-A3 -- UC06
-A4 -- UC08
-A4 -- UC0801
-A4 -- UC10
-A4 -- UC13
-A4 -- UC14
-
-UC05 ..> UC06 : <<include>>
-UC08 ..> UC0801 : <<include>>
+A1 --> UC01
+A1 --> UC03
+A1 --> UC04
+A1 --> UC07
+A1 --> UC09
+A1 --> UC11
+A1 --> UC12
+A2 --> UC05
+A2 --> UC06
+A3 --> UC02
+A3 --> UC05
+A3 --> UC06
+UC08 <-- A4
+UC0801 <-- A4
+A1 --> UC0801
+UC02 <-- A4
+UC10 <-- A4
+UC13 <-- A4
+UC14 <-- A4
+UC06 ..> UC05 : <<extend>>\n有效约定后提交完成确认
+UC0801 ..> UC08 : <<extend>>\n实际处置告知或用户说明／申辩
 UC14 ..> UC05 : <<extend>>
+
 @enduml
