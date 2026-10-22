@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<!--
+Version: 0.1.0
+Version-Datetime: 2026-10-23T03:49:34+08:00
+-->
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>校园二手交易平台 · 多页 HTML 原型目录</title>
+<style>
+:root{
+  --bg:#eef1ee; --panel:#ffffff; --ink:#182420; --ink-soft:#4d5f58; --ink-faint:#7b8b84;
+  --line:#dfe6e1; --line-strong:#c8d3cc; --brand:#2f6b4f; --brand-soft:#e7f1ea;
+  --brand-ink:#1f4d38; --accent:#b7791f; --accent-soft:#fbf1df;
+  --ok:#2f7d4f; --ok-soft:#e6f3ea; --warn:#9a6a12; --warn-soft:#fdf3e2;
+  --danger:#a33a33; --danger-soft:#fae9e7; --info:#2b5f87; --info-soft:#e8f1f8;
+  --radius:12px; --shadow:0 1px 2px rgba(24,36,32,.05),0 10px 26px rgba(24,36,32,.07);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.62;-webkit-font-smoothing:antialiased}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{margin:0;line-height:1.3;font-weight:650}
+p{margin:0}
+ul{margin:0;padding:0;list-style:none}
+button{font:inherit}
+code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+[hidden]{display:none !important}
+
+/* page chrome */
+.strip{background:#1e2f28;color:#e8f0eb;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12.5px}
+.strip .brandline{display:flex;align-items:center;gap:10px;min-width:0}
+.strip .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#7fb79b,#2f6b4f);display:grid;place-items:center;font-weight:700;color:#0f221a;font-size:12px;flex:0 0 auto}
+.strip b{color:#fff;font-weight:650}
+.strip .muted-dark{color:#9fb5a9}
+.strip nav{display:flex;gap:6px;flex-wrap:wrap}
+.strip nav a{color:#cfded6;padding:4px 9px;border-radius:7px;border:1px solid #3a5346}
+.strip nav a:hover{background:#2a3f35;color:#fff;text-decoration:none}
+.page{max-width:1060px;margin:22px auto 40px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:30px 36px 22px}
+.page-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);margin-top:26px;padding-top:14px;font-size:12px;color:var(--ink-faint);flex-wrap:wrap}
+.page-foot .pager{display:flex;gap:8px;flex-wrap:wrap}
+.page-foot .pager a,.page-foot .pager span{border:1px solid var(--line);border-radius:7px;padding:3px 10px;color:var(--ink-soft)}
+.page-foot .pager a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.page-foot .pager span.disabled{color:#b7c2bc;border-color:#e6ece8}
+@media (max-width:900px){.page{margin:12px 10px 26px;padding:20px 16px}.strip{padding:9px 14px}}
+
+/* story screen */
+.screen{animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.screen-head{border-bottom:1px solid var(--line);padding:2px 0 18px;margin-bottom:22px}
+.kicker{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--ink-faint);margin-bottom:8px}
+.badge{display:inline-block;background:var(--brand);color:#fff;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:650}
+.screen-head h1{font-size:26px;letter-spacing:-.01em;margin-bottom:8px}
+.goal{color:var(--ink-soft);font-size:14.5px;max-width:76ch}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;font-size:12px;color:var(--ink-faint)}
+.meta li::before{content:"·";margin-right:6px;color:var(--line-strong)}
+.meta li:first-child::before{content:"";margin:0}
+.section{margin-top:26px}
+.section-title{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.section-title h2{font-size:16px}
+.section-title .hint{font-size:12px;color:var(--ink-faint)}
+.grid{display:grid;gap:16px}
+.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.stack{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 1px 2px rgba(24,36,32,.04);padding:16px 18px}
+.card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.card-head h3{font-size:14px}
+.muted{color:var(--ink-faint);font-size:12.5px}
+.hr{height:1px;background:var(--line);margin:12px 0;border:0}
+
+/* device frames */
+.frame{background:#fff;border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;box-shadow:0 8px 22px rgba(24,36,32,.07)}
+.frames-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.frame-bar{background:#eef2ef;border-bottom:1px solid var(--line);padding:8px 12px;font-size:11.5px;color:var(--ink-faint);display:flex;gap:8px;align-items:center}
+.frame-bar .dots{display:flex;gap:4px}
+.frame-bar .dots i{width:7px;height:7px;border-radius:50%;background:#c9d4cd;display:block}
+.phone{max-width:390px;margin:0 auto}
+.phone .frame-bar{background:#1e2f28;color:#cfe0d7;border-bottom:0}
+.phone .frame-bar .dots i{background:#4c6457}
+.browser .frame-bar{background:#eef2ef}
+.app{padding:14px;background:#fbfcfb}
+.topbar-app{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.topbar-app h4{font-size:14px}
+.topbar-app .who{font-size:11.5px;color:var(--ink-faint)}
+.navbar{display:flex;gap:6px;flex-wrap:wrap}
+.navbar .chip{font-size:11.5px}
+.tabbar{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:2px 0 12px;overflow:auto}
+.tabbar .tab{border:0;background:none;padding:8px 10px;color:var(--ink-faint);font-size:12.5px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tabbar .tab.active{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line-strong);background:#fff;color:var(--ink);border-radius:8px;padding:6px 12px;font-size:12.5px;cursor:pointer;transition:.12s}
+.btn:hover{border-color:var(--brand);color:var(--brand)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.primary:hover{background:var(--brand-ink);color:#fff}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--ink-soft)}
+.btn.danger{background:var(--danger-soft);border-color:#e6c9c6;color:var(--danger)}
+.btn:disabled{opacity:.45;cursor:not-allowed;border-color:var(--line);color:var(--ink-faint)}
+.btn.small{padding:3px 9px;font-size:11.5px;border-radius:6px}
+.btn-link{border:0;background:none;color:var(--brand);cursor:pointer;padding:0;font-size:12.5px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.label{font-size:12px;color:var(--ink-soft);font-weight:600}
+.input,.textarea,.select{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;background:#fff;color:var(--ink);font:inherit;font-size:13px}
+.textarea{min-height:66px;resize:vertical}
+.input:focus,.textarea:focus,.select:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.form-row .field{flex:1 1 140px;margin-bottom:0}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{border:0;background:none;padding:5px 10px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+.seg button.active{background:var(--brand-soft);color:var(--brand-ink);font-weight:600}
+
+/* tabs */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+.tab.active{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.panel{padding-top:2px}
+
+/* chips / states */
+.chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11.5px;color:var(--ink-soft);cursor:default}
+.chip.selectable{cursor:pointer}
+.chip.selectable.active{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-ink)}
+.tag{display:inline-block;background:var(--brand-soft);color:var(--brand-ink);border-radius:6px;padding:1px 7px;font-size:11.5px;margin:0 4px 4px 0}
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
+.state{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.state.ok{background:var(--ok-soft);color:var(--ok)}
+.state.warn{background:var(--warn-soft);color:var(--warn)}
+.state.danger{background:var(--danger-soft);color:var(--danger)}
+.state.info{background:var(--info-soft);color:var(--info)}
+.state.neutral{background:#eef2ef;color:var(--ink-soft)}
+
+/* lists & tables */
+.list{display:flex;flex-direction:column;gap:8px}
+.list-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.list-item:hover{border-color:var(--line-strong)}
+.list-item .main{min-width:0}
+.list-item .title{font-weight:600;font-size:13px;margin-bottom:2px}
+.list-item .sub{font-size:11.5px;color:var(--ink-faint)}
+.list-item .side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+.row{display:flex;gap:10px;align-items:center}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--brand-soft);color:var(--brand-ink);display:grid;place-items:center;font-size:12px;font-weight:700;flex:0 0 auto}
+.table{width:100%;border-collapse:collapse;font-size:12.5px}
+.table th,.table td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+.table th{color:var(--ink-faint);font-weight:600;font-size:11.5px;background:#f7f9f7}
+.table tr:last-child td{border-bottom:0}
+.empty{text-align:center;color:var(--ink-faint);padding:26px 10px;border:1px dashed var(--line-strong);border-radius:10px;font-size:12.5px;background:#fbfcfb}
+
+/* feedback */
+.banner{display:flex;gap:8px;align-items:flex-start;border-radius:10px;padding:9px 12px;font-size:12.5px;border:1px solid var(--line);background:#f7f9f7;color:var(--ink-soft);margin-bottom:12px}
+.banner.warn{background:var(--warn-soft);border-color:#eeddba;color:#75500c}
+.banner.danger{background:var(--danger-soft);border-color:#e8cbc7;color:#7d2e28}
+.banner.info{background:var(--info-soft);border-color:#cfdeea;color:#244e70}
+.banner b{color:inherit}
+.msg{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto;padding-right:2px}
+.bubble{max-width:84%;border-radius:10px;padding:7px 10px;font-size:12.5px;background:#fff;border:1px solid var(--line);align-self:flex-start}
+.bubble.me{align-self:flex-end;background:var(--brand-soft);border-color:#cfe3d7}
+.bubble .who{display:block;font-size:10.5px;color:var(--ink-faint);margin-bottom:2px}
+.timeline{display:flex;flex-direction:column;gap:0;margin-left:4px}
+.timeline li{position:relative;padding:0 0 14px 18px;font-size:12.5px;color:var(--ink-soft)}
+.timeline li::before{content:"";position:absolute;left:0;top:5px;width:8px;height:8px;border-radius:50%;background:var(--brand-soft);border:2px solid var(--brand)}
+.timeline li::after{content:"";position:absolute;left:4px;top:16px;bottom:0;width:1px;background:var(--line)}
+.timeline li:last-child::after{display:none}
+.timeline b{color:var(--ink)}
+.progress{height:7px;border-radius:999px;background:#e8eeea;overflow:hidden}
+.progress > i{display:block;height:100%;background:linear-gradient(90deg,#7fb79b,var(--brand));width:0;transition:width .3s}
+.progress-label{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-faint);margin-bottom:4px}
+
+/* stats */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.stat .k{font-size:11.5px;color:var(--ink-faint)}
+.stat .v{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.stat .v small{font-size:11.5px;font-weight:500;color:var(--ink-faint);margin-left:3px}
+.big{font-size:20px;font-weight:700}
+
+/* toast */
+.toast-host{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:50;align-items:center;pointer-events:none}
+.toast{background:#1e2f28;color:#f2f8f4;border-radius:10px;padding:9px 16px;font-size:12.5px;box-shadow:0 10px 28px rgba(0,0,0,.22);opacity:0;transform:translateY(6px);transition:.18s;max-width:min(88vw,560px)}
+.toast.show{opacity:1;transform:none}
+.toast.ok{background:#245c3d}
+.toast.warn{background:#7a5410}
+.toast.danger{background:#7d2e28}
+
+/* cover / index */
+.hero{background:linear-gradient(135deg,#204334,#2f6b4f 62%,#4f8a6c);color:#eef6f1;border-radius:14px;padding:26px 28px;margin-bottom:22px}
+.hero .eyebrow{font-size:11.5px;letter-spacing:.14em;color:#bfd8c9;text-transform:uppercase}
+.hero h1{font-size:27px;margin:8px 0 10px;letter-spacing:-.01em}
+.hero p{color:#d5e6dc;max-width:74ch;font-size:13.5px}
+.hero .hero-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.hero .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.32);color:#fff}
+.hero .btn:hover{background:rgba(255,255,255,.2);color:#fff}
+.matrix{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.matrix th,.matrix td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}
+.matrix th{background:#f2f6f3;color:var(--ink-faint);font-size:11.5px;font-weight:600}
+.matrix tr:last-child td{border-bottom:0}
+.matrix td:first-child{white-space:nowrap}
+.matrix a{font-weight:600}
+.role-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-soft);margin-top:14px}
+.role-legend b{color:var(--ink)}
+.notice{font-size:12px;color:var(--ink-faint);margin-top:14px;line-height:1.7}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.toc a{display:flex;gap:8px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff;font-size:12.5px;color:var(--ink-soft)}
+.toc a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.toc a .n{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+@media (max-width:900px){.cols-2{grid-template-columns:1fr}.screen-head h1{font-size:22px}}
+@media print{.strip{display:none}.page{box-shadow:none;border:0;margin:0;max-width:none}.page-foot{display:none}}
+
+</style>
+<script>
+(function () {
+  "use strict";
+  var registry = [];
+  var host = null;
+  function ensureHost() {
+    if (!host) {
+      host = document.createElement("div");
+      host.className = "toast-host";
+      host.setAttribute("aria-live", "polite");
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+  function toast(message, kind) {
+    if (!message) return;
+    var el = document.createElement("div");
+    el.className = "toast" + (kind ? " " + kind : "");
+    el.textContent = message;
+    ensureHost().appendChild(el);
+    requestAnimationFrame(function () { el.classList.add("show"); });
+    setTimeout(function () {
+      el.classList.remove("show");
+      setTimeout(function () { el.remove(); }, 250);
+    }, 2600);
+  }
+  window.PROTO = {
+    register: function (id, fn) { if (typeof fn === "function") registry.push(fn); },
+    toast: toast
+  };
+  function initTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs"), function (group) {
+      var tabs = Array.prototype.slice.call(group.querySelectorAll("[data-tab]"));
+      if (!tabs.length) return;
+      var name = group.getAttribute("data-tabs") || "";
+      var active = tabs.filter(function (item) { return item.classList.contains("active"); })[0] || tabs[0];
+      active.classList.add("active");
+      var value = active.getAttribute("data-tab");
+      var values = tabs.map(function (item) { return item.getAttribute("data-tab"); });
+      var scope = group.closest(".screen") || document;
+      Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
+        var panelValue = panel.getAttribute("data-panel");
+        var panelGroup = panel.getAttribute("data-group");
+        if (panelGroup && panelGroup !== name) return;
+        var matched = values.indexOf(panelValue) >= 0 || values.indexOf(panelValue.replace(name + ":", "")) >= 0;
+        if (!matched) return;
+        var shown = panelValue === value || panelValue === name + ":" + value;
+        panel.hidden = !shown;
+        panel.classList.toggle("active", shown);
+      });
+    });
+  }
+  function init() {
+    initTabs();
+    document.addEventListener("click", function (event) {
+      var target = event.target.closest("[data-toast]");
+      if (target) toast(target.getAttribute("data-toast"), target.getAttribute("data-toast-kind") || "");
+      var toggle = event.target.closest("[data-toggle]");
+      if (toggle) {
+        var node = document.getElementById(toggle.getAttribute("data-toggle"));
+        if (node) node.hidden = !node.hidden;
+      }
+      var tab = event.target.closest(".tabs [data-tab]");
+      if (tab) {
+        var group = tab.closest(".tabs");
+        var name = group.getAttribute("data-tabs") || "";
+        var value = tab.getAttribute("data-tab");
+        Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
+          item.classList.toggle("active", item === tab);
+        });
+        var scope = tab.closest(".screen") || document;
+        Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
+          if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
+          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          panel.hidden = !match;
+          panel.classList.toggle("active", match);
+        });
+      }
+      var seg = event.target.closest(".seg button");
+      if (seg) {
+        Array.prototype.forEach.call(seg.parentElement.querySelectorAll("button"), function (item) {
+          item.classList.toggle("active", item === seg);
+        });
+      }
+    });
+    document.addEventListener("submit", function (event) {
+      var form = event.target.closest("form");
+      if (!form) return;
+      event.preventDefault();
+      toast(form.getAttribute("data-demo") || "演示原型：表单已拦截，不会提交或保存。", "warn");
+    });
+    registry.forEach(function (fn) {
+      try { fn(document); } catch (error) { toast("本页演示初始化失败：" + error.message, "danger"); }
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+
+</script>
+</head>
+<body>
+<header class="strip">
+  <div class="brandline"><span class="logo">二</span><span><b>校园二手交易平台 · 多页 HTML 原型</b> <span class="muted-dark">目录</span></span></div>
+  <nav><a href="us-01.html">开始浏览 →</a></nav>
+</header>
+<main class="page">
+  <div class="hero">
+    <div class="eyebrow">Campus Second-hand Marketplace · Prototype</div>
+    <h1>按用户故事组织的多页 HTML 原型</h1>
+    <p>本原型为需求阶段的界面补充材料：每个用户故事一个独立 HTML 页面，页面之间用链接跳转，不做单页应用。界面元素与可操作范围取自该故事的验收条件；页面数据均为示例，不连接后台，不作为功能已实现的证明。</p>
+    <div class="hero-actions">
+      <a class="btn" href="us-01.html">从 US-01 开始</a>
+      <a class="btn" href="us-05.html">看交易主线</a>
+      <a class="btn" href="us-08.html">看管理端</a>
+      <a class="btn" href="us-12.html">看“我的”聚合</a>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card">
+      <div class="card-head"><h3>结构</h3><span class="pill">15 个文件</span></div>
+      <p class="muted">1 个目录页（本页）+ 14 个用户故事页，每页一个 HTML 文件，目录与页脚提供前后页跳转。所有页面共用同一套样式与少量演示脚本；没有路由、没有应用状态，刷新页面不保存任何修改。</p>
+      <div class="hr"></div>
+      <div class="role-legend">
+        <span><b>校园用户</b>：买方 / 卖方（同一账户可随商品分别担任）</span>
+        <span><b>平台管理员</b>：认领事项、审核处置、分类与禁发范围维护、统计</span>
+        <span><b>游客</b>：仅注册、登录与找回密码入口</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>阅读方式</h3><span class="pill">无需启动</span></div>
+      <ul class="list">
+        <li class="list-item"><div class="main"><div class="title">直接用浏览器打开</div><div class="sub">打开本目录下的 <code>index.html</code>，从目录进入任一故事页。</div></div></li>
+        <li class="list-item"><div class="main"><div class="title">可点击元素</div><div class="sub">按钮给出“预期结果”提示；标签页、开关只在当前页面切换显示。</div></div></li>
+        <li class="list-item"><div class="main"><div class="title">示例数据</div><div class="sub">教材、自行车、台灯及人名均为示例，不代表真实用户或商品。</div></div></li>
+      </ul>
+      <div class="notice">页面走查与真实功能验证不在此原型中完成；界面文案待最终评审。</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><h2>目录</h2><span class="hint">14 个用户故事页，按优先级顺序</span></div>
+    <div class="toc">
+      <a href="us-01.html"><span class="n">US-01</span> 账户生命周期</a>
+      <a href="us-02.html"><span class="n">US-02</span> 发布与维护商品</a>
+      <a href="us-03.html"><span class="n">US-03</span> 检索商品</a>
+      <a href="us-04.html"><span class="n">US-04</span> 收藏与咨询</a>
+      <a href="us-05.html"><span class="n">US-05</span> 请求与确认交易</a>
+      <a href="us-06.html"><span class="n">US-06</span> 记录线下交付</a>
+      <a href="us-07.html"><span class="n">US-07</span> 评价与举报</a>
+      <a href="us-08.html"><span class="n">US-08</span> 审核与处置沟通</a>
+      <a href="us-09.html"><span class="n">US-09</span> 了解商品状态</a>
+      <a href="us-10.html"><span class="n">US-10</span> 查看管理统计</a>
+      <a href="us-11.html"><span class="n">US-11</span> 接收通知与待办</a>
+      <a href="us-12.html"><span class="n">US-12</span> 管理本人业务</a>
+      <a href="us-13.html"><span class="n">US-13</span> 维护商品分类</a>
+      <a href="us-14.html"><span class="n">US-14</span> 处理异常交易</a>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><h2>故事与页面覆盖</h2><span class="hint">目标、主要界面与重点演示</span></div>
+    <table class="matrix">
+      <thead><tr><th>故事</th><th>用户目标</th><th>主要界面</th></tr></thead>
+      <tbody>
+            <tr><td><a href="us-01.html">US-01 账户生命周期</a></td><td>注册、邮箱登录、退出，维护密码与显示名称</td><td>注册 / 登录 / 找回密码 / 账户设置</td></tr>
+            <tr><td><a href="us-02.html">US-02 发布与维护商品</a></td><td>查看禁发范围后发布，管理审核结果与上下架</td><td>发布表单、禁发范围、我的商品</td></tr>
+            <tr><td><a href="us-03.html">US-03 检索商品</a></td><td>组合关键词、标签与价格找到商品</td><td>搜索筛选条、结果列表、空结果</td></tr>
+            <tr><td><a href="us-04.html">US-04 收藏与咨询</a></td><td>收藏、商品页评论、普通私聊与交易分支沟通</td><td>商品详情、收藏清单、会话</td></tr>
+            <tr><td><a href="us-05.html">US-05 请求与确认交易</a></td><td>发起并处理请求、确认约定与结果、取消或争议</td><td>请求列表、约定、双方确认、取消</td></tr>
+            <tr><td><a href="us-06.html">US-06 记录线下交付</a></td><td>分别提交完成声明并查看历史</td><td>完成确认卡、确认历史</td></tr>
+            <tr><td><a href="us-07.html">US-07 评价与举报</a></td><td>评价交易对方，独立举报并查看结果</td><td>我的评价、举报表单、结果通知</td></tr>
+            <tr><td><a href="us-08.html">US-08 审核与处置沟通</a></td><td>维护禁发范围，认领审核处置并回复说明申辩</td><td>共享池、审核面板、禁发范围、沟通</td></tr>
+            <tr><td><a href="us-09.html">US-09 了解商品状态</a></td><td>查看状态、展示资格与可操作范围</td><td>我的商品、状态说明</td></tr>
+            <tr><td><a href="us-10.html">US-10 查看管理统计</a></td><td>查看指标并显式选择完成交易范围</td><td>管理统计</td></tr>
+            <tr><td><a href="us-11.html">US-11 接收通知与待办</a></td><td>收到提醒并进入当前事项</td><td>通知中心、待办</td></tr>
+            <tr><td><a href="us-12.html">US-12 管理本人业务</a></td><td>集中查看本人商品、交易、评价、举报与沟通</td><td>我的（聚合页）</td></tr>
+            <tr><td><a href="us-13.html">US-13 维护商品分类</a></td><td>维护单级多标签与别名，处理标签申请</td><td>分类管理、申请处理</td></tr>
+            <tr><td><a href="us-14.html">US-14 处理异常交易</a></td><td>单方确认超时后进入可追溯管理处理</td><td>异常事项、恢复与结束</td></tr>
+          </tbody>
+    </table>
+    <div class="notice">依据：<span class="mono">docs/appendices/user-stories/index.md</span> 与 US-01—US-14 各详细文档；本原型只做界面与少数状态演示，不改变用户故事及验收条件。</div>
+  </div>
+<footer class="page-foot">
+  <span>目录页 · 共 15 个页面 · 按用户故事组织的界面补充材料 · 示例数据，不连接后台</span>
+  <span class="pager"><a href="us-01.html">下一页 →</a></span>
+</footer>
+</main>
+</body>
+</html>

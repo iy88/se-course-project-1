@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<!--
+Version: 0.1.0
+Version-Datetime: 2026-10-23T03:49:34+08:00
+-->
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US-09 了解商品状态 · 校园二手交易平台原型</title>
+<style>
+:root{
+  --bg:#eef1ee; --panel:#ffffff; --ink:#182420; --ink-soft:#4d5f58; --ink-faint:#7b8b84;
+  --line:#dfe6e1; --line-strong:#c8d3cc; --brand:#2f6b4f; --brand-soft:#e7f1ea;
+  --brand-ink:#1f4d38; --accent:#b7791f; --accent-soft:#fbf1df;
+  --ok:#2f7d4f; --ok-soft:#e6f3ea; --warn:#9a6a12; --warn-soft:#fdf3e2;
+  --danger:#a33a33; --danger-soft:#fae9e7; --info:#2b5f87; --info-soft:#e8f1f8;
+  --radius:12px; --shadow:0 1px 2px rgba(24,36,32,.05),0 10px 26px rgba(24,36,32,.07);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.62;-webkit-font-smoothing:antialiased}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{margin:0;line-height:1.3;font-weight:650}
+p{margin:0}
+ul{margin:0;padding:0;list-style:none}
+button{font:inherit}
+code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+[hidden]{display:none !important}
+
+/* page chrome */
+.strip{background:#1e2f28;color:#e8f0eb;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12.5px}
+.strip .brandline{display:flex;align-items:center;gap:10px;min-width:0}
+.strip .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#7fb79b,#2f6b4f);display:grid;place-items:center;font-weight:700;color:#0f221a;font-size:12px;flex:0 0 auto}
+.strip b{color:#fff;font-weight:650}
+.strip .muted-dark{color:#9fb5a9}
+.strip nav{display:flex;gap:6px;flex-wrap:wrap}
+.strip nav a{color:#cfded6;padding:4px 9px;border-radius:7px;border:1px solid #3a5346}
+.strip nav a:hover{background:#2a3f35;color:#fff;text-decoration:none}
+.page{max-width:1060px;margin:22px auto 40px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:30px 36px 22px}
+.page-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);margin-top:26px;padding-top:14px;font-size:12px;color:var(--ink-faint);flex-wrap:wrap}
+.page-foot .pager{display:flex;gap:8px;flex-wrap:wrap}
+.page-foot .pager a,.page-foot .pager span{border:1px solid var(--line);border-radius:7px;padding:3px 10px;color:var(--ink-soft)}
+.page-foot .pager a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.page-foot .pager span.disabled{color:#b7c2bc;border-color:#e6ece8}
+@media (max-width:900px){.page{margin:12px 10px 26px;padding:20px 16px}.strip{padding:9px 14px}}
+
+/* story screen */
+.screen{animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.screen-head{border-bottom:1px solid var(--line);padding:2px 0 18px;margin-bottom:22px}
+.kicker{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--ink-faint);margin-bottom:8px}
+.badge{display:inline-block;background:var(--brand);color:#fff;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:650}
+.screen-head h1{font-size:26px;letter-spacing:-.01em;margin-bottom:8px}
+.goal{color:var(--ink-soft);font-size:14.5px;max-width:76ch}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;font-size:12px;color:var(--ink-faint)}
+.meta li::before{content:"·";margin-right:6px;color:var(--line-strong)}
+.meta li:first-child::before{content:"";margin:0}
+.section{margin-top:26px}
+.section-title{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.section-title h2{font-size:16px}
+.section-title .hint{font-size:12px;color:var(--ink-faint)}
+.grid{display:grid;gap:16px}
+.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.stack{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 1px 2px rgba(24,36,32,.04);padding:16px 18px}
+.card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.card-head h3{font-size:14px}
+.muted{color:var(--ink-faint);font-size:12.5px}
+.hr{height:1px;background:var(--line);margin:12px 0;border:0}
+
+/* device frames */
+.frame{background:#fff;border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;box-shadow:0 8px 22px rgba(24,36,32,.07)}
+.frames-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.frame-bar{background:#eef2ef;border-bottom:1px solid var(--line);padding:8px 12px;font-size:11.5px;color:var(--ink-faint);display:flex;gap:8px;align-items:center}
+.frame-bar .dots{display:flex;gap:4px}
+.frame-bar .dots i{width:7px;height:7px;border-radius:50%;background:#c9d4cd;display:block}
+.phone{max-width:390px;margin:0 auto}
+.phone .frame-bar{background:#1e2f28;color:#cfe0d7;border-bottom:0}
+.phone .frame-bar .dots i{background:#4c6457}
+.browser .frame-bar{background:#eef2ef}
+.app{padding:14px;background:#fbfcfb}
+.topbar-app{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.topbar-app h4{font-size:14px}
+.topbar-app .who{font-size:11.5px;color:var(--ink-faint)}
+.navbar{display:flex;gap:6px;flex-wrap:wrap}
+.navbar .chip{font-size:11.5px}
+.tabbar{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:2px 0 12px;overflow:auto}
+.tabbar .tab{border:0;background:none;padding:8px 10px;color:var(--ink-faint);font-size:12.5px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tabbar .tab.active{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line-strong);background:#fff;color:var(--ink);border-radius:8px;padding:6px 12px;font-size:12.5px;cursor:pointer;transition:.12s}
+.btn:hover{border-color:var(--brand);color:var(--brand)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.primary:hover{background:var(--brand-ink);color:#fff}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--ink-soft)}
+.btn.danger{background:var(--danger-soft);border-color:#e6c9c6;color:var(--danger)}
+.btn:disabled{opacity:.45;cursor:not-allowed;border-color:var(--line);color:var(--ink-faint)}
+.btn.small{padding:3px 9px;font-size:11.5px;border-radius:6px}
+.btn-link{border:0;background:none;color:var(--brand);cursor:pointer;padding:0;font-size:12.5px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.label{font-size:12px;color:var(--ink-soft);font-weight:600}
+.input,.textarea,.select{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;background:#fff;color:var(--ink);font:inherit;font-size:13px}
+.textarea{min-height:66px;resize:vertical}
+.input:focus,.textarea:focus,.select:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.form-row .field{flex:1 1 140px;margin-bottom:0}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{border:0;background:none;padding:5px 10px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+.seg button.active{background:var(--brand-soft);color:var(--brand-ink);font-weight:600}
+
+/* tabs */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+.tab.active{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.panel{padding-top:2px}
+
+/* chips / states */
+.chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11.5px;color:var(--ink-soft);cursor:default}
+.chip.selectable{cursor:pointer}
+.chip.selectable.active{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-ink)}
+.tag{display:inline-block;background:var(--brand-soft);color:var(--brand-ink);border-radius:6px;padding:1px 7px;font-size:11.5px;margin:0 4px 4px 0}
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
+.state{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.state.ok{background:var(--ok-soft);color:var(--ok)}
+.state.warn{background:var(--warn-soft);color:var(--warn)}
+.state.danger{background:var(--danger-soft);color:var(--danger)}
+.state.info{background:var(--info-soft);color:var(--info)}
+.state.neutral{background:#eef2ef;color:var(--ink-soft)}
+
+/* lists & tables */
+.list{display:flex;flex-direction:column;gap:8px}
+.list-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.list-item:hover{border-color:var(--line-strong)}
+.list-item .main{min-width:0}
+.list-item .title{font-weight:600;font-size:13px;margin-bottom:2px}
+.list-item .sub{font-size:11.5px;color:var(--ink-faint)}
+.list-item .side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+.row{display:flex;gap:10px;align-items:center}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--brand-soft);color:var(--brand-ink);display:grid;place-items:center;font-size:12px;font-weight:700;flex:0 0 auto}
+.table{width:100%;border-collapse:collapse;font-size:12.5px}
+.table th,.table td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+.table th{color:var(--ink-faint);font-weight:600;font-size:11.5px;background:#f7f9f7}
+.table tr:last-child td{border-bottom:0}
+.empty{text-align:center;color:var(--ink-faint);padding:26px 10px;border:1px dashed var(--line-strong);border-radius:10px;font-size:12.5px;background:#fbfcfb}
+
+/* feedback */
+.banner{display:flex;gap:8px;align-items:flex-start;border-radius:10px;padding:9px 12px;font-size:12.5px;border:1px solid var(--line);background:#f7f9f7;color:var(--ink-soft);margin-bottom:12px}
+.banner.warn{background:var(--warn-soft);border-color:#eeddba;color:#75500c}
+.banner.danger{background:var(--danger-soft);border-color:#e8cbc7;color:#7d2e28}
+.banner.info{background:var(--info-soft);border-color:#cfdeea;color:#244e70}
+.banner b{color:inherit}
+.msg{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto;padding-right:2px}
+.bubble{max-width:84%;border-radius:10px;padding:7px 10px;font-size:12.5px;background:#fff;border:1px solid var(--line);align-self:flex-start}
+.bubble.me{align-self:flex-end;background:var(--brand-soft);border-color:#cfe3d7}
+.bubble .who{display:block;font-size:10.5px;color:var(--ink-faint);margin-bottom:2px}
+.timeline{display:flex;flex-direction:column;gap:0;margin-left:4px}
+.timeline li{position:relative;padding:0 0 14px 18px;font-size:12.5px;color:var(--ink-soft)}
+.timeline li::before{content:"";position:absolute;left:0;top:5px;width:8px;height:8px;border-radius:50%;background:var(--brand-soft);border:2px solid var(--brand)}
+.timeline li::after{content:"";position:absolute;left:4px;top:16px;bottom:0;width:1px;background:var(--line)}
+.timeline li:last-child::after{display:none}
+.timeline b{color:var(--ink)}
+.progress{height:7px;border-radius:999px;background:#e8eeea;overflow:hidden}
+.progress > i{display:block;height:100%;background:linear-gradient(90deg,#7fb79b,var(--brand));width:0;transition:width .3s}
+.progress-label{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-faint);margin-bottom:4px}
+
+/* stats */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.stat .k{font-size:11.5px;color:var(--ink-faint)}
+.stat .v{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.stat .v small{font-size:11.5px;font-weight:500;color:var(--ink-faint);margin-left:3px}
+.big{font-size:20px;font-weight:700}
+
+/* toast */
+.toast-host{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:50;align-items:center;pointer-events:none}
+.toast{background:#1e2f28;color:#f2f8f4;border-radius:10px;padding:9px 16px;font-size:12.5px;box-shadow:0 10px 28px rgba(0,0,0,.22);opacity:0;transform:translateY(6px);transition:.18s;max-width:min(88vw,560px)}
+.toast.show{opacity:1;transform:none}
+.toast.ok{background:#245c3d}
+.toast.warn{background:#7a5410}
+.toast.danger{background:#7d2e28}
+
+/* cover / index */
+.hero{background:linear-gradient(135deg,#204334,#2f6b4f 62%,#4f8a6c);color:#eef6f1;border-radius:14px;padding:26px 28px;margin-bottom:22px}
+.hero .eyebrow{font-size:11.5px;letter-spacing:.14em;color:#bfd8c9;text-transform:uppercase}
+.hero h1{font-size:27px;margin:8px 0 10px;letter-spacing:-.01em}
+.hero p{color:#d5e6dc;max-width:74ch;font-size:13.5px}
+.hero .hero-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.hero .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.32);color:#fff}
+.hero .btn:hover{background:rgba(255,255,255,.2);color:#fff}
+.matrix{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.matrix th,.matrix td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}
+.matrix th{background:#f2f6f3;color:var(--ink-faint);font-size:11.5px;font-weight:600}
+.matrix tr:last-child td{border-bottom:0}
+.matrix td:first-child{white-space:nowrap}
+.matrix a{font-weight:600}
+.role-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-soft);margin-top:14px}
+.role-legend b{color:var(--ink)}
+.notice{font-size:12px;color:var(--ink-faint);margin-top:14px;line-height:1.7}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.toc a{display:flex;gap:8px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff;font-size:12.5px;color:var(--ink-soft)}
+.toc a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.toc a .n{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+@media (max-width:900px){.cols-2{grid-template-columns:1fr}.screen-head h1{font-size:22px}}
+@media print{.strip{display:none}.page{box-shadow:none;border:0;margin:0;max-width:none}.page-foot{display:none}}
+
+</style>
+<style>
+    #us-01 .auth-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:16px;align-items:start}
+    #us-01 .brand{display:flex;align-items:center;gap:8px;font-weight:600}
+    #us-01 .brand-dot{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;background:#3f6fd8;color:#fff;font-size:12px}
+    #us-01 .brand-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
+    #us-01 .hint{font-size:12px;line-height:1.6;margin:0}
+    #us-01 .account-line{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed rgba(120,130,150,.25);font-size:13px}
+    #us-01 .account-line:last-of-type{border-bottom:0}
+    #us-01 .signed-in{border:1px solid #bfe3cd;background:#f3fbf6;border-radius:10px;padding:12px;display:grid;gap:8px}
+    #us-01 .signed-in strong{font-size:14px}
+    #us-01 .auth-panel{display:grid;gap:12px}
+    #us-01 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-01 .ban-state{font-weight:600}
+    @media (max-width: 900px){#us-01 .auth-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-02 .work-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:16px;align-items:start}
+    #us-02 .thumb{width:52px;height:52px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:1px}
+    #us-02 .thumb-sm{width:56px;height:56px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px dashed rgba(120,130,150,.45)}
+    #us-02 .prod{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-02 .prod-main{flex:1;min-width:0}
+    #us-02 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-02 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-02 .prod-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+    #us-02 .thumb-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    #us-02 .tag-btn[aria-pressed="true"]{background:#e8efff;border-color:#7c9cf5;color:#24407a}
+    #us-02 .scope-item{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-02 .scope-item:last-child{border-bottom:0}
+    #us-02 .scope-item p{margin:2px 0 0;font-size:12px;color:#6b7280}
+    #us-02 .notice{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-02 .notice:last-child{border-bottom:0}
+    #us-02 .notice div{font-size:13px;line-height:1.6}
+    #us-02 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    @media (max-width: 900px){#us-02 .work-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-03 .search-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:16px;align-items:start}
+    #us-03 .chips{display:flex;flex-wrap:wrap;gap:8px}
+    #us-03 .tag-btn[aria-pressed="true"]{background:#e8efff;border-color:#7c9cf5;color:#24407a}
+    #us-03 .thumb{width:54px;height:54px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px}
+    #us-03 .thumb.bike{background:#eef8f1;color:#3f6b50}
+    #us-03 .thumb.lamp{background:#fdf6e7;color:#7a6530}
+    #us-03 .prod{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-03 .prod-main{flex:1;min-width:0}
+    #us-03 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-03 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-03 .price{font-weight:600}
+    #us-03 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-03 .side-line{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed rgba(120,130,150,.25);font-size:13px}
+    #us-03 .side-line:last-child{border-bottom:0}
+    #us-03 .detail-title{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+    #us-03 .detail-title strong{font-size:15px}
+    @media (max-width: 900px){#us-03 .search-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-04 .chat-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:16px;align-items:start}
+    #us-04 .thumb{width:52px;height:52px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px}
+    #us-04 .thumb.faded{background:#f1f2f5;color:#9aa1ad}
+    #us-04 .prod-main{flex:1;min-width:0}
+    #us-04 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-04 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-04 .comment{display:flex;gap:10px;padding:10px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-04 .comment:last-child{border-bottom:0}
+    #us-04 .comment-body{flex:1;min-width:0}
+    #us-04 .comment-body p{margin:4px 0;font-size:13px;line-height:1.6}
+    #us-04 .comment-head{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+    #us-04 .reply{margin-top:6px;padding:8px 10px;border-left:3px solid #9db4e8;background:rgba(120,140,190,.08);border-radius:0 6px 6px 0;font-size:13px}
+    #us-04 .chat-body{display:grid;gap:8px;max-height:260px;overflow:auto;padding:10px;border:1px solid rgba(120,130,150,.2);border-radius:10px;background:rgba(120,130,150,.04)}
+    #us-04 .composer{display:flex;gap:8px}
+    #us-04 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-04 .ctx{border:1px solid rgba(120,130,150,.25);border-radius:8px;padding:8px 10px;font-size:12px;display:grid;gap:4px}
+    #us-04 .ctx strong{font-size:13px}
+    #us-04 .tab .pill{margin-left:4px}
+    #us-04 .fav-row{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-04 .section-gap{display:grid;gap:12px}
+    @media (max-width: 900px){#us-04 .chat-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+  #us-05 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  #us-05 .req{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}
+  #us-05 .req-main{display:flex;gap:10px;min-width:0}
+  #us-05 .req-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  #us-05 .req.closed{opacity:.62}
+  #us-05 .req.accepted{border-left:3px solid #2f9e6e;padding-left:9px}
+  #us-05 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-05 .agree-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #us-05 .agree-grid .field{margin:0}
+  #us-05 .trbar{height:8px;border-radius:999px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0}
+  #us-05 .trbar>i{display:block;height:100%;width:0;background:#2f9e6e;transition:width .3s}
+  #us-05 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+  #us-05 .ac-list strong{white-space:nowrap}
+  #us-05 .agree-summary{font-size:13px}
+</style>
+<style>
+  #us-06 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  #us-06 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-06 .rec{display:flex;gap:10px;justify-content:space-between;align-items:center}
+  #us-06 .who{display:flex;gap:10px;align-items:center;min-width:0}
+  #us-06 .trbar{height:8px;border-radius:999px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0}
+  #us-06 .trbar>i{display:block;height:100%;width:0;background:#2f9e6e;transition:width .3s}
+  #us-06 .hist-item{display:grid;gap:2px}
+  #us-06 .rule-note{margin:6px 0 0;font-size:13px}
+  #us-06 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+</style>
+<style>
+  #us-07 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  #us-07 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-07 .rev{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}
+  #us-07 .stars{letter-spacing:2px;color:#c98a12;font-weight:600}
+  #us-07 .rev-body{min-width:0}
+  #us-07 .rform{display:grid;gap:10px}
+  #us-07 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+  #us-07 .archive-note{font-size:13px}
+  #us-07 .panel-note{font-size:13px}
+</style>
+<style>
+    #us-08 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-08 .item-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-08 .split{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    #us-08 .kv{display:grid;grid-template-columns:88px 1fr;gap:6px 10px;margin:0}
+    #us-08 .kv dt{color:#6b7280;font-size:12px}
+    #us-08 .kv dd{margin:0}
+    #us-08 .thread-item{padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-08 .thread-item:last-child{border-bottom:0}
+    #us-08 .thread-item .muted{display:block;margin-top:2px}
+  </style>
+<style>
+    #us-09 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-09 .check{display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:13px}
+    #us-09 .state-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #us-09 .step{padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-09 .step:last-child{border-bottom:0}
+    #us-09 .step .muted{display:block;margin-top:2px}
+  </style>
+<style>
+    #us-10 .range-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    #us-10 .range-note{font-size:12px;color:#6b7280}
+    #us-10 .split{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    #us-10 .stat .muted{display:block}
+    #us-10 .report-line{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-10 .report-line:last-child{border-bottom:0}
+  </style>
+<style>
+    #us-11 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-11 .item-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-11 .notif{cursor:pointer}
+    #us-11 .notif:hover{background:#f8fafc}
+    #us-11 .detail-title{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  </style>
+<style>
+    #us-12 .person{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    #us-12 .person-id{display:flex;align-items:center;gap:10px}
+    #us-12 .tab-strip{overflow-x:auto}
+    #us-12 .tab-strip .tab{flex:0 0 auto;white-space:nowrap}
+    #us-12 .stat-grid{margin:10px 0}
+    #us-12 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-12 .entry-main{flex:1;min-width:0}
+    #us-12 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-12 .subnav{display:flex;gap:6px;margin:8px 0}
+    #us-12 .note-line{margin:6px 0 0}
+  </style>
+<style>
+    #us-13 .admin-line{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    #us-13 .cat-name{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-13 .alias-text{font-size:13px}
+    #us-13 .ops{display:flex;gap:6px;flex-wrap:wrap}
+    #us-13 .table td{vertical-align:top}
+    #us-13 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-13 .entry-main{flex:1;min-width:0}
+    #us-13 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-13 .inline-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px}
+    #us-13 .inline-form .field{flex:1;min-width:180px}
+    #us-13 .publish-note{margin:6px 0 0}
+    #us-13 .record-line{margin:4px 0 0}
+  </style>
+<style>
+    #us-14 .admin-line{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    #us-14 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-14 .entry-main{flex:1;min-width:0}
+    #us-14 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-14 .case-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+    #us-14 .field{margin-top:8px}
+    #us-14 .ops{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+    #us-14 .notice-line{margin:6px 0 0}
+    #us-14 .user-actions{display:flex;gap:6px;flex-wrap:wrap}
+  </style>
+<script>
+(function () {
+  "use strict";
+  var registry = [];
+  var host = null;
+  function ensureHost() {
+    if (!host) {
+      host = document.createElement("div");
+      host.className = "toast-host";
+      host.setAttribute("aria-live", "polite");
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+  function toast(message, kind) {
+    if (!message) return;
+    var el = document.createElement("div");
+    el.className = "toast" + (kind ? " " + kind : "");
+    el.textContent = message;
+    ensureHost().appendChild(el);
+    requestAnimationFrame(function () { el.classList.add("show"); });
+    setTimeout(function () {
+      el.classList.remove("show");
+      setTimeout(function () { el.remove(); }, 250);
+    }, 2600);
+  }
+  window.PROTO = {
+    register: function (id, fn) { if (typeof fn === "function") registry.push(fn); },
+    toast: toast
+  };
+  function initTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs"), function (group) {
+      var tabs = Array.prototype.slice.call(group.querySelectorAll("[data-tab]"));
+      if (!tabs.length) return;
+      var name = group.getAttribute("data-tabs") || "";
+      var active = tabs.filter(function (item) { return item.classList.contains("active"); })[0] || tabs[0];
+      active.classList.add("active");
+      var value = active.getAttribute("data-tab");
+      var values = tabs.map(function (item) { return item.getAttribute("data-tab"); });
+      var scope = group.closest(".screen") || document;
+      Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
+        var panelValue = panel.getAttribute("data-panel");
+        var panelGroup = panel.getAttribute("data-group");
+        if (panelGroup && panelGroup !== name) return;
+        var matched = values.indexOf(panelValue) >= 0 || values.indexOf(panelValue.replace(name + ":", "")) >= 0;
+        if (!matched) return;
+        var shown = panelValue === value || panelValue === name + ":" + value;
+        panel.hidden = !shown;
+        panel.classList.toggle("active", shown);
+      });
+    });
+  }
+  function init() {
+    initTabs();
+    document.addEventListener("click", function (event) {
+      var target = event.target.closest("[data-toast]");
+      if (target) toast(target.getAttribute("data-toast"), target.getAttribute("data-toast-kind") || "");
+      var toggle = event.target.closest("[data-toggle]");
+      if (toggle) {
+        var node = document.getElementById(toggle.getAttribute("data-toggle"));
+        if (node) node.hidden = !node.hidden;
+      }
+      var tab = event.target.closest(".tabs [data-tab]");
+      if (tab) {
+        var group = tab.closest(".tabs");
+        var name = group.getAttribute("data-tabs") || "";
+        var value = tab.getAttribute("data-tab");
+        Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
+          item.classList.toggle("active", item === tab);
+        });
+        var scope = tab.closest(".screen") || document;
+        Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
+          if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
+          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          panel.hidden = !match;
+          panel.classList.toggle("active", match);
+        });
+      }
+      var seg = event.target.closest(".seg button");
+      if (seg) {
+        Array.prototype.forEach.call(seg.parentElement.querySelectorAll("button"), function (item) {
+          item.classList.toggle("active", item === seg);
+        });
+      }
+    });
+    document.addEventListener("submit", function (event) {
+      var form = event.target.closest("form");
+      if (!form) return;
+      event.preventDefault();
+      toast(form.getAttribute("data-demo") || "演示原型：表单已拦截，不会提交或保存。", "warn");
+    });
+    registry.forEach(function (fn) {
+      try { fn(document); } catch (error) { toast("本页演示初始化失败：" + error.message, "danger"); }
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+
+</script>
+</head>
+<body>
+<header class="strip">
+  <div class="brandline"><span class="logo">二</span><span><b>校园二手交易平台 · 多页原型</b> <span class="muted-dark">US-09 了解商品状态</span></span></div>
+  <nav><a href="index.html">目录</a><a href="us-08.html">← US-08 审核与处置沟通</a><a href="us-10.html">US-10 查看管理统计 →</a></nav>
+</header>
+<main class="page">
+<section class="screen" id="us-09" data-us="09">
+
+
+  <header class="screen-head">
+    <div class="kicker"><span class="badge">US-09</span> 商品状态 · 高优先级 · 批次 1</div>
+    <h1>了解商品状态</h1>
+    <p class="goal">作为校园用户或卖方，我希望查看商品状态、展示资格及相应操作范围，以便正确理解能否搜索、查看、请求、评论或维护商品。</p>
+    <ul class="meta">
+      <li>关联功能 FR-09</li>
+      <li>主用例 UC-C09；协作用例 UC-C02、UC-C03、UC-C05、UC-C08、UC-C14</li>
+      <li>依据 US-09-AC-01—US-09-AC-06</li>
+    </ul>
+  </header>
+
+  <div class="frame phone">
+    <div class="frame-bar">校园二手 · 卖方视角（示例）</div>
+    <div class="app">
+      <div class="topbar">
+        <strong>我的商品</strong>
+        <span class="chip" id="us09-chip">待审核</span>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <strong>台灯 · 9 成新</strong>
+          <span class="muted">¥35</span>
+        </div>
+        <p class="muted">学习用品 / 台灯 · 发布者：我 · 2026-10-22 20:30 提交</p>
+        <p class="muted">状态与展示资格分开显示；下面切换状态，查看界面提供哪些操作。</p>
+      </div>
+
+      <div class="tabs" data-tabs>
+        <button class="tab" data-tab="pending">待审核</button>
+        <button class="tab" data-tab="rejected">未通过</button>
+        <button class="tab" data-tab="public">可交易</button>
+        <button class="tab" data-tab="trading">交易中</button>
+        <button class="tab" data-tab="off">已下架</button>
+      </div>
+
+      <div class="panel" data-panel="pending">
+        <div class="card">
+          <div class="state-line">
+            <span class="state warn">待审核</span>
+            <span class="muted">公开入口尚未生成</span>
+          </div>
+          <p class="muted">展示资格：公开搜索不展示 · 公开详情不可访问 · 不能接受请求 · 不能新增评论。仅本人“我的商品”可见。</p>
+          <div class="banner info">审核结果会通过站内通知告知；通过后才产生公开入口。</div>
+          <button type="button" class="btn" data-toast="编辑已保存，修改后仍需重新审核（示例）">编辑商品</button>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="rejected">
+        <div class="card">
+          <div class="state-line">
+            <span class="state danger">审核未通过</span>
+            <span class="muted">2026-10-22 20:05</span>
+          </div>
+          <div class="banner danger">原因：图片包含外部联系方式（示例）。公开搜索与详情均不展示。</div>
+          <p class="muted">修改后可重新提交，重新进入待审核；审核通过前不产生公开入口。</p>
+          <button type="button" class="btn primary" data-toast="已进入编辑；重新提交后转为待审核（示例）">修改并重新提交</button>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="public">
+        <div class="card">
+          <div class="state-line">
+            <span class="state ok">公开可交易</span>
+            <span class="muted">已收到 2 条请求（示例）</span>
+          </div>
+          <p class="muted">展示资格：搜索可见 · 详情可访问 · 可接受请求 · 可评论；卖方按当前资格可编辑或下架。</p>
+          <div class="row">
+            <button type="button" class="btn primary" id="us09-accept">接受一条请求</button>
+            <button type="button" class="btn" data-toast="已下架：公开搜索与详情不再展示；本人历史仍可查看">下架</button>
+          </div>
+          <p class="muted">接受后转为交易中并锁单，搜索随即退出。</p>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="trading">
+        <div class="card">
+          <div class="state-line">
+            <span class="state info">交易中</span>
+            <span class="muted">已锁定 1 笔交易</span>
+          </div>
+          <p class="muted">展示资格：搜索已退出 · 已登录有资格用户仍可看详情并评论 · 新请求停止 · 编辑与下架暂不可用。</p>
+          <div class="banner info">交易结束默认下架；需卖方明确继续上架后，才重新公开可交易。</div>
+          <div class="row">
+            <button type="button" class="btn" disabled>编辑商品</button>
+            <button type="button" class="btn" disabled>下架</button>
+            <button type="button" class="btn ghost" data-toast="已定位到该笔交易（示例）">查看交易</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="off">
+        <div class="card">
+          <div class="state-line">
+            <span class="state">已下架</span>
+            <span class="muted">2026-10-21 交易结束</span>
+          </div>
+          <p class="muted">展示资格：公开详情不可访问 · 搜索不展示 · 本人历史与既有事项可按规则读取。</p>
+          <label class="check">
+            <input type="checkbox" id="us09-disposed">
+            <span>演示：该商品正被管理处置撤销公开访问</span>
+          </label>
+          <div class="banner warn" id="us09-disposed-note" hidden>处置期间拒绝公开详情；解除后仅恢复原展示资格，原“已下架”状态保留，不自动上架。</div>
+          <button type="button" class="btn primary" id="us09-relist">重新上架</button>
+          <p class="muted" id="us09-relist-note">当前账户与商品限制允许重新上架；上架后形成新的公开交易，聊天分支独立。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card">
+      <div class="card-head">公开访问结果（示例）</div>
+      <p class="muted">买方或未登录访问者视角。每次进入公开详情都重新校验登录状态与当前展示资格。</p>
+      <button type="button" class="btn" id="us09-public-check">打开旧详情链接</button>
+      <div class="banner info" id="us09-public-result" hidden></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">生命周期与展示资格</div>
+      <div class="step"><strong>待审核 / 审核未通过</strong><span class="muted">无公开搜索与详情入口。</span></div>
+      <div class="step"><strong>公开可交易</strong><span class="muted">搜索、详情、请求与评论按资格开放。</span></div>
+      <div class="step"><strong>交易中</strong><span class="muted">搜索退出；有资格登录用户仍可看详情并评论。</span></div>
+      <div class="step"><strong>已下架</strong><span class="muted">公开详情关闭；卖方按当前资格明确重新上架。</span></div>
+      <p class="muted">违规撤销访问、解除恢复、封禁与交易冻结，与上述生命周期分开解释。</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">验收要点 <span class="muted">关键 AC，界面据此设计</span></div>
+    <ul class="list">
+      <li class="list-item">US-09-AC-01：商品初次发布或审核拒绝 → 分别显示“待审核”／“审核未通过”，公开搜索和详情都不展示。</li>
+      <li class="list-item">US-09-AC-02：商品公开可交易时卖方接受请求 → 转“交易中”并停止新请求、退出搜索；已登录有资格用户仍可看详情并评论。</li>
+      <li class="list-item">US-09-AC-03：普通商品交易完成或终止 → 默认“已下架”；卖方明确继续且资格满足后才恢复公开可交易。</li>
+      <li class="list-item">US-09-AC-04：已下架、审核有效且限制允许 → 卖方重新上架后恢复公开可交易，下一笔交易与聊天分支独立。</li>
+      <li class="list-item">US-09-AC-05：管理处置撤销公开访问 → 处置期间旧链接拒绝公开详情；解除只恢复原展示资格，原非在售状态保留。</li>
+      <li class="list-item">US-09-AC-06：商品已下架 → 公开详情不可访问；授权本人历史或既有事项仍可按规则读取。</li>
+    </ul>
+  </div>
+
+  <script>
+    window.PROTO.register('us-09', function (section) {
+      function q(id) { return section.querySelector('#' + id); }
+      var state = 'pending';
+      var chip = q('us09-chip');
+
+      section.querySelectorAll('.tabs .tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          state = tab.getAttribute('data-tab');
+        });
+      });
+
+      q('us09-accept').addEventListener('click', function () {
+        state = 'trading';
+        chip.textContent = '交易中';
+        window.PROTO.toast('已接受请求：转交易中并锁单，搜索退出');
+        var tab = section.querySelector('[data-tab="trading"]');
+        if (tab) { tab.click(); }
+      });
+
+      var disposed = q('us09-disposed');
+      var relist = q('us09-relist');
+      var disposedNote = q('us09-disposed-note');
+      var relistNote = q('us09-relist-note');
+
+      disposed.addEventListener('change', function () {
+        var blocked = disposed.checked;
+        relist.disabled = blocked;
+        disposedNote.hidden = !blocked;
+        relistNote.textContent = blocked
+          ? '当前存在管理处置，不能重新上架；解除处置后仍需本人明确上架。'
+          : '当前账户与商品限制允许重新上架；上架后形成新的公开交易，聊天分支独立。';
+        if (blocked) {
+          window.PROTO.toast('管理处置期间不能重新上架');
+        }
+      });
+
+      relist.addEventListener('click', function () {
+        if (disposed.checked) {
+          window.PROTO.toast('管理处置期间不能重新上架');
+          return;
+        }
+        state = 'public';
+        chip.textContent = '公开可交易';
+        window.PROTO.toast('已重新上架：公开可交易，新交易与聊天分支独立（示例）');
+        var tab = section.querySelector('[data-tab="public"]');
+        if (tab) { tab.click(); }
+      });
+
+      q('us09-public-check').addEventListener('click', function () {
+        var box = q('us09-public-result');
+        var text = '';
+        var kind = 'info';
+        if (state === 'pending') {
+          kind = 'danger';
+          text = '公开搜索与详情均不展示：该商品仍待审核，未生成公开入口。';
+        } else if (state === 'rejected') {
+          kind = 'danger';
+          text = '公开搜索与详情均不展示：该商品审核未通过。';
+        } else if (state === 'public') {
+          kind = 'info';
+          text = '公开可交易：搜索可见，详情可访问，有资格用户可发起请求并评论。';
+        } else if (state === 'trading') {
+          kind = 'info';
+          text = '交易中：搜索已退出；已登录有资格用户仍可访问详情并评论，新请求已停止。';
+        } else {
+          kind = 'danger';
+          if (disposed.checked) {
+            text = '拒绝公开详情：该商品正被管理处置撤销公开访问；解除后仅恢复原展示资格，原“已下架”状态保留。';
+          } else {
+            text = '公开详情不可访问：该商品已下架；仅本人历史与既有事项可按规则读取。';
+          }
+        }
+        box.hidden = false;
+        box.className = 'banner ' + kind;
+        box.textContent = text;
+        window.PROTO.toast('已按当前状态重新校验公开访问');
+      });
+    });
+  </script>
+</section>
+<footer class="page-foot">
+  <span>第 9 / 15 页 · 按用户故事组织的界面补充材料 · 示例数据，不连接后台</span>
+  <span class="pager"><a href="index.html">返回目录</a></span>
+</footer>
+</main>
+<script>
+
+</script>
+</body>
+</html>

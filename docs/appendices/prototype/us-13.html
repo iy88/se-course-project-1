@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<!--
+Version: 0.1.0
+Version-Datetime: 2026-10-23T03:49:34+08:00
+-->
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US-13 维护商品分类 · 校园二手交易平台原型</title>
+<style>
+:root{
+  --bg:#eef1ee; --panel:#ffffff; --ink:#182420; --ink-soft:#4d5f58; --ink-faint:#7b8b84;
+  --line:#dfe6e1; --line-strong:#c8d3cc; --brand:#2f6b4f; --brand-soft:#e7f1ea;
+  --brand-ink:#1f4d38; --accent:#b7791f; --accent-soft:#fbf1df;
+  --ok:#2f7d4f; --ok-soft:#e6f3ea; --warn:#9a6a12; --warn-soft:#fdf3e2;
+  --danger:#a33a33; --danger-soft:#fae9e7; --info:#2b5f87; --info-soft:#e8f1f8;
+  --radius:12px; --shadow:0 1px 2px rgba(24,36,32,.05),0 10px 26px rgba(24,36,32,.07);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.62;-webkit-font-smoothing:antialiased}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{margin:0;line-height:1.3;font-weight:650}
+p{margin:0}
+ul{margin:0;padding:0;list-style:none}
+button{font:inherit}
+code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+[hidden]{display:none !important}
+
+/* page chrome */
+.strip{background:#1e2f28;color:#e8f0eb;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12.5px}
+.strip .brandline{display:flex;align-items:center;gap:10px;min-width:0}
+.strip .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#7fb79b,#2f6b4f);display:grid;place-items:center;font-weight:700;color:#0f221a;font-size:12px;flex:0 0 auto}
+.strip b{color:#fff;font-weight:650}
+.strip .muted-dark{color:#9fb5a9}
+.strip nav{display:flex;gap:6px;flex-wrap:wrap}
+.strip nav a{color:#cfded6;padding:4px 9px;border-radius:7px;border:1px solid #3a5346}
+.strip nav a:hover{background:#2a3f35;color:#fff;text-decoration:none}
+.page{max-width:1060px;margin:22px auto 40px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:30px 36px 22px}
+.page-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);margin-top:26px;padding-top:14px;font-size:12px;color:var(--ink-faint);flex-wrap:wrap}
+.page-foot .pager{display:flex;gap:8px;flex-wrap:wrap}
+.page-foot .pager a,.page-foot .pager span{border:1px solid var(--line);border-radius:7px;padding:3px 10px;color:var(--ink-soft)}
+.page-foot .pager a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.page-foot .pager span.disabled{color:#b7c2bc;border-color:#e6ece8}
+@media (max-width:900px){.page{margin:12px 10px 26px;padding:20px 16px}.strip{padding:9px 14px}}
+
+/* story screen */
+.screen{animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.screen-head{border-bottom:1px solid var(--line);padding:2px 0 18px;margin-bottom:22px}
+.kicker{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--ink-faint);margin-bottom:8px}
+.badge{display:inline-block;background:var(--brand);color:#fff;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:650}
+.screen-head h1{font-size:26px;letter-spacing:-.01em;margin-bottom:8px}
+.goal{color:var(--ink-soft);font-size:14.5px;max-width:76ch}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;font-size:12px;color:var(--ink-faint)}
+.meta li::before{content:"·";margin-right:6px;color:var(--line-strong)}
+.meta li:first-child::before{content:"";margin:0}
+.section{margin-top:26px}
+.section-title{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.section-title h2{font-size:16px}
+.section-title .hint{font-size:12px;color:var(--ink-faint)}
+.grid{display:grid;gap:16px}
+.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.stack{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 1px 2px rgba(24,36,32,.04);padding:16px 18px}
+.card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.card-head h3{font-size:14px}
+.muted{color:var(--ink-faint);font-size:12.5px}
+.hr{height:1px;background:var(--line);margin:12px 0;border:0}
+
+/* device frames */
+.frame{background:#fff;border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;box-shadow:0 8px 22px rgba(24,36,32,.07)}
+.frames-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.frame-bar{background:#eef2ef;border-bottom:1px solid var(--line);padding:8px 12px;font-size:11.5px;color:var(--ink-faint);display:flex;gap:8px;align-items:center}
+.frame-bar .dots{display:flex;gap:4px}
+.frame-bar .dots i{width:7px;height:7px;border-radius:50%;background:#c9d4cd;display:block}
+.phone{max-width:390px;margin:0 auto}
+.phone .frame-bar{background:#1e2f28;color:#cfe0d7;border-bottom:0}
+.phone .frame-bar .dots i{background:#4c6457}
+.browser .frame-bar{background:#eef2ef}
+.app{padding:14px;background:#fbfcfb}
+.topbar-app{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.topbar-app h4{font-size:14px}
+.topbar-app .who{font-size:11.5px;color:var(--ink-faint)}
+.navbar{display:flex;gap:6px;flex-wrap:wrap}
+.navbar .chip{font-size:11.5px}
+.tabbar{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:2px 0 12px;overflow:auto}
+.tabbar .tab{border:0;background:none;padding:8px 10px;color:var(--ink-faint);font-size:12.5px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tabbar .tab.active{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line-strong);background:#fff;color:var(--ink);border-radius:8px;padding:6px 12px;font-size:12.5px;cursor:pointer;transition:.12s}
+.btn:hover{border-color:var(--brand);color:var(--brand)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.primary:hover{background:var(--brand-ink);color:#fff}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--ink-soft)}
+.btn.danger{background:var(--danger-soft);border-color:#e6c9c6;color:var(--danger)}
+.btn:disabled{opacity:.45;cursor:not-allowed;border-color:var(--line);color:var(--ink-faint)}
+.btn.small{padding:3px 9px;font-size:11.5px;border-radius:6px}
+.btn-link{border:0;background:none;color:var(--brand);cursor:pointer;padding:0;font-size:12.5px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.label{font-size:12px;color:var(--ink-soft);font-weight:600}
+.input,.textarea,.select{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;background:#fff;color:var(--ink);font:inherit;font-size:13px}
+.textarea{min-height:66px;resize:vertical}
+.input:focus,.textarea:focus,.select:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.form-row .field{flex:1 1 140px;margin-bottom:0}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{border:0;background:none;padding:5px 10px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+.seg button.active{background:var(--brand-soft);color:var(--brand-ink);font-weight:600}
+
+/* tabs */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+.tab.active{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.panel{padding-top:2px}
+
+/* chips / states */
+.chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11.5px;color:var(--ink-soft);cursor:default}
+.chip.selectable{cursor:pointer}
+.chip.selectable.active{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-ink)}
+.tag{display:inline-block;background:var(--brand-soft);color:var(--brand-ink);border-radius:6px;padding:1px 7px;font-size:11.5px;margin:0 4px 4px 0}
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
+.state{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.state.ok{background:var(--ok-soft);color:var(--ok)}
+.state.warn{background:var(--warn-soft);color:var(--warn)}
+.state.danger{background:var(--danger-soft);color:var(--danger)}
+.state.info{background:var(--info-soft);color:var(--info)}
+.state.neutral{background:#eef2ef;color:var(--ink-soft)}
+
+/* lists & tables */
+.list{display:flex;flex-direction:column;gap:8px}
+.list-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.list-item:hover{border-color:var(--line-strong)}
+.list-item .main{min-width:0}
+.list-item .title{font-weight:600;font-size:13px;margin-bottom:2px}
+.list-item .sub{font-size:11.5px;color:var(--ink-faint)}
+.list-item .side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+.row{display:flex;gap:10px;align-items:center}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--brand-soft);color:var(--brand-ink);display:grid;place-items:center;font-size:12px;font-weight:700;flex:0 0 auto}
+.table{width:100%;border-collapse:collapse;font-size:12.5px}
+.table th,.table td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+.table th{color:var(--ink-faint);font-weight:600;font-size:11.5px;background:#f7f9f7}
+.table tr:last-child td{border-bottom:0}
+.empty{text-align:center;color:var(--ink-faint);padding:26px 10px;border:1px dashed var(--line-strong);border-radius:10px;font-size:12.5px;background:#fbfcfb}
+
+/* feedback */
+.banner{display:flex;gap:8px;align-items:flex-start;border-radius:10px;padding:9px 12px;font-size:12.5px;border:1px solid var(--line);background:#f7f9f7;color:var(--ink-soft);margin-bottom:12px}
+.banner.warn{background:var(--warn-soft);border-color:#eeddba;color:#75500c}
+.banner.danger{background:var(--danger-soft);border-color:#e8cbc7;color:#7d2e28}
+.banner.info{background:var(--info-soft);border-color:#cfdeea;color:#244e70}
+.banner b{color:inherit}
+.msg{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto;padding-right:2px}
+.bubble{max-width:84%;border-radius:10px;padding:7px 10px;font-size:12.5px;background:#fff;border:1px solid var(--line);align-self:flex-start}
+.bubble.me{align-self:flex-end;background:var(--brand-soft);border-color:#cfe3d7}
+.bubble .who{display:block;font-size:10.5px;color:var(--ink-faint);margin-bottom:2px}
+.timeline{display:flex;flex-direction:column;gap:0;margin-left:4px}
+.timeline li{position:relative;padding:0 0 14px 18px;font-size:12.5px;color:var(--ink-soft)}
+.timeline li::before{content:"";position:absolute;left:0;top:5px;width:8px;height:8px;border-radius:50%;background:var(--brand-soft);border:2px solid var(--brand)}
+.timeline li::after{content:"";position:absolute;left:4px;top:16px;bottom:0;width:1px;background:var(--line)}
+.timeline li:last-child::after{display:none}
+.timeline b{color:var(--ink)}
+.progress{height:7px;border-radius:999px;background:#e8eeea;overflow:hidden}
+.progress > i{display:block;height:100%;background:linear-gradient(90deg,#7fb79b,var(--brand));width:0;transition:width .3s}
+.progress-label{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-faint);margin-bottom:4px}
+
+/* stats */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.stat .k{font-size:11.5px;color:var(--ink-faint)}
+.stat .v{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.stat .v small{font-size:11.5px;font-weight:500;color:var(--ink-faint);margin-left:3px}
+.big{font-size:20px;font-weight:700}
+
+/* toast */
+.toast-host{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:50;align-items:center;pointer-events:none}
+.toast{background:#1e2f28;color:#f2f8f4;border-radius:10px;padding:9px 16px;font-size:12.5px;box-shadow:0 10px 28px rgba(0,0,0,.22);opacity:0;transform:translateY(6px);transition:.18s;max-width:min(88vw,560px)}
+.toast.show{opacity:1;transform:none}
+.toast.ok{background:#245c3d}
+.toast.warn{background:#7a5410}
+.toast.danger{background:#7d2e28}
+
+/* cover / index */
+.hero{background:linear-gradient(135deg,#204334,#2f6b4f 62%,#4f8a6c);color:#eef6f1;border-radius:14px;padding:26px 28px;margin-bottom:22px}
+.hero .eyebrow{font-size:11.5px;letter-spacing:.14em;color:#bfd8c9;text-transform:uppercase}
+.hero h1{font-size:27px;margin:8px 0 10px;letter-spacing:-.01em}
+.hero p{color:#d5e6dc;max-width:74ch;font-size:13.5px}
+.hero .hero-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.hero .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.32);color:#fff}
+.hero .btn:hover{background:rgba(255,255,255,.2);color:#fff}
+.matrix{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.matrix th,.matrix td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}
+.matrix th{background:#f2f6f3;color:var(--ink-faint);font-size:11.5px;font-weight:600}
+.matrix tr:last-child td{border-bottom:0}
+.matrix td:first-child{white-space:nowrap}
+.matrix a{font-weight:600}
+.role-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-soft);margin-top:14px}
+.role-legend b{color:var(--ink)}
+.notice{font-size:12px;color:var(--ink-faint);margin-top:14px;line-height:1.7}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.toc a{display:flex;gap:8px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff;font-size:12.5px;color:var(--ink-soft)}
+.toc a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.toc a .n{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+@media (max-width:900px){.cols-2{grid-template-columns:1fr}.screen-head h1{font-size:22px}}
+@media print{.strip{display:none}.page{box-shadow:none;border:0;margin:0;max-width:none}.page-foot{display:none}}
+
+</style>
+<style>
+    #us-01 .auth-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:16px;align-items:start}
+    #us-01 .brand{display:flex;align-items:center;gap:8px;font-weight:600}
+    #us-01 .brand-dot{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;background:#3f6fd8;color:#fff;font-size:12px}
+    #us-01 .brand-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
+    #us-01 .hint{font-size:12px;line-height:1.6;margin:0}
+    #us-01 .account-line{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed rgba(120,130,150,.25);font-size:13px}
+    #us-01 .account-line:last-of-type{border-bottom:0}
+    #us-01 .signed-in{border:1px solid #bfe3cd;background:#f3fbf6;border-radius:10px;padding:12px;display:grid;gap:8px}
+    #us-01 .signed-in strong{font-size:14px}
+    #us-01 .auth-panel{display:grid;gap:12px}
+    #us-01 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-01 .ban-state{font-weight:600}
+    @media (max-width: 900px){#us-01 .auth-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-02 .work-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:16px;align-items:start}
+    #us-02 .thumb{width:52px;height:52px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:1px}
+    #us-02 .thumb-sm{width:56px;height:56px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px dashed rgba(120,130,150,.45)}
+    #us-02 .prod{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-02 .prod-main{flex:1;min-width:0}
+    #us-02 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-02 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-02 .prod-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+    #us-02 .thumb-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    #us-02 .tag-btn[aria-pressed="true"]{background:#e8efff;border-color:#7c9cf5;color:#24407a}
+    #us-02 .scope-item{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-02 .scope-item:last-child{border-bottom:0}
+    #us-02 .scope-item p{margin:2px 0 0;font-size:12px;color:#6b7280}
+    #us-02 .notice{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-02 .notice:last-child{border-bottom:0}
+    #us-02 .notice div{font-size:13px;line-height:1.6}
+    #us-02 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    @media (max-width: 900px){#us-02 .work-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-03 .search-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:16px;align-items:start}
+    #us-03 .chips{display:flex;flex-wrap:wrap;gap:8px}
+    #us-03 .tag-btn[aria-pressed="true"]{background:#e8efff;border-color:#7c9cf5;color:#24407a}
+    #us-03 .thumb{width:54px;height:54px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px}
+    #us-03 .thumb.bike{background:#eef8f1;color:#3f6b50}
+    #us-03 .thumb.lamp{background:#fdf6e7;color:#7a6530}
+    #us-03 .prod{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-03 .prod-main{flex:1;min-width:0}
+    #us-03 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-03 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-03 .price{font-weight:600}
+    #us-03 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-03 .side-line{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed rgba(120,130,150,.25);font-size:13px}
+    #us-03 .side-line:last-child{border-bottom:0}
+    #us-03 .detail-title{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+    #us-03 .detail-title strong{font-size:15px}
+    @media (max-width: 900px){#us-03 .search-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-04 .chat-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:16px;align-items:start}
+    #us-04 .thumb{width:52px;height:52px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px}
+    #us-04 .thumb.faded{background:#f1f2f5;color:#9aa1ad}
+    #us-04 .prod-main{flex:1;min-width:0}
+    #us-04 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-04 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-04 .comment{display:flex;gap:10px;padding:10px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-04 .comment:last-child{border-bottom:0}
+    #us-04 .comment-body{flex:1;min-width:0}
+    #us-04 .comment-body p{margin:4px 0;font-size:13px;line-height:1.6}
+    #us-04 .comment-head{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+    #us-04 .reply{margin-top:6px;padding:8px 10px;border-left:3px solid #9db4e8;background:rgba(120,140,190,.08);border-radius:0 6px 6px 0;font-size:13px}
+    #us-04 .chat-body{display:grid;gap:8px;max-height:260px;overflow:auto;padding:10px;border:1px solid rgba(120,130,150,.2);border-radius:10px;background:rgba(120,130,150,.04)}
+    #us-04 .composer{display:flex;gap:8px}
+    #us-04 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-04 .ctx{border:1px solid rgba(120,130,150,.25);border-radius:8px;padding:8px 10px;font-size:12px;display:grid;gap:4px}
+    #us-04 .ctx strong{font-size:13px}
+    #us-04 .tab .pill{margin-left:4px}
+    #us-04 .fav-row{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-04 .section-gap{display:grid;gap:12px}
+    @media (max-width: 900px){#us-04 .chat-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+  #us-05 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  #us-05 .req{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}
+  #us-05 .req-main{display:flex;gap:10px;min-width:0}
+  #us-05 .req-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  #us-05 .req.closed{opacity:.62}
+  #us-05 .req.accepted{border-left:3px solid #2f9e6e;padding-left:9px}
+  #us-05 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-05 .agree-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #us-05 .agree-grid .field{margin:0}
+  #us-05 .trbar{height:8px;border-radius:999px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0}
+  #us-05 .trbar>i{display:block;height:100%;width:0;background:#2f9e6e;transition:width .3s}
+  #us-05 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+  #us-05 .ac-list strong{white-space:nowrap}
+  #us-05 .agree-summary{font-size:13px}
+</style>
+<style>
+  #us-06 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  #us-06 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-06 .rec{display:flex;gap:10px;justify-content:space-between;align-items:center}
+  #us-06 .who{display:flex;gap:10px;align-items:center;min-width:0}
+  #us-06 .trbar{height:8px;border-radius:999px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0}
+  #us-06 .trbar>i{display:block;height:100%;width:0;background:#2f9e6e;transition:width .3s}
+  #us-06 .hist-item{display:grid;gap:2px}
+  #us-06 .rule-note{margin:6px 0 0;font-size:13px}
+  #us-06 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+</style>
+<style>
+  #us-07 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  #us-07 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-07 .rev{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}
+  #us-07 .stars{letter-spacing:2px;color:#c98a12;font-weight:600}
+  #us-07 .rev-body{min-width:0}
+  #us-07 .rform{display:grid;gap:10px}
+  #us-07 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+  #us-07 .archive-note{font-size:13px}
+  #us-07 .panel-note{font-size:13px}
+</style>
+<style>
+    #us-08 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-08 .item-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-08 .split{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    #us-08 .kv{display:grid;grid-template-columns:88px 1fr;gap:6px 10px;margin:0}
+    #us-08 .kv dt{color:#6b7280;font-size:12px}
+    #us-08 .kv dd{margin:0}
+    #us-08 .thread-item{padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-08 .thread-item:last-child{border-bottom:0}
+    #us-08 .thread-item .muted{display:block;margin-top:2px}
+  </style>
+<style>
+    #us-09 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-09 .check{display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:13px}
+    #us-09 .state-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #us-09 .step{padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-09 .step:last-child{border-bottom:0}
+    #us-09 .step .muted{display:block;margin-top:2px}
+  </style>
+<style>
+    #us-10 .range-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    #us-10 .range-note{font-size:12px;color:#6b7280}
+    #us-10 .split{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    #us-10 .stat .muted{display:block}
+    #us-10 .report-line{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-10 .report-line:last-child{border-bottom:0}
+  </style>
+<style>
+    #us-11 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-11 .item-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-11 .notif{cursor:pointer}
+    #us-11 .notif:hover{background:#f8fafc}
+    #us-11 .detail-title{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  </style>
+<style>
+    #us-12 .person{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    #us-12 .person-id{display:flex;align-items:center;gap:10px}
+    #us-12 .tab-strip{overflow-x:auto}
+    #us-12 .tab-strip .tab{flex:0 0 auto;white-space:nowrap}
+    #us-12 .stat-grid{margin:10px 0}
+    #us-12 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-12 .entry-main{flex:1;min-width:0}
+    #us-12 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-12 .subnav{display:flex;gap:6px;margin:8px 0}
+    #us-12 .note-line{margin:6px 0 0}
+  </style>
+<style>
+    #us-13 .admin-line{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    #us-13 .cat-name{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-13 .alias-text{font-size:13px}
+    #us-13 .ops{display:flex;gap:6px;flex-wrap:wrap}
+    #us-13 .table td{vertical-align:top}
+    #us-13 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-13 .entry-main{flex:1;min-width:0}
+    #us-13 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-13 .inline-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px}
+    #us-13 .inline-form .field{flex:1;min-width:180px}
+    #us-13 .publish-note{margin:6px 0 0}
+    #us-13 .record-line{margin:4px 0 0}
+  </style>
+<style>
+    #us-14 .admin-line{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    #us-14 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-14 .entry-main{flex:1;min-width:0}
+    #us-14 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-14 .case-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+    #us-14 .field{margin-top:8px}
+    #us-14 .ops{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+    #us-14 .notice-line{margin:6px 0 0}
+    #us-14 .user-actions{display:flex;gap:6px;flex-wrap:wrap}
+  </style>
+<script>
+(function () {
+  "use strict";
+  var registry = [];
+  var host = null;
+  function ensureHost() {
+    if (!host) {
+      host = document.createElement("div");
+      host.className = "toast-host";
+      host.setAttribute("aria-live", "polite");
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+  function toast(message, kind) {
+    if (!message) return;
+    var el = document.createElement("div");
+    el.className = "toast" + (kind ? " " + kind : "");
+    el.textContent = message;
+    ensureHost().appendChild(el);
+    requestAnimationFrame(function () { el.classList.add("show"); });
+    setTimeout(function () {
+      el.classList.remove("show");
+      setTimeout(function () { el.remove(); }, 250);
+    }, 2600);
+  }
+  window.PROTO = {
+    register: function (id, fn) { if (typeof fn === "function") registry.push(fn); },
+    toast: toast
+  };
+  function initTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs"), function (group) {
+      var tabs = Array.prototype.slice.call(group.querySelectorAll("[data-tab]"));
+      if (!tabs.length) return;
+      var name = group.getAttribute("data-tabs") || "";
+      var active = tabs.filter(function (item) { return item.classList.contains("active"); })[0] || tabs[0];
+      active.classList.add("active");
+      var value = active.getAttribute("data-tab");
+      var values = tabs.map(function (item) { return item.getAttribute("data-tab"); });
+      var scope = group.closest(".screen") || document;
+      Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
+        var panelValue = panel.getAttribute("data-panel");
+        var panelGroup = panel.getAttribute("data-group");
+        if (panelGroup && panelGroup !== name) return;
+        var matched = values.indexOf(panelValue) >= 0 || values.indexOf(panelValue.replace(name + ":", "")) >= 0;
+        if (!matched) return;
+        var shown = panelValue === value || panelValue === name + ":" + value;
+        panel.hidden = !shown;
+        panel.classList.toggle("active", shown);
+      });
+    });
+  }
+  function init() {
+    initTabs();
+    document.addEventListener("click", function (event) {
+      var target = event.target.closest("[data-toast]");
+      if (target) toast(target.getAttribute("data-toast"), target.getAttribute("data-toast-kind") || "");
+      var toggle = event.target.closest("[data-toggle]");
+      if (toggle) {
+        var node = document.getElementById(toggle.getAttribute("data-toggle"));
+        if (node) node.hidden = !node.hidden;
+      }
+      var tab = event.target.closest(".tabs [data-tab]");
+      if (tab) {
+        var group = tab.closest(".tabs");
+        var name = group.getAttribute("data-tabs") || "";
+        var value = tab.getAttribute("data-tab");
+        Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
+          item.classList.toggle("active", item === tab);
+        });
+        var scope = tab.closest(".screen") || document;
+        Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
+          if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
+          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          panel.hidden = !match;
+          panel.classList.toggle("active", match);
+        });
+      }
+      var seg = event.target.closest(".seg button");
+      if (seg) {
+        Array.prototype.forEach.call(seg.parentElement.querySelectorAll("button"), function (item) {
+          item.classList.toggle("active", item === seg);
+        });
+      }
+    });
+    document.addEventListener("submit", function (event) {
+      var form = event.target.closest("form");
+      if (!form) return;
+      event.preventDefault();
+      toast(form.getAttribute("data-demo") || "演示原型：表单已拦截，不会提交或保存。", "warn");
+    });
+    registry.forEach(function (fn) {
+      try { fn(document); } catch (error) { toast("本页演示初始化失败：" + error.message, "danger"); }
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+
+</script>
+</head>
+<body>
+<header class="strip">
+  <div class="brandline"><span class="logo">二</span><span><b>校园二手交易平台 · 多页原型</b> <span class="muted-dark">US-13 维护商品分类</span></span></div>
+  <nav><a href="index.html">目录</a><a href="us-12.html">← US-12 管理本人业务</a><a href="us-14.html">US-14 处理异常交易 →</a></nav>
+</header>
+<main class="page">
+<section class="screen" id="us-13" data-us="13">
+
+
+  <header class="screen-head">
+    <div class="kicker"><span class="badge">US-13</span> 分类与标签维护 · 中优先级 · 批次 2</div>
+    <h1>维护商品分类</h1>
+    <p class="goal">作为有分类管理权限的平台管理员；申请标签的卖方参与关联审核，我希望维护单级多标签及别名，处理随商品提出的标签申请，以便使商品归类、名称变更与检索使用一致依据。</p>
+    <ul class="meta">
+      <li>关联功能 FR-13</li>
+      <li>主用例 UC-C13</li>
+      <li>协作用例 UC-C02、UC-C03、UC-C08、UC-C11</li>
+      <li>依据 US-13-AC-01—AC-07</li>
+    </ul>
+  </header>
+
+  <div class="stack">
+    <div class="frame browser">
+      <div class="frame-bar">管理后台 · 分类与标签（示例数据）</div>
+      <div class="app">
+        <div class="topbar">
+          <div class="admin-line">
+            <strong>商品分类 · 单级多标签</strong>
+            <span class="chip">管理员 周（示例）</span>
+          </div>
+        </div>
+
+        <div class="tabs" data-tabs>
+          <button class="tab active" data-tab="cats">分类与别名</button>
+          <button class="tab" data-tab="apply">标签申请</button>
+          <button class="tab" data-tab="fix">纠正记录</button>
+        </div>
+
+        <div class="panel" data-panel="cats">
+          <div class="banner info">一个分类只保留一个主名，可维护多个别名；改名保持分类身份不变。</div>
+
+          <table class="table">
+            <thead>
+              <tr><th>主名与别名</th><th>关联商品</th><th>状态</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              <tr data-cat-row="textbook" data-disabled="false" data-linked="yes">
+                <td>
+                  <div class="cat-name">
+                    <strong data-cat-name>教材</strong>
+                    <span class="tag alias-text" data-cat-alias>课本 · 教科书</span>
+                  </div>
+                </td>
+                <td>126</td>
+                <td><span class="state ok" data-cat-state>启用</span></td>
+                <td>
+                  <div class="ops">
+                    <button class="btn ghost" type="button" data-cat-action="rename" data-cat="textbook">改名</button>
+                    <button class="btn ghost" type="button" data-cat-action="toggle" data-cat="textbook">停用</button>
+                    <button class="btn danger" type="button" data-cat-action="delete" data-cat="textbook">删除</button>
+                  </div>
+                </td>
+              </tr>
+              <tr data-cat-row="bike" data-disabled="false" data-linked="yes">
+                <td>
+                  <div class="cat-name">
+                    <strong data-cat-name>自行车</strong>
+                    <span class="tag alias-text" data-cat-alias>单车</span>
+                  </div>
+                </td>
+                <td>48</td>
+                <td><span class="state ok" data-cat-state>启用</span></td>
+                <td>
+                  <div class="ops">
+                    <button class="btn ghost" type="button" data-cat-action="rename" data-cat="bike">改名</button>
+                    <button class="btn ghost" type="button" data-cat-action="toggle" data-cat="bike">停用</button>
+                    <button class="btn danger" type="button" data-cat-action="delete" data-cat="bike">删除</button>
+                  </div>
+                </td>
+              </tr>
+              <tr data-cat-row="lamp" data-disabled="false" data-linked="no">
+                <td>
+                  <div class="cat-name">
+                    <strong data-cat-name>台灯</strong>
+                    <span class="tag alias-text" data-cat-alias>—</span>
+                  </div>
+                </td>
+                <td>0</td>
+                <td><span class="state ok" data-cat-state>启用</span></td>
+                <td>
+                  <div class="ops">
+                    <button class="btn ghost" type="button" data-cat-action="rename" data-cat="lamp">改名</button>
+                    <button class="btn ghost" type="button" data-cat-action="toggle" data-cat="lamp">停用</button>
+                    <button class="btn danger" type="button" data-cat-action="delete" data-cat="lamp">删除</button>
+                  </div>
+                </td>
+              </tr>
+              <tr data-cat-row="digital" data-disabled="true" data-linked="yes">
+                <td>
+                  <div class="cat-name">
+                    <strong data-cat-name>数码配件</strong>
+                    <span class="tag alias-text" data-cat-alias>耳机 · 数据线</span>
+                  </div>
+                </td>
+                <td>33</td>
+                <td><span class="state warn" data-cat-state>已停用</span></td>
+                <td>
+                  <div class="ops">
+                    <button class="btn ghost" type="button" data-cat-action="rename" data-cat="digital">改名</button>
+                    <button class="btn ghost" type="button" data-cat-action="toggle" data-cat="digital">启用</button>
+                    <button class="btn danger" type="button" data-cat-action="delete" data-cat="digital">删除</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p class="muted">删除仅对从未关联商品的分类可用；曾关联商品的分类只能停用，旧商品与交易保留，在售商品仍可筛选。</p>
+
+          <form class="card" id="us13-rename-form" hidden>
+            <div class="card-head">修改主名</div>
+            <label class="field">
+              <span class="label">新主名</span>
+              <input class="input" id="us13-rename-input" type="text" maxlength="20" value="">
+            </label>
+            <p class="muted">旧主名将自动保留为别名；分类身份、商品归属与历史交易当时名称不变。</p>
+            <div class="ops">
+              <button class="btn primary" type="submit">保存改名</button>
+              <button class="btn ghost" type="button" data-close-rename>取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel" data-panel="apply" hidden>
+          <div class="banner info">卖方随商品提交新标签申请；仅商品审核通过时，新标签或别名才一并批准公开。</div>
+
+          <div class="list">
+            <div class="list-item">
+              <div class="entry-main">
+                <strong>商品 XZ-5521 ·「考研数学复习全书」</strong>
+                <div class="muted">申请新标签：考研资料 · 说明：现有「教材」范围过宽，检索不便</div>
+                <div><span class="state info" data-tag-state>待审核</span> <span class="tag">随商品送审</span></div>
+              </div>
+              <div class="entry-side">
+                <button class="btn primary" type="button" data-approve-tag>批准并随商品通过</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="banner info" id="us13-apply-result" hidden></div>
+
+          <div class="card">
+            <div class="card-head">标签不合适的处理</div>
+            <p class="muted">若商品本身合规但申请标签不合适：有合适已有标签时说明原因后通过；否则按不通过记录退回补充原因，不因标签名当然拒绝商品。</p>
+            <div class="inline-form">
+              <label class="field">
+                <span class="label">退回补充原因</span>
+                <input class="input" id="us13-reject-reason" type="text" placeholder="示例：请改用已有标签「教材 · 考研」">
+              </label>
+              <button class="btn ghost" type="button" data-reject-tag>退回补充</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" data-panel="fix" hidden>
+          <div class="banner warn">纠正交易中商品的分类须有依据；仅记录分类变化，不改变交易约定、交易状态与历史内容。</div>
+
+          <form class="card" id="us13-correct-form">
+            <div class="card-head">纠正分类 · LED 护眼台灯（交易 T-2050 进行中）</div>
+            <p class="muted">当前分类：数码配件 · 卖方 吴同学（示例）</p>
+            <div class="inline-form">
+              <label class="field">
+                <span class="label">调整为</span>
+                <select class="select" id="us13-correct-select">
+                  <option value="教材">教材</option>
+                  <option value="自行车">自行车</option>
+                  <option value="台灯" selected>台灯</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="label">调整原因</span>
+                <input class="input" id="us13-correct-reason" type="text" placeholder="示例：商品实物为台灯，发布时误选">
+              </label>
+              <button class="btn primary" type="submit">留据并通知卖方</button>
+            </div>
+          </form>
+
+          <div class="banner info" id="us13-correct-result" hidden></div>
+
+          <div class="card">
+            <div class="card-head">历史纠正记录</div>
+            <div class="list">
+              <div class="list-item">
+                <div class="entry-main">
+                  <strong>商品 XZ-5402 · 数码配件 → 台灯</strong>
+                  <div class="muted">原因：发布时误选分类 · 执行者：管理员 周（示例）· 2026-10-19 15:42</div>
+                  <div class="record-line"><span class="state info">已通知卖方</span> <span class="tag">交易约定未变更</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="frame phone">
+      <div class="frame-bar">发布商品 · 卖方视角（示例数据）</div>
+      <div class="app">
+        <div class="topbar">发布商品</div>
+        <div class="card">
+          <label class="field">
+            <span class="label">商品标题</span>
+            <input class="input" type="text" value="考研数学复习全书（九成新）">
+          </label>
+          <label class="field">
+            <span class="label">商品分类</span>
+            <select class="select" id="us13-publish-select">
+              <option value="">请选择分类</option>
+              <option value="textbook" data-publish-option="textbook" data-base-label="教材">教材</option>
+              <option value="bike" data-publish-option="bike" data-base-label="自行车">自行车</option>
+              <option value="lamp" data-publish-option="lamp" data-base-label="台灯">台灯</option>
+              <option value="digital" data-publish-option="digital" data-base-label="数码配件" disabled>数码配件（已停用）</option>
+            </select>
+          </label>
+          <p class="muted publish-note">已停用分类不出现在可选范围；有在售商品的停用分类仍保留筛选入口。</p>
+          <div class="ops">
+            <button class="btn" type="button" data-toast="缺少合适分类时，可随商品提交标签申请；仅在商品审核通过时一并批准生效。">申请新标签</button>
+            <button class="btn primary" type="button" data-toast="发布校验通过后送审；新发布不能选择已停用的分类。">提交送审</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">标签申请记录</div>
+          <div class="muted">XZ-5521 · 申请「考研资料」· 待商品审核结果</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <div class="card-head">验收要点</div>
+        <div class="list">
+          <div class="list-item"><div class="entry-main">US-13-AC-01：卖方发布时缺少合适已有分类 → 可随商品提交新标签申请，仅在商品通过时一并批准并公开为新标签或别名。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-02：申请标签不合适但商品合规 → 有合适已有标签时说明原因后通过，否则退回补充并写明原因，不因标签名拒绝商品。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-03：分类存在主名与别名 → 改名后显示新主名、旧名保留为别名，分类身份与商品归属不变，历史交易保留当时名称。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-04：分类曾关联商品 → 操作只提供停用；旧商品与交易保留，有在售商品时仍可筛选，新的发布不可选。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-05：分类从未关联商品 → 可逻辑删除，并保留必要依据。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-06：交易中商品需纠正分类 → 有权限管理员填写依据后调整，记录前后分类、原因、执行者与时间并通知卖方，交易约定与历史不变。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-07：商品匹配多个选定标签 → 检索结果同时满足全部所选标签、关键词与价格；同义别名不重复计标签。</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.PROTO.register('us-13', function (section) {
+      var renameForm = section.querySelector('#us13-rename-form');
+      var renameInput = section.querySelector('#us13-rename-input');
+      var renameTarget = null;
+
+      function toast(message) {
+        if (window.PROTO && window.PROTO.toast) window.PROTO.toast(message);
+      }
+
+      function rowFor(key) {
+        return section.querySelector('[data-cat-row="' + key + '"]');
+      }
+
+      function optionFor(key) {
+        return section.querySelector('[data-publish-option="' + key + '"]');
+      }
+
+      function syncOption(key, label, disabled) {
+        var option = optionFor(key);
+        if (!option) return;
+        option.setAttribute('data-base-label', label);
+        option.textContent = label + (disabled ? '（已停用）' : '');
+        option.disabled = disabled;
+      }
+
+      section.querySelectorAll('[data-cat-action]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var action = button.getAttribute('data-cat-action');
+          var key = button.getAttribute('data-cat');
+          var row = rowFor(key);
+          if (!row) return;
+
+          if (action === 'rename') {
+            renameTarget = key;
+            renameInput.value = row.querySelector('[data-cat-name]').textContent;
+            renameForm.hidden = false;
+            renameInput.focus();
+            return;
+          }
+
+          if (action === 'toggle') {
+            var nextDisabled = row.getAttribute('data-disabled') !== 'true';
+            row.setAttribute('data-disabled', String(nextDisabled));
+            var stateCell = row.querySelector('[data-cat-state]');
+            stateCell.className = 'state ' + (nextDisabled ? 'warn' : 'ok');
+            stateCell.textContent = nextDisabled ? '已停用' : '启用';
+            button.textContent = nextDisabled ? '启用' : '停用';
+            syncOption(key, row.querySelector('[data-cat-name]').textContent, nextDisabled);
+            toast(nextDisabled
+              ? '分类已停用：新的发布不可选，旧商品与交易保留；有在售商品时仍可筛选。'
+              : '分类已启用：可再次用于新的发布与检索。');
+            return;
+          }
+
+          if (action === 'delete') {
+            if (row.getAttribute('data-linked') === 'yes') {
+              toast('该分类曾关联商品，只能停用，不能删除。');
+              return;
+            }
+            var nameCell = row.querySelector('[data-cat-name]');
+            var state = row.querySelector('[data-cat-state]');
+            nameCell.textContent = nameCell.textContent + '（已逻辑删除）';
+            state.className = 'state danger';
+            state.textContent = '已逻辑删除';
+            row.querySelectorAll('[data-cat-action]').forEach(function (item) {
+              item.disabled = true;
+            });
+            toast('该分类从未关联商品，已逻辑删除并保留必要依据。');
+          }
+        });
+      });
+
+      section.querySelector('[data-close-rename]').addEventListener('click', function () {
+        renameForm.hidden = true;
+        renameTarget = null;
+      });
+
+      renameForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        if (!renameTarget) return;
+        var row = rowFor(renameTarget);
+        var nameCell = row.querySelector('[data-cat-name]');
+        var oldName = nameCell.textContent;
+        var newName = renameInput.value.trim();
+        if (!newName) {
+          toast('请填写新的主名。');
+          return;
+        }
+        if (newName === oldName) {
+          toast('主名没有变化。');
+          return;
+        }
+        nameCell.textContent = newName;
+        var aliasCell = row.querySelector('[data-cat-alias]');
+        var aliasText = aliasCell.textContent.trim();
+        aliasCell.textContent = (!aliasText || aliasText === '—') ? oldName : aliasText + ' · ' + oldName;
+        syncOption(renameTarget, newName, row.getAttribute('data-disabled') === 'true');
+        renameForm.hidden = true;
+        renameTarget = null;
+        toast('主名已更新，旧名保留为别名；分类身份、商品归属与历史交易当时名称不变。');
+      });
+
+      var approveButton = section.querySelector('[data-approve-tag]');
+      approveButton.addEventListener('click', function () {
+        approveButton.disabled = true;
+        approveButton.textContent = '已批准';
+        var tagState = section.querySelector('[data-tag-state]');
+        tagState.className = 'state ok';
+        tagState.textContent = '已随商品通过';
+        var applyResult = section.querySelector('#us13-apply-result');
+        applyResult.hidden = false;
+        applyResult.textContent = '已批准：「考研资料」作为「教材」的别名公开；检索时同义别名不重复计标签。';
+        toast('标签申请已随商品审核通过生效，并作为「教材」的别名公开。');
+      });
+
+      section.querySelector('[data-reject-tag]').addEventListener('click', function () {
+        var reasonField = section.querySelector('#us13-reject-reason');
+        var reason = reasonField.value.trim();
+        if (!reason) {
+          toast('请填写退回补充原因。');
+          return;
+        }
+        var applyResult = section.querySelector('#us13-apply-result');
+        applyResult.hidden = false;
+        applyResult.textContent = '已按不通过记录退回补充原因：' + reason + '。商品可改用已有标签后重新送审，不因标签名拒绝商品。';
+        var tagState = section.querySelector('[data-tag-state]');
+        tagState.className = 'state warn';
+        tagState.textContent = '退回补充';
+        toast('已记录退回补充原因；商品本身不因标签不合适被拒绝。');
+      });
+
+      section.querySelector('#us13-correct-form').addEventListener('submit', function (event) {
+        event.preventDefault();
+        var reasonField = section.querySelector('#us13-correct-reason');
+        var reason = reasonField.value.trim();
+        var target = section.querySelector('#us13-correct-select').value;
+        var current = '数码配件';
+        if (!reason) {
+          toast('纠正分类须填写依据。');
+          return;
+        }
+        var result = section.querySelector('#us13-correct-result');
+        result.hidden = false;
+        result.textContent = '已记录：' + current + ' → ' + target + '；原因：' + reason + '；执行者：管理员 周（示例）；时间 2026-10-23 10:20。已通知卖方，交易约定、状态与历史内容不变。';
+        toast('分类纠正已留据并通知卖方；交易约定、交易状态及历史内容保持不变。');
+      });
+    });
+  </script>
+</section>
+<footer class="page-foot">
+  <span>第 13 / 15 页 · 按用户故事组织的界面补充材料 · 示例数据，不连接后台</span>
+  <span class="pager"><a href="index.html">返回目录</a></span>
+</footer>
+</main>
+<script>
+
+</script>
+</body>
+</html>

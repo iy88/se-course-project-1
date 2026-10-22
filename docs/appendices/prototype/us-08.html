@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<!--
+Version: 0.1.0
+Version-Datetime: 2026-10-23T03:49:34+08:00
+-->
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US-08 审核与处置沟通 · 校园二手交易平台原型</title>
+<style>
+:root{
+  --bg:#eef1ee; --panel:#ffffff; --ink:#182420; --ink-soft:#4d5f58; --ink-faint:#7b8b84;
+  --line:#dfe6e1; --line-strong:#c8d3cc; --brand:#2f6b4f; --brand-soft:#e7f1ea;
+  --brand-ink:#1f4d38; --accent:#b7791f; --accent-soft:#fbf1df;
+  --ok:#2f7d4f; --ok-soft:#e6f3ea; --warn:#9a6a12; --warn-soft:#fdf3e2;
+  --danger:#a33a33; --danger-soft:#fae9e7; --info:#2b5f87; --info-soft:#e8f1f8;
+  --radius:12px; --shadow:0 1px 2px rgba(24,36,32,.05),0 10px 26px rgba(24,36,32,.07);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.62;-webkit-font-smoothing:antialiased}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{margin:0;line-height:1.3;font-weight:650}
+p{margin:0}
+ul{margin:0;padding:0;list-style:none}
+button{font:inherit}
+code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+[hidden]{display:none !important}
+
+/* page chrome */
+.strip{background:#1e2f28;color:#e8f0eb;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12.5px}
+.strip .brandline{display:flex;align-items:center;gap:10px;min-width:0}
+.strip .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#7fb79b,#2f6b4f);display:grid;place-items:center;font-weight:700;color:#0f221a;font-size:12px;flex:0 0 auto}
+.strip b{color:#fff;font-weight:650}
+.strip .muted-dark{color:#9fb5a9}
+.strip nav{display:flex;gap:6px;flex-wrap:wrap}
+.strip nav a{color:#cfded6;padding:4px 9px;border-radius:7px;border:1px solid #3a5346}
+.strip nav a:hover{background:#2a3f35;color:#fff;text-decoration:none}
+.page{max-width:1060px;margin:22px auto 40px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:30px 36px 22px}
+.page-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);margin-top:26px;padding-top:14px;font-size:12px;color:var(--ink-faint);flex-wrap:wrap}
+.page-foot .pager{display:flex;gap:8px;flex-wrap:wrap}
+.page-foot .pager a,.page-foot .pager span{border:1px solid var(--line);border-radius:7px;padding:3px 10px;color:var(--ink-soft)}
+.page-foot .pager a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.page-foot .pager span.disabled{color:#b7c2bc;border-color:#e6ece8}
+@media (max-width:900px){.page{margin:12px 10px 26px;padding:20px 16px}.strip{padding:9px 14px}}
+
+/* story screen */
+.screen{animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.screen-head{border-bottom:1px solid var(--line);padding:2px 0 18px;margin-bottom:22px}
+.kicker{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--ink-faint);margin-bottom:8px}
+.badge{display:inline-block;background:var(--brand);color:#fff;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:650}
+.screen-head h1{font-size:26px;letter-spacing:-.01em;margin-bottom:8px}
+.goal{color:var(--ink-soft);font-size:14.5px;max-width:76ch}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;font-size:12px;color:var(--ink-faint)}
+.meta li::before{content:"·";margin-right:6px;color:var(--line-strong)}
+.meta li:first-child::before{content:"";margin:0}
+.section{margin-top:26px}
+.section-title{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.section-title h2{font-size:16px}
+.section-title .hint{font-size:12px;color:var(--ink-faint)}
+.grid{display:grid;gap:16px}
+.cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.stack{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 1px 2px rgba(24,36,32,.04);padding:16px 18px}
+.card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.card-head h3{font-size:14px}
+.muted{color:var(--ink-faint);font-size:12.5px}
+.hr{height:1px;background:var(--line);margin:12px 0;border:0}
+
+/* device frames */
+.frame{background:#fff;border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;box-shadow:0 8px 22px rgba(24,36,32,.07)}
+.frames-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+.frame-bar{background:#eef2ef;border-bottom:1px solid var(--line);padding:8px 12px;font-size:11.5px;color:var(--ink-faint);display:flex;gap:8px;align-items:center}
+.frame-bar .dots{display:flex;gap:4px}
+.frame-bar .dots i{width:7px;height:7px;border-radius:50%;background:#c9d4cd;display:block}
+.phone{max-width:390px;margin:0 auto}
+.phone .frame-bar{background:#1e2f28;color:#cfe0d7;border-bottom:0}
+.phone .frame-bar .dots i{background:#4c6457}
+.browser .frame-bar{background:#eef2ef}
+.app{padding:14px;background:#fbfcfb}
+.topbar-app{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.topbar-app h4{font-size:14px}
+.topbar-app .who{font-size:11.5px;color:var(--ink-faint)}
+.navbar{display:flex;gap:6px;flex-wrap:wrap}
+.navbar .chip{font-size:11.5px}
+.tabbar{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:2px 0 12px;overflow:auto}
+.tabbar .tab{border:0;background:none;padding:8px 10px;color:var(--ink-faint);font-size:12.5px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tabbar .tab.active{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line-strong);background:#fff;color:var(--ink);border-radius:8px;padding:6px 12px;font-size:12.5px;cursor:pointer;transition:.12s}
+.btn:hover{border-color:var(--brand);color:var(--brand)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.primary:hover{background:var(--brand-ink);color:#fff}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--ink-soft)}
+.btn.danger{background:var(--danger-soft);border-color:#e6c9c6;color:var(--danger)}
+.btn:disabled{opacity:.45;cursor:not-allowed;border-color:var(--line);color:var(--ink-faint)}
+.btn.small{padding:3px 9px;font-size:11.5px;border-radius:6px}
+.btn-link{border:0;background:none;color:var(--brand);cursor:pointer;padding:0;font-size:12.5px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.label{font-size:12px;color:var(--ink-soft);font-weight:600}
+.input,.textarea,.select{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;background:#fff;color:var(--ink);font:inherit;font-size:13px}
+.textarea{min-height:66px;resize:vertical}
+.input:focus,.textarea:focus,.select:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.form-row .field{flex:1 1 140px;margin-bottom:0}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{border:0;background:none;padding:5px 10px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+.seg button.active{background:var(--brand-soft);color:var(--brand-ink);font-weight:600}
+
+/* tabs */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+.tab.active{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.panel{padding-top:2px}
+
+/* chips / states */
+.chip{display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11.5px;color:var(--ink-soft);cursor:default}
+.chip.selectable{cursor:pointer}
+.chip.selectable.active{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-ink)}
+.tag{display:inline-block;background:var(--brand-soft);color:var(--brand-ink);border-radius:6px;padding:1px 7px;font-size:11.5px;margin:0 4px 4px 0}
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11.5px;border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
+.state{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11.5px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.state.ok{background:var(--ok-soft);color:var(--ok)}
+.state.warn{background:var(--warn-soft);color:var(--warn)}
+.state.danger{background:var(--danger-soft);color:var(--danger)}
+.state.info{background:var(--info-soft);color:var(--info)}
+.state.neutral{background:#eef2ef;color:var(--ink-soft)}
+
+/* lists & tables */
+.list{display:flex;flex-direction:column;gap:8px}
+.list-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.list-item:hover{border-color:var(--line-strong)}
+.list-item .main{min-width:0}
+.list-item .title{font-weight:600;font-size:13px;margin-bottom:2px}
+.list-item .sub{font-size:11.5px;color:var(--ink-faint)}
+.list-item .side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+.row{display:flex;gap:10px;align-items:center}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--brand-soft);color:var(--brand-ink);display:grid;place-items:center;font-size:12px;font-weight:700;flex:0 0 auto}
+.table{width:100%;border-collapse:collapse;font-size:12.5px}
+.table th,.table td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+.table th{color:var(--ink-faint);font-weight:600;font-size:11.5px;background:#f7f9f7}
+.table tr:last-child td{border-bottom:0}
+.empty{text-align:center;color:var(--ink-faint);padding:26px 10px;border:1px dashed var(--line-strong);border-radius:10px;font-size:12.5px;background:#fbfcfb}
+
+/* feedback */
+.banner{display:flex;gap:8px;align-items:flex-start;border-radius:10px;padding:9px 12px;font-size:12.5px;border:1px solid var(--line);background:#f7f9f7;color:var(--ink-soft);margin-bottom:12px}
+.banner.warn{background:var(--warn-soft);border-color:#eeddba;color:#75500c}
+.banner.danger{background:var(--danger-soft);border-color:#e8cbc7;color:#7d2e28}
+.banner.info{background:var(--info-soft);border-color:#cfdeea;color:#244e70}
+.banner b{color:inherit}
+.msg{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto;padding-right:2px}
+.bubble{max-width:84%;border-radius:10px;padding:7px 10px;font-size:12.5px;background:#fff;border:1px solid var(--line);align-self:flex-start}
+.bubble.me{align-self:flex-end;background:var(--brand-soft);border-color:#cfe3d7}
+.bubble .who{display:block;font-size:10.5px;color:var(--ink-faint);margin-bottom:2px}
+.timeline{display:flex;flex-direction:column;gap:0;margin-left:4px}
+.timeline li{position:relative;padding:0 0 14px 18px;font-size:12.5px;color:var(--ink-soft)}
+.timeline li::before{content:"";position:absolute;left:0;top:5px;width:8px;height:8px;border-radius:50%;background:var(--brand-soft);border:2px solid var(--brand)}
+.timeline li::after{content:"";position:absolute;left:4px;top:16px;bottom:0;width:1px;background:var(--line)}
+.timeline li:last-child::after{display:none}
+.timeline b{color:var(--ink)}
+.progress{height:7px;border-radius:999px;background:#e8eeea;overflow:hidden}
+.progress > i{display:block;height:100%;background:linear-gradient(90deg,#7fb79b,var(--brand));width:0;transition:width .3s}
+.progress-label{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-faint);margin-bottom:4px}
+
+/* stats */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+.stat .k{font-size:11.5px;color:var(--ink-faint)}
+.stat .v{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.stat .v small{font-size:11.5px;font-weight:500;color:var(--ink-faint);margin-left:3px}
+.big{font-size:20px;font-weight:700}
+
+/* toast */
+.toast-host{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:50;align-items:center;pointer-events:none}
+.toast{background:#1e2f28;color:#f2f8f4;border-radius:10px;padding:9px 16px;font-size:12.5px;box-shadow:0 10px 28px rgba(0,0,0,.22);opacity:0;transform:translateY(6px);transition:.18s;max-width:min(88vw,560px)}
+.toast.show{opacity:1;transform:none}
+.toast.ok{background:#245c3d}
+.toast.warn{background:#7a5410}
+.toast.danger{background:#7d2e28}
+
+/* cover / index */
+.hero{background:linear-gradient(135deg,#204334,#2f6b4f 62%,#4f8a6c);color:#eef6f1;border-radius:14px;padding:26px 28px;margin-bottom:22px}
+.hero .eyebrow{font-size:11.5px;letter-spacing:.14em;color:#bfd8c9;text-transform:uppercase}
+.hero h1{font-size:27px;margin:8px 0 10px;letter-spacing:-.01em}
+.hero p{color:#d5e6dc;max-width:74ch;font-size:13.5px}
+.hero .hero-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.hero .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.32);color:#fff}
+.hero .btn:hover{background:rgba(255,255,255,.2);color:#fff}
+.matrix{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.matrix th,.matrix td{border-bottom:1px solid var(--line);padding:9px 10px;text-align:left;vertical-align:top}
+.matrix th{background:#f2f6f3;color:var(--ink-faint);font-size:11.5px;font-weight:600}
+.matrix tr:last-child td{border-bottom:0}
+.matrix td:first-child{white-space:nowrap}
+.matrix a{font-weight:600}
+.role-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-soft);margin-top:14px}
+.role-legend b{color:var(--ink)}
+.notice{font-size:12px;color:var(--ink-faint);margin-top:14px;line-height:1.7}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.toc a{display:flex;gap:8px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:#fff;font-size:12.5px;color:var(--ink-soft)}
+.toc a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.toc a .n{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+@media (max-width:900px){.cols-2{grid-template-columns:1fr}.screen-head h1{font-size:22px}}
+@media print{.strip{display:none}.page{box-shadow:none;border:0;margin:0;max-width:none}.page-foot{display:none}}
+
+</style>
+<style>
+    #us-01 .auth-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:16px;align-items:start}
+    #us-01 .brand{display:flex;align-items:center;gap:8px;font-weight:600}
+    #us-01 .brand-dot{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;background:#3f6fd8;color:#fff;font-size:12px}
+    #us-01 .brand-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
+    #us-01 .hint{font-size:12px;line-height:1.6;margin:0}
+    #us-01 .account-line{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed rgba(120,130,150,.25);font-size:13px}
+    #us-01 .account-line:last-of-type{border-bottom:0}
+    #us-01 .signed-in{border:1px solid #bfe3cd;background:#f3fbf6;border-radius:10px;padding:12px;display:grid;gap:8px}
+    #us-01 .signed-in strong{font-size:14px}
+    #us-01 .auth-panel{display:grid;gap:12px}
+    #us-01 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-01 .ban-state{font-weight:600}
+    @media (max-width: 900px){#us-01 .auth-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-02 .work-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:16px;align-items:start}
+    #us-02 .thumb{width:52px;height:52px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:1px}
+    #us-02 .thumb-sm{width:56px;height:56px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px dashed rgba(120,130,150,.45)}
+    #us-02 .prod{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-02 .prod-main{flex:1;min-width:0}
+    #us-02 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-02 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-02 .prod-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+    #us-02 .thumb-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    #us-02 .tag-btn[aria-pressed="true"]{background:#e8efff;border-color:#7c9cf5;color:#24407a}
+    #us-02 .scope-item{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-02 .scope-item:last-child{border-bottom:0}
+    #us-02 .scope-item p{margin:2px 0 0;font-size:12px;color:#6b7280}
+    #us-02 .notice{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-02 .notice:last-child{border-bottom:0}
+    #us-02 .notice div{font-size:13px;line-height:1.6}
+    #us-02 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    @media (max-width: 900px){#us-02 .work-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-03 .search-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:16px;align-items:start}
+    #us-03 .chips{display:flex;flex-wrap:wrap;gap:8px}
+    #us-03 .tag-btn[aria-pressed="true"]{background:#e8efff;border-color:#7c9cf5;color:#24407a}
+    #us-03 .thumb{width:54px;height:54px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px}
+    #us-03 .thumb.bike{background:#eef8f1;color:#3f6b50}
+    #us-03 .thumb.lamp{background:#fdf6e7;color:#7a6530}
+    #us-03 .prod{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-03 .prod-main{flex:1;min-width:0}
+    #us-03 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-03 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-03 .price{font-weight:600}
+    #us-03 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-03 .side-line{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed rgba(120,130,150,.25);font-size:13px}
+    #us-03 .side-line:last-child{border-bottom:0}
+    #us-03 .detail-title{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+    #us-03 .detail-title strong{font-size:15px}
+    @media (max-width: 900px){#us-03 .search-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+    #us-04 .chat-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:16px;align-items:start}
+    #us-04 .thumb{width:52px;height:52px;flex:0 0 auto;border-radius:8px;background:#eef2f8;color:#4a5875;display:flex;align-items:center;justify-content:center;font-size:12px}
+    #us-04 .thumb.faded{background:#f1f2f5;color:#9aa1ad}
+    #us-04 .prod-main{flex:1;min-width:0}
+    #us-04 .prod-title{margin:0 0 4px;font-weight:600}
+    #us-04 .prod-meta{font-size:12px;color:#6b7280;line-height:1.6}
+    #us-04 .comment{display:flex;gap:10px;padding:10px 0;border-bottom:1px dashed rgba(120,130,150,.25)}
+    #us-04 .comment:last-child{border-bottom:0}
+    #us-04 .comment-body{flex:1;min-width:0}
+    #us-04 .comment-body p{margin:4px 0;font-size:13px;line-height:1.6}
+    #us-04 .comment-head{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+    #us-04 .reply{margin-top:6px;padding:8px 10px;border-left:3px solid #9db4e8;background:rgba(120,140,190,.08);border-radius:0 6px 6px 0;font-size:13px}
+    #us-04 .chat-body{display:grid;gap:8px;max-height:260px;overflow:auto;padding:10px;border:1px solid rgba(120,130,150,.2);border-radius:10px;background:rgba(120,130,150,.04)}
+    #us-04 .composer{display:flex;gap:8px}
+    #us-04 .mini-note{font-size:12px;line-height:1.6;color:#6b7280;margin:0}
+    #us-04 .ctx{border:1px solid rgba(120,130,150,.25);border-radius:8px;padding:8px 10px;font-size:12px;display:grid;gap:4px}
+    #us-04 .ctx strong{font-size:13px}
+    #us-04 .tab .pill{margin-left:4px}
+    #us-04 .fav-row{display:flex;gap:12px;align-items:flex-start;width:100%}
+    #us-04 .section-gap{display:grid;gap:12px}
+    @media (max-width: 900px){#us-04 .chat-grid{grid-template-columns:minmax(0,1fr)}}
+  </style>
+<style>
+  #us-05 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  #us-05 .req{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}
+  #us-05 .req-main{display:flex;gap:10px;min-width:0}
+  #us-05 .req-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  #us-05 .req.closed{opacity:.62}
+  #us-05 .req.accepted{border-left:3px solid #2f9e6e;padding-left:9px}
+  #us-05 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-05 .agree-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #us-05 .agree-grid .field{margin:0}
+  #us-05 .trbar{height:8px;border-radius:999px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0}
+  #us-05 .trbar>i{display:block;height:100%;width:0;background:#2f9e6e;transition:width .3s}
+  #us-05 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+  #us-05 .ac-list strong{white-space:nowrap}
+  #us-05 .agree-summary{font-size:13px}
+</style>
+<style>
+  #us-06 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  #us-06 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-06 .rec{display:flex;gap:10px;justify-content:space-between;align-items:center}
+  #us-06 .who{display:flex;gap:10px;align-items:center;min-width:0}
+  #us-06 .trbar{height:8px;border-radius:999px;background:rgba(128,128,128,.22);overflow:hidden;margin:8px 0}
+  #us-06 .trbar>i{display:block;height:100%;width:0;background:#2f9e6e;transition:width .3s}
+  #us-06 .hist-item{display:grid;gap:2px}
+  #us-06 .rule-note{margin:6px 0 0;font-size:13px}
+  #us-06 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+</style>
+<style>
+  #us-07 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  #us-07 .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #us-07 .rev{display:flex;gap:10px;justify-content:space-between;align-items:flex-start}
+  #us-07 .stars{letter-spacing:2px;color:#c98a12;font-weight:600}
+  #us-07 .rev-body{min-width:0}
+  #us-07 .rform{display:grid;gap:10px}
+  #us-07 .ac-list{margin:0;padding-left:20px;display:grid;gap:8px}
+  #us-07 .archive-note{font-size:13px}
+  #us-07 .panel-note{font-size:13px}
+</style>
+<style>
+    #us-08 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-08 .item-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-08 .split{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    #us-08 .kv{display:grid;grid-template-columns:88px 1fr;gap:6px 10px;margin:0}
+    #us-08 .kv dt{color:#6b7280;font-size:12px}
+    #us-08 .kv dd{margin:0}
+    #us-08 .thread-item{padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-08 .thread-item:last-child{border-bottom:0}
+    #us-08 .thread-item .muted{display:block;margin-top:2px}
+  </style>
+<style>
+    #us-09 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-09 .check{display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:13px}
+    #us-09 .state-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #us-09 .step{padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-09 .step:last-child{border-bottom:0}
+    #us-09 .step .muted{display:block;margin-top:2px}
+  </style>
+<style>
+    #us-10 .range-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    #us-10 .range-note{font-size:12px;color:#6b7280}
+    #us-10 .split{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+    #us-10 .stat .muted{display:block}
+    #us-10 .report-line{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #eef0f3}
+    #us-10 .report-line:last-child{border-bottom:0}
+  </style>
+<style>
+    #us-11 .item-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+    #us-11 .item-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-11 .notif{cursor:pointer}
+    #us-11 .notif:hover{background:#f8fafc}
+    #us-11 .detail-title{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  </style>
+<style>
+    #us-12 .person{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    #us-12 .person-id{display:flex;align-items:center;gap:10px}
+    #us-12 .tab-strip{overflow-x:auto}
+    #us-12 .tab-strip .tab{flex:0 0 auto;white-space:nowrap}
+    #us-12 .stat-grid{margin:10px 0}
+    #us-12 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-12 .entry-main{flex:1;min-width:0}
+    #us-12 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-12 .subnav{display:flex;gap:6px;margin:8px 0}
+    #us-12 .note-line{margin:6px 0 0}
+  </style>
+<style>
+    #us-13 .admin-line{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    #us-13 .cat-name{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #us-13 .alias-text{font-size:13px}
+    #us-13 .ops{display:flex;gap:6px;flex-wrap:wrap}
+    #us-13 .table td{vertical-align:top}
+    #us-13 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-13 .entry-main{flex:1;min-width:0}
+    #us-13 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-13 .inline-form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px}
+    #us-13 .inline-form .field{flex:1;min-width:180px}
+    #us-13 .publish-note{margin:6px 0 0}
+    #us-13 .record-line{margin:4px 0 0}
+  </style>
+<style>
+    #us-14 .admin-line{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    #us-14 .entry{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    #us-14 .entry-main{flex:1;min-width:0}
+    #us-14 .entry-side{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+    #us-14 .case-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+    #us-14 .field{margin-top:8px}
+    #us-14 .ops{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+    #us-14 .notice-line{margin:6px 0 0}
+    #us-14 .user-actions{display:flex;gap:6px;flex-wrap:wrap}
+  </style>
+<script>
+(function () {
+  "use strict";
+  var registry = [];
+  var host = null;
+  function ensureHost() {
+    if (!host) {
+      host = document.createElement("div");
+      host.className = "toast-host";
+      host.setAttribute("aria-live", "polite");
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+  function toast(message, kind) {
+    if (!message) return;
+    var el = document.createElement("div");
+    el.className = "toast" + (kind ? " " + kind : "");
+    el.textContent = message;
+    ensureHost().appendChild(el);
+    requestAnimationFrame(function () { el.classList.add("show"); });
+    setTimeout(function () {
+      el.classList.remove("show");
+      setTimeout(function () { el.remove(); }, 250);
+    }, 2600);
+  }
+  window.PROTO = {
+    register: function (id, fn) { if (typeof fn === "function") registry.push(fn); },
+    toast: toast
+  };
+  function initTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs"), function (group) {
+      var tabs = Array.prototype.slice.call(group.querySelectorAll("[data-tab]"));
+      if (!tabs.length) return;
+      var name = group.getAttribute("data-tabs") || "";
+      var active = tabs.filter(function (item) { return item.classList.contains("active"); })[0] || tabs[0];
+      active.classList.add("active");
+      var value = active.getAttribute("data-tab");
+      var values = tabs.map(function (item) { return item.getAttribute("data-tab"); });
+      var scope = group.closest(".screen") || document;
+      Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
+        var panelValue = panel.getAttribute("data-panel");
+        var panelGroup = panel.getAttribute("data-group");
+        if (panelGroup && panelGroup !== name) return;
+        var matched = values.indexOf(panelValue) >= 0 || values.indexOf(panelValue.replace(name + ":", "")) >= 0;
+        if (!matched) return;
+        var shown = panelValue === value || panelValue === name + ":" + value;
+        panel.hidden = !shown;
+        panel.classList.toggle("active", shown);
+      });
+    });
+  }
+  function init() {
+    initTabs();
+    document.addEventListener("click", function (event) {
+      var target = event.target.closest("[data-toast]");
+      if (target) toast(target.getAttribute("data-toast"), target.getAttribute("data-toast-kind") || "");
+      var toggle = event.target.closest("[data-toggle]");
+      if (toggle) {
+        var node = document.getElementById(toggle.getAttribute("data-toggle"));
+        if (node) node.hidden = !node.hidden;
+      }
+      var tab = event.target.closest(".tabs [data-tab]");
+      if (tab) {
+        var group = tab.closest(".tabs");
+        var name = group.getAttribute("data-tabs") || "";
+        var value = tab.getAttribute("data-tab");
+        Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
+          item.classList.toggle("active", item === tab);
+        });
+        var scope = tab.closest(".screen") || document;
+        Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
+          if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
+          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          panel.hidden = !match;
+          panel.classList.toggle("active", match);
+        });
+      }
+      var seg = event.target.closest(".seg button");
+      if (seg) {
+        Array.prototype.forEach.call(seg.parentElement.querySelectorAll("button"), function (item) {
+          item.classList.toggle("active", item === seg);
+        });
+      }
+    });
+    document.addEventListener("submit", function (event) {
+      var form = event.target.closest("form");
+      if (!form) return;
+      event.preventDefault();
+      toast(form.getAttribute("data-demo") || "演示原型：表单已拦截，不会提交或保存。", "warn");
+    });
+    registry.forEach(function (fn) {
+      try { fn(document); } catch (error) { toast("本页演示初始化失败：" + error.message, "danger"); }
+    });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+})();
+
+</script>
+</head>
+<body>
+<header class="strip">
+  <div class="brandline"><span class="logo">二</span><span><b>校园二手交易平台 · 多页原型</b> <span class="muted-dark">US-08 审核与处置沟通</span></span></div>
+  <nav><a href="index.html">目录</a><a href="us-07.html">← US-07 评价与举报</a><a href="us-09.html">US-09 了解商品状态 →</a></nav>
+</header>
+<main class="page">
+<section class="screen" id="us-08" data-us="08">
+
+
+  <header class="screen-head">
+    <div class="kicker"><span class="badge">US-08</span> 审核与处置 · 高优先级 · 批次 1</div>
+    <h1>审核与处置沟通</h1>
+    <p class="goal">作为平台管理员或需要说明、受处置的用户，我希望认领并审核或处置事项、维护禁发范围，并在本人事项中提交说明或申辩、获得回复，以便处理权限、依据与实际恢复范围清楚可查。</p>
+    <ul class="meta">
+      <li>关联功能 FR-08；协作 FR-02（禁发范围维护与展示）</li>
+      <li>主用例 UC-C08；协作用例 UC-C02、UC-C07、UC-C14、UC-C11</li>
+      <li>依据 US-08-AC-01—US-08-AC-09（场景 SC-02、SC-06、SC-07、SC-09）</li>
+    </ul>
+  </header>
+
+  <div class="frame browser">
+    <div class="frame-bar">管理后台 · 审核与处置（示例数据）</div>
+    <div class="app">
+      <div class="topbar">
+        <strong>处理中心</strong>
+        <span class="muted">当前管理员：审核员 A（示例）</span>
+        <span class="chip">共享池待认领 3 项</span>
+      </div>
+
+      <div class="tabs" data-tabs>
+        <button class="tab" data-tab="pool">共享待处理池</button>
+        <button class="tab" data-tab="ban">禁发范围维护</button>
+        <button class="tab" data-tab="talk">处置沟通</button>
+      </div>
+
+      <div class="panel" data-panel="pool">
+        <div class="grid cols-2">
+          <div class="card">
+            <div class="card-head">共享待处理池 <span class="muted">先认领后处理</span></div>
+            <div class="list">
+              <div class="list-item">
+                <div class="item-main">
+                  <strong>商品审核 · 台灯（9 成新）</strong>
+                  <span class="muted">发布者：用户 1042 · 提交于 10-22 20:41</span>
+                  <span class="muted">当前禁发范围：未命中</span>
+                </div>
+                <div class="item-actions">
+                  <span class="state warn" id="us08-pool-state">待认领</span>
+                  <button type="button" class="btn primary" id="us08-claim">认领</button>
+                </div>
+              </div>
+              <div class="list-item">
+                <div class="item-main">
+                  <strong>举报核查 · 评论区广告</strong>
+                  <span class="muted">来源：商品评论区 · 10-22 19:58</span>
+                </div>
+                <div class="item-actions">
+                  <span class="state warn">待认领</span>
+                  <button type="button" class="btn ghost" data-toast="演示：举报事项同样须先认领，认领后才可核查与记录结论">认领</button>
+                </div>
+              </div>
+              <div class="list-item">
+                <div class="item-main">
+                  <strong>异常交易 · 确认超时</strong>
+                  <span class="muted">交易 T-2026-1021-15 · 10-22 18:30 转入</span>
+                </div>
+                <div class="item-actions">
+                  <span class="state warn">待认领</span>
+                  <button type="button" class="btn ghost" data-toast="演示：异常交易事项同样先认领，再由认领管理员处理">认领</button>
+                </div>
+              </div>
+            </div>
+            <p class="muted">同一事项同时仅一名认领人；未认领管理员不能处理，也不能访问超出必要范围的私人记录。</p>
+          </div>
+
+          <div class="card" id="us08-review">
+            <div class="card-head">审核面板 <span class="muted">认领后可用</span></div>
+            <div class="empty" id="us08-review-locked">认领“台灯”事项后，此面板显示当次内容、禁发范围依据与审核操作。</div>
+            <div id="us08-review-body" hidden>
+              <div class="row">
+                <span class="tag">商品审核</span>
+                <span class="state warn" id="us08-review-state">审核中</span>
+              </div>
+              <dl class="kv">
+                <dt>事项对象</dt><dd>台灯（9 成新）· 分类：学习用品</dd>
+                <dt>发布者</dt><dd>用户 1042（示例）</dd>
+                <dt>提交时间</dt><dd>2026-10-22 20:41</dd>
+                <dt>认领人</dt><dd>审核员 A</dd>
+                <dt>审核依据</dt><dd>当前禁发范围 v2026-10-22；未命中禁发细目</dd>
+              </dl>
+              <div class="hr"></div>
+              <p class="label">当次内容</p>
+              <p>“宿舍台灯，9 成新，暖光三档，35 元，可在东区宿舍楼下自提。” 附图片 2 张。</p>
+              <p class="muted">分类标签“学习用品 / 台灯”随本次审核结果生效。</p>
+              <div class="row">
+                <button type="button" class="btn primary" id="us08-pass">审核通过</button>
+                <button type="button" class="btn" id="us08-return">退回补充</button>
+              </div>
+              <div id="us08-return-box" hidden>
+                <label class="field">
+                  <span class="label">退回补充原因（将通知发布者）</span>
+                  <textarea class="textarea" id="us08-reason" rows="3" placeholder="例如：图片包含外部联系方式，请修改后重新提交"></textarea>
+                </label>
+                <div class="row">
+                  <button type="button" class="btn primary" id="us08-return-confirm">确认退回</button>
+                </div>
+              </div>
+              <div class="banner info" id="us08-review-result" hidden></div>
+              <div class="hr"></div>
+              <div class="split">
+                <span class="muted" id="us08-other-note">其他管理员：未认领时处理入口不可用。</span>
+                <button type="button" class="btn ghost" id="us08-other-btn">以其他管理员身份处理</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" data-panel="ban">
+        <div class="card">
+          <div class="card-head">禁发范围 <span class="muted">管理员可修改；普通登录用户只读</span></div>
+          <table class="table">
+            <thead>
+              <tr><th>禁发类别</th><th>细目示例</th><th>启用</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>危险物品</td><td>管制刀具、易燃易爆品</td><td><input type="checkbox" checked></td></tr>
+              <tr><td>药品与医疗</td><td>处方药、无资质医疗器械</td><td><input type="checkbox" checked></td></tr>
+              <tr><td>学术违规</td><td>代写代考、作弊器材</td><td><input type="checkbox" checked></td></tr>
+              <tr><td>野生动物</td><td>制品及其制成品</td><td><input type="checkbox" checked></td></tr>
+              <tr><td>其他违法内容</td><td>伪造证件、赃物</td><td><input type="checkbox"></td></tr>
+            </tbody>
+          </table>
+          <label class="field">
+            <span class="label">补充禁发细目</span>
+            <textarea class="textarea" id="us08-ban-extra" rows="2" placeholder="每行一条细目，例如：带摄像功能的改装设备"></textarea>
+          </label>
+          <div class="row">
+            <button type="button" class="btn primary" id="us08-save-ban">保存禁发范围</button>
+            <span class="muted" id="us08-ban-stamp">最近修改：审核员 A · 2026-10-20 14:32（示例）</span>
+          </div>
+          <div class="banner info" id="us08-ban-result" hidden></div>
+        </div>
+        <p class="muted">范围维护不要求先认领具体商品。保存后，已登录用户查看时显示最新内容，认领管理员审核时使用该范围。</p>
+      </div>
+
+      <div class="panel" data-panel="talk">
+        <div class="grid cols-2">
+          <div class="card">
+            <div class="card-head">事项沟通 · 交易冻结 <span class="state danger">已处置</span></div>
+            <div>
+              <div class="thread-item"><strong>10-22 19:20 管理员发起问询</strong><span class="muted">请说明本笔交易是否存在约定外的付款要求。</span></div>
+              <div class="thread-item"><strong>10-22 19:48 卖方提交说明</strong><span class="muted">问询阶段，不改变账户、交易及评论状态。</span></div>
+              <div class="thread-item"><strong>10-22 20:10 管理员确认处置</strong><span class="muted">冻结本笔交易；原因与范围已告知双方，举报人身份不展示。</span></div>
+              <div class="thread-item"><strong>10-22 20:40 受处置用户提交申辩</strong><span class="muted">称付款要求为误会；申辩留存，但不自动撤销处置。</span></div>
+            </div>
+            <label class="field">
+              <span class="label">回复结论及原因（通知受影响者）</span>
+              <textarea class="textarea" id="us08-reply-text" rows="3" placeholder="说明复核结论、依据、本笔恢复范围及仍有效的其他限制"></textarea>
+            </label>
+            <button type="button" class="btn primary" id="us08-reply">回复并通知</button>
+            <div class="banner info" id="us08-reply-result" hidden></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">沟通位置与状态影响</div>
+            <div class="list">
+              <div class="list-item">
+                <div class="item-main"><strong>问询阶段</strong><span class="muted">用户从问询通知进入原事项提交说明。</span></div>
+                <span class="tag">状态不变</span>
+              </div>
+              <div class="list-item">
+                <div class="item-main"><strong>处置之后</strong><span class="muted">受处置用户从本人通知或独立事项入口提交申辩。</span></div>
+                <span class="tag">处置不自动撤销</span>
+              </div>
+              <div class="list-item">
+                <div class="item-main"><strong>解除具体限制</strong><span class="muted">只恢复该限制允许恢复的资格，其他有效限制继续适用。</span></div>
+                <span class="tag">原非在售商品不自动上架</span>
+              </div>
+            </div>
+            <p class="muted">未实际处置时不主动告知被举报人；核查需要说明时，由管理员通过问询联系。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame phone">
+    <div class="frame-bar">校园二手 · 本人事项（受影响用户视角，示例）</div>
+    <div class="app">
+      <div class="topbar">
+        <strong>我的事项</strong>
+        <span class="state danger" id="us08-my-state">交易冻结</span>
+      </div>
+      <div class="card">
+        <div class="card-head">处置告知</div>
+        <p>原因：约定外付款要求（示例）。范围：本笔交易；账户其他功能仍可用。</p>
+        <p class="muted">举报人身份不展示。本笔恢复前，双方不能推进该交易。</p>
+        <button type="button" class="btn ghost" data-toggle="us08-scope-note">查看仍有效的其他限制</button>
+        <p class="muted" id="us08-scope-note" hidden>仍有效：无其他限制。解除本笔冻结只恢复本笔交易，已下架商品不自动上架。</p>
+      </div>
+      <div class="tabs" data-tabs>
+        <button class="tab" data-tab="ask">问询说明</button>
+        <button class="tab" data-tab="appeal">处置后申辩</button>
+      </div>
+      <div class="panel" data-panel="ask">
+        <div class="card">
+          <div class="card-head">管理员问询 · 10-22 19:20</div>
+          <p>请说明：是否在本笔交易约定外向买方提出额外付款？</p>
+          <textarea class="textarea" id="us08-ask-text" rows="3" placeholder="提交说明（仅留存于原事项）"></textarea>
+          <button type="button" class="btn primary" id="us08-ask-submit">提交说明</button>
+          <p class="muted">问询阶段提交说明不会改变账户、交易及评论状态。</p>
+        </div>
+      </div>
+      <div class="panel" data-panel="appeal">
+        <div class="card">
+          <div class="card-head">提交申辩</div>
+          <p>处置：冻结本笔交易。依据：约定外付款要求（示例）。</p>
+          <textarea class="textarea" id="us08-appeal-text" rows="3" placeholder="说明您的申辩理由与可核对的事实"></textarea>
+          <button type="button" class="btn primary" id="us08-appeal-submit">提交申辩</button>
+          <p class="muted">申辩留存于原事项，认领管理员回复后通知您；提交不自动撤销处置。</p>
+          <div class="banner info" id="us08-appeal-result" hidden>申辩已留存至原事项，等待认领管理员回复（示例）。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">验收要点 <span class="muted">关键 AC，界面据此设计</span></div>
+    <ul class="list">
+      <li class="list-item">US-08-AC-01：事项在共享池且未认领 → 界面显示“待认领”；认领后仅认领人出现处理入口，其他人的处理按钮保持禁用。</li>
+      <li class="list-item">US-08-AC-02：待审商品已被本人认领 → 审核面板显示当次内容与当前禁发范围；通过或退回都要记录原因并通知发布者，标签随审批生效。</li>
+      <li class="list-item">US-08-AC-03：举报证据不足且没有实际处置 → 可记录“无法认定／不予处理”并通知举报人；被举报人处不出现该告知。</li>
+      <li class="list-item">US-08-AC-04：内容移除、封禁或交易冻结生效 → 受影响者在通知与事项页看到原因、范围及本人沟通入口，举报人身份不可见。</li>
+      <li class="list-item">US-08-AC-05：问询阶段或处置之后 → 分别在原事项提交说明与申辩，管理员回复结论及原因并通知；问询不改变状态，申辩不自动撤销处置。</li>
+      <li class="list-item">US-08-AC-06：交易被冻结 → 双方推进入口不可用；认领管理员调整时记录前后状态并通知，不伪造确认。</li>
+      <li class="list-item">US-08-AC-07：解除具体封禁或冻结 → 仅恢复该限制允许恢复的资格，其他有效限制继续提示适用，原非在售商品不自动上架。</li>
+      <li class="list-item">US-08-AC-08：管理员维护禁发细目并保存 → 登录用户查看时显示最新范围，审核面板同步引用；普通用户只看到只读内容，没有保存入口。</li>
+    </ul>
+  </div>
+
+  <script>
+    window.PROTO.register('us-08', function (section) {
+      function q(id) { return section.querySelector('#' + id); }
+      var claimed = false;
+      var claimBtn = q('us08-claim');
+      var poolState = q('us08-pool-state');
+      var locked = q('us08-review-locked');
+      var body = q('us08-review-body');
+      var otherNote = q('us08-other-note');
+
+      q('us08-other-btn').addEventListener('click', function () {
+        window.PROTO.toast('拒绝处理：该事项尚未被您认领，其他管理员只能查看摘要');
+      });
+
+      claimBtn.addEventListener('click', function () {
+        if (claimed) { return; }
+        claimed = true;
+        poolState.textContent = '已由我认领';
+        poolState.className = 'state info';
+        claimBtn.disabled = true;
+        claimBtn.textContent = '已认领';
+        locked.hidden = true;
+        body.hidden = false;
+        otherNote.textContent = '该事项已由审核员 A 认领，其他管理员不可处理或查看私人材料。';
+        var otherBtn = q('us08-other-btn');
+        otherBtn.disabled = true;
+        otherBtn.textContent = '其他管理员不可处理（已锁定）';
+        window.PROTO.toast('已认领“台灯”事项；同一事项同时仅您一名认领人');
+      });
+
+      var passBtn = q('us08-pass');
+      var returnBtn = q('us08-return');
+      var returnBox = q('us08-return-box');
+      var reason = q('us08-reason');
+      var result = q('us08-review-result');
+      var reviewState = q('us08-review-state');
+
+      passBtn.addEventListener('click', function () {
+        result.hidden = false;
+        result.className = 'banner info';
+        result.textContent = '审核通过：商品进入公开可交易，结果已通知发布者；分类标签随本次审核生效。';
+        reviewState.textContent = '已通过';
+        reviewState.className = 'state ok';
+        passBtn.disabled = true;
+        returnBtn.disabled = true;
+        returnBox.hidden = true;
+        window.PROTO.toast('审核通过已记录，发布者将收到结果通知');
+      });
+
+      returnBtn.addEventListener('click', function () {
+        returnBox.hidden = false;
+        reason.focus();
+        window.PROTO.toast('请填写退回补充原因，原因会随结果通知发布者');
+      });
+
+      q('us08-return-confirm').addEventListener('click', function () {
+        if (!reason.value.trim()) {
+          window.PROTO.toast('请先填写退回补充原因');
+          return;
+        }
+        result.hidden = false;
+        result.className = 'banner warn';
+        result.textContent = '已退回补充：原因已记录并通知发布者；该商品当前为“审核未通过”，修改后可重新提交。';
+        reviewState.textContent = '已退回';
+        reviewState.className = 'state danger';
+        passBtn.disabled = true;
+        returnBtn.disabled = true;
+        returnBox.hidden = true;
+        window.PROTO.toast('已退回补充，发布者将收到原因');
+      });
+
+      q('us08-save-ban').addEventListener('click', function () {
+        var checked = section.querySelectorAll('[data-panel="ban"] input[type="checkbox"]:checked').length;
+        var extra = q('us08-ban-extra').value.trim();
+        q('us08-ban-stamp').textContent = '最近修改：审核员 A · 刚刚（示例）';
+        var banResult = q('us08-ban-result');
+        banResult.hidden = false;
+        banResult.textContent = '已保存：当前启用 ' + checked + ' 个禁发类别' + (extra ? '，并记录补充细目' : '') + '。登录用户查看时显示最新范围。';
+        window.PROTO.toast('禁发范围已保存，审核时将使用最新范围');
+      });
+
+      q('us08-reply').addEventListener('click', function () {
+        var text = q('us08-reply-text').value.trim();
+        if (!text) {
+          window.PROTO.toast('请先填写回复结论及原因');
+          return;
+        }
+        var replyResult = q('us08-reply-result');
+        replyResult.hidden = false;
+        replyResult.textContent = '已回复并通知受影响者；结论与原因留存于原事项，本笔恢复范围与仍有效限制已列明。';
+        window.PROTO.toast('回复已发送，受影响者将收到通知');
+      });
+
+      q('us08-ask-submit').addEventListener('click', function () {
+        if (!q('us08-ask-text').value.trim()) {
+          window.PROTO.toast('请先填写说明内容');
+          return;
+        }
+        window.PROTO.toast('说明已提交至原事项；问询阶段不改变账户、交易及评论状态');
+      });
+
+      q('us08-appeal-submit').addEventListener('click', function () {
+        if (!q('us08-appeal-text').value.trim()) {
+          window.PROTO.toast('请先填写申辩理由');
+          return;
+        }
+        q('us08-appeal-result').hidden = false;
+        window.PROTO.toast('申辩已留存至原事项，不自动撤销处置');
+      });
+    });
+  </script>
+</section>
+<footer class="page-foot">
+  <span>第 8 / 15 页 · 按用户故事组织的界面补充材料 · 示例数据，不连接后台</span>
+  <span class="pager"><a href="index.html">返回目录</a></span>
+</footer>
+</main>
+<script>
+
+</script>
+</body>
+</html>
