@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:47:39+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-23T03:47:53+08:00
 -->
 
 # 图源渲染索引
@@ -20,5 +20,9 @@ PNG 使用单一字体 PingFang SC（苹方），中文与西文均按该字体�
 | ACT-09-举报认领与处置 | [PlantUML](../../appendices/models/ACT-09-举报认领与处置.puml) | [PNG](ACT-09-举报认领与处置.png) | 3763 × 2150 | 200 |
 | ACT-10-管理员统计 | [PlantUML](../../appendices/models/ACT-10-管理员统计.puml) | [PNG](ACT-10-管理员统计.png) | 1869 × 1264 | 200 |
 | ACT-11-异常交易处置 | [PlantUML](../../appendices/models/ACT-11-异常交易处置.puml) | [PNG](ACT-11-异常交易处置.png) | 3144 × 1927 | 200 |
+| CL-01-核心领域类图 | [PlantUML](../../appendices/models/CL-01-核心领域类图.puml) | [PNG](CL-01-核心领域类图.png) | 2790 × 2527 | 200 |
+| CL-02-账户与商品类图 | [PlantUML](../../appendices/models/CL-02-账户与商品类图.puml) | [PNG](CL-02-账户与商品类图.png) | 1752 × 1808 | 200 |
+| CL-03-交易与沟通类图 | [PlantUML](../../appendices/models/CL-03-交易与沟通类图.puml) | [PNG](CL-03-交易与沟通类图.png) | 3308 × 1975 | 200 |
+| CL-04-治理与通知类图 | [PlantUML](../../appendices/models/CL-04-治理与通知类图.puml) | [PNG](CL-04-治理与通知类图.png) | 3581 × 2299 | 200 |
 | UC-01-系统用例图 | [PlantUML](../../appendices/models/UC-01-系统用例图.puml) | [PNG](UC-01-系统用例图.png) | 1988 × 2036 | 200 |
 | UC-02-子用例图 | [PlantUML](../../appendices/models/UC-02-子用例图.puml) | [PNG](UC-02-子用例图.png) | 2879 × 2635 | 200 |
