@@ -1,0 +1,69 @@
+% Layout helpers for PDF export.  Fonts, margins and colours are supplied by
+% the exporter through Pandoc template variables.
+
+\usepackage{etoolbox}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{pdflscape}
+\usepackage{fvextra}
+\usepackage{xurl}
+\usepackage{graphicx}
+
+% Long code lines and URLs must not run into the margin.
+\fvset{breaklines=true,breakanywhere=true}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{%
+  breaklines=true,breakanywhere=true,commandchars=\\\{\}%
+}
+\setlength{\emergencystretch}{4em}
+
+% Tables: keep cell padding compact, wrap long cells, and use a slightly
+% smaller font inside long tables.
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\LTcapwidth}{\linewidth}
+\AtBeginEnvironment{longtable}{\small}
+
+% Images should never overflow the text block.
+\setkeys{Gin}{width=\linewidth,height=0.82\textheight,keepaspectratio}
+
+% Arrows and similar symbols are missing from the CJK text fonts; map the
+% Unicode characters used in the reports to their math glyphs so that they do
+% not render as empty boxes in the PDF export.
+\usepackage{newunicodechar}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{←}{\ensuremath{\leftarrow}}
+\newunicodechar{↔}{\ensuremath{\leftrightarrow}}
+\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
+\newunicodechar{⇔}{\ensuremath{\Leftrightarrow}}
+
+% Enclosed alphanumerics ①-⑳ are used as inline step markers.  They live
+% outside xeCJK's default CJK ranges, so they fall back to the Latin font and
+% lose their glyph; assigning them to the CJK class keeps them in the CJK font.
+\xeCJKDeclareCharClass{CJK}{"2460 -> "2473}
+
+% A remote PDF filename is a Unicode file specification, not a URI or a
+% platform byte string. Explicit UTF-16BE /UF avoids ambiguous UTF-8 bytes
+% being interpreted as PDFDocEncoding for short Chinese names.
+\makeatletter
+\newcommand{\ProjectPdfLink}[3]{%
+  \leavevmode
+  \begingroup
+  \Hy@BeginAnnot{%
+    \@pdfm@mark{%
+      bann<< /Type/Annot /Subtype/Link
+        \Hy@setpdfborder
+        \Hy@setpdfhighlight
+        /A<< /S/GoToR
+          /F<< /Type/Filespec /F<#1> /UF<#1> >>
+          /D #2
+        >>
+      >>%
+    }%
+    \Hy@colorlink\@filecolor
+  }%
+  #3\Hy@xspace@end
+  \Hy@EndAnnot
+  \endgroup
+}
+\makeatother
