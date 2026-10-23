@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.18
-Version-Datetime: 2026-10-23T12:12:52+08:00
+Version: 0.1.19
+Version-Datetime: 2026-10-23T12:31:51+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -35,7 +35,7 @@ Version-Datetime: 2026-10-23T12:12:52+08:00
 
 文件按“编号-名称”组织；编号重排时同步更新文件名、索引及引用，需要的版本、日期按版本规范记录，需求确认事实集中登记在需求基线和证据中。正文通过相对链接及编号引用附件；尚未开展的工作不预填结果。
 
-`docs/` 中的正文、附录、evidence及ai-usage不引用 `bits/` 或 `scripts/`。必要决定、背景及依据保留在对应docs材料中；脚本用法集中在仓库及脚本README，工作笔记可引用docs。
+`docs/`中的交付材料只引用`docs/`内的本地文件，不引用仓库根AGENTS.md／README.md、bits、scripts或其他目录。必要决定、背景及依据保留在docs内，使交付材料能够独立阅读；历史引文中的文件名不作为现行依赖。脚本用法和仓库操作规范保留在docs外的指导文件中，工作笔记及仓库指导文件可以引用docs。
 
 ## 范围与验证约束
 
@@ -107,7 +107,7 @@ python3 scripts/cli.py pdf
 python3 scripts/cli.py pdf --check --pdf-link-check on
 ```
 
-导出范围为 `docs/` 下全部Markdown，输出到 `docs-pdf/` 并保持目录层级；主说明书对应 `docs-pdf/需求规格说明书.pdf`。图片、图源及HTML原型等引用附件一并复制。指向docs外仓库材料的引用在PDF中保留为文字路径，不生成 `_repository/`。
+导出范围为 `docs/` 下全部Markdown，输出到 `docs-pdf/` 并保持目录层级；主说明书对应 `docs-pdf/需求规格说明书.pdf`。图片、图源及HTML原型等引用附件一并复制。导出前应已消除docs外的本地文件引用，不以导出时转成文字路径代替源文档修正，不生成 `_repository/`。
 
 默认使用SHA-256增量导出。缓存 `docs-pdf/.export-cache.json` 分别保存源文件、渲染输入和产出PDF摘要；未变化且产出完整的PDF直接复用。源文档、内嵌图片、字体、模板、脚本、渲染器版本或排版参数变化时重导受影响文件；PDF缺失或内容损坏时自动重导。附件仅在内容变化时复制；首次无缓存时正常生成，缓存与PDF均由Git忽略。
 
