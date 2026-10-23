@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.17
-Version-Datetime: 2026-10-23T03:50:14+08:00
+Version: 0.1.18
+Version-Datetime: 2026-10-23T12:12:52+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -27,7 +27,7 @@ Version-Datetime: 2026-10-23T03:50:14+08:00
 | `docs/appendices/models/` | 报告图（用例、活动、类、状态、上下文图等）的可编辑源文件目录，例如 `.puml`、`.mmd`；PNG 集中在 docs/appendices/rendered，不保存 SVG |
 | `docs/appendices/rendered/` | `.puml`／`.mmd` 统一渲染的 PNG，入口 [渲染索引](docs/appendices/rendered/README.md) |
 | `docs/appendices/evidence/` | 业务决定及讨论依据、实际形成的验证证据；入口 [证据索引](docs/appendices/evidence/index.md)，E 编号与 D 决定连续编号；编号重排时以 evidence 中映射表为准 |
-| `docs/appendices/ai-usage/` | AI 关键分析贡献、人工取舍及证据引用、填写模板，索引见 [index.md](docs/appendices/ai-usage/index.md)，填写规则见 [AGENTS.md](AGENTS.md) |
+| `docs/appendices/ai-usage/` | AI关键分析贡献、必要上下文及交互原文、人工取舍和核验、填写模板，索引见 [index.md](docs/appendices/ai-usage/index.md)，填写规则见 [AGENTS.md](AGENTS.md) |
 | `docs/appendices/prototype/` | 按用户故事组织的多页 HTML 原型及 [说明](docs/appendices/prototype/README.md)，一个 HTML 文件一个页面，示例数据不代表后台功能实现 |
 | `docs-pdf/` | 由Pandoc生成的PDF交付副本，保持docs的目录结构，文档链接使用PDF目标；该目录由Git忽略 |
 | `scripts/` | [Python构建说明](scripts/README.md)：同步关键材料、生成说明书、渲染PNG，以及按SHA-256增量导出和检查PDF |
@@ -44,7 +44,7 @@ Version-Datetime: 2026-10-23T03:50:14+08:00
 - 多页 HTML 原型按用户故事组织界面示例，作为最终 review 的补充材料，不以静态页面证明后台功能已实现。
 - 需求清单覆盖题目全部十项核心功能；14个主用例均有详细文档，主报告选取五个关键业务闭环展开。
 - 业务规则、术语及未决问题统一维护；性能目标按第 6 章登记的来源与状态表达，实测结论待系统实现后形成。教学模拟如实标注，AI 自检不能替代人工确认。
-- 各成员仅记录 AI 对项目分析有实质影响的关键建议、人工取舍及证据，须有必要上下文并注明姓名；人工直接决定由 evidence 承载。无需完整对话、逐字 prompts 或环境、Git、一般文档维护流水，也不要求每次提交补档。构建与导出工具按用户明确要求专项记录于[AI-14](docs/appendices/ai-usage/AI-14-2026-10-23-文档构建与PDF增量导出.md)，不扩大日常维护的默认建档范围。详细边界见 AGENTS.md；B 报告由组长汇总。袁尚峰统筹最终review与汇总；三位成员按执行指引在各自设备和Git账号下开展走查及个人AI证据补充，再合并各自材料。
+- 各成员仅记录 AI 对项目分析有实质影响的关键建议、人工取舍及证据，须有必要上下文并注明姓名；人工直接决定由 evidence 承载。实质分析开始时起草ai-usage，讨论中途保存关键prompt／output及实际反馈原文、来源定位与人工取舍；不要求完整聊天或环境、Git、一般文档维护流水，也不要求每次提交补档。构建与导出工具按用户明确要求专项记录于[AI-14](docs/appendices/ai-usage/AI-14-2026-10-23-文档构建与PDF增量导出.md)，不扩大日常维护的默认建档范围。详细边界见 AGENTS.md；B 报告由组长汇总。袁尚峰统筹最终review与汇总；三位成员按执行指引在各自设备和Git账号下开展走查及个人AI证据补充，再合并各自材料。
 
 ## 图文件与索引规范
 
@@ -67,6 +67,7 @@ Version-Datetime: 2026-10-23T03:50:14+08:00
 
 ## 当前阶段工作入口
 
+- [项目协作复盘与后续工作方法](bits/项目协作复盘与后续工作方法.md)：根据本人及组员Git历史，归纳基线漂移、共享材料合并、覆盖与模型语义、证据记录、图稿和导出等问题，说明后续任务的组织方法。具体执行规则统一见[AGENTS.md](AGENTS.md#工作中的基线变更传播与交接强制)。
 - [组员场景与原型走查执行指引](bits/组员场景与原型走查执行指引.md)：三位成员在各自设备上开展场景推演、原型观察并回填A报告。
 - [组员AI证据补充与报告回填指引](bits/组员AI使用证据补充与报告回填指引.md)：指导DSH补齐个人关键交互、人工取舍与证据，并回填B报告。
 
@@ -83,7 +84,7 @@ Version-Datetime: 2026-10-23T03:50:14+08:00
 - [AI 智能体使用验证报告](docs/draft-AI智能体使用验证报告.md)
 - [多页 HTML 原型](docs/appendices/prototype/README.md)
 - [渲染图索引](docs/appendices/rendered/README.md)
-- [分类证据索引 E-01—E-10](docs/appendices/evidence/index.md)
+- [分类证据索引 E-01—E-09](docs/appendices/evidence/index.md)
 
 ## 文档生成
 
