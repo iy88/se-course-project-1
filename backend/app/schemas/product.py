@@ -1,0 +1,92 @@
+"""商品相关 Pydantic 模型。"""
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.enums import ProductStatus
+
+
+class TagIn(BaseModel):
+    category_id: int | None = None  # 已有标签
+    new_name: str | None = Field(default=None, max_length=64)  # 或申请新标签
+
+
+class ProductCreateIn(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=5000)
+    price_cents: int = Field(ge=0, le=100_000_000)
+    image_keys: list[str] = Field(min_length=1)
+    tags: list[TagIn]  # 至少一个已有标签或一个新标签申请（BR-12）
+
+
+class ProductUpdateIn(BaseModel):
+    """信息微调（BR-11）：允许状态下编辑不二审；交易中禁改（由服务层拒绝）。"""
+
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, min_length=1, max_length=5000)
+    price_cents: int | None = Field(default=None, ge=0, le=100_000_000)
+    image_keys: list[str] | None = None
+    category_ids: list[int] | None = None  # 仅允许在已有标签间调整；新标签须重新走审核
+
+
+class ProductOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    seller_id: int
+    title: str
+    description: str
+    price_cents: int
+    status: ProductStatus
+    display_restricted: bool = False
+    display_restricted_reason: str | None = None
+    reject_reason: str | None = None
+    image_keys: list[str] = []
+    image_urls: list[str] = []
+    tag_ids: list[int] = []
+    tag_names: list[str] = []
+    created_at: datetime
+    updated_at: datetime
+    pending_request_count: int = 0  # 卖方视角：待接受请求数
+
+
+class ProductCardOut(BaseModel):
+    """搜索/列表卡片。"""
+
+    id: int
+    title: str
+    price_cents: int
+    image_url: str | None = None
+    tag_ids: list[int] = []
+    tag_names: list[str] = []
+    status: ProductStatus
+    seller_id: int
+    seller_name: str = ""
+    created_at: datetime
+
+
+class ProductSearchOut(BaseModel):
+    items: list[ProductCardOut]
+    total: int
+    message: str | None = None  # 无匹配商品提示（BR-15）
+
+
+class ProductEditHistoryOut(BaseModel):
+    id: int
+    editor_id: int
+    edit_type: str
+    before_json: dict
+    after_json: dict
+    reason: str | None
+    created_at: datetime
+
+
+class ReviewRecordOut(BaseModel):
+    id: int
+    product_id: int
+    reviewer_id: int | None
+    result: str
+    reason: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
