@@ -135,6 +135,26 @@ async def remove_alias(category_id: int, alias_id: int, admin: CurrentAdmin, db:
     return CategoryOut(id=category.id, name=category.name, status=category.status, aliases=[a.name for a in aliases])
 
 
+@router.delete("/{category_id}/aliases/by-name")
+async def remove_alias_by_name(
+    category_id: int, name: str, admin: CurrentAdmin, db: DbSession
+) -> dict:
+    """按名称移除别名（管理端列表仅展示名称）。"""
+    await get_active_category_or_404(db, category_id)
+    alias = await db.scalar(
+        select(CategoryAlias).where(
+            CategoryAlias.category_id == category_id,
+            CategoryAlias.name == name.strip(),
+            CategoryAlias.removed_at.is_(None),
+        )
+    )
+    if not alias:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "别名不存在")
+    alias.removed_at = datetime.now(UTC)
+    await db.commit()
+    return {"detail": "别名已移除"}
+
+
 @router.delete("/{category_id}")
 async def delete_category(category_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
     """逻辑删除：仅从未关联商品的标签可删（4.16），关联检查在服务层执行。"""
