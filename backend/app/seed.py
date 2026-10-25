@@ -77,9 +77,64 @@ async def seed() -> None:
                     prohibited_count += 1
             await db.commit()
             print(f"禁发范围条目新增：{prohibited_count} 项")
+            await seed_demo(db)
             return
         await db.commit()
         print("种子数据完成")
+
+
+DEMO_USERS = [
+    ("zhang@campus.edu", "张同学"),
+    ("li@campus.edu", "李同学"),
+    ("wang@campus.edu", "王同学"),
+]
+
+
+async def seed_demo(db) -> None:
+    """演示数据：演示用户与示例商品（管理员审核字段直接置为已通过）。"""
+    from app.models import Product, ProductImage, ProductTag, ReviewRecord
+    from datetime import UTC, datetime
+
+    users = {}
+    for email, name in DEMO_USERS:
+        user = await db.scalar(select(User).where(User.email == email))
+        if user is None:
+            user = User(email=email, display_name=name, password_hash=hash_password("secret123"), role="user")
+            db.add(user)
+            await db.flush()
+        users[name] = user
+
+    demo_products = [
+        ("张同学", "高等数学教材（第七版）", "上册下册全套，九成新，无笔记", 1800, "教材与书籍"),
+        ("张同学", "机械键盘 87 键", "红轴，用了一年，功能正常", 12900, "电子产品"),
+        ("李同学", "山地自行车", "骑了一学期，车况良好，可小刀", 39900, "运动器材"),
+        ("王同学", "台灯与收纳盒", "宿舍闲置，一起出", 2500, "生活用品"),
+    ]
+    for seller_name, title, desc, price, tag_name in demo_products:
+        exists = await db.scalar(select(Product).where(Product.title == title))
+        if exists:
+            continue
+        seller = users[seller_name]
+        category = await db.scalar(select(Category).where(Category.name == tag_name, Category.deleted_at.is_(None)))
+        product = Product(
+            seller_id=seller.id,
+            title=title,
+            description=desc,
+            price_cents=price,
+            status="listed",
+            listed_at=datetime.now(UTC),
+        )
+        db.add(product)
+        await db.flush()
+        db.add(ReviewRecord(
+            product_id=product.id,
+            content_json={"title": title, "description": desc, "price_cents": price, "images": [], "tags": [tag_name]},
+            reviewer_id=None, result="approved", reviewed_at=datetime.now(UTC),
+        ))
+        if category:
+            db.add(ProductTag(product_id=product.id, category_id=category.id))
+    await db.commit()
+    print("演示数据完成：演示用户张/李/王同学（密码 secret123）与 4 件在售示例商品")
 
 
 if __name__ == "__main__":

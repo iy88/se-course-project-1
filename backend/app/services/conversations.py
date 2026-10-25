@@ -50,8 +50,9 @@ async def send_system_message(db: AsyncSession, conversation_id: int, content: s
 
 
 async def send_text_message(
-    db: AsyncSession, conversation: Conversation, sender_id: int, content: str, member_ids: list[int]
+    db: AsyncSession, conversation: Conversation, sender_id: int, content: str
 ) -> Message:
+    """保存文字消息并推送给会话其他成员。"""
     message = Message(conversation_id=conversation.id, sender_id=sender_id, kind=MessageKind.TEXT.value, content=content)
     db.add(message)
     await db.flush()
@@ -64,6 +65,7 @@ async def send_text_message(
         "content": message.content,
         "created_at": message.created_at.isoformat() if message.created_at else None,
     }
+    member_ids = [conversation.user_low_id, conversation.user_high_id]
     await manager.push_to_users([uid for uid in member_ids if uid != sender_id], payload)
     return message
 

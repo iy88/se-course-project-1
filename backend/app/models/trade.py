@@ -60,11 +60,20 @@ class Trade(Base):
     # 单方确认进度与 7 天等待计时（BR-05）；争议/恢复时清空
     confirm_wait_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # 取消申请（BR-06：约定前卖方取消须买方同意；约定后双方同意）
+    cancel_requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # 争议解决确认（BR-07：双方均确认解决可恢复；管理员解决限认领事项）
+    resolution_confirmed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    resolution_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # 冻结：管理处置导致的进度暂停标记（BR-33），与生命周期状态分开
     frozen: Mapped[bool] = mapped_column(Boolean, default=False)
     frozen_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     frozen_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    frozen_case_id: Mapped[int | None] = mapped_column(ForeignKey("disposal_cases.id"), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

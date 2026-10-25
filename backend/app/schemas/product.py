@@ -73,6 +73,8 @@ class ProductSearchOut(BaseModel):
 
 
 class ProductEditHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     editor_id: int
     edit_type: str
@@ -83,6 +85,8 @@ class ProductEditHistoryOut(BaseModel):
 
 
 class ReviewRecordOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     product_id: int
     reviewer_id: int | None

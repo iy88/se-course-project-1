@@ -34,6 +34,7 @@ class Product(Base):
     display_restricted: Mapped[bool] = mapped_column(default=False)
     display_restricted_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     display_restricted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    display_restricted_case_id: Mapped[int | None] = mapped_column(ForeignKey("disposal_cases.id"), nullable=True)
 
     # 待审核/未通过的最新说明（历史结论看 review_records）
     reject_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -43,7 +44,9 @@ class Product(Base):
     listed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     delisted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    images: Mapped[list["ProductImage"]] = relationship(back_populates="product", order_by="ProductImage.sort")
+    images: Mapped[list["ProductImage"]] = relationship(
+        back_populates="product", order_by="ProductImage.sort", lazy="selectin"
+    )
     tags: Mapped[list["Category"]] = relationship(
         "Category", secondary="product_tags", lazy="selectin", order_by="Category.id"
     )

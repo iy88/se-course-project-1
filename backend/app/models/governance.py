@@ -74,7 +74,9 @@ class DisposalCase(Base):
     disposed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    messages: Mapped[list["DisposalMessage"]] = relationship(back_populates="case", order_by="DisposalMessage.id")
+    messages: Mapped[list["DisposalMessage"]] = relationship(
+        back_populates="case", order_by="DisposalMessage.id", lazy="selectin"
+    )
 
 
 class DisposalMessage(Base):

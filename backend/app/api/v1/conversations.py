@@ -1,0 +1,199 @@
+"""IM 会话与消息（C-07/C-08，BR-18）：普通私聊与交易分支在同一双人入口下组织。"""
+
+from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import CurrentUser, DbSession, ensure_can_write
+from app.models import Conversation, ConversationRead, Message, Product, Trade, User
+from app.services import conversations as conversation_service
+from app.services import im as im_service
+from app.services.im import MAX_MESSAGE_LENGTH, ensure_member, pair_frozen
+from app.schemas.conversation import MessageIn, NormalConversationCreateIn, ReadAdvanceIn
+
+router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+
+async def _get_member_conversation(db: AsyncSession, conversation_id: int, user_id: int) -> Conversation:
+    conversation = await db.get(Conversation, conversation_id)
+    if not conversation:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "会话不存在")
+    try:
+        await ensure_member(conversation, user_id)
+    except PermissionError as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
+    return conversation
+
+
+async def _get_last_read_id(db: AsyncSession, conversation_id: int, user_id: int) -> int:
+    row = await db.scalar(
+        select(ConversationRead).where(
+            ConversationRead.conversation_id == conversation_id, ConversationRead.user_id == user_id
+        )
+    )
+    return row.last_read_message_id if row else 0
+
+
+async def _conversation_item(db: AsyncSession, conversation: Conversation, user_id: int) -> dict:
+    last_read_id = await _get_last_read_id(db, conversation.id, user_id)
+    unread = await im_service.unread_count(db, conversation.id, user_id, last_read_id)
+    last_message = await db.scalar(
+        select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(1)
+    )
+    peer_name = await im_service.get_peer_display_name(db, conversation, user_id)
+    peer_id = conversation.user_high_id if user_id == conversation.user_low_id else conversation.user_low_id
+    item = {
+        "id": conversation.id,
+        "type": conversation.type,
+        "peer_id": peer_id,
+        "peer_name": peer_name,
+        "archived": conversation.archived,
+        "unread": unread,
+        "last_message": (
+            {
+                "id": last_message.id,
+                "sender_id": last_message.sender_id,
+                "kind": last_message.kind,
+                "content": last_message.content[:80],
+                "created_at": last_message.created_at.isoformat() if last_message.created_at else None,
+            }
+            if last_message
+            else None
+        ),
+        "trade": None,
+    }
+    if conversation.type == "trade" and conversation.trade_id:
+        trade = await db.get(Trade, conversation.trade_id)
+        product = await db.get(Product, trade.product_id) if trade else None
+        item["trade"] = {
+            "id": trade.id if trade else None,
+            "status": trade.status if trade else None,
+            "frozen": trade.frozen if trade else False,
+            "product_id": trade.product_id if trade else None,
+            "product_title": product.title if product else "",
+            "my_role": "seller" if (trade and trade.seller_id == user_id) else "buyer",
+        }
+    return item
+
+
+@router.get("")
+async def list_conversations(user: CurrentUser, db: DbSession) -> list[dict]:
+    """同一双人入口下展示普通私聊与交易分支（FR-04）。"""
+    result = await db.execute(
+        select(Conversation)
+        .where((Conversation.user_low_id == user.id) | (Conversation.user_high_id == user.id))
+        .order_by(Conversation.id.desc())
+    )
+    conversations = list(result.scalars())
+    return [await _conversation_item(db, c, user.id) for c in conversations]
+
+
+@router.post("/normal", status_code=201)
+async def create_normal(body: NormalConversationCreateIn, user: CurrentUser, db: DbSession) -> dict:
+    """发起/复用普通私聊：不以商品或购买请求为前提（BR-18）。"""
+    ensure_can_write(user)
+    if body.peer_user_id == user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能向本人发起私聊")
+    peer = await db.get(User, body.peer_user_id)
+    if not peer:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "对方用户不存在")
+    conversation = await conversation_service.get_or_create_normal_conversation(db, user.id, body.peer_user_id)
+    await db.commit()
+    return {"id": conversation.id, "detail": "会话已就绪"}
+
+
+@router.get("/unread-summary")
+async def unread_summary(user: CurrentUser, db: DbSession) -> dict:
+    result = await db.execute(
+        select(Conversation.id).where(
+            (Conversation.user_low_id == user.id) | (Conversation.user_high_id == user.id)
+        )
+    )
+    total = 0
+    for (conversation_id,) in result.all():
+        last_read_id = await _get_last_read_id(db, conversation_id, user.id)
+        total += await im_service.unread_count(db, conversation_id, user.id, last_read_id)
+    return {"unread": total}
+
+
+@router.get("/{conversation_id}")
+async def conversation_detail(
+    conversation_id: int,
+    user: CurrentUser,
+    db: DbSession,
+    before_id: int | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict:
+    """会话消息（倒序分页）。查看历史不改变已读；已读由 /read 显式推进（BR-18）。"""
+    conversation = await _get_member_conversation(db, conversation_id, user.id)
+    query = select(Message).where(Message.conversation_id == conversation.id)
+    if before_id is not None:
+        query = query.where(Message.id < before_id)
+    result = await db.execute(query.order_by(Message.id.desc()).limit(limit))
+    messages = list(result.scalars())
+    messages.reverse()
+    item = await _conversation_item(db, conversation, user.id)
+    item["messages"] = [
+        {
+            "id": m.id,
+            "sender_id": m.sender_id,
+            "kind": m.kind,
+            "content": m.content,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+            "mine": m.sender_id == user.id,
+        }
+        for m in messages
+    ]
+    item["last_read_message_id"] = await _get_last_read_id(db, conversation.id, user.id)
+    return item
+
+
+@router.post("/{conversation_id}/messages")
+async def send_message(conversation_id: int, body: MessageIn, user: CurrentUser, db: DbSession) -> dict:
+    """发送文字消息：成员、封禁、双人冻结、归档校验（BR-17/18/32/33）。"""
+    ensure_can_write(user)
+    conversation = await _get_member_conversation(db, conversation_id, user.id)
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "消息内容不能为空")
+    if len(content) > MAX_MESSAGE_LENGTH:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"消息最长 {MAX_MESSAGE_LENGTH} 字")
+    if conversation.archived:
+        raise HTTPException(status.HTTP_409_CONFLICT, "该交易分支已归档，可转入普通私聊继续沟通")
+    if await pair_frozen(db, conversation.user_low_id, conversation.user_high_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "当前双方交易沟通受限（冻结期间禁发），可查看历史或通过管理沟通处理")
+    message = await conversation_service.send_text_message(db, conversation, user.id, content)
+    await db.commit()
+    return {"id": message.id, "detail": "已发送"}
+
+
+@router.post("/{conversation_id}/read")
+async def advance_read(conversation_id: int, body: ReadAdvanceIn, user: CurrentUser, db: DbSession) -> dict:
+    """仅将已展示消息标为已读（BR-18）：推进本人该会话已读指针。"""
+    conversation = await _get_member_conversation(db, conversation_id, user.id)
+    max_id = await db.scalar(
+        select(Message.id).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(1)
+    )
+    target = min(body.last_displayed_message_id, int(max_id or 0))
+    row = await db.scalar(
+        select(ConversationRead).where(
+            ConversationRead.conversation_id == conversation.id, ConversationRead.user_id == user.id
+        )
+    )
+    if row is None:
+        row = ConversationRead(conversation_id=conversation.id, user_id=user.id, last_read_message_id=target)
+        db.add(row)
+    elif target > row.last_read_message_id:
+        row.last_read_message_id = target
+    await db.commit()
+    return {"last_read_message_id": row.last_read_message_id}
+
+
+@router.post("/{conversation_id}/to-normal")
+async def migrate_to_normal(conversation_id: int, user: CurrentUser, db: DbSession) -> dict:
+    """归档分支引导转入普通私聊：不迁移消息、不自动发送（BR-18）。"""
+    conversation = await _get_member_conversation(db, conversation_id, user.id)
+    peer_id = conversation.user_high_id if user.id == conversation.user_low_id else conversation.user_low_id
+    normal = await conversation_service.get_or_create_normal_conversation(db, user.id, peer_id)
+    await db.commit()
+    return {"id": normal.id, "detail": "已转入普通私聊（历史消息不迁移）"}

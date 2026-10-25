@@ -1,0 +1,223 @@
+"""管理事项（C-13/BR-34）：共享池、认领、详情、问询、沟通与结论。"""
+
+from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+
+from app.api.deps import CurrentAdmin, CurrentUser, DbSession
+from app.models import DisposalCase, Product, Trade, User
+from app.models.enums import CaseStatus, CaseType
+from app.services import cases as case_service
+from app.services.cases import ensure_claimant
+
+router = APIRouter(prefix="/admin/cases", tags=["admin-cases"])
+
+
+class ClaimOut(BaseModel):
+    id: int
+    detail: str
+
+
+class CaseMessageIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class InquiryIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)  # 需要本人说明的内容范围
+
+
+class DisposeIn(BaseModel):
+    conclusion: str = Field(min_length=1, max_length=200)
+    reason: str | None = Field(default=None, max_length=500)
+    basis: str | None = Field(default=None, max_length=500)
+
+
+async def _case_or_404(db, case_id: int) -> DisposalCase:
+    case = await db.get(DisposalCase, case_id)
+    if not case:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
+    return case
+
+
+def _case_item(case: DisposalCase) -> dict:
+    return {
+        "id": case.id,
+        "case_type": case.case_type,
+        "status": case.status,
+        "title": case.title,
+        "claimed_by_id": case.claimed_by_id,
+        "subject_user_id": case.subject_user_id,
+        "product_id": case.product_id,
+        "report_id": case.report_id,
+        "trade_id": case.trade_id,
+        "conclusion": case.conclusion,
+        "conclusion_reason": case.conclusion_reason,
+        "basis": case.basis,
+        "created_at": case.created_at.isoformat() if case.created_at else None,
+        "disposed_at": case.disposed_at.isoformat() if case.disposed_at else None,
+    }
+
+
+@router.get("")
+async def list_cases(
+    admin: CurrentAdmin,
+    db: DbSession,
+    case_status: str = Query(default="pending", alias="status", pattern="^(pending|processing|disposed|all)$"),
+    case_type: str | None = Query(default=None),
+) -> list[dict]:
+    query = select(DisposalCase).order_by(DisposalCase.id.desc())
+    if case_status != "all":
+        query = query.where(DisposalCase.status == case_status)
+    if case_type:
+        query = query.where(DisposalCase.case_type == case_type)
+    result = await db.execute(query.limit(200))
+    return [_case_item(c) for c in result.scalars()]
+
+
+@router.post("/{case_id}/claim", response_model=ClaimOut)
+async def claim_case(case_id: int, admin: CurrentAdmin, db: DbSession) -> ClaimOut:
+    """共享池主动认领：同一事项同时仅一名管理员（BR-34）。"""
+    case = await _case_or_404(db, case_id)
+    if case.status != CaseStatus.PENDING.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "该事项已被认领或已处置")
+    case.status = CaseStatus.PROCESSING.value
+    case.claimed_by_id = admin.id
+    case.claimed_at = case_service.now_utc()
+    await db.commit()
+    return ClaimOut(id=case.id, detail="认领成功")
+
+
+@router.get("/{case_id}")
+async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
+    """事项详情：仅认领人可查看非公开内容与沟通记录（BR-19/34）。"""
+    case = await _case_or_404(db, case_id)
+    if case.claimed_by_id != admin.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "仅该事项认领管理员可查看详情")
+    data = _case_item(case)
+    data["messages"] = [
+        {
+            "id": m.id,
+            "sender_id": m.sender_id,
+            "role": m.role,
+            "kind": m.kind,
+            "content": m.content,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in case.messages
+    ]
+    # 附加上下文
+    if case.product_id:
+        product = await db.get(Product, case.product_id)
+        data["product"] = {
+            "id": product.id,
+            "title": product.title,
+            "description": product.description,
+            "price_cents": product.price_cents,
+            "status": product.status,
+            "image_keys": [i.file_key for i in product.images],
+            "tag_names": [t.name for t in product.tags],
+        } if product else None
+        if product:
+            from sqlalchemy import select as _select
+            from app.models import ProductTagApplication
+
+            apps = (await db.execute(_select(ProductTagApplication).where(ProductTagApplication.product_id == product.id))).scalars().all()
+            data["tag_applications"] = [
+                {"id": a.id, "requested_name": a.requested_name, "status": a.status} for a in apps
+            ]
+    if case.report_id:
+        from app.models import Report
+
+        report = await db.get(Report, case.report_id)
+        data["report"] = {
+            "id": report.id,
+            "reporter_id": report.reporter_id,
+            "target_type": report.target_type,
+            "target_id": report.target_id,
+            "reason": report.reason,
+            "detail": report.detail,
+            "evidence_keys": report.evidence_keys,
+            "status": report.status,
+            "result_confirmed": report.result_confirmed,
+        } if report else None
+        # 举报目标内容（限必要范围展示）
+        if report:
+            from app.api.v1.admin.reports import target_snapshot
+
+            data["report_target"] = await target_snapshot(db, report)
+    if case.trade_id:
+        from app.api.v1.admin.trades import admin_trade_view
+
+        data["trade"] = await admin_trade_view(db, case.trade_id)
+    if case.subject_user_id:
+        subject = await db.get(User, case.subject_user_id)
+        data["subject_user"] = {"id": subject.id, "display_name": subject.display_name, "email": subject.email} if subject else None
+    return data
+
+
+@router.post("/{case_id}/inquiry")
+async def send_inquiry(case_id: int, body: InquiryIn, admin: CurrentAdmin, db: DbSession) -> dict:
+    """发起问询：向被询问用户发送问询通知，从通知进入提交说明（BR-26）。"""
+    case = await _case_or_404(db, case_id)
+    ensure_claimant(case, admin.id)
+    if case.subject_user_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该事项无被询问用户")
+    await case_service.add_case_message(
+        db, case, sender_id=admin.id,
+        role=case_service.DisposalMessageRole.ADMIN,
+        kind=case_service.DisposalMessageKind.INQUIRY,
+        content=body.content.strip(),
+    )
+    from app.services.notifications import notify
+
+    await notify(
+        db, [case.subject_user_id], "inquiry", "管理员向您发起问询",
+        f"事项「{case.title}」需要您说明：{body.content.strip()[:100]}。请从本通知进入提交说明。",
+        link_type="case", link_id=case.id,
+    )
+    await db.commit()
+    return {"detail": "问询已发送"}
+
+
+@router.post("/{case_id}/messages")
+async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db: DbSession) -> dict:
+    """管理员在事项沟通单回复结论/说明（BR-32/33）。"""
+    case = await _case_or_404(db, case_id)
+    ensure_claimant(case, admin.id)
+    await case_service.add_case_message(
+        db, case, sender_id=admin.id,
+        role=case_service.DisposalMessageRole.ADMIN,
+        kind=case_service.DisposalMessageKind.REPLY,
+        content=body.content.strip(),
+    )
+    recipients = []
+    if case.subject_user_id:
+        recipients.append(case.subject_user_id)
+    if case.trade_id:
+        trade = await db.get(Trade, case.trade_id)
+        if trade:
+            recipients += [trade.buyer_id, trade.seller_id]
+    if recipients:
+        from app.services.notifications import notify
+
+        await notify(
+            db, recipients, "appeal_result", "事项沟通有新回复",
+            f"事项「{case.title}」有管理员回复，请进入查看。",
+            link_type="case", link_id=case.id,
+        )
+    await db.commit()
+    return {"detail": "回复已发送"}
+
+
+@router.post("/{case_id}/dispose")
+async def dispose_case(case_id: int, body: DisposeIn, admin: CurrentAdmin, db: DbSession) -> dict:
+    """形成处置结论并留依据（BR-26）；具体处置动作由各专项接口执行。"""
+    case = await _case_or_404(db, case_id)
+    ensure_claimant(case, admin.id)
+    if case.status == CaseStatus.DISPOSED.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置")
+    await case_service.dispose_case(
+        db, case, conclusion=body.conclusion.strip(), reason=body.reason, basis=body.basis
+    )
+    await db.commit()
+    return {"detail": "事项已处置"}

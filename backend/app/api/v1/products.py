@@ -159,16 +159,14 @@ async def publish_product(body: ProductCreateIn, user: CurrentUser, db: DbSessio
         db.add(ProductImage(product_id=product.id, file_key=key, sort=sort))
     # 当次审核内容快照 + 审核事项进入共享池
     content = await _snapshot_content(db, product)
-    review = ReviewRecord(product_id=product.id, content_json=content)
-    db.add(review)
-    await db.flush()
-    await case_service.create_case(
+    case = await case_service.create_case(
         db,
         case_type=CaseType.PRODUCT_REVIEW,
         title=f"商品审核：{product.title}",
         subject_user_id=user.id,
         product_id=product.id,
     )
+    db.add(ReviewRecord(product_id=product.id, content_json=content, case_id=case.id))
     await db.commit()
     await db.refresh(product)
     return await _out(db, product, user, include_pending_count=True)
@@ -290,15 +288,14 @@ async def resubmit(
     product.status = ProductStatus.PENDING_REVIEW.value
     product.reject_reason = None
     content = await _snapshot_content(db, product)
-    db.add(ReviewRecord(product_id=product.id, content_json=content))
-    await db.flush()
-    await case_service.create_case(
+    case = await case_service.create_case(
         db,
         case_type=CaseType.PRODUCT_REVIEW,
         title=f"商品重提审核：{product.title}",
         subject_user_id=user.id,
         product_id=product.id,
     )
+    db.add(ReviewRecord(product_id=product.id, content_json=content, case_id=case.id))
     await db.commit()
     await db.refresh(product)
     return await _out(db, product, user, include_pending_count=True)
