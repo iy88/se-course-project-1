@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-26T01:41:00+08:00
 -->
 
 <html lang="zh-CN">
@@ -555,7 +555,8 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
                 </div>
                 <div class="item-actions">
                   <span class="state warn">待认领</span>
-                  <button type="button" class="btn ghost" data-toast="演示：举报事项同样须先认领，认领后才可核查与记录结论">认领</button>
+                  <button type="button" class="btn ghost" id="us08-claim-report">认领</button>
+                  <button type="button" class="btn primary" id="us08-dispose-report" hidden>处置</button>
                 </div>
               </div>
               <div class="list-item">
@@ -747,6 +748,18 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       var locked = q('us08-review-locked');
       var body = q('us08-review-body');
       var otherNote = q('us08-other-note');
+
+      var claimReport = q('us08-claim-report');
+      var disposeReport = q('us08-dispose-report');
+      claimReport.addEventListener('click', function () {
+        claimReport.disabled = true;
+        claimReport.textContent = '已认领';
+        disposeReport.hidden = false;
+        window.PROTO.toast('已认领举报事项；同一事项仅认领人可处置');
+      });
+      disposeReport.addEventListener('click', function () {
+        window.PROTO.toast('处置执行（演示）：记录结论与依据，通知受影响者；不自动解除其他限制');
+      });
 
       q('us08-other-btn').addEventListener('click', function () {
         window.PROTO.toast('拒绝处理：该事项尚未被您认领，其他管理员只能查看摘要');
