@@ -1,0 +1,28 @@
+:root {
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  background: #f7f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.page {
+  padding-bottom: calc(60px + var(--safe-bottom));
+}
+
+.price {
+  color: #ee0a24;
+  font-weight: 600;
+}
+
+.empty-tip {
+  text-align: center;
+  color: #969799;
+  padding: 40px 0;
+}
