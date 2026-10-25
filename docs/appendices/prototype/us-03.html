@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-26T02:38:00+08:00
 -->
 
 <html lang="zh-CN">
@@ -524,7 +524,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         <div class="topbar">
           <div>
             <strong>找闲置</strong>
-            <div class="muted">登录身份：林同学（示例）</div>
+            <div class="muted" id="us-03-identity">登录身份：林同学（示例）</div>
           </div>
           <button class="btn ghost" type="button" id="us-03-guest">以未登录访客浏览</button>
         </div>
@@ -547,8 +547,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           <div class="field">
             <span class="label">分类标签（可多选，需全部匹配）</span>
             <div class="chips">
-              <button class="chip tag-btn" type="button" data-tag="教材" aria-pressed="false">教材</button>
-              <button class="chip tag-btn" type="button" data-tag="课本" aria-pressed="false">课本（教材别名）</button>
+              <button class="chip tag-btn" type="button" data-tag="教材" aria-pressed="false">教材（别名：课本，同属教材分类）</button>
               <button class="chip tag-btn" type="button" data-tag="习题册" aria-pressed="false">习题册</button>
               <button class="chip tag-btn" type="button" data-tag="自行车" aria-pressed="false">自行车</button>
               <button class="chip tag-btn" type="button" data-tag="台灯" aria-pressed="false">台灯</button>
@@ -832,6 +831,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           applyFilter(false);
         }
         section.querySelector('#us-03-guest').textContent = guest ? '恢复登录状态' : '以未登录访客浏览';
+        section.querySelector('#us-03-identity').textContent = guest ? '当前身份：未登录访客' : '登录身份：林同学（示例）';
         toast(guest ? '已切换为未登录访客：不返回业务内容' : '已恢复登录状态，可继续检索');
       });
 
