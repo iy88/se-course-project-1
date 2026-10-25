@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-26T01:41:00+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-26T02:05:49+08:00
 -->
 
 <html lang="zh-CN">
@@ -512,7 +512,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
     <p class="goal">作为平台管理员或需要说明、受处置的用户，我希望认领并审核或处置事项、维护禁发范围，并在本人事项中提交说明或申辩、获得回复，以便处理权限、依据与实际恢复范围清楚可查。</p>
     <ul class="meta">
       <li>关联功能 FR-08；协作 FR-02（禁发范围维护与展示）</li>
-      <li>主用例 UC-C08；协作用例 UC-C02、UC-C07、UC-C14、UC-C11</li>
+      <li>主用例 UC-C08；协作用例 UC-C02、UC-C07、UC-C14、UC-C11、UC-C12</li>
       <li>依据 US-08-AC-01—US-08-AC-09（场景 SC-02、SC-06、SC-07、SC-09）</li>
     </ul>
   </header>
@@ -554,7 +554,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
                   <span class="muted">来源：商品评论区 · 10-22 19:58</span>
                 </div>
                 <div class="item-actions">
-                  <span class="state warn">待认领</span>
+                  <span class="state warn" id="us08-report-state">待认领</span>
                   <button type="button" class="btn ghost" id="us08-claim-report">认领</button>
                   <button type="button" class="btn primary" id="us08-dispose-report" hidden>处置</button>
                 </div>
@@ -736,6 +736,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <li class="list-item">US-08-AC-06：交易被冻结 → 双方推进入口不可用；认领管理员调整时记录前后状态并通知，不伪造确认。</li>
       <li class="list-item">US-08-AC-07：解除具体封禁或冻结 → 仅恢复该限制允许恢复的资格，其他有效限制继续提示适用，原非在售商品不自动上架。</li>
       <li class="list-item">US-08-AC-08：管理员维护禁发细目并保存 → 登录用户查看时显示最新范围，审核面板同步引用；普通用户只看到只读内容，没有保存入口。</li>
+      <li class="list-item">US-08-AC-09：普通用户或未登录访问者尝试修改禁发范围 → 拒绝维护，原范围保持；普通登录用户仅可查看。</li>
     </ul>
   </div>
 
@@ -751,10 +752,13 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
 
       var claimReport = q('us08-claim-report');
       var disposeReport = q('us08-dispose-report');
+      var reportState = q('us08-report-state');
       claimReport.addEventListener('click', function () {
         claimReport.disabled = true;
         claimReport.textContent = '已认领';
         disposeReport.hidden = false;
+        reportState.textContent = '已认领';
+        reportState.className = 'state ok';
         window.PROTO.toast('已认领举报事项；同一事项仅认领人可处置');
       });
       disposeReport.addEventListener('click', function () {
