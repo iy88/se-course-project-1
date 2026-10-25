@@ -200,6 +200,24 @@ async def test_single_claimant_rule(client, setup, db):
     assert resp.status_code == 409
     resp = await client.get(f"/api/v1/admin/cases/{case_id}", headers=admin2_h)
     assert resp.status_code == 403
+    # 处理动作同样仅限认领人（BR-34）：问询、处置、商品审核均须 403
+    resp = await client.post(
+        f"/api/v1/admin/cases/{case_id}/inquiry", headers=admin2_h, json={"content": "请说明来源"}
+    )
+    assert resp.status_code == 403
+    resp = await client.post(
+        f"/api/v1/admin/cases/{case_id}/dispose", headers=admin2_h, json={"conclusion": "无问题"}
+    )
+    assert resp.status_code == 403
+    resp = await client.post(
+        f"/api/v1/admin/products/cases/{case_id}/review", headers=admin2_h, json={"result": "approved"}
+    )
+    assert resp.status_code == 403
+    # 认领人本人处理不受影响
+    resp = await client.post(
+        f"/api/v1/admin/cases/{case_id}/dispose", headers=admin_h, json={"conclusion": "无问题"}
+    )
+    assert resp.status_code == 200
 
 
 async def test_admin_adjust_and_restore(client, setup):

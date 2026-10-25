@@ -67,13 +67,16 @@ async def ban_user(user_id: int, body: BanIn, admin: CurrentAdmin, db: DbSession
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能封禁管理员账户")
     if user.status == AccountStatus.BANNED.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "该账户已被封禁")
-    # 直接触发封禁时建立封禁事项，作为申辩沟通入口
+    # 直接触发封禁时建立封禁事项，作为申辩沟通入口；处置即时形成，
+    # 执行管理员即该事项认领人（BR-34），申辩沟通限受限用户与认领管理员（BR-32）
     case = await case_service.create_case(
         db,
         case_type=CaseType.ACCOUNT_BAN,
         title=f"账户封禁：{user.display_name}（{user.email}）",
         subject_user_id=user.id,
     )
+    case.claimed_by_id = admin.id
+    case.claimed_at = case_service.now_utc()
     await moderation.ban_user(
         db, user, reason=body.reason.strip(), basis=None, case_id=case.id, admin_id=admin.id
     )

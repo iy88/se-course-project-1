@@ -159,7 +159,7 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
 async def send_inquiry(case_id: int, body: InquiryIn, admin: CurrentAdmin, db: DbSession) -> dict:
     """发起问询：向被询问用户发送问询通知，从通知进入提交说明（BR-26）。"""
     case = await _case_or_404(db, case_id)
-    ensure_claimant(case, admin.id)
+    await ensure_claimant(case, admin.id)
     if case.subject_user_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该事项无被询问用户")
     await case_service.add_case_message(
@@ -183,7 +183,7 @@ async def send_inquiry(case_id: int, body: InquiryIn, admin: CurrentAdmin, db: D
 async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db: DbSession) -> dict:
     """管理员在事项沟通单回复结论/说明（BR-32/33）。"""
     case = await _case_or_404(db, case_id)
-    ensure_claimant(case, admin.id)
+    await ensure_claimant(case, admin.id)
     await case_service.add_case_message(
         db, case, sender_id=admin.id,
         role=case_service.DisposalMessageRole.ADMIN,
@@ -213,7 +213,7 @@ async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db
 async def dispose_case(case_id: int, body: DisposeIn, admin: CurrentAdmin, db: DbSession) -> dict:
     """形成处置结论并留依据（BR-26）；具体处置动作由各专项接口执行。"""
     case = await _case_or_404(db, case_id)
-    ensure_claimant(case, admin.id)
+    await ensure_claimant(case, admin.id)
     if case.status == CaseStatus.DISPOSED.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置")
     await case_service.dispose_case(

@@ -38,7 +38,7 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
     case = await db.get(DisposalCase, case_id)
     if not case:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
-    ensure_claimant(case, admin.id)
+    await ensure_claimant(case, admin.id)
     if case.case_type != CaseType.PRODUCT_REVIEW.value:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该事项不是商品审核事项")
     if case.status == CaseStatus.DISPOSED.value:

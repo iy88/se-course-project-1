@@ -77,7 +77,7 @@ async def _report_case(db, case_id: int, admin) -> tuple[DisposalCase, Report]:
     case = await db.get(DisposalCase, case_id)
     if not case:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
-    ensure_claimant(case, admin.id)
+    await ensure_claimant(case, admin.id)
     if case.case_type != CaseType.REPORT.value:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该事项不是举报事项")
     report = await db.get(Report, case.report_id)
