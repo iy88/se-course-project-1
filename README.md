@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.22
-Version-Datetime: 2026-10-26T13:08:30+08:00
+Version: 0.1.23
+Version-Datetime: 2026-10-26T21:22:39+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -9,7 +9,7 @@ Version-Datetime: 2026-10-26T13:08:30+08:00
 
 ## 成员分工
 
-需求成果确认已登记；现行34张图稿（含UC-03—UC-16独立用例图）已于2026-10-26由用户确认审阅通过；成员按实际完成的内容记录贡献，见 [成员职责表](bits/成员职责表.md)。
+需求成果确认已登记；当时34张图稿（含UC-03—UC-16独立用例图）已于2026-10-26由用户确认审阅通过；13张变化图稿及相关一致性修订已于2026-10-26获用户确认；成员按实际完成的内容记录贡献，见 [成员职责表](bits/成员职责表.md)。
 
 ## 文件位置与命名
 
@@ -82,7 +82,7 @@ Version-Datetime: 2026-10-26T13:08:30+08:00
 - [AI 智能体使用验证报告](docs/draft-AI智能体使用验证报告.md)
 - [多页 HTML 原型](docs/appendices/prototype/README.md)
 - [渲染图索引](docs/appendices/rendered/README.md)
-- [证据索引 E-01—E-09、E-11—E-14](docs/appendices/evidence/index.md)
+- [证据索引 E-01—E-09、E-11—E-15](docs/appendices/evidence/index.md)
 
 ## 文档生成
 
