@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-26T02:38:00+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-26T12:37:52+08:00
 -->
 
 <html lang="zh-CN">
@@ -619,11 +619,12 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
                   <div class="prod-meta">自行车 ／ ¥180 ／ 刹车已检修</div>
                   <div class="prod-actions">
                     <span class="state warn">待审核</span>
-                    <span class="pill">10-22 提交</span>
+                    <span class="pill">10-22 提交；尚未认领（示例）</span>
                   </div>
                   <div class="prod-actions">
+                    <button class="btn ghost" type="button" data-toast="待审核期认领前后均可修改内容或标签，不重新排队；审核以提交结论时最新内容为准（演示）">修改待审内容</button>
                     <button class="btn ghost" type="button" data-toast="审核中：结果将出现在“我的商品”和站内通知">查看审核状态</button>
-                    <button class="btn ghost" type="button" data-toast="撤回后商品置为已下架，不产生公开内容；修改后可重新提交审核（演示）">撤回</button>
+                    <button class="btn ghost" type="button" data-toast="仅审核认领前可撤回；认领后拒绝撤回且状态保持。撤回后商品置为已下架，不产生公开内容；修改后可重新提交审核（演示）">撤回</button>
                   </div>
                 </div>
               </div>
@@ -763,7 +764,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <div class="list-item"><div><strong>US-02-AC-06</strong>：已下架商品原审核有效且当前资格允许 → 重新上架后恢复公开可交易，后续新交易使用独立记录及分支。</div></div>
       <div class="list-item"><div><strong>US-02-AC-07</strong>：仅交易冻结、账户未封禁 → 可编辑无关商品，尝试上架被拒绝并提示冻结原因；封禁账户另按写操作限制。</div></div>
       <div class="list-item"><div><strong>US-02-AC-08</strong>：尚未提交商品时查看禁发范围 → 直接展示管理员维护的当前禁发细目，无需先创建商品；管理员保存更新后查看可见最新范围。</div></div>
-      <div class="list-item"><div><strong>US-02-AC-09</strong>：本人商品处于待审核 → 可修改内容或标签、撤回标签申请或撤回商品；修改以最新内容审核、不重新排队，撤回后置为已下架、修改后可重新提交审核。</div></div>
+      <div class="list-item"><div><strong>US-02-AC-09</strong>：本人商品处于待审核 → 可修改内容或标签、撤回标签申请或撤回商品；认领前后均可修改，以提交审核结论时最新内容为准、不重新排队；撤回商品仅限认领前，认领后拒绝撤回且状态保持；撤回后置为已下架、修改后可重新提交审核。</div></div>
     </div>
   </div>
 

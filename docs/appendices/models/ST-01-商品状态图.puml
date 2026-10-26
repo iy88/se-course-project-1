@@ -1,6 +1,6 @@
 /'
-Version: 0.1.1
-Version-Datetime: 2026-10-23T03:48:01+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-26T12:37:52+08:00
 '/
 @startuml
 skinparam defaultFontName "PingFang SC"
@@ -19,6 +19,9 @@ state "已下架" as OffShelf
 Pending --> Public : 认领管理员审核通过（TR-01）
 Pending --> Rejected : 审核不通过（TR-02）
 Rejected --> Pending : 修改重提（TR-03）
+Pending --> Pending : 认领前后可修改\n结论依据提交时最新内容（BR-10）
+Pending --> OffShelf : 认领前撤回（TR-20）
+OffShelf --> Pending : 撤回审核后修改重提，尚未审核通过（TR-21）
 Public --> Public : 信息编辑，保留历史（TR-04）
 Public --> InTrade : 卖方接受请求（TR-05）
 InTrade --> OffShelf : 完成／终止，默认下架（TR-06、TR-07）
