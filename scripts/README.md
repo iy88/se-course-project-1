@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.0
-Version-Datetime: 2026-10-23T03:50:05+08:00
+Version: 0.2.1
+Version-Datetime: 2026-10-26T12:38:12+08:00
 -->
 
 # 文档构建
@@ -13,7 +13,7 @@ Version-Datetime: 2026-10-23T03:50:05+08:00
 python3 scripts/cli.py build
 ```
 
-默认先将20张业务模型图按200 DPI输出到 `docs/appendices/rendered/`，再同步关键材料到01—08章节并生成 `docs/需求规格说明书.md`。渲染索引自动登记实际像素尺寸和DPI；PNG伴随文件记录源文件及图片摘要。
+默认先将34张业务模型图按200 DPI输出到 `docs/appendices/rendered/`，再同步关键材料到01—08章节并生成 `docs/需求规格说明书.md`。渲染索引自动登记实际像素尺寸和DPI；PNG伴随文件记录源文件及图片摘要。
 
 ## 目录结构与统一入口
 
@@ -98,4 +98,4 @@ python3 scripts/cli.py pdf --force --only docs/requirements/01-项目概述.md
 
 导出不修改源 Markdown。本地 `.md` 链接改写为相对 `.pdf` 路径并保留片段；标题同时登记 Pandoc ID 与 GitHub 风格片段别名，正文中的 `<a id="…">` 转为 LaTeX 目标，使目录链接可用。ASCII 片段保持原样；非 ASCII 片段在 PDF 目标中映射为稳定的 ASCII 目标名，避免 XeLaTeX 目标名编码不一致。外部 URL 原样保留；PNG、PUML 等非 Markdown 附件复制到对应目录。`docs/` 之外的仓库文档不导出；对应链接在PDF中保留标题与仓库相对路径文字，不生成点击动作或 `_repository/`。PDF间文件跳转使用显式UTF-16BE文件描述（`/Filespec`、`/UF`），保留真实中文文件名和空格，避免短中文名被误解为PDFDocEncoding，不把文件名编码为URI；网页和普通附件仍按URI处理。不展开索引目录，只处理实际链接。
 
-输出为 A4，正文使用中文字体，长代码与 URL 自动换行，图片缩放至版心；列数达到 6 的宽表自动使用横向页（`--no-landscape-tables` 可关闭）。字体、页边距、字号及宽表阈值可通过 `--cjk-main-font`、`--margin`、`--fontsize`、`--wide-table-columns` 等参数调整。`scripts/doc_tools/pdf/header.tex` 将正文使用的箭头（`→`、`↔` 等）映射到数学字形，并把带圈数字 `①`—`⑳` 声明为 CJK 字符，避免中文字体缺字形成空框。
+输出为 A4，正文使用中文字体，长代码与 URL 自动换行，图片缩放至版心并按正文位置放置，避免漂移到长表之后；列数达到 6 的宽表自动使用横向页（`--no-landscape-tables` 可关闭）。字体、页边距、字号及宽表阈值可通过 `--cjk-main-font`、`--margin`、`--fontsize`、`--wide-table-columns` 等参数调整。`scripts/doc_tools/pdf/header.tex` 将正文使用的箭头（`→`、`↔` 等）映射到数学字形，并把带圈数字 `①`—`⑳` 声明为 CJK 字符，避免中文字体缺字形成空框。
