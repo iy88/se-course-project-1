@@ -1,0 +1,96 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-10 · UC-C08 审核与处置沟通
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 平台管理员 as Admin
+actor 认领管理员 as ClaimAdmin
+actor 受处置用户 as Sanctioned
+actor 被询问用户 as Inquired
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C08-01 问询说明与处置申辩) as C0801
+  usecase (UC-C08-02 认领待处理事项) as C0802
+  usecase (UC-C08-03 核查举报与内容处置) as C0803
+  usecase (UC-C08-04 封禁与解除账户限制) as C0804
+  usecase (UC-C08-05 冻结交易与恢复) as C0805
+  usecase (UC-C08-06 审核商品并告知结果) as C0806
+  usecase (维护禁发范围) as C08A1 <<辅助>>
+}
+
+Admin --> C0802
+Admin --> C08A1
+ClaimAdmin --> C0801
+ClaimAdmin --> C0803
+ClaimAdmin --> C0804
+ClaimAdmin --> C0805
+ClaimAdmin --> C0806
+Sanctioned --> C0801
+Inquired --> C0801
+
+' note right of C0802
+'   同一事项同时仅一名认领人；管理员待办来自
+'   共享处理池，不发送站内通知（BR-34）。
+' end note
+
+' note bottom of C0801
+'   问询先发通知并说明范围；实际处置后受处置
+'   用户可申辩；说明与申辩分别记录，认领管理员
+'   在原事项回复并留痕；举报人无权读取对方申辩
+'   （BR-26、BR-32、BR-33）。
+' end note
+
+' note bottom of C0803
+'   仅限本人认领事项；非公开记录按必要范围访问，
+'   私聊消息仅限相关举报或争议所需（BR-19、BR-34）。
+' end note
+
+' note bottom of C0804
+'   记录理由、执行者及时间；解除后按原资格恢复，
+'   其他有效限制保留；非在售商品不自动上架
+'   （BR-32、TR-10）。
+' end note
+
+' note bottom of C0805
+'   冻结以交易进度暂停标记表达；禁发双方普通
+'   私聊及全部交易分支，历史可读；与第三方聊天
+'   不受影响；结束或解除须留据（BR-33）。
+' end note
+
+' note bottom of C0806
+'   与 UC-C02 商品审核是同一次业务处理；记录当次
+'   内容、结论及原因，通知发布者；待审核期认领后仍可修改，以提交结论时
+'   最新内容为审核依据（BR-10）。
+' end note
+
+' note right of C08A1
+'   独立于具体商品审核，不要求先认领商品；保存后
+'   向已登录用户展示，普通用户只读（BR-13、BR-22）。
+' end note
+
+' 认领是 03—06 的前置，不是 include；问询或申辩、
+' 封禁、冻结、审核是不同处置结果，不互相包含。
+' 举报人仅接收结果通知，经 UC-C07-04 与 UC-C11 体现。
+legend bottom
+核查、处置和审核限本人认领事项；同一事项仅一名认领人。
+禁发范围维护独立于商品事项；用户说明、申辩由认领管理员回复。
+商品审核与UC-C02同一次处理，依据提交结论时最新内容。
+endlegend
+@enduml

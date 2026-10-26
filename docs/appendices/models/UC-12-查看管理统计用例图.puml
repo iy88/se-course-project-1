@@ -1,0 +1,57 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-12 · UC-C10 查看管理统计
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 平台管理员 as Admin
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C10-01 按时间范围查询统计) as C1001
+  usecase (UC-C10-02 查看当前状态与待办数量) as C1002
+}
+
+Admin --> C1001
+Admin --> C1002
+
+' note bottom of C1001
+'   时间范围必须由管理员显式选择范围或“全部”，
+'   无默认值；按交易结果确认时间统计，与查询
+'   时点状态指标分别标明（BR-31）。
+' end note
+
+' note bottom of C1002
+'   按查询时点读取用户总数及封禁数、各状态商品
+'   数、审核与举报待办数及完成、终止、争议交易数；
+'   封禁账户数单列，不统计真实付款或收入。
+' end note
+
+' note right of C1001
+'   无匹配记录时返回空结果或零计数，不推断
+'   缺失原因；统计为业务记录派生数量，原业务
+'   记录与状态不变。
+' end note
+
+' 两种统计口径并列，互不包含；显式范围选择是
+' 规则或前置，不拆成 include。
+legend bottom
+管理员显式选择时间范围或全部；状态及待办按查询时点统计。
+封禁单列；已拒绝、撤回、关闭与已接受交易失败分开。
+endlegend
+@enduml

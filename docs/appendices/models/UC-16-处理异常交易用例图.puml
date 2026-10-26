@@ -1,0 +1,84 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-16 · UC-C14 处理异常交易
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 买方 as Buyer
+actor 卖方 as Seller
+actor 平台管理员 as ClaimAdmin
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C14-01 识别单方确认超时) as C1401 <<内部触发>>
+  usecase (UC-C14-02 异常交易转交与认领) as C1402
+  usecase (UC-C14-03 记录处理结论并恢复) as C1403
+  usecase (查看异常状态并使用管理沟通) as C14A1 <<辅助>>
+}
+
+ClaimAdmin --> C1402
+ClaimAdmin --> C1403
+Buyer --> C14A1
+C14A1 <-- Seller
+
+' note right of C1401
+'   内部计时触发：有效约定且一方完成确认后
+'   7 天未回应；进入争议即结束计时。不自动
+'   完成或取消；此为系统内部触发规则（BR-05、TR-14）。
+' end note
+
+' note bottom of C1401
+'   受影响者为交易双方；超时不是由买方、卖方
+'   或管理员发起，由内部规则识别后产生异常事项。
+' end note
+
+' note bottom of C1402
+'   异常事项进入共享待处理池，同一事项仅一名
+'   认领人；按必要范围访问（BR-08、BR-34）。
+' end note
+
+' note bottom of C1403
+'   限本人认领事项；核查留据，记录原因、依据、前后状态及时间；
+'   可调整全部状态包括直接完成，但不得伪造双方
+'   确认，不代表核实线下付款或交付；恢复清当前
+'   确认、保留历史及有效约定，不启动计时；结束
+'   解除本笔冻结与锁单并归档分支，其他限制保留。
+' end note
+
+' note right of C1403
+'   冻结范围：暂停双方上架及交易操作；双方普通
+'   私聊及全部交易分支禁发、历史可读；与第三方
+'   聊天不受影响；仅冻结不禁无关商品合规编辑、
+'   收藏、其他举报及既往评价。
+' end note
+
+' note bottom of C14A1
+'   双方保留原资格内容的只读访问及管理沟通；
+'   冻结期间不得推进交易。管理沟通不是普通私聊或交易分支，
+'   不受该笔冻结禁发影响（BR-33）。
+' end note
+
+' 01 是内部规则触发，不是外部 actor；02 认领是
+' 03 处理的前置而非 include；恢复或结束是同一处理
+' 结论下的分支，不用 extend 强加。
+legend bottom
+C14-01为系统内部7天计时规则，进入争议即结束原计时。
+管理员认领异常事项后留据处理，不伪造用户确认。
+恢复保留历史及有效约定、清当前确认；管理沟通不受冻结禁发影响。
+endlegend
+@enduml

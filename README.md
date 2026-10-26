@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.20
-Version-Datetime: 2026-10-26T01:18:47+08:00
+Version: 0.1.21
+Version-Datetime: 2026-10-26T12:37:57+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -9,7 +9,7 @@ Version-Datetime: 2026-10-26T01:18:47+08:00
 
 ## 成员分工
 
-需求成果确认已登记；剩余图稿可读性复核由袁尚峰统筹；成员按实际完成的内容记录贡献，见 [成员职责表](bits/成员职责表.md)。
+需求成果确认已登记；现行34张图稿（含UC-03—UC-16独立用例图）已于2026-10-26由用户确认审阅通过；成员按实际完成的内容记录贡献，见 [成员职责表](bits/成员职责表.md)。
 
 ## 文件位置与命名
 
@@ -84,7 +84,7 @@ Version-Datetime: 2026-10-26T01:18:47+08:00
 - [AI 智能体使用验证报告](docs/draft-AI智能体使用验证报告.md)
 - [多页 HTML 原型](docs/appendices/prototype/README.md)
 - [渲染图索引](docs/appendices/rendered/README.md)
-- [证据索引 E-01—E-09、E-11—E-13](docs/appendices/evidence/index.md)
+- [证据索引 E-01—E-09、E-11—E-14](docs/appendices/evidence/index.md)
 
 ## 文档生成
 
@@ -95,7 +95,7 @@ python3 scripts/cli.py build
 python3 scripts/cli.py check
 ```
 
-默认按源文件摘要复用未变化的业务图，需更新时按200 DPI渲染20张业务模型图。仅同步正文用 `python3 scripts/cli.py report`，仅检查用 `python3 scripts/cli.py check`；原型直接维护HTML页面。分步构建及自定义DPI见[scripts说明](scripts/README.md)。
+默认按源文件摘要复用未变化的业务图，需更新时按200 DPI渲染34张业务模型图。仅同步正文用 `python3 scripts/cli.py report`，仅检查用 `python3 scripts/cli.py check`；原型直接维护HTML页面。分步构建及自定义DPI见[scripts说明](scripts/README.md)。
 
 ## PDF 增量导出与检查
 

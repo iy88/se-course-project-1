@@ -1,0 +1,71 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-05 · UC-C03 检索商品
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 校园用户 as CampusUser
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C03-01 关键词检索) as C0301
+  usecase (UC-C03-02 按分类筛选) as C0302
+  usecase (UC-C03-03 按价格区间筛选) as C0303
+  usecase (UC-C03-04 查看商品详情与状态) as C0304
+  usecase (UC-C03-05 空结果提示) as C0305
+}
+
+CampusUser --> C0301
+CampusUser --> C0302
+CampusUser --> C0303
+CampusUser --> C0304
+CampusUser --> C0305
+
+' note right of C0302
+'   主名称与别名解析到同一分类；多标签须全部
+'   匹配，别名不重复计标签（BR-15、4.16）。
+' end note
+
+' note right of C0303
+'   价格区间包含端点；关键词、标签、价格条件
+'   同时生效（BR-15）。
+' end note
+
+' note bottom of C0301
+'   仅返回当前公开可交易且有展示资格的商品；
+'   交易中、已下架、待审核、审核未通过不进入
+'   在售结果。
+' end note
+
+' note bottom of C0304
+'   打开详情时重新校验展示资格；交易中仍可看
+'   详情，已下架或撤销公开访问则拒绝公开详情。
+' end note
+
+' note bottom of C0305
+'   无匹配时返回空列表并提示，不返回非公开
+'   商品，也不推断缺失原因。
+' end note
+
+' 组合筛选是同一次查询，不设 include；详情读取
+' 和空结果提示是独立目标或结果分支。
+legend bottom
+关键词、标签、价格条件同时满足；多标签全部匹配（BR-15）。
+详情重新校验展示资格；无匹配时不返回非公开内容。
+endlegend
+@enduml

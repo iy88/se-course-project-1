@@ -1,0 +1,110 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-07 · UC-C05 请求与确认交易
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 买方 as Buyer
+actor 卖方 as Seller
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C05-01 发起交易请求) as C0501
+  usecase (UC-C05-02 接受请求) as C0502
+  usecase (UC-C05-03 拒绝请求) as C0503
+  usecase (UC-C05-04 撤回请求) as C0504
+  usecase (UC-C05-05 提交完成确认) as C0505
+  usecase (UC-C05-06 发起争议) as C0506
+  usecase (UC-C05-07 协商终止) as C0507
+  usecase (UC-C05-08 提出与确认首次交易约定) as C0508
+  usecase (UC-C05-09 变更已确认交易约定) as C0509
+}
+
+Buyer --> C0501
+Buyer --> C0504
+Buyer --> C0505
+Buyer --> C0506
+Buyer --> C0507
+Buyer --> C0508
+Buyer --> C0509
+C0502 <-- Seller
+C0503 <-- Seller
+C0505 <-- Seller
+C0506 <-- Seller
+C0507 <-- Seller
+C0508 <-- Seller
+C0509 <-- Seller
+
+' note right of C0501
+'   有效请求创建待接受记录和专属交易分支，通知
+'   卖方但暂不锁单；同一买方对同一商品至多一条
+'   有效待接受请求（BR-01、BR-02）。
+' end note
+
+' note bottom of C0502
+'   接受一条即锁单，商品转交易中；其余待接受
+'   请求自动关闭，原因统一为“商品已被其他用户
+'   锁单”（BR-02、BR-03）。
+' end note
+
+' note right of C0503
+'   认领管理员仅按 BR-08 与 BR-34 在管理事项中
+'   介入，不是本图日常 actor；管理调整见
+'   UC-C08 与 UC-C14。
+' end note
+
+' note bottom of C0505
+'   与 UC-C06-01 是同一次完成声明：一次确认
+'   同时声明交付与支付完成，不新增第二个确认
+'   步骤；单方仅记进度，双方确认后完成
+'   （BR-04、BR-05、BR-28）。
+' end note
+
+' note bottom of C0506
+'   争议须填写说明，保持锁单，不自动冻结；
+'   恢复进行中时清空当前确认、保留历史，
+'   不启动计时（BR-07）。
+' end note
+
+' note bottom of C0507
+'   首次约定前买方可直接取消、卖方申请须买方
+'   同意；约定后须双方明确同意；生效为已终止
+'   并计失败；冻结期间不得推进（BR-06）。
+' end note
+
+' note bottom of C0508
+'   首次约定须包含交付与支付要素，由另一方
+'   明确同意后生效；拒绝只结束提案，交易与
+'   锁单保持（BR-04、4.15）。
+' end note
+
+' note bottom of C0509
+'   变更须对方同意；未同意保留原约定并保存
+'   新旧历史，不退回首次约定前阶段，不恢复
+'   买方直接取消权（4.15）。
+' end note
+
+' 发起→接受→首次约定→完成确认是阶段顺序，
+' 不是 include；变更约定是独立条件路径，不强制
+' extend；接受时关闭其他请求属系统联动。
+legend bottom
+买卖双方分别操作；首次约定及变更须对方明确同意后生效。
+C05-05与C06-01为同一次交付及支付完成声明，不新增确认步骤。
+接受请求后锁单；争议不自动冻结；终止条件按BR-06，冻结期间不推进。
+endlegend
+@enduml
