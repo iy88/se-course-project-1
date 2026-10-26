@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-26T02:38:00+08:00
 -->
 
 <html lang="zh-CN">
@@ -582,8 +582,8 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             <div class="list-item">
               <div class="entry-main">
                 <strong>护眼台灯</strong>
-                <div class="muted">已售出 · 关联交易 T-1988 已结束</div>
-                <div><span class="state info">已售出</span> <span class="tag">1 条已结束交易</span></div>
+                <div class="muted">交易已结束 · 默认下架 · 关联交易 T-1988</div>
+                <div><span class="state neutral">已下架</span> <span class="tag">1 条已结束交易</span></div>
               </div>
               <div class="entry-side">
                 <button class="btn ghost" data-toast="已结束交易只读查看，历史商品与交易内容保留。">只读查看</button>
@@ -601,7 +601,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
               </div>
             </div>
           </div>
-          <p class="muted note-line">在售、审核不通过、已下架与已售出商品均可在本页找到。</p>
+          <p class="muted note-line">在售、审核不通过与已下架（含交易结束默认下架）商品均可在本页找到。</p>
         </div>
 
         <div class="panel" data-panel="trade" hidden>
@@ -633,11 +633,11 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             <div class="list-item">
               <div class="entry-main">
                 <strong>T-2015 · 折叠自行车 · ¥180</strong>
-                <div class="muted">我作为卖方 · 买方在约定前取消</div>
-                <div><span class="state warn">已取消</span></div>
+                <div class="muted">我作为卖方 · 买方在约定前取消，按终止记录</div>
+                <div><span class="state warn">已终止</span></div>
               </div>
               <div class="entry-side">
-                <button class="btn ghost" data-toast="已取消交易保留请求与取消记录，只读查看。">查看记录</button>
+                <button class="btn ghost" data-toast="已终止交易保留请求与终止记录，只读查看。">查看记录</button>
               </div>
             </div>
           </div>
@@ -672,11 +672,11 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             <div class="list-item">
               <div class="entry-main">
                 <strong>机械键盘（示例）</strong>
-                <div class="muted">收藏于 09-20 · 商品已售出</div>
-                <div><span class="state info">已售出</span></div>
+                <div class="muted">收藏于 09-20 · 商品已下架</div>
+                <div><span class="state neutral">已失效</span></div>
               </div>
               <div class="entry-side">
-                <button class="btn ghost" data-toast="商品已售出，收藏记录保留供回看。">查看商品</button>
+                <button class="btn ghost" data-toast="商品已下架，收藏保留并提示失效；恢复公开后自动恢复有效。">查看商品</button>
               </div>
             </div>
           </div>
@@ -698,18 +698,12 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
                   <div class="muted">教材成色与描述一致，约定时间准时。</div>
                   <div><span class="tag">关联 T-1988</span></div>
                 </div>
-                <div class="entry-side">
-                  <button class="btn ghost" data-toast="评价不提供修改或删除；如需说明可通过管理沟通提出。">删除</button>
-                </div>
               </div>
               <div class="list-item">
                 <div class="entry-main">
                   <strong>对买方 周同学（示例）· 评分 4 / 5</strong>
                   <div class="muted">沟通顺畅，取货稍有延迟。</div>
                   <div><span class="tag">关联 T-2015</span></div>
-                </div>
-                <div class="entry-side">
-                  <button class="btn ghost" data-toast="评价不提供修改或删除。">删除</button>
                 </div>
               </div>
             </div>

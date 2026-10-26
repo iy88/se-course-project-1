@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-26T02:38:00+08:00
 -->
 
 <html lang="zh-CN">
@@ -642,7 +642,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             <button class="btn ghost" type="button" data-act="dispute">提出争议</button>
           </div>
           <p class="muted" data-cancel-rule>当前规则：约定生效前，买方可直接取消，卖方取消需买方同意。</p>
-          <div class="banner danger" data-dispute hidden>争议处理中：交易已冻结，等待管理员处理；恢复后当前确认清空，历史保留。</div>
+          <div class="banner danger" data-dispute hidden>争议处理中：争议本身不新增权限限制、不自动冻结交易，等待管理员处理；恢复后当前确认清空，历史保留。</div>
         </div>
       </div>
     </div>
@@ -659,6 +659,9 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
     <li><strong>US-05-AC-05</strong>：已有有效约定后提出变更但对方未同意，界面继续显示原约定，变更记录标为“未生效”。</li>
     <li><strong>US-05-AC-06</strong>：取消入口在约定生效前后给出不同规则提示——约定前买方直接取消、卖方需买方同意；约定后双方同意才终止并计为失败。</li>
     <li><strong>US-05-AC-07</strong>：双方分别提交完成确认后，进度由单方 1/2 变为 2/2，交易才显示“已完成”。</li>
+    <li><strong>US-05-AC-08</strong>：争议解决后恢复进行中 → 清空当前确认、保留历史；有有效约定回待完成，无有效约定回待约定；恢复不启动计时，任一方重新提交完成确认后才重新计算完整 7 天等待。</li>
+    <li><strong>US-05-AC-09</strong>：单方确认后 7 天未回应 → 转异常并冻结，进入异常交易处理，不自动成交或取消。</li>
+    <li><strong>US-05-AC-10</strong>：交易完成或有效终止 → 商品默认下架，卖方明确继续且有资格才上架；分支归档、解除本笔冻结，其他限制保持。</li>
   </ol>
 </div>
 

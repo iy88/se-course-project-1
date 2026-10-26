@@ -60,7 +60,7 @@ package "UC-C05 请求与确认交易" as P05 {
  UCC0508 -[hidden]down- UCC0509
 }
 package "UC-C08 审核与处置沟通" as P08 {
- usecase "UC-C08-01\n处置告知与申辩" as UCC0801
+ usecase "UC-C08-01\n问询说明与处置申辩" as UCC0801
  usecase "UC-C08-02\n认领待处理事项" as UCC0802
  usecase "UC-C08-03\n核查举报与内容处置" as UCC0803
  usecase "UC-C08-04\n封禁与解除账户限制" as UCC0804

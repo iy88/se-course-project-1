@@ -30,7 +30,7 @@ rectangle "校园二手交易与物品流转平台" {
   usecase "UC-C05 请求与确认交易" as UC05
   usecase "UC-C06 记录线下交付" as UC06
   usecase "UC-C08 审核与处置沟通" as UC08
-  usecase "UC-C08-01 处置告知与申辩" as UC0801
+  usecase "UC-C08-01 问询说明与处置申辩" as UC0801
   usecase "UC-C10 查看管理统计" as UC10
   usecase "UC-C13 维护商品分类" as UC13
   usecase "UC-C14 处理异常交易" as UC14

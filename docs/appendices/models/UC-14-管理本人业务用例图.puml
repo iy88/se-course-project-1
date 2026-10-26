@@ -1,0 +1,67 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-14 · UC-C12 管理本人业务
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 校园用户 as CampusUser
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C12-01 查看本人全部状态商品及关联请求) as C1201
+  usecase (UC-C12-02 查看本人交易与收藏) as C1202
+  usecase (UC-C12-03 查看本人双向评价、举报与处置沟通) as C1203
+}
+
+CampusUser --> C1201
+CampusUser --> C1202
+CampusUser --> C1203
+
+' note bottom of C1201
+'   覆盖待审核、审核未通过、在售、交易中、已下架
+'   全部状态及审核原因、关联请求；按当前资格继续
+'   维护，不新增删除权或他人记录访问权。
+' end note
+
+' note bottom of C1202
+'   覆盖本人买卖两种身份的全部请求与交易及本人
+'   收藏；结束交易只读、不自行删除；收藏写操作
+'   仍按 UC-C04。
+' end note
+
+' note bottom of C1203
+'   评价分我发表与我收到并关联交易，不可自行修改
+'   或删除；我的举报与我收到的举报独立，收到事项
+'   仅列已实际处置记录并隐去举报人，未处置事项
+'   不额外披露（BR-25、BR-32）。
+' end note
+
+' note right of C1201
+'   聚合入口只按本人用户 ID 过滤并提供入口；进入
+'   后续操作重新校验对象及当前权限，不增加访问、
+'   删除或重开权限。后续流程沿用 UC-C02、C05、
+'   C06、C07、C08。
+' end note
+
+' 三个子用例是聚合查询，不 include 各自业务
+' 主用例；聚合不生成另一套记录。
+legend bottom
+本人入口按现有权限聚合，不新增删除权或他人私人记录访问权。
+收到举报仅列已实际处置事项并隐去举报人；结束交易只读。
+endlegend
+@enduml

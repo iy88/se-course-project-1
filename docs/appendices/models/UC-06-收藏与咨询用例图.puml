@@ -1,0 +1,86 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-06 · UC-C04 收藏与咨询
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 校园用户 as CampusUser
+actor 卖方 as Seller
+actor 认领管理员 as ClaimAdmin
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C04-01 收藏商品) as C0401
+  usecase (UC-C04-02 取消收藏) as C0402
+  usecase (UC-C04-03 查看本人收藏清单) as C0403
+  usecase (UC-C04-04 发表商品评论) as C0404
+  usecase (UC-C04-05 卖方回复评论) as C0405
+  usecase (UC-C04-06 删除本人评论) as C0406
+  usecase (UC-C04-07 发起私聊咨询) as C0407
+  usecase (UC-C04-08 发送与查看会话消息) as C0408
+}
+
+CampusUser --> C0401
+CampusUser --> C0402
+CampusUser --> C0403
+CampusUser --> C0404
+Seller --> C0405
+CampusUser --> C0406
+ClaimAdmin --> C0406
+CampusUser --> C0407
+Seller --> C0407
+CampusUser --> C0408
+Seller --> C0408
+
+' note right of C0406
+'   作者可删除本人评论；认领管理员仅限本人认领
+'   事项移除违规评论并保留理由（BR-17、BR-34）。
+'   两条路径权限不同，不互相替代。
+' end note
+
+' note bottom of C0404
+'   商品公开可交易或交易中可评论；已下架或撤销
+'   公开访问禁止新增评论或回复；卖方仅回复买方，
+'   其他买方不能代回复。
+' end note
+
+' note bottom of C0407
+'   从个人页等入口发起，不以商品状态或购买请求
+'   为前提；不得向本人发起；同一对用户复用普通
+'   私聊（BR-18）。
+' end note
+
+' note bottom of C0408
+'   普通私聊、逐笔交易分支、管理处置沟通单三类
+'   渠道分离；仅将会话或分支已展示消息标读，进入
+'   列表、其他分支或通知中心不代标读（BR-18）。
+' end note
+
+' note bottom of C0401
+'   封禁期间收藏只读；交易中商品退出搜索但收藏
+'   项保持有效；失效仅提示“已失效”，不泄露内容。
+' end note
+
+' 收藏、评论、私聊、交易分支消息为独立目标；
+' 交易分支由请求建立，不以 C04-07 为前置，故不设 include。
+legend bottom
+收藏、评论与普通私聊是独立目标；普通私聊不以购买请求为前提。
+评论回复限该商品卖方；管理员移除与必要消息读取均限认领事项。
+交易IM按笔建立；普通IM、交易IM与管理沟通分别管理。
+endlegend
+@enduml

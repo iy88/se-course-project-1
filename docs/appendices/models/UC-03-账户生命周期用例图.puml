@@ -1,0 +1,78 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-03 · UC-C01 账户生命周期
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 访客 as Visitor
+actor 校园用户 as CampusUser
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C01-01 注册账户) as C0101
+  usecase (UC-C01-02 登录与身份验证) as C0102
+  usecase (UC-C01-03 退出登录) as C0103
+  usecase (UC-C01-04 忘记密码与自助重置) as C0104
+  usecase (UC-C01-05 修改密码) as C0105
+  usecase (UC-C01-06 绑定或更换邮箱) as C0106
+  usecase (UC-C01-07 修改显示名称) as C0107
+}
+
+Visitor --> C0101
+Visitor --> C0102
+Visitor --> C0104
+CampusUser --> C0102
+CampusUser --> C0103
+CampusUser --> C0104
+CampusUser --> C0105
+CampusUser --> C0106
+CampusUser --> C0107
+
+' note right of C0102
+'   登录失败不设次数阈值，不自动锁定（BR-21）。
+'   封禁账户仍可登录并只读访问原资格内容，
+'   写操作受限；管理沟通见 UC-C08。
+' end note
+
+' note bottom of C0104
+'   仅验证绑定邮箱后重置，保留原用户 ID；
+'   与已登录改密（UC-C01-05）是两条独立路径。
+' end note
+
+' note bottom of C0105
+'   必须验证当前密码；改密不改用户 ID。
+' end note
+
+' note bottom of C0106
+'   须验证新旧邮箱并校验新邮箱未被占用；
+'   生效后用新邮箱登录，历史归属不变。
+' end note
+
+' note bottom of C0107
+'   不设次数、间隔或审批；历史操作主体
+'   及当时名称保留，不改账户归属。
+' end note
+
+' 本图不设 include/extend：注册、登录、退出、重置、
+' 改密、换邮箱、改名均为独立目标；先后顺序和
+' 验证步骤不是可复用的子用例。
+legend bottom
+访客仅使用注册、登录、忘记密码入口（BR-22）。
+改密验证当前密码；换邮箱验证新旧邮箱，用户ID及历史保持。
+endlegend
+@enduml

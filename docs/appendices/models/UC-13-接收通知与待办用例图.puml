@@ -1,0 +1,68 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-13 · UC-C11 接收通知与待办
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 校园用户 as CampusUser
+actor 平台管理员 as Admin
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C11-01 接收业务事件通知) as C1101
+  usecase (UC-C11-02 查看与管理待办) as C1102
+  usecase (UC-C11-03 查看通知并自动标记已读) as C1103
+}
+
+CampusUser --> C1101
+CampusUser --> C1102
+Admin --> C1102
+CampusUser --> C1103
+
+' note bottom of C1101
+'   业务事件生效后按事件类型及接收人资格产生
+'   通知，关联原业务事项；通知与业务记录分离，
+'   不重复创建业务（4.17）。
+' end note
+
+' note bottom of C1102
+'   用户按本人有资格的关联事项处理；管理员待办
+'   来自共享处理池，不发送站内通知，同一事项
+'   仅一名认领人（BR-34）。
+' end note
+
+' note bottom of C1103
+'   仅打开具体通知才标已读；进入列表、其他通知
+'   或其他分支不标读；通知已读不消除聊天未读，
+'   聊天按会话或分支已展示消息单独标读。
+' end note
+
+' note right of C1103
+'   通知只作入口，进入时重新校验身份及对象资格
+'   并显示当前状态；已读不代替请求接受、约定
+'   确认、完成确认或交易操作。
+' end note
+
+' 接收、待办、标读是三个独立目标；标读以打开
+' 具体通知为条件，但不强加 extend；普通 IM、
+' 交易 IM 与通知已读分别计算。
+legend bottom
+管理员只从共享处理池查看待办，不接收站内通知。
+打开具体通知才标读；通知已读、消息已读及业务确认分别处理。
+endlegend
+@enduml

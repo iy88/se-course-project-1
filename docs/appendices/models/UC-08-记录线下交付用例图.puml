@@ -1,0 +1,78 @@
+@startuml
+' Version: 0.1.0
+' Version-Datetime: 2026-10-26T12:37:57+08:00
+title UC-08 · UC-C06 记录线下交付
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "PingFang SC"
+skinparam shadowing false
+skinparam nodesep 24
+skinparam ranksep 38
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam rectangle {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+}
+skinparam ArrowColor #444444
+skinparam noteBackgroundColor #FFFFFF
+left to right direction
+
+actor 买方 as Buyer
+actor 卖方 as Seller
+actor 认领管理员 as ClaimAdmin
+
+rectangle "校园二手交易与物品流转平台" {
+  usecase (UC-C06-01 提交交易完成确认与可选说明) as C0601
+  usecase (UC-C06-02 查看本人交付记录与历史) as C0602
+  usecase (UC-C06-03 申请更正交付记录) as C0603
+  usecase (按认领事项更正确认记录) as C06A1 <<辅助>>
+}
+
+Buyer --> C0601
+C0601 <-- Seller
+Buyer --> C0602
+C0602 <-- Seller
+ClaimAdmin --> C0602
+Buyer --> C0603
+C0603 <-- Seller
+ClaimAdmin --> C06A1
+
+' note right of C0601
+'   与 UC-C05-05 是同一操作、同一入口：一次声明
+'   交付与支付均完成，可填可选说明；双方记录
+'   分别保存、互不覆盖，不新增第二个确认步骤
+'   （BR-28）。
+' end note
+
+' note bottom of C0601
+'   记录表示提交方对线下结果的声明，不是平台
+'   核实付款或交付；用户不得自行改写或删除。
+' end note
+
+' note bottom of C0602
+'   当前有效确认与历史分开；争议恢复或管理恢复
+'   只清当前标记，历史不删除；双方仅本人交易
+'   可见，管理员限认领事项必要范围（BR-27、BR-29）。
+' end note
+
+' note bottom of C0603
+'   用户不能自行更正；向对应管理事项说明，由
+'   认领管理员留据处理，原记录继续保留（BR-29）。
+' end note
+
+' note bottom of C06A1
+'   管理员更正须保留原记录、处理依据及调整
+'   前后内容，不伪造用户确认；更正不是用户
+'   自助编辑路径。
+' end note
+
+' C06-01 与 C05-05 同一次操作，不设跨图 include；
+' 查看历史与申请更正是独立目标。
+legend bottom
+C06-01与C05-05为同一次完成声明；当前确认可清空，历史保留。
+本人可申请更正，认领管理员按必要范围留据处理，不改写为用户确认。
+endlegend
+@enduml
