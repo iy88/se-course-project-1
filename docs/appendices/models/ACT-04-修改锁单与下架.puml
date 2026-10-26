@@ -1,6 +1,6 @@
 /'
-Version: 0.1.1
-Version-Datetime: 2026-10-23T03:48:11+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-26T21:22:39+08:00
 图编号: ACT-04
 关联场景: SC-02 商品信息修改、锁单与下架
 关联需求: FR-02、FR-09；US-02；UC-C02
@@ -50,7 +50,7 @@ if (选择的操作是否为修改信息) then (修改)
   endif
 elseif (选择的操作是否为下架) then (下架)
   if (账户封禁或有效交易冻结是否禁止该操作) then (是)
-    :拒绝主动下架（BR-32、BR-33）;
+    :拒绝主动下架（BR-32、BR-33；D-50）;
     stop
   else (否)
   endif

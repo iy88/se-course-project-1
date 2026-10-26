@@ -1,6 +1,6 @@
 /'
-Version: 0.1.1
-Version-Datetime: 2026-10-23T03:48:01+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-26T21:22:39+08:00
 '/
 @startuml
 skinparam defaultFontName "PingFang SC"
@@ -15,7 +15,7 @@ state "约定已确认、待完成" as AwaitCompletion
 [*] --> AwaitAgreement : 卖方接受请求
 AwaitAgreement --> AwaitAgreement : 提案拒绝，交易与锁单保持
 AwaitAgreement --> AwaitCompletion : 对方明确同意完整交付及支付安排
-AwaitCompletion --> AwaitCompletion : 变更须对方同意，未同意保留原约定
+AwaitCompletion --> AwaitCompletion : 变更须对方同意；生效清当前确认、结束旧计时
 note left of AwaitAgreement
 约定前买方可直接取消；
 卖方申请取消须买方同意。
@@ -24,8 +24,13 @@ end note
 note right of AwaitCompletion
 任一方的一次确认同时声明交付及支付完成。
 单方只记进度，双方确认后普通完成（TR-15）。
-单方确认后7天未回应转异常（TR-14）。
+单方确认有效等待满7天未回应转异常（TR-14）。
+处置／封禁冻结暂停计时，保留当前确认；
+仅解冻且原确认有效时续算剩余时间（D-51）。
 约定后取消须双方同意。
+未同意变更保留原约定及确认／计时；
+变更生效清当前确认、结束旧计时，保留历史；
+重新单方完成确认后才开始完整7天（D-49）。
 end note
 note bottom of AwaitCompletion
 争议解决或管理恢复进行中：

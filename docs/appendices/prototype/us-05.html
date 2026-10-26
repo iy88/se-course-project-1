@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-26T02:38:00+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-26T21:22:39+08:00
 -->
 
 <html lang="zh-CN">
@@ -509,7 +509,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
   <div class="kicker"><span class="badge">US-05</span> 请求与确认交易 · 高优先级 · 批次 1</div>
   <h1>请求与确认交易</h1>
   <p class="goal">作为交易买方或卖方，我希望发起并处理请求、确认交易约定及结果，并按阶段取消或解决争议，以便让平台外交易在系统中有明确、可追溯的过程与结果。</p>
-  <ul class="meta"><li>关联功能 FR-05</li><li>主用例 UC-C05</li><li>协作用例 UC-C06、UC-C04、UC-C09、UC-C11、UC-C14</li><li>依据 US-05-AC-01—AC-10</li><li>优先级 高 · 批次 1</li></ul>
+  <ul class="meta"><li>关联功能 FR-05</li><li>主用例 UC-C05</li><li>协作用例 UC-C06、UC-C04、UC-C09、UC-C11、UC-C14</li><li>依据 US-05-AC-01—AC-11</li><li>优先级 高 · 批次 1</li></ul>
 </header>
 
 <div class="frame browser">
@@ -630,7 +630,8 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
               <button class="btn primary" type="button" data-act="confirm-self">我已完成（卖方）</button>
               <button class="btn ghost" type="button" data-act="confirm-other">模拟买方确认</button>
             </div>
-            <p class="muted">一次声明同时涵盖交付与支付；单方只记进度，双方均确认后才显示普通完成。</p>
+            <p class="muted">一次声明同时涵盖交付与支付；单方只记进度，双方均确认后才显示普通完成。约定变更未获同意保留当前确认；变更生效时清空当前确认、结束旧计时，重新单方确认后才重新计时。</p>
+            <p class="mini-note" data-confirm-history>尚无完成确认历史。</p>
             <div class="banner info" data-done hidden>双方均已确认：交易显示普通完成，商品默认下架并归档会话分支。</div>
           </div>
         </div>
@@ -642,7 +643,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             <button class="btn ghost" type="button" data-act="dispute">提出争议</button>
           </div>
           <p class="muted" data-cancel-rule>当前规则：约定生效前，买方可直接取消，卖方取消需买方同意。</p>
-          <div class="banner danger" data-dispute hidden>争议处理中：争议本身不新增权限限制、不自动冻结交易，等待管理员处理；恢复后当前确认清空，历史保留。</div>
+          <div class="banner danger" data-dispute hidden>有争议：争议本身不新增权限限制、不自动冻结交易，等待管理员处理；恢复后当前确认清空，历史保留。</div>
         </div>
       </div>
     </div>
@@ -662,6 +663,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
     <li><strong>US-05-AC-08</strong>：争议解决后恢复进行中 → 清空当前确认、保留历史；有有效约定回待完成，无有效约定回待约定；恢复不启动计时，任一方重新提交完成确认后才重新计算完整 7 天等待。</li>
     <li><strong>US-05-AC-09</strong>：单方确认后 7 天未回应 → 转异常并冻结，进入异常交易处理，不自动成交或取消。</li>
     <li><strong>US-05-AC-10</strong>：交易完成或有效终止 → 商品默认下架，卖方明确继续且有资格才上架；分支归档、解除本笔冻结，其他限制保持。</li>
+    <li><strong>US-05-AC-11</strong>：单方完成确认后变更约定 → 未同意保留当前确认及计时；生效清空当前确认、结束旧计时、保留历史，重新单方确认后才开始完整7天。</li>
   </ol>
 </div>
 
@@ -672,6 +674,8 @@ window.PROTO.register('us-05', function (root) {
   var accepted = false;
   var agreed = false;
   var frozen = false;
+  var disputed = false;
+  var confirmationHistory = [];
   var done = false;
   var confirms = 0;
   var proposal = '';
@@ -688,7 +692,7 @@ window.PROTO.register('us-05', function (root) {
     var state = q('[data-trade-state]');
     if (text) { text.textContent = confirms + '/2'; }
     if (bar) { bar.style.width = (confirms * 50) + '%'; }
-    if (state && !frozen) {
+    if (state && !frozen && !disputed) {
       if (confirms >= 2) {
         state.className = 'state ok';
         state.textContent = '已完成';
@@ -751,7 +755,7 @@ window.PROTO.register('us-05', function (root) {
     }
 
     if (act === 'propose') {
-      if (agreed || done || frozen) { return; }
+      if (!accepted || done || frozen || disputed) { return; }
       var time = q('[data-f-time]').value.trim();
       var place = q('[data-f-place]').value.trim();
       var way = q('[data-f-way]').value;
@@ -770,23 +774,35 @@ window.PROTO.register('us-05', function (root) {
     }
 
     if (act === 'agree') {
-      if (agreed || done || frozen) { return; }
+      if (!accepted || done || frozen || disputed) { return; }
       if (!proposal) { toast('请先提出约定。'); return; }
+      var changingAgreement = agreed;
+      if (changingAgreement) {
+        confirms = 0;
+        all('[data-act="confirm-self"], [data-act="confirm-other"]').forEach(function (b) { b.disabled = false; });
+        q('[data-done]').hidden = true;
+        renderProgress();
+        q('[data-confirm-history]').textContent = '约定变更生效：当前确认0/2，旧计时已结束；保留原确认历史 ' + confirmationHistory.length + ' 条。重新单方确认后才开始完整7天。';
+      }
       agreed = true;
+      proposal = proposal.trim();
       q('[data-proposal]').hidden = true;
-      q('[data-agree-box]').hidden = true;
+      q('[data-agree-box]').hidden = false;
+      q('[data-agree-btn]').hidden = true;
+      q('[data-act="propose"]').textContent = '提出约定变更';
       q('[data-agreement]').hidden = false;
       q('[data-agreement-summary]').textContent = proposal;
       q('[data-confirm-box]').hidden = false;
       q('[data-cancel-banner]').className = 'banner warn';
       q('[data-cancel-banner]').textContent = '约定已生效：变更须对方同意；取消须双方同意，并计为失败交易。';
       q('[data-cancel-rule]').textContent = '当前规则：约定生效后，双方同意才能取消，取消计为失败交易。';
-      toast('对方已同意，约定生效；取消规则变为需双方同意。');
+      proposal = '';
+      toast(changingAgreement ? '变更已生效：清空当前确认、结束旧计时，确认历史保留。' : '对方已同意，约定生效；取消规则变为需双方同意。');
       return;
     }
 
     if (act === 'cancel') {
-      if (frozen) { toast('交易处于争议冻结中，暂不能取消。'); return; }
+      if (frozen) { toast('交易被冻结，暂不能取消。'); return; }
       if (done) { toast('交易已结束，无需取消。'); return; }
       if (!agreed) {
         q('[data-cancel-banner]').textContent = '已发出卖方取消请求：约定生效前卖方取消需买方同意（演示）。';
@@ -798,22 +814,24 @@ window.PROTO.register('us-05', function (root) {
     }
 
     if (act === 'dispute') {
-      if (frozen || done) { return; }
-      frozen = true;
+      if (!accepted || frozen || disputed || done) { return; }
+      disputed = true;
       q('[data-dispute]').hidden = false;
       q('[data-trade-state]').className = 'state danger';
-      q('[data-trade-state]').textContent = '争议处理中';
+      q('[data-trade-state]').textContent = '有争议';
       var cancelBtn = q('[data-act="cancel"]');
-      if (cancelBtn) { cancelBtn.disabled = true; }
+      if (cancelBtn) { cancelBtn.disabled = false; }
       all('[data-act="confirm-self"], [data-act="confirm-other"]').forEach(function (b) { b.disabled = true; });
-      toast('已提出争议：交易冻结，进入管理处理，不自动完成或取消。');
+      toast('已提出争议：保持锁单、结束旧计时，不自动冻结；有资格双方仍可协商取消，完成须先恢复。');
       return;
     }
 
     if (act === 'confirm-self' || act === 'confirm-other') {
-      if (!agreed || frozen || done) { return; }
+      if (!agreed || frozen || disputed || done) { return; }
       if (confirms >= 2) { toast('双方均已确认，交易已完成。'); return; }
+      confirmationHistory.push(act);
       confirms += 1;
+      q('[data-confirm-history]').textContent = '已保留确认历史 ' + confirmationHistory.length + ' 条；单方确认后开始完整7天等待。';
       btn.disabled = true;
       renderProgress();
       if (confirms >= 2) {

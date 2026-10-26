@@ -1,6 +1,6 @@
 /'
-Version: 0.1.1
-Version-Datetime: 2026-10-23T03:48:01+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-26T21:22:39+08:00
 '/
 @startuml
 skinparam defaultFontName "PingFang SC"
@@ -23,7 +23,7 @@ state "已完成" as Completed
 Pending --> Ongoing : 卖方接受 TR-11
 Pending --> Refused : 拒绝 TR-12
 Pending --> Withdrawn : 撤回 TR-13
-Pending --> Closed : 锁单关闭／下架 BR-02
+Pending --> Closed : 锁单／下架／撤销访问／封禁关闭 BR-02
 Ongoing --> Completed : 有效约定后双确认 TR-15
 Ongoing --> Terminated : 按阶段取消 TR-17
 Ongoing --> Disputed : 发起争议 TR-16
@@ -41,6 +41,8 @@ note right of Ongoing
 约定阶段与完成进度见ST-03。
 争议结束原计时；恢复清当前确认、保留历史。
 冻结为限制标记，不新增生命周期状态。
+已有单方确认后因处置／封禁冻结：暂停原计时；
+仅解冻且原确认有效时续算剩余时间（D-51）。
 end note
 note right of Abnormal
 单方确认后7天未回应。
@@ -52,5 +54,7 @@ note bottom of Completed
 商品默认下架，卖方可按资格明确继续上架。
 其他有效限制保留。管理调整可涉及全部状态，
 本图绘制常见出口，完整约束见BR-08及4.15。
+旧交易恢复锁单前若同商品另一笔仍锁单，拒绝恢复；
+先按另一笔规则处理后再校验，不自动终止另一笔（D-48）。
 end note
 @enduml

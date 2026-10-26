@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-26T21:22:39+08:00
 -->
 
 <html lang="zh-CN">
@@ -514,7 +514,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <li>关联功能 FR-14</li>
       <li>主用例 UC-C14</li>
       <li>协作用例 UC-C05、UC-C08、UC-C09、UC-C11</li>
-      <li>依据 US-14-AC-01—AC-07</li>
+      <li>依据 US-14-AC-01—AC-08</li>
     </ul>
   </header>
 
@@ -655,10 +655,11 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           <div class="list-item"><div class="entry-main">US-14-AC-01：一方确认后另一方7 天未回应 → 交易显示「异常 · 已冻结」，商品锁单保持，不自动成交或取消。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-02：等待期内进入争议 → 原计时结束；恢复后不自动计时，任一方重新提交完成确认后才重新开始完整等待。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-03：异常事项待处理 → 共享池仅一名管理员可认领，认领后仅其可核查处理，其他管理员入口不可用。</div></div>
-          <div class="list-item"><div class="entry-main">US-14-AC-04：交易被冻结 → 双方推进交易或互发消息被拒，历史只读查看与管理沟通仍可用。</div></div>
+          <div class="list-item"><div class="entry-main">US-14-AC-04：交易被冻结 → 双方推进交易或互发消息被拒，历史只读查看与管理沟通仍可用；若已有单方确认后因处置／封禁冻结，旧计时暂停，仅解冻且原确认有效时续算剩余时间。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-05：管理员恢复进行中 → 保留有效约定与历史，清空当前确认；本笔仍冻结，不自动解冻。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-06：管理员有依据调整完成或终止 → 记录依据并通知双方，解除本笔冻结与锁单、归档分支，商品默认下架。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-07：用户提交说明或申辩 → 管理员回复结论原因并通知；提交不自动撤销任何限制。</div></div>
+          <div class="list-item"><div class="entry-main">US-14-AC-08：旧交易恢复需锁单状态前发现同商品另一笔锁单 → 拒绝恢复，交易、商品、分支及限制保持，先按另一笔适用规则处理后重新校验。</div></div>
         </div>
       </div>
     </div>

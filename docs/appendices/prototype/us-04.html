@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-26T21:22:39+08:00
 -->
 
 <html lang="zh-CN">
@@ -513,7 +513,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <li>关联功能 FR-04</li>
       <li>主用例 UC-C04</li>
       <li>协作用例 UC-C05、UC-C11、UC-C12</li>
-      <li>依据 US-04-AC-01—AC-08</li>
+      <li>依据 US-04-AC-01—AC-09</li>
     </ul>
   </header>
 
@@ -699,7 +699,8 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <div class="list-item"><div><strong>US-04-AC-05</strong>：已有不同购买请求 → 每笔交易分支独立，系统引导该笔交流，普通私聊历史不迁移。</div></div>
       <div class="list-item"><div><strong>US-04-AC-06</strong>：存在多个会话或分支未读 → 仅当前分支已展示消息标读，不影响列表、其他分支及通知未读。</div></div>
       <div class="list-item"><div><strong>US-04-AC-07</strong>：p、q 之间任一交易冻结 → 双方普通私聊与交易分支均禁发、历史可读；其他用户间会话不受影响。</div></div>
-      <div class="list-item"><div><strong>US-04-AC-08</strong>：请求拒绝、撤回、关闭或交易结束 → 对应交易分支归档，普通私聊独立保留，旧交易消息不自动迁移。</div></div>
+      <div class="list-item"><div><strong>US-04-AC-08</strong>：请求拒绝、撤回、关闭或交易结束 → 对应交易分支归档、历史可读、不可发送；普通私聊独立保留，旧交易消息不自动迁移。</div></div>
+      <div class="list-item"><div><strong>US-04-AC-09</strong>：管理处置解除且商品恢复公开访问 → 原收藏自动恢复有效；其他限制仍有效或商品已下架时保持失效。</div></div>
     </div>
   </div>
 

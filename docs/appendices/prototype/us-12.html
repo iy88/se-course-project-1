@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-26T02:38:00+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-26T21:22:39+08:00
 -->
 
 <html lang="zh-CN">
@@ -514,7 +514,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <li>关联功能 FR-12</li>
       <li>主用例 UC-C12</li>
       <li>协作用例 UC-C01、UC-C02、UC-C04、UC-C05、UC-C07、UC-C08</li>
-      <li>依据 US-12-AC-01—AC-06</li>
+      <li>依据 US-12-AC-01—AC-07</li>
     </ul>
   </header>
 
@@ -612,7 +612,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
               <div class="entry-main">
                 <strong>T-2031 ·《线性代数》教材 · ¥25</strong>
                 <div class="muted">我作为卖方 · 买方已提交完成确认，等待卖方回应</div>
-                <div><span class="state danger">异常处理中</span> <span class="tag">已冻结</span></div>
+                <div><span class="state danger">异常交易</span> <span class="tag">已冻结</span></div>
               </div>
               <div class="entry-side">
                 <button class="btn" data-toast="进入异常交易事项：可查看历史并提交说明，交易推进暂停。">进入事项</button>
@@ -807,12 +807,13 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <div class="card">
         <div class="card-head">验收要点</div>
         <div class="list">
-          <div class="list-item"><div class="entry-main">US-12-AC-01：本人商品覆盖在售、审核不通过、已下架与已售出 → 「商品」标签页全部列出，并展示审核原因与关联请求。</div></div>
+          <div class="list-item"><div class="entry-main">US-12-AC-01：本人商品覆盖待审核、审核未通过、公开可交易、交易中与已下架 → 「商品」标签页全部列出，并展示审核原因与关联请求。</div></div>
           <div class="list-item"><div class="entry-main">US-12-AC-02：本人曾作为买方或卖方 → 「交易」标签页覆盖两种身份的全部请求与交易，已结束记录只读并保留历史。</div></div>
           <div class="list-item"><div class="entry-main">US-12-AC-03：本人发表或收到评价 → 「评价」中按「我发表的／我收到的」分别读取并关联原交易，无修改或删除入口。</div></div>
           <div class="list-item"><div class="entry-main">US-12-AC-04：本人提交举报或收到已处置举报 → 两个举报入口独立可查，收到的举报隐去举报人身份，未处置事项不展示。</div></div>
           <div class="list-item"><div class="entry-main">US-12-AC-05：商品或对象已失效但存在既有本人举报 → 仍可按既有资格读取关联内容，不开放对方申辩与其他私有记录。</div></div>
           <div class="list-item"><div class="entry-main">US-12-AC-06：从聚合入口继续操作或打开他人业务链接 → 重新校验对象与当前权限，越权访问被拒，聚合入口不增加权限。</div></div>
+      <div class="list-item"><div><strong>US-12-AC-07</strong>：请求或交易结束后商品继续编辑 → 买方按资格查看请求对应内容及之后变更，不再收到该已结束事项的商品变更通知。</div></div>
         </div>
       </div>
     </div>

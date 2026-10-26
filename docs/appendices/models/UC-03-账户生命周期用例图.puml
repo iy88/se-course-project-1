@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.0
-' Version-Datetime: 2026-10-26T12:37:57+08:00
+' Version: 0.1.1
+' Version-Datetime: 2026-10-26T21:22:39+08:00
 title UC-03 · UC-C01 账户生命周期
 
 skinparam backgroundColor #FFFFFF
@@ -73,6 +73,7 @@ CampusUser --> C0107
 ' 验证步骤不是可复用的子用例。
 legend bottom
 访客仅使用注册、登录、忘记密码入口（BR-22）。
+创建账户前验证注册邮箱控制权；未验证或失败不创建（BR-20）。
 改密验证当前密码；换邮箱验证新旧邮箱，用户ID及历史保持。
 endlegend
 @enduml
