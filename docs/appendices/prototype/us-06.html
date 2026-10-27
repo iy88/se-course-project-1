@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-26T02:38:00+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -618,7 +621,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
     <li><strong>US-06-AC-01</strong>：尚无双方明确同意的约定时，完成确认入口提示先完成约定，不能提交声明。</li>
     <li><strong>US-06-AC-02</strong>：约定有效时，一次提交同时声明交付与支付完成，记录本人、时间和可选说明，没有第二个交付确认步骤。</li>
     <li><strong>US-06-AC-03</strong>：一方已确认后，另一方的记录互不覆盖；两方齐备后界面显示交易完成。</li>
-    <li><strong>US-06-AC-04</strong>：争议解决并恢复后进行中后，当前确认清空、历史保留；重新提交形成新记录并重新开始计时。</li>
+    <li><strong>US-06-AC-04</strong>：争议解决并恢复进行中后，当前确认清空、历史保留；重新提交形成新记录并重新开始计时。</li>
     <li><strong>US-06-AC-05</strong>：已提交的声明不能由用户自行修改或删除；更正须由认领管理员保留原记录与依据后处理。</li>
     <li><strong>US-06-AC-06</strong>：确认历史仅交易双方在本人参与的交易中可见，界面明确标注其为用户声明而非平台核实。</li>
   </ol>
@@ -706,6 +709,7 @@ window.PROTO.register('us-06', function (root) {
     }
 
     if (act === 'restore') {
+      if (confirms >= 2) { toast('交易已完成；此演示适用于尚未完成的争议恢复。'); return; }
       if (restored) {
         toast('恢复演示已执行；重新提交确认后才会重新计时。');
         return;
@@ -723,6 +727,9 @@ window.PROTO.register('us-06', function (root) {
       q('[data-confirm-form]').hidden = true;
       var openBtn = q('[data-act="open-form"]');
       if (openBtn) { openBtn.disabled = false; }
+      Array.prototype.forEach.call(q('[data-history-list]').querySelectorAll('.hist-item .muted'), function (item) {
+        item.textContent = item.textContent.replace('当前有效', '因争议恢复失效，历史保留');
+      });
       addHistory('10-23 10:00 争议解决，恢复进行中', '当前确认已清空，原确认作为历史保留', false);
       toast('已恢复：当前确认清空、历史保留，不启动计时；需重新提交完成确认。');
       return;
@@ -740,7 +747,7 @@ window.PROTO.register('us-06', function (root) {
         q('[data-done-banner]').hidden = false;
         var openAfter = q('[data-act="open-form"]');
         if (openAfter) { openAfter.disabled = true; }
-        toast('双方重新确认（2/2）：交易完成，重新计时以新记录为准。');
+        toast('双方重新确认（2/2）：交易完成，确认历史保留。');
       } else {
         toast('对方已重新确认（1/2），等待你提交完成声明。');
       }

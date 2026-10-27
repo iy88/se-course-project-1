@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-26T21:22:39+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -606,7 +609,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
               <div class="thumb faded">失效</div>
               <div class="prod-main">
                 <p class="prod-title">收藏已失效</p>
-                <div class="prod-meta">该商品已下架或不可见，不展示原商品内容。</div>
+                <div class="prod-meta">该收藏暂不可用。</div>
               </div>
               <button class="btn ghost" type="button" id="us-04-cancel-invalid">取消收藏</button>
             </div>
@@ -646,18 +649,18 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         <div class="panel" data-panel="branch">
           <div class="ctx">
             <strong>交易分支 · 请求 R-2031</strong>
-            <span>《高等数学》第七版 上下册 ／ 买方 林同学（示例） ／ 状态：待卖方确认</span>
+            <span>《高等数学》第七版 上下册 ／ 买方 林同学（示例） ／ 状态：交易进行中</span>
             <span class="muted">每笔有效购买请求对应独立分支，消息与已读分别计算。</span>
           </div>
           <div id="us-04-branch-frozen" class="banner warn" hidden>本笔交易已冻结：本分支与双方普通私聊均禁发，历史可读；其他用户间会话不受影响。</div>
           <div class="form-row">
-            <button class="btn ghost" type="button" id="us-04-read-branch">标记本分支已读</button>
+            <button class="btn ghost" type="button" id="us-04-read-branch">查看本分支消息</button>
             <button class="btn ghost" type="button" id="us-04-freeze">模拟本笔交易冻结</button>
           </div>
           <div class="chat-body" id="us-04-chat-branch">
             <div class="msg other"><div class="bubble other">你好，两册书今晚六点东区食堂门口方便看吗？</div></div>
             <div class="msg me"><div class="bubble me">可以，我六点到，当面确认成色。</div></div>
-            <div class="msg other"><div class="bubble other">好的，收到你的请求后我来确认。</div></div>
+            <div class="msg other"><div class="bubble other">好的，按约定时间见。</div></div>
           </div>
           <form id="us-04-chat-branch-form" class="composer">
             <input class="input" id="us-04-chat-branch-input" type="text" placeholder="发送本笔交易分支消息…" autocomplete="off">
@@ -820,6 +823,10 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         }
         appendBubble(section.querySelector('#us-04-chat-branch'), text);
         input.value = '';
+      });
+
+      section.querySelector('[data-tab="branch"]').addEventListener('click', function () {
+        section.querySelector('#us-04-badge-branch').textContent = '0';
       });
 
       section.querySelector('#us-04-read-branch').addEventListener('click', function () {

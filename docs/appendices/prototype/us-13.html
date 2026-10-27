@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.2
-Version-Datetime: 2026-10-26T21:22:39+08:00
+Version: 0.1.3
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -509,7 +512,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
   <header class="screen-head">
     <div class="kicker"><span class="badge">US-13</span> 分类与标签维护 · 中优先级 · 批次 2</div>
     <h1>维护商品分类</h1>
-    <p class="goal">作为有分类管理权限的平台管理员；申请标签的卖方参与关联审核，我希望维护单级多标签及别名，处理随商品提出的标签申请，以便使商品归类、名称变更与检索使用一致依据。</p>
+    <p class="goal">作为有分类管理权限的平台管理员，我希望维护单级多标签及别名，处理卖方随商品提出的标签申请，以便使商品归类、名称变更与检索使用一致依据。</p>
     <ul class="meta">
       <li>关联功能 FR-13</li>
       <li>主用例 UC-C13</li>
@@ -817,6 +820,9 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             nameCell.textContent = nameCell.textContent + '（已逻辑删除）';
             state.className = 'state danger';
             state.textContent = '已逻辑删除';
+            syncOption(key, nameCell.textContent, true);
+            var deletedOption = optionFor(key);
+            if (deletedOption) deletedOption.textContent = nameCell.textContent;
             row.querySelectorAll('[data-cat-action]').forEach(function (item) {
               item.disabled = true;
             });
@@ -848,7 +854,10 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         nameCell.textContent = newName;
         var aliasCell = row.querySelector('[data-cat-alias]');
         var aliasText = aliasCell.textContent.trim();
-        aliasCell.textContent = (!aliasText || aliasText === '—') ? oldName : aliasText + ' · ' + oldName;
+        var aliases = (!aliasText || aliasText === '—') ? [] : aliasText.split(' · ');
+        aliases = aliases.filter(function (alias) { return alias !== newName && alias !== oldName; });
+        aliases.push(oldName);
+        aliasCell.textContent = aliases.join(' · ');
         syncOption(renameTarget, newName, row.getAttribute('data-disabled') === 'true');
         renameForm.hidden = true;
         renameTarget = null;
@@ -858,6 +867,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       var approveButton = section.querySelector('[data-approve-tag]');
       approveButton.addEventListener('click', function () {
         approveButton.disabled = true;
+        section.querySelector('[data-reject-tag]').disabled = true;
         approveButton.textContent = '已批准';
         var tagState = section.querySelector('[data-tag-state]');
         tagState.className = 'state ok';
@@ -875,6 +885,8 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           toast('请填写退回补充原因。');
           return;
         }
+        approveButton.disabled = true;
+        section.querySelector('[data-reject-tag]').disabled = true;
         var applyResult = section.querySelector('#us13-apply-result');
         applyResult.hidden = false;
         applyResult.textContent = '已按不通过记录退回补充原因：' + reason + '。商品可改用已有标签后重新送审，不因标签名拒绝商品。';
