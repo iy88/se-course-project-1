@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.24
-Version-Datetime: 2026-10-26T22:28:14+08:00
+Version: 0.1.25
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -23,7 +23,7 @@ Version-Datetime: 2026-10-26T22:28:14+08:00
 | `docs/appendices/class-analysis/` | 详细类分析材料，入口 [类分析索引](docs/appendices/class-analysis/index.md)；图仍放 models |
 | `docs/appendices/` | 附录及附件组织入口 [附录索引](docs/appendices/index.md)，引用现有材料，不复制另一套正文／证据 |
 | `docs/需求分析质量验证报告.md` | A 报告，汇总确认、模型检查、最终验收 review 及问题复核记录 |
-| `docs/draft-AI智能体使用验证报告.md` | B 报告，汇总实质 AI 贡献、人工取舍、核验与证据索引 |
+| `docs/AI智能体使用验证报告.md` | B 报告，汇总实质 AI 贡献、人工取舍、核验与证据索引 |
 | `docs/appendices/models/` | 报告图（用例、活动、类、状态、上下文图等）的可编辑源文件目录，例如 `.puml`、`.mmd`；PNG 集中在 docs/appendices/rendered，不保存 SVG |
 | `docs/appendices/rendered/` | `.puml`／`.mmd` 统一渲染的 PNG，入口 [渲染索引](docs/appendices/rendered/README.md) |
 | `docs/appendices/evidence/` | 业务决定及讨论依据、实际形成的验证证据；入口 [证据索引](docs/appendices/evidence/index.md)，E 编号与 D 决定连续编号；编号重排时以 evidence 中映射表为准 |
@@ -40,9 +40,9 @@ Version-Datetime: 2026-10-26T22:28:14+08:00
 ## 范围与验证约束
 
 - 原型作为本项目需求分析交付材料，包含按用户故事组织的15个HTML页面。
-- 场景分析与原型材料已成文；场景及原型走查由张新悦、孙含佳、金婉怡分别于 2026-10-23、2026-10-23、2026-10-25 完成（A.5.4—A.5.6、A.6.4—A.6.6、E-11—E-13）。图稿可读性记录按实际范围保留，系统运行验收在实现阶段开展。
+- 场景分析与原型材料已成文；场景及原型走查由张新悦、孙含佳、金婉怡分别于 2026-10-23、2026-10-23、2026-10-25 完成（A.5.2—A.5.4、A.6.2—A.6.4、E-11—E-13）。图稿可读性记录按实际范围保留，系统运行验收在实现阶段开展。
 - 多页 HTML 原型按用户故事组织界面示例，作为最终 review 的补充材料，不以静态页面证明后台功能已实现。
-- 需求清单覆盖题目全部十项核心功能；14个主用例均有详细文档，主报告选取五个关键业务闭环展开。
+- 需求清单覆盖题目全部十项核心功能；14个主用例均有详细文档，主报告以交易闭环展开用户故事、场景和关键类，并展示三个代表性用例。
 - 业务规则、术语及未决问题统一维护；性能目标按第 6 章登记的来源与状态表达，实测结论待系统实现后形成。教学模拟如实标注，AI 自检不能替代人工确认。
 - 各成员仅记录 AI 对项目分析有实质影响的关键建议、人工取舍及证据，须有必要上下文并注明姓名；人工直接决定由 evidence 承载。实质分析开始时起草ai-usage，讨论中途保存关键prompt／output及实际反馈原文、来源定位与人工取舍；不要求完整聊天或环境、Git、一般文档维护流水，也不要求每次提交补档。构建与导出工具按用户明确要求专项记录于[AI-14](docs/appendices/ai-usage/AI-14-2026-10-23-文档构建与PDF增量导出.md)，不扩大日常维护的默认建档范围。详细边界见 AGENTS.md；B 报告由组长汇总。袁尚峰统筹最终review与汇总；三位成员已在各自设备和Git账号下完成走查及个人AI证据补充，实际贡献见A报告A.8。
 
@@ -79,7 +79,7 @@ Version-Datetime: 2026-10-26T22:28:14+08:00
 - [需求规格说明书](docs/需求规格说明书.md)
 - [附录与附件索引](docs/appendices/index.md)
 - [需求分析质量验证报告](docs/需求分析质量验证报告.md)
-- [AI 智能体使用验证报告](docs/draft-AI智能体使用验证报告.md)
+- [AI 智能体使用验证报告](docs/AI智能体使用验证报告.md)
 - [多页 HTML 原型](docs/appendices/prototype/README.md)
 - [渲染图索引](docs/appendices/rendered/README.md)
 - [证据索引 E-01—E-09、E-11—E-15](docs/appendices/evidence/index.md)
