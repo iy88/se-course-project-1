@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.2
-Version-Datetime: 2026-10-26T12:37:52+08:00
+Version: 0.1.4
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -591,7 +594,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         </div>
 
         <div class="panel" data-panel="mine">
-          <div id="us-02-freeze-banner" class="banner warn" hidden>当前仅交易冻结、账户未封禁：可编辑无关商品，但不可上架或重新上架。</div>
+          <div id="us-02-freeze-banner" class="banner warn" hidden>当前仅交易冻结、账户未封禁：仅可合规编辑无关商品；禁止发布新商品、主动下架及上架。</div>
           <div class="list">
             <div class="list-item">
               <div class="prod">
@@ -743,7 +746,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           <strong>资格与限制演示</strong>
           <span class="state ok" id="us-02-freeze-state">未冻结</span>
         </div>
-        <p class="mini-note">仅交易冻结且账户未封禁时，无关商品仍可合规编辑，但上架与重新上架会被拒绝。</p>
+        <p class="mini-note">仅交易冻结且账户未封禁时，仅可合规编辑无关商品；禁止发布新商品、主动下架及上架。</p>
         <div id="us-02-frozen-banner" class="banner warn" hidden>交易冻结生效：上架被拒绝；账户未封禁，编辑无关商品不受影响。</div>
         <button class="btn ghost" type="button" id="us-02-freeze-toggle">切换交易冻结</button>
       </div>
@@ -762,7 +765,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <div class="list-item"><div><strong>US-02-AC-04</strong>：商品处于交易中修改关键内容 → 界面拒绝编辑；有权限管理员的分类纠正另行留依据并通知卖方。</div></div>
       <div class="list-item"><div><strong>US-02-AC-05</strong>：无锁单但有待接受请求时主动下架 → 商品显示“已下架”，请求关闭并说明商品已下架，对应分支归档。</div></div>
       <div class="list-item"><div><strong>US-02-AC-06</strong>：已下架商品原审核有效且当前资格允许 → 重新上架后恢复公开可交易，后续新交易使用独立记录及分支。</div></div>
-      <div class="list-item"><div><strong>US-02-AC-07</strong>：仅交易冻结、账户未封禁 → 可编辑无关商品，尝试上架被拒绝并提示冻结原因；封禁账户另按写操作限制。</div></div>
+      <div class="list-item"><div><strong>US-02-AC-07</strong>：仅交易冻结、账户未封禁 → 允许合规编辑无关商品，发布、主动下架及上架均被拒绝并提示冻结原因；封禁账户另按写操作限制。</div></div>
       <div class="list-item"><div><strong>US-02-AC-08</strong>：尚未提交商品时查看禁发范围 → 直接展示管理员维护的当前禁发细目，无需先创建商品；管理员保存更新后查看可见最新范围。</div></div>
       <div class="list-item"><div><strong>US-02-AC-09</strong>：本人商品处于待审核 → 可修改内容或标签、撤回标签申请或撤回商品；认领前后均可修改，以提交审核结论时最新内容为准、不重新排队；撤回商品仅限认领前，认领后拒绝撤回且状态保持；撤回后置为已下架、修改后可重新提交审核。</div></div>
     </div>
@@ -813,6 +816,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           return;
         }
         formError.hidden = true;
+        if (frozen) { toast('发布被拒绝：交易冻结期间禁止发布新商品'); return; }
         publishOk.textContent = '已提交审核：商品状态“待审核”，不公开展示，进入管理员共享待处理池。' + (newTag ? '新标签“' + newTag + '”随本次审核一并处理：商品通过前不公开、不可被他人选择。' : '审核结果将出现在“我的商品”和站内通知中。');
         publishOk.hidden = false;
         toast('已提交审核，当前状态：待审核');
@@ -848,6 +852,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
 
       var delistButton = section.querySelector('#us-02-delist');
       delistButton.addEventListener('click', function () {
+        if (frozen) { toast('下架被拒绝：交易冻结期间禁止主动下架'); return; }
         delistButton.disabled = true;
         delistButton.textContent = '已下架';
         var delistState = section.querySelector('#us-02-math-state');

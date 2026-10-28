@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -514,7 +517,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <li>关联功能 FR-14</li>
       <li>主用例 UC-C14</li>
       <li>协作用例 UC-C05、UC-C08、UC-C09、UC-C11</li>
-      <li>依据 US-14-AC-01—AC-07</li>
+      <li>依据 US-14-AC-01—AC-08</li>
     </ul>
   </header>
 
@@ -577,7 +580,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             </div>
             <div>
               <div class="label">双方说明</div>
-              <div class="muted">买方：已按约定在图书馆门口交付并付款。</div>
+              <div class="muted">买方：已按约定在图书馆门口取货并付款。</div>
               <button class="btn ghost" type="button" data-reply>回复结论原因并通知</button>
             </div>
           </div>
@@ -606,7 +609,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         <div class="app">
           <div class="topbar">交易 T-2031</div>
 
-          <div class="banner warn">单方确认超时，交易已转为异常并由管理员处理；等待期间不会自动成交或取消。</div>
+          <div class="banner warn" id="us14-user-summary">单方确认超时，交易已转为异常并由管理员处理；等待期间不会自动成交或取消。</div>
           <div class="banner info" data-user-notice hidden></div>
 
           <div class="card">
@@ -626,11 +629,11 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           <div class="card">
             <div class="card-head">可进行的操作</div>
             <div class="user-actions">
-              <button class="btn primary" type="button" data-toast="交易已冻结：完成确认暂停，需待管理处理结果。">确认完成</button>
-              <button class="btn ghost" type="button" data-toast="本笔冻结期间双方私聊暂停；历史只读保留。">发送消息</button>
+              <button class="btn primary" type="button" data-user-transaction-action data-toast="交易已冻结：完成确认暂停，需待管理处理结果。">确认完成</button>
+              <button class="btn ghost" type="button" data-user-transaction-action data-toast="本笔冻结期间双方私聊暂停；历史只读保留。">发送消息</button>
               <button class="btn ghost" type="button" data-toggle="us14-user-note">提交说明 / 申辩</button>
             </div>
-            <p class="muted notice-line">本笔冻结期间，完成确认、取消与双方私聊暂停；历史只读查看与管理沟通保留。</p>
+            <p class="muted notice-line" id="us14-user-actions-note">本笔冻结期间，完成确认、取消与双方私聊暂停；历史只读查看与管理沟通保留。</p>
           </div>
 
           <form class="card" id="us14-user-note" hidden>
@@ -655,10 +658,11 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           <div class="list-item"><div class="entry-main">US-14-AC-01：一方确认后另一方7 天未回应 → 交易显示「异常 · 已冻结」，商品锁单保持，不自动成交或取消。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-02：等待期内进入争议 → 原计时结束；恢复后不自动计时，任一方重新提交完成确认后才重新开始完整等待。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-03：异常事项待处理 → 共享池仅一名管理员可认领，认领后仅其可核查处理，其他管理员入口不可用。</div></div>
-          <div class="list-item"><div class="entry-main">US-14-AC-04：交易被冻结 → 双方推进交易或互发消息被拒，历史只读查看与管理沟通仍可用。</div></div>
+          <div class="list-item"><div class="entry-main">US-14-AC-04：交易被冻结 → 双方推进交易或互发消息被拒，历史只读查看与管理沟通仍可用；若已有单方确认后因处置／封禁冻结，旧计时暂停，仅解冻且原确认有效时续算剩余时间。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-05：管理员恢复进行中 → 保留有效约定与历史，清空当前确认；本笔仍冻结，不自动解冻。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-06：管理员有依据调整完成或终止 → 记录依据并通知双方，解除本笔冻结与锁单、归档分支，商品默认下架。</div></div>
           <div class="list-item"><div class="entry-main">US-14-AC-07：用户提交说明或申辩 → 管理员回复结论原因并通知；提交不自动撤销任何限制。</div></div>
+          <div class="list-item"><div class="entry-main">US-14-AC-08：旧交易恢复需锁单状态前发现同商品另一笔锁单 → 拒绝恢复，交易、商品、分支及限制保持，先按另一笔适用规则处理后重新校验。</div></div>
         </div>
       </div>
     </div>
@@ -701,7 +705,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
 
           if (kind === 'resume') {
             result.className = 'banner info';
-            result.textContent = '已恢复「T-2031 进行中」：保留有效约定与历史，清空当前确认；本笔仍冻结，需任一方重新提交完成确认后重新开始完整等待。已通知双方。';
+            result.textContent = '已恢复「T-2031 进行中」：保留有效约定与历史，清空当前确认；本笔仍冻结；解除冻结且具备资格后，任一方重新提交完成确认才开始完整等待。已通知双方。';
             userState.className = 'state warn';
             userState.textContent = '已恢复进行中 · 仍冻结';
             notice.textContent = '通知：管理员已将交易恢复为进行中，当前确认已清空；冻结尚未解除，重新确认后才重新计时。';
@@ -727,6 +731,12 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             claimState.textContent = '已处理 · 已归档';
             toast('已调整终止并留据：解除本笔冻结与锁单，商品默认下架，已通知双方。');
           }
+          section.querySelector('#us14-user-summary').textContent = notice.textContent;
+          if (kind !== 'resume') {
+            section.querySelectorAll('[data-user-transaction-action]').forEach(function (action) { action.disabled = true; });
+            section.querySelector('#us14-user-actions-note').textContent = '交易已结束，历史保留；管理沟通按事项资格使用。';
+          }
+          section.querySelectorAll('[data-handle]').forEach(function (action) { action.disabled = true; });
           basisField.value = '';
         });
       });

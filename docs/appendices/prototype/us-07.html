@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -539,7 +542,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
                 <div>台灯亮度合适，卖家按约定时间送到。</div>
                 <div class="muted">交易：护眼台灯 · 被评价方：卖家（示例 C）· 10-20 21:05</div>
               </div>
-              <button class="btn ghost" type="button" data-toast="评价提交后不能自行修改或删除；违规评价由管理员有依据处理。">修改</button>
+              <span class="muted">评价已提交</span>
             </div>
           </div>
           <p class="muted panel-note">评价按“我发表／我收到”分开查看，不在商品页公开。</p>
@@ -560,7 +563,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
 
         <div class="hr"></div>
         <form class="rform" data-review-form>
-          <div class="card-head">评价已完成交易：护眼台灯</div>
+          <div class="card-head">评价另一笔已完成交易：捷安特自行车</div>
           <div class="field">
             <span class="label">评分（1—5 分）</span>
             <select class="select" data-score>
@@ -601,13 +604,13 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             <div class="field">
               <span class="label">举报对象</span>
               <select class="select" data-r-object>
-                <option value="捷安特自行车">捷安特自行车（商品）</option>
-                <option value="护眼台灯">护眼台灯（商品）</option>
-                <option value="关于台灯的评论">关于台灯的评论</option>
-                <option value="交易私聊消息">交易私聊消息</option>
-                <option value="对卖家的评价">对卖家的评价</option>
-                <option value="已失效商品">已失效商品（示例）</option>
-                <option value="示例卖家 C">用户：示例卖家 C</option>
+                <option data-object-type="商品" value="捷安特自行车">捷安特自行车（商品）</option>
+                <option data-object-type="商品" value="护眼台灯">护眼台灯（商品）</option>
+                <option data-object-type="评论" value="关于台灯的评论">关于台灯的评论</option>
+                <option data-object-type="消息" value="交易私聊消息">交易私聊消息</option>
+                <option data-object-type="评价" value="对卖家的评价">对卖家的评价</option>
+                <option data-object-type="商品" value="已失效商品">已失效商品（示例）</option>
+                <option data-object-type="用户" value="示例卖家 C">用户：示例卖家 C</option>
               </select>
             </div>
           </div>
@@ -711,7 +714,7 @@ window.PROTO.register('us-07', function (root) {
       content.textContent = text;
       var meta = doc.createElement('div');
       meta.className = 'muted';
-      meta.textContent = '交易：护眼台灯 · 被评价方：卖家（示例 C）· 刚刚';
+      meta.textContent = '交易：捷安特自行车 · 被评价方：卖家（示例 C）· 刚刚';
       body.appendChild(head);
       body.appendChild(content);
       body.appendChild(meta);
@@ -733,6 +736,11 @@ window.PROTO.register('us-07', function (root) {
       var type = q('[data-r-type]').value;
       var object = q('[data-r-object]').value;
       var reason = q('[data-r-reason]').value;
+      var selectedObject = q('[data-r-object]').selectedOptions[0];
+      if (selectedObject && selectedObject.dataset.objectType !== type) {
+        toast('请选择与对象类型一致的举报对象。');
+        return;
+      }
       if (!object || !reason) {
         toast('请选择举报对象并填写原因；说明和截图可选。');
         return;

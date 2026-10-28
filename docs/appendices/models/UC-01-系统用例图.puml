@@ -2,8 +2,8 @@
 ' 语义模型：参与者与用例的关联、用例间的包含与扩展关系。展示图 UC-01-系统用例图.png（docs/appendices/rendered） 按 UML 用例图惯例直排：
 ' 参与者分置系统边界两侧、用例两列排布、关系线用虚线标注 <<include>>／<<extend>>；修改关系时须同步重绘展示图。
 ' 本项目付款与交付在平台外完成，无外部系统或设备参与者。用例编号对应 docs/appendices/use-cases/index.md。
-' Version: 0.3.1
-' Version-Datetime: 2026-10-23T03:47:39+08:00
+' Version: 0.3.2
+' Version-Datetime: 2026-10-28T19:49:18+08:00
 @startuml
 left to right direction
 skinparam defaultFontName "PingFang SC"

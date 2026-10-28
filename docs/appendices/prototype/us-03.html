@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-26T02:38:00+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -681,7 +684,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         <p class="mini-note">交易中商品不进入在售搜索；已下架或撤销公开后，公开详情访问被拒绝。</p>
       </div>
 
-      <div class="card">
+      <div class="card" id="us-03-visible-scope">
         <div class="card-head">
           <strong>当前可见范围</strong>
         </div>
@@ -817,13 +820,15 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         selectedTags = [];
         renderTags();
         applyFilter(false);
-        toast('已清空条件，显示全部在售商品');
+        toast(guest ? '已清空条件，请先登录后检索' : '已清空条件，显示全部在售商品');
       });
 
       section.querySelector('#us-03-guest').addEventListener('click', function () {
         guest = !guest;
         section.querySelector('#us-03-guest-banner').hidden = !guest;
         section.querySelector('#us-03-results').hidden = guest;
+        section.querySelector('#us-03-count').hidden = guest;
+        section.querySelector('#us-03-visible-scope').hidden = guest;
         section.querySelector('#us-03-detail').hidden = guest;
         if (guest) {
           section.querySelector('#us-03-empty').hidden = true;

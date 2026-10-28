@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.0
-' Version-Datetime: 2026-10-26T12:37:57+08:00
+' Version: 0.1.1
+' Version-Datetime: 2026-10-26T21:22:39+08:00
 title UC-13 · UC-C11 接收通知与待办
 
 skinparam backgroundColor #FFFFFF
@@ -64,5 +64,9 @@ CampusUser --> C1103
 legend bottom
 管理员只从共享处理池查看待办，不接收站内通知。
 打开具体通知才标读；通知已读、消息已读及业务确认分别处理。
+endlegend
+legend bottom
+用户待办按本人当前需处理事项聚合；办结后移出。
+通知已读不代表办结，进入时重新校验资格（D-53）。
 endlegend
 @enduml

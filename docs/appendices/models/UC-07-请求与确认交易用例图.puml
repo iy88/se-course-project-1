@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.0
-' Version-Datetime: 2026-10-26T12:37:57+08:00
+' Version: 0.1.1
+' Version-Datetime: 2026-10-26T21:22:39+08:00
 title UC-07 · UC-C05 请求与确认交易
 
 skinparam backgroundColor #FFFFFF
@@ -106,5 +106,6 @@ legend bottom
 买卖双方分别操作；首次约定及变更须对方明确同意后生效。
 C05-05与C06-01为同一次交付及支付完成声明，不新增确认步骤。
 接受请求后锁单；争议不自动冻结；终止条件按BR-06，冻结期间不推进。
+变更生效清当前确认、结束旧计时；重新单方确认后才开始完整7天。
 endlegend
 @enduml

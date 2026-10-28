@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-26T02:38:00+08:00
+Version: 0.1.2
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -550,7 +553,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           </div>
           <p class="muted">展示资格：公开搜索不展示 · 公开详情不可访问 · 不能接受请求 · 不能新增评论。仅本人“我的商品”可见。</p>
           <div class="banner info">审核结果会通过站内通知告知；通过后才产生公开入口。</div>
-          <button type="button" class="btn" data-toast="编辑已保存，修改后仍需重新审核（示例）">编辑商品</button>
+          <button type="button" class="btn" data-toast="待审核期认领前后均可修改，不重新排队；审核以提交结论时最新内容为准（示例）">编辑商品</button>
         </div>
       </div>
 
@@ -610,7 +613,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           </label>
           <div class="banner warn" id="us09-disposed-note" hidden>处置期间拒绝公开详情；解除后仅恢复原展示资格，原“已下架”状态保留，不自动上架。</div>
           <button type="button" class="btn primary" id="us09-relist">重新上架</button>
-          <p class="muted" id="us09-relist-note">当前账户与商品限制允许重新上架；上架后形成新的公开交易，聊天分支独立。</p>
+          <p class="muted" id="us09-relist-note">当前账户与商品限制允许重新上架；上架后可按资格发起新请求，新交易与聊天分支独立。</p>
         </div>
       </div>
     </div>
@@ -655,6 +658,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       section.querySelectorAll('.tabs .tab').forEach(function (tab) {
         tab.addEventListener('click', function () {
           state = tab.getAttribute('data-tab');
+          chip.textContent = {pending: '待审核', rejected: '审核未通过', public: '公开可交易', trading: '交易中', off: '已下架'}[state];
         });
       });
 
@@ -677,7 +681,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         disposedNote.hidden = !blocked;
         relistNote.textContent = blocked
           ? '当前存在管理处置，不能重新上架；解除处置后仍需本人明确上架。'
-          : '当前账户与商品限制允许重新上架；上架后形成新的公开交易，聊天分支独立。';
+          : '当前账户与商品限制允许重新上架；上架后可按资格发起新请求，新交易与聊天分支独立。';
         if (blocked) {
           window.PROTO.toast('管理处置期间不能重新上架');
         }

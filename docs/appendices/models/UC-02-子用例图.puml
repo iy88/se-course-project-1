@@ -1,6 +1,6 @@
 /'
-Version: 0.3.1
-Version-Datetime: 2026-10-23T03:47:39+08:00
+Version: 0.3.2
+Version-Datetime: 2026-10-28T19:49:18+08:00
 '/
 @startuml
 skinparam defaultFontName "PingFang SC"

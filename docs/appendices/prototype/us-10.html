@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-23T03:49:34+08:00
+Version: 0.1.1
+Version-Datetime: 2026-10-27T21:54:13+08:00
 -->
 
 <html lang="zh-CN">
@@ -463,13 +463,16 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         var group = tab.closest(".tabs");
         var name = group.getAttribute("data-tabs") || "";
         var value = tab.getAttribute("data-tab");
+        var values = Array.prototype.map.call(group.querySelectorAll("[data-tab]"), function (item) { return item.getAttribute("data-tab"); });
         Array.prototype.forEach.call(group.querySelectorAll("[data-tab]"), function (item) {
           item.classList.toggle("active", item === tab);
         });
         var scope = tab.closest(".screen") || document;
         Array.prototype.forEach.call(scope.querySelectorAll(".panel[data-panel]"), function (panel) {
           if (panel.getAttribute("data-group") && panel.getAttribute("data-group") !== name) return;
-          var match = panel.getAttribute("data-panel") === value || panel.getAttribute("data-panel") === name + ":" + value;
+          var panelValue = panel.getAttribute("data-panel");
+          if (values.indexOf(panelValue) < 0 && values.indexOf(panelValue.replace(name + ":", "")) < 0) return;
+          var match = panelValue === value || panelValue === name + ":" + value;
           panel.hidden = !match;
           panel.classList.toggle("active", match);
         });
@@ -529,7 +532,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <div class="card">
         <div class="split">
           <div>
-            <strong>当前身份：平台管理员</strong>
+            <strong id="us10-identity">当前身份：平台管理员</strong>
             <p class="muted">统计入口仅对具有平台管理资格的账户开放。</p>
           </div>
           <button type="button" class="btn ghost" id="us10-visitor">以普通用户身份查看</button>
@@ -627,6 +630,10 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
 
       function selectRange(range) {
         selected = range;
+        result.hidden = true;
+        zero.hidden = true;
+        empty.hidden = false;
+        empty.textContent = '已选择范围，请点击统计查看结果。';
         buttons.forEach(function (btn) {
           var on = btn.getAttribute('data-range') === range;
           btn.classList.toggle('primary', on);
@@ -647,6 +654,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       visitorBtn.addEventListener('click', function () {
         denied = !denied;
         q('us10-access').hidden = !denied;
+        q('us10-identity').textContent = denied ? '当前身份：普通校园用户（演示）' : '当前身份：平台管理员';
         q('us10-metrics').hidden = denied;
         q('us10-range-card').hidden = denied;
         visitorBtn.textContent = denied ? '返回管理员视角' : '以普通用户身份查看';
