@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.7
-Version-Datetime: 2026-10-26T21:22:39+08:00
+Version: 0.1.8
+Version-Datetime: 2026-10-28T19:49:20+08:00
 -->
 
 # 图源渲染索引
@@ -27,8 +27,8 @@ PNG 使用单一字体 PingFang SC（苹方），中文与西文均按该字体�
 | ST-01-商品状态图 | [PlantUML](../../appendices/models/ST-01-商品状态图.puml) | [PNG](ST-01-商品状态图.png) | 2833 × 1225 | 200 |
 | ST-02-交易状态图 | [PlantUML](../../appendices/models/ST-02-交易状态图.puml) | [PNG](ST-02-交易状态图.png) | 2442 × 1617 | 200 |
 | ST-03-交易约定与确认进度 | [PlantUML](../../appendices/models/ST-03-交易约定与确认进度.puml) | [PNG](ST-03-交易约定与确认进度.png) | 2166 × 1247 | 200 |
-| UC-01-系统用例图 | [PlantUML](../../appendices/models/UC-01-系统用例图.puml) | [PNG](UC-01-系统用例图.png) | 2043 × 2055 | 200 |
-| UC-02-子用例图 | [PlantUML](../../appendices/models/UC-02-子用例图.puml) | [PNG](UC-02-子用例图.png) | 2891 × 2636 | 200 |
+| UC-01-系统用例图 | [PlantUML](../../appendices/models/UC-01-系统用例图.puml) | [PNG](UC-01-系统用例图.png) | 2040 × 2051 | 200 |
+| UC-02-子用例图 | [PlantUML](../../appendices/models/UC-02-子用例图.puml) | [PNG](UC-02-子用例图.png) | 2879 × 2635 | 200 |
 | UC-03-账户生命周期用例图 | [PlantUML](../../appendices/models/UC-03-账户生命周期用例图.puml) | [PNG](UC-03-账户生命周期用例图.png) | 962 × 1382 | 200 |
 | UC-04-发布与维护商品用例图 | [PlantUML](../../appendices/models/UC-04-发布与维护商品用例图.puml) | [PNG](UC-04-发布与维护商品用例图.png) | 1067 × 1922 | 200 |
 | UC-05-检索商品用例图 | [PlantUML](../../appendices/models/UC-05-检索商品用例图.puml) | [PNG](UC-05-检索商品用例图.png) | 927 × 1066 | 200 |
