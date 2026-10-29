@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.1
-Version-Datetime: 2026-10-26T12:38:12+08:00
+Version: 0.2.2
+Version-Datetime: 2026-10-29T17:51:11+08:00
 -->
 
 # 文档构建
@@ -13,7 +13,7 @@ Version-Datetime: 2026-10-26T12:38:12+08:00
 python3 scripts/cli.py build
 ```
 
-默认先将34张业务模型图按200 DPI输出到 `docs/appendices/rendered/`，再同步关键材料到01—08章节并生成 `docs/需求规格说明书.md`。渲染索引自动登记实际像素尺寸和DPI；PNG伴随文件记录源文件及图片摘要。
+默认先将34张业务模型图按200 DPI输出到 `docs/appendices/rendered/`，再同步关键材料到01—08章节并生成 `docs/需求规格说明书.md`。渲染索引自动登记实际像素尺寸和DPI；PNG伴随文件仅记录源文件及图片两个SHA-256摘要，不记录版本号、时间或DPI。
 
 ## 目录结构与统一入口
 
@@ -49,7 +49,7 @@ python3 scripts/cli.py render --dpi 300
 python3 scripts/cli.py check
 ```
 
-`report` 更新章节中的关键材料及整合说明书，并检查本地链接和锚点。`check` 只读核对生成内容、模型源文件、PNG摘要及DPI，默认核对200 DPI；检查其他DPI时传入相同的 `--dpi`。
+`report` 更新章节中的关键材料及整合说明书，并检查本地链接和锚点。`check` 只读核对生成内容、模型源文件、PNG摘要；DPI由生成脚本写入，不作为增量渲染或检查判据。改变输出DPI时，使用 `render --force --dpi 数值` 强制重新生成。
 
 `--plantuml` 可指定PlantUML可执行文件路径，`--force` 可重新渲染全部选定图。渲染先验证全部选定图片成功，再发布到输出目录。分辨率通过PlantUML实际渲染和PNG物理分辨率共同设置。图源 `skinparam defaultFontName` 统一为 `PingFang SC`（苹方），PNG 中中文与西文均按该字体渲染。
 

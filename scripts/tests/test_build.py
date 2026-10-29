@@ -1,6 +1,7 @@
 """Regression checks for single-source generation and rendering contracts."""
 
 import base64
+import hashlib
 from pathlib import Path
 import tempfile
 import types
@@ -117,6 +118,37 @@ class BuildTests(unittest.TestCase):
                     render(root, 200, False, "plantuml", False)
             self.assertEqual(old.read_bytes(), PIXEL)
             self.assertFalse((old.parent / "B.png").exists())
+
+    def test_render_hash_records_are_stable_and_detect_content_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            models = root / "docs/appendices/models"
+            models.mkdir(parents=True)
+            source = models / "A.puml"
+            source.write_text("@startuml\nA -> B\n@enduml\n")
+            result = types.SimpleNamespace(returncode=0, stdout=PIXEL, stderr=b"")
+            with patch.object(diagrams.shutil, "which", return_value="plantuml"), patch.object(diagrams.subprocess, "run", return_value=result) as renderer:
+                render(root, 200, False, "plantuml", True)
+                image = root / "docs/appendices/rendered/A.png"
+                sidecar = image.with_suffix(".png.version")
+                record = sidecar.read_bytes()
+                self.assertEqual(sidecar.read_text().splitlines(), [
+                    "Source-SHA256: " + hashlib.sha256(source.read_bytes()).hexdigest(),
+                    "PNG-SHA256: " + hashlib.sha256(image.read_bytes()).hexdigest(),
+                ])
+                render(root, 200, False, "plantuml", True)
+                self.assertEqual(sidecar.read_bytes(), record)
+                renderer.reset_mock()
+                render(root, 300, True, "plantuml", False)
+                renderer.assert_not_called()
+                image.write_bytes(b"damaged")
+                with self.assertRaises(ValueError):
+                    render(root, 200, True, "plantuml", False)
+                render(root, 200, False, "plantuml", False)
+                self.assertEqual(sidecar.read_bytes(), record)
+                source.write_text("@startuml\nB -> A\n@enduml\n")
+                with self.assertRaises(ValueError):
+                    render(root, 200, True, "plantuml", False)
 
     def test_dpi_is_recorded_without_resampling_pixels(self):
         data = png_resolution(PIXEL, 200)

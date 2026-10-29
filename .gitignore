@@ -26,3 +26,5 @@ dist/
 # 编辑器
 .idea/
 .vscode/
+
+.vite

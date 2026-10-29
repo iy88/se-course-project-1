@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.30
-Version-Datetime: 2026-10-29T15:50:59+08:00
+Version: 0.1.31
+Version-Datetime: 2026-10-29T20:56:02+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -222,7 +222,7 @@ Vite预览沿用现有开发代理，可在本机联调；正式托管静态产�
 ## 草稿与版本规范
 
 - `bits/` 为 notes，不使用 `draft-` 前缀，去前缀不代表内容已验证；其余未确认的业务文档以 `draft-` 开头；确认后去除前缀并修订引用。README 及配置属于仓库运行规范，不作为业务确认稿。
-- 仅 `docs/` 下的文件及各目录的 `README.md`、`AGENTS.md` 需要记录 `Version: x.y.z` 和带时区的 `Version-Datetime: ISO8601`。文本在原生注释或正文中记录；`docs/` 中的二进制文件使用同目录 `<文件名>.version` 伴随文件记录。其他文件（包括工具源码、测试、配置及未来业务代码）不需要版本信息，由 Git 历史追踪。
+- 仅 `docs/` 下的文件及各目录的 `README.md`、`AGENTS.md` 需要记录 `Version: x.y.z` 和带时区的 `Version-Datetime: ISO8601`。文本在原生注释或正文中记录；`docs/` 中的二进制文件使用同目录 `<文件名>.version` 伴随文件记录；渲染PNG的伴随文件仅保存源文件与PNG的SHA-256，不要求版本号与时间，DPI由生成脚本保证。其他文件（包括工具源码、测试、配置及未来业务代码）不需要版本信息，由 Git 历史追踪。
 - 每次 commit 前对需要版本信息的修改文件按最终内容统一递增版本号、更新版本时间，并与上一提交比较；时间不得在未来。同一提交前的多轮修改不逐轮登记版本或保留未提交即放弃的中间方案。删除文件无需更新版本。
 - 文档拆分、改名后同步修订引用。图源按最终提交内容管理版本。
 
@@ -263,7 +263,7 @@ python3 scripts/cli.py check
 在项目根目录执行：
 
 ```bash
-# 增量渲染：只重新导出源文件或产物摘要变化、PNG 缺失或 DPI 不符的图
+# 增量渲染：只重新导出源文件或产物摘要变化、PNG 缺失的图
 python3 scripts/cli.py render
 
 # 强制重新导出全部图
@@ -273,7 +273,7 @@ python3 scripts/cli.py render --force
 python3 scripts/cli.py build
 ```
 
-脚本调用本机 PlantUML，将 `docs/appendices/models/*.puml` 导出为默认200 DPI的PNG，保存到 `docs/appendices/rendered/`；同时更新对应 `.png.version` 中的版本、渲染时间、源文件及PNG的SHA-256摘要，以及渲染索引。源文件摘要包含版本注释，因此仅修改图源版本头也会触发重新渲染。`render` 不同步需求正文，也不导出PDF；需要同步正文时使用 `build`。
+脚本调用本机 PlantUML，将 `docs/appendices/models/*.puml` 导出为默认200 DPI的PNG，保存到 `docs/appendices/rendered/`；同时更新对应 `.png.version` 中的源文件及PNG两个SHA-256摘要（不记录版本号、时间或DPI），以及渲染索引。源文件摘要包含版本注释，因此仅修改图源版本头也会触发重新渲染。`render` 不同步需求正文，也不导出PDF；需要同步正文时使用 `build`。
 
 仅同步正文用 `python3 scripts/cli.py report`，仅检查用 `python3 scripts/cli.py check`；原型直接维护HTML页面。分步构建及自定义DPI见[scripts说明](scripts/README.md)。
 

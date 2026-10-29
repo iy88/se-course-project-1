@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.0
-' Version-Datetime: 2026-10-26T12:37:57+08:00
+' Version: 0.1.1
+' Version-Datetime: 2026-10-29T14:58:36+08:00
 title UC-04 · UC-C02 发布与维护商品
 
 skinparam backgroundColor #FFFFFF
@@ -94,5 +94,6 @@ legend bottom
 待审核期认领前后均可修改；结论依据提交时最新内容（BR-10）。
 撤回商品仅限认领前；撤回后已下架，修改重提须重新审核。
 辅助能力不新增全局子用例编号；管理员审核与UC-C08-06为同一次处理。
+认领管理员即R-04平台管理员在本人认领事项中的称谓，不是独立角色。
 endlegend
 @enduml
