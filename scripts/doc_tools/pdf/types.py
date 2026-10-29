@@ -1,7 +1,9 @@
 from __future__ import annotations
+
+import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[3]
 DOCS = ROOT / "docs"
@@ -56,3 +58,63 @@ class TransformState:
     targets: set[str] = field(default_factory=set)
     slug_counts: dict[str, int] = field(default_factory=dict)
     header_targets: dict[int, str] = field(default_factory=dict)
+
+class ExporterBase:
+    """Shared exporter contract for the cooperating implementation mixins."""
+
+    root: Path
+    docs: Path
+    output: Path
+    pandoc: str
+    pdf_engine: str
+    header: Path
+    cjk_main_font: str
+    cjk_sans_font: str
+    cjk_mono_font: str
+    latin_main_font: str
+    latin_mono_font: str
+    margin: str
+    fontsize: str
+    landscape_tables: bool
+    wide_table_columns: int
+    jobs: int
+    timeout: float
+    pdf_link_check: str
+    glyph_check: str
+    _pandoc_ids: set[str]
+    _font_preamble: str | None
+    _font_paths: list[Path]
+
+    def _resolve_tool(self, value: str) -> str:
+        raise NotImplementedError
+
+    def require_fonts(self) -> None:
+        raise NotImplementedError
+
+    def output_for_markdown(self, source: Path) -> Path:
+        raise NotImplementedError
+
+    def output_for_asset(self, source: Path) -> Path:
+        raise NotImplementedError
+
+    def pdf_command(self, output: Path, font_header: Path | None = None) -> list[str]:
+        raise NotImplementedError
+
+    def run_pandoc(self, command: list[str], *, data: bytes | None = None,
+                   timeout: float | None = None) -> subprocess.CompletedProcess[bytes]:
+        raise NotImplementedError
+
+    def prepare_assets(self, plan: Plan) -> int:
+        raise NotImplementedError
+
+    def convert_document(self, source: Path, document: dict) -> Path:
+        raise NotImplementedError
+
+    def load_export_cache(self) -> dict:
+        raise NotImplementedError
+
+    def export_fingerprints(self, plan: Plan) -> dict:
+        raise NotImplementedError
+
+    def cache_entry_current(self, source: Path, fingerprint: dict, cache: dict) -> bool:
+        raise NotImplementedError

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import struct
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
 import zlib
+from pathlib import Path
+from unittest.mock import patch
 
 from doc_tools.pdf import exporter as export_pdf
 from doc_tools.pdf import navigation
@@ -96,44 +96,41 @@ class Fixture:
         write(self.root / "bits/unlinked.md", "# Unlinked\n\n不应导出。\n")
         self.source = write(
             self.docs / "requirements/a.md",
-            "\n".join([
-                "# A",
-                "",
-                "[inline](b.md#section \"title\")",
-                "",
-                "中文内容。",
-                "",
-                "状态转换：待审核 → 公开可交易。",
-                "",
-                "[github](<b.md#416-单级分类标签>)",
-                "",
-                "[ref][r]",
-                "",
-                "[frag](#a)",
-                "",
-                "[web](https://example.com/x.md#frag)",
-                "",
-                "[mail](mailto:a@b.c)",
-                "",
-                "[space](<b%20c.md#space>)",
-                "",
-                "[asset](../appendices/rendered/pic.png)",
-                "",
-                "[model](../appendices/models/x.puml)",
-                "",
-                "[outside](../../AGENTS.md#rules)",
-                "",
-                "![figure](../appendices/rendered/pic.png)",
-                "",
-                "`[code](x.md)`",
-                "",
-                "```",
-                "[fenced](y.md)",
-                "```",
-                "",
-                "[r]: b.md#section",
-                "",
-            ]),
+            "# A\n"
+            "\n"
+            "[inline](b.md#section \"title\")\n"
+            "\n"
+            "中文内容。\n"
+            "\n"
+            "状态转换：待审核 → 公开可交易。\n"
+            "\n"
+            "[github](<b.md#416-单级分类标签>)\n"
+            "\n"
+            "[ref][r]\n"
+            "\n"
+            "[frag](#a)\n"
+            "\n"
+            "[web](https://example.com/x.md#frag)\n"
+            "\n"
+            "[mail](mailto:a@b.c)\n"
+            "\n"
+            "[space](<b%20c.md#space>)\n"
+            "\n"
+            "[asset](../appendices/rendered/pic.png)\n"
+            "\n"
+            "[model](../appendices/models/x.puml)\n"
+            "\n"
+            "[outside](../../AGENTS.md#rules)\n"
+            "\n"
+            "![figure](../appendices/rendered/pic.png)\n"
+            "\n"
+            "`[code](x.md)`\n"
+            "\n"
+            "```\n"
+            "[fenced](y.md)\n"
+            "```\n"
+            "\n"
+            "[r]: b.md#section\n",
         )
         self.exporter = export_pdf.PdfExporter(
             root=self.root, output=self.root / "docs-pdf",
@@ -205,9 +202,7 @@ class ExportTests(unittest.TestCase):
 
     def test_assets_and_repository_markdown(self):
         plan = self.fixture.plan()
-        source = self.fixture.source.resolve()
         agents = self.fixture.agents.resolve()
-        notes = self.fixture.notes.resolve()
 
         self.assertNotIn(agents, plan.documents)
         self.assertNotIn((self.fixture.root / "bits/unlinked.md").resolve(),
@@ -231,18 +226,15 @@ class ExportTests(unittest.TestCase):
     def test_raw_anchor_and_github_heading_alias(self):
         source = write(
             self.fixture.docs / "requirements/anchor.md",
-            "\n".join([
-                "# 目录",
-                "",
-                "- [第一章](#chapter-01)",
-                "",
-                '<a id="chapter-01"></a>',
-                "",
-                "# 1. 项目概述",
-                "",
-                "[自己](#1-项目概述)",
-                "",
-            ]),
+            "# 目录\n"
+            "\n"
+            "- [第一章](#chapter-01)\n"
+            "\n"
+            '<a id="chapter-01"></a>\n'
+            "\n"
+            "# 1. 项目概述\n"
+            "\n"
+            "[自己](#1-项目概述)\n",
         )
         plan = self.fixture.exporter.build_plan([source])
         aliases = plan.aliases[source.resolve()]
@@ -318,11 +310,13 @@ class ExportTests(unittest.TestCase):
             args=[], returncode=1, stdout=b"", stderr=b"latex error"
         )
         self.fixture.exporter.require_fonts()
-        with patch.object(export_pdf.subprocess, "run", return_value=failure):
-            with self.assertRaisesRegex(export_pdf.ExportError, "PDF conversion failed"):
-                self.fixture.exporter.convert_document(
-                    source, plan.rewritten[source]
-                )
+        with (
+            patch.object(export_pdf.subprocess, "run", return_value=failure),
+            self.assertRaisesRegex(export_pdf.ExportError, "PDF conversion failed"),
+        ):
+            self.fixture.exporter.convert_document(
+                source, plan.rewritten[source]
+            )
         self.assertEqual(destination.read_bytes(), b"OLD")
         self.assertEqual(
             list(destination.parent.glob(".*.tmp-*")), []
@@ -363,6 +357,8 @@ class ExportTests(unittest.TestCase):
         qpdf = shutil.which("qpdf")
         if qpdf:
             targets = navigation.pdf_file_targets(source_pdf, qpdf)
+            self.assertIsNotNone(targets)
+            assert targets is not None
             normalized = {navigation.normalize_pdf_target(item)
                           for item in targets}
             self.assertIn("b.pdf", normalized)
@@ -373,7 +369,7 @@ class ExportTests(unittest.TestCase):
         if pdfinfo:
             destinations = subprocess.run(
                 [pdfinfo, "-dests", str(target_pdf)],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=30, check=False,
             ).stdout
             self.assertIn("section", destinations)
             self.assertIn(
@@ -384,7 +380,7 @@ class ExportTests(unittest.TestCase):
         if pdftotext:
             text = subprocess.run(
                 [pdftotext, str(source_pdf), "-"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=30, check=False,
             ).stdout
             self.assertIn("中文", text)
             # Arrows must resolve to a real glyph, not an empty box.

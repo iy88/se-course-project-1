@@ -2,17 +2,16 @@
 
 import base64
 import hashlib
-from pathlib import Path
 import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from doc_tools import report, markdown, diagrams
+from doc_tools import diagrams
+from doc_tools.diagrams import png_chunks, png_info, png_resolution, render
+from doc_tools.markdown import expand_chapter, relocate
 from doc_tools.report import specification
-from doc_tools.markdown import relocate, expand_chapter
-from doc_tools.diagrams import render, png_resolution, png_info, png_chunks
-
 
 PIXEL = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
@@ -113,9 +112,12 @@ class BuildTests(unittest.TestCase):
             old.write_bytes(PIXEL)
             results = [types.SimpleNamespace(returncode=0, stdout=PIXEL, stderr=b""),
                        types.SimpleNamespace(returncode=1, stdout=b"", stderr=b"syntax error")]
-            with patch.object(diagrams.shutil, "which", return_value="plantuml"), patch.object(diagrams.subprocess, "run", side_effect=results):
-                with self.assertRaises(ValueError):
-                    render(root, 200, False, "plantuml", False)
+            with (
+                patch.object(diagrams.shutil, "which", return_value="plantuml"),
+                patch.object(diagrams.subprocess, "run", side_effect=results),
+                self.assertRaises(ValueError),
+            ):
+                render(root, 200, False, "plantuml", False)
             self.assertEqual(old.read_bytes(), PIXEL)
             self.assertFalse((old.parent / "B.png").exists())
 
@@ -154,7 +156,8 @@ class BuildTests(unittest.TestCase):
         data = png_resolution(PIXEL, 200)
         width, height, dpi = png_info(data)
         self.assertEqual((width, height), (1, 1))
-        self.assertAlmostEqual(dpi, 200, places=1)
+        assert dpi is not None
+        self.assertAlmostEqual(dpi, 200.0, places=1)
         original_pixels = [p for kind, p, _ in png_chunks(PIXEL) if kind == b"IDAT"]
         updated_pixels = [p for kind, p, _ in png_chunks(data) if kind == b"IDAT"]
         self.assertEqual(original_pixels, updated_pixels)

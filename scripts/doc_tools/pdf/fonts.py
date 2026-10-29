@@ -1,11 +1,13 @@
 from __future__ import annotations
-from pathlib import Path
+
 import shutil
 import subprocess
+from pathlib import Path
 
-from .types import ExportError
+from .types import ExporterBase, ExportError
 
-class FontSupport:
+
+class FontSupport(ExporterBase):
 
     def _resolve_tool(self, value: str) -> str:
         candidate = Path(value)
@@ -42,7 +44,7 @@ class FontSupport:
             else:
                 match = subprocess.run(
                     [matcher, "-f", "%{family}\n%{file}\n%{index}\n", family + pattern],
-                    capture_output=True, text=True, timeout=30,
+                    capture_output=True, text=True, timeout=30, check=False,
                 )
                 lines = match.stdout.splitlines()
                 if (match.returncode or len(lines) < 3 or

@@ -1,17 +1,19 @@
 from __future__ import annotations
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
-from .types import ExportError, Plan
 from .navigation import _hash_file
+from .types import ExporterBase, ExportError, Plan
 
-class IncrementalExport:
+
+class IncrementalExport(ExporterBase):
 
     def load_export_cache(self) -> dict:
         path = self.output / ".export-cache.json"
@@ -53,7 +55,7 @@ class IncrementalExport:
         versions = {}
         for tool in (self.pandoc, self.pdf_engine):
             result = subprocess.run([tool, "--version"], capture_output=True,
-                                    text=True, timeout=30)
+                                    text=True, timeout=30, check=False)
             if result.returncode:
                 raise ExportError(f"Cannot identify renderer: {tool}")
             versions[tool] = result.stdout.splitlines()[0]

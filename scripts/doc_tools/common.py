@@ -1,14 +1,15 @@
 from __future__ import annotations
-from pathlib import Path
+
 import re
 import tempfile
 from datetime import datetime
+from pathlib import Path
 
 INCLUDE = re.compile(
     r'<!-- spec-include: path="([^"]+)" level="([3-6])"(?: view="(acceptance)")? -->'
-    r'.*?<!-- /spec-include -->', re.S,
+    r'.*?<!-- /spec-include -->', re.DOTALL,
 )
-META = re.compile(r"\A<!--\n.*?-->\s*", re.S)
+META = re.compile(r"\A<!--\n.*?-->\s*", re.DOTALL)
 LINK = re.compile(r"(!?\[[^\]\n]*\]\()(<[^>\n]+>|[^)\n]+)(\))")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
@@ -32,7 +33,7 @@ def generated_markdown(path: Path, body: str) -> str:
     existing = path.read_text() if path.exists() else ""
     if META.sub("", existing).strip() == body.strip():
         return existing
-    version = re.search(r"^Version: (.+)$", existing, re.M)
+    version = re.search(r"^Version: (.+)$", existing, re.MULTILINE)
     return (
         "<!--\nVersion: " + (version[1] if version else "0.1.0")
         + "\nVersion-Datetime: " + timestamp() + "\n-->\n\n"
