@@ -6,6 +6,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // 移动端用户侧 PWA：可安装、离线壳缓存；业务数据始终走网络
 export default defineConfig({
+  // 依赖预构建缓存放在本项目根目录，避免随共享 node_modules 被清理
+  cacheDir: '.vite',
   plugins: [
     vue(),
     Components({ resolvers: [VantResolver()] }),
@@ -16,8 +18,8 @@ export default defineConfig({
         name: '校园二手交易平台',
         short_name: '校园二手',
         description: '校园闲置物品发布、检索、沟通与交易记录',
-        theme_color: '#1989fa',
-        background_color: '#f7f8fa',
+        theme_color: '#2f6b4f',
+        background_color: '#eef1ee',
         display: 'standalone',
         start_url: '/',
         icons: [

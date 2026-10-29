@@ -12,6 +12,7 @@ __pycache__/
 # Node
 node_modules/
 dist/
+.vite/
 *.local
 
 # 运行期数据（数据库/本地对象存储/日志）
