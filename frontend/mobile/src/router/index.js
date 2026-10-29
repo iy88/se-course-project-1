@@ -18,6 +18,7 @@ const routes = [
     ],
   },
   { path: '/products/:id', component: () => import('../views/ProductDetail.vue') },
+  { path: '/products/:id/edit', component: () => import('../views/Publish.vue'), meta: { title: '编辑商品' } },
   { path: '/users/:id', component: () => import('../views/UserProfile.vue') },
   { path: '/trades/:id', component: () => import('../views/TradeDetail.vue') },
   { path: '/conversations/:id', component: () => import('../views/Chat.vue') },

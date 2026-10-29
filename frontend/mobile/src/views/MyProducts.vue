@@ -1,39 +1,220 @@
 <template>
-  <div>
-    <van-nav-bar title="我的商品" left-arrow @click-left="$router.back()" fixed placeholder />
-    <van-cell-group inset>
-      <van-cell v-for="p in products" :key="p.id" :title="p.title" is-link @click="$router.push(`/products/${p.id}`)">
-        <template #label>
-          <van-tag :type="statusType(p.status)" plain>{{ productStatusLabels[p.status] }}</van-tag>
-          <span v-if="p.reject_reason" style="color: #ee0a24; margin-left: 6px">原因：{{ p.reject_reason }}</span>
-          <span v-else style="margin-left: 6px; color: #969799">￥{{ fen2yuan(p.price_cents) }}</span>
-        </template>
-        <template #value>
-          <span v-if="p.pending_request_count" class="pending">待接受请求 {{ p.pending_request_count }}</span>
-        </template>
-      </van-cell>
-      <div v-if="!products.length" class="empty-tip">还没有发布过商品</div>
-    </van-cell-group>
+  <div class="history-page">
+    <AppNavBar title="我的商品" />
+
+    <div class="view">
+      <div v-if="error" class="error-banner">
+        <AppIcon name="alert" :size="18" />
+        <span class="error-banner__text">{{ error }}</span>
+        <van-button size="small" plain type="primary" @click="load">重新加载</van-button>
+      </div>
+
+      <div v-else-if="products.length" class="listing-list">
+        <article v-for="p in products" :key="p.id" class="surface listing-card">
+          <div class="listing-card__head">
+            <router-link :to="`/products/${p.id}`" class="listing-card__title">{{ p.title }}</router-link>
+            <span class="pill" :class="statusTone(p.status)">{{ productStatusLabels[p.status] }}</span>
+          </div>
+
+          <div class="listing-card__meta">
+            <span class="price price--sm"><span class="price__symbol">￥</span>{{ fen2yuan(p.price_cents) }}</span>
+            <span v-if="p.pending_request_count" class="pill pill--warn">待接受请求 {{ p.pending_request_count }}</span>
+          </div>
+
+          <p v-if="p.reject_reason" class="listing-card__reject">原因：{{ p.reject_reason }}</p>
+          <p v-if="p.status === 'delisted' && canResubmit(p)" class="listing-card__tip">可修改后重新提交审核</p>
+
+          <div v-if="canEdit(p) || p.can_withdraw_review === true || canResubmit(p)" class="listing-card__actions">
+            <van-button v-if="canEdit(p)" size="small" plain type="primary" @click="edit(p)">编辑</van-button>
+            <van-button
+              v-if="p.can_withdraw_review === true && !session.banned"
+              size="small"
+              plain
+              type="warning"
+              @click="withdraw(p)"
+            >
+              撤回审核
+            </van-button>
+            <van-button v-if="canResubmit(p)" size="small" plain type="primary" @click="edit(p, true)">
+              修改重提
+            </van-button>
+          </div>
+
+          <div class="listing-card__foot">
+            <router-link :to="`/products/${p.id}`" class="listing-card__link">
+              查看详情
+              <AppIcon name="chevron-right" :size="15" />
+            </router-link>
+          </div>
+        </article>
+      </div>
+
+      <EmptyState
+        v-else-if="loaded"
+        icon="box"
+        title="还没有发布过商品"
+      >
+        <van-button size="small" type="primary" @click="$router.push('/publish')">去发布</van-button>
+      </EmptyState>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onActivated, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { showConfirmDialog, showToast } from 'vant'
+import AppIcon from '../components/AppIcon.vue'
+import AppNavBar from '../components/AppNavBar.vue'
+import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
 import { fen2yuan, productStatusLabels } from '../api/labels'
+import { useSession } from '../stores/session'
 
+const router = useRouter()
+const session = useSession()
 const products = ref([])
-const statusType = (s) =>
-  ({ listed: 'primary', in_transaction: 'warning', delisted: 'default', pending_review: 'warning', rejected: 'danger' }[s] || 'default')
+const loaded = ref(false)
+const error = ref('')
 
-onMounted(async () => {
-  products.value = await http.get('/products/mine')
-})
+const statusTone = (s) =>
+  ({
+    listed: 'pill--brand',
+    in_transaction: 'pill--info',
+    delisted: '',
+    pending_review: 'pill--warn',
+    rejected: 'pill--danger',
+  }[s] || '')
+
+const canResubmit = (p) =>
+  !session.banned && (p.can_resubmit === true || (p.can_resubmit === undefined && p.status === 'rejected'))
+
+const canEdit = (p) =>
+  !session.banned && ['pending_review', 'listed', 'delisted'].includes(p.status) && !p.display_restricted && !canResubmit(p)
+
+async function load() {
+  error.value = ''
+  try {
+    products.value = await http.get('/products/mine')
+    loaded.value = true
+  } catch {
+    error.value = '商品列表加载失败，请检查网络后重试。'
+  }
+}
+
+function edit(p, resubmit = false) {
+  router.push(`/products/${p.id}/edit${resubmit ? '?resubmit=1' : ''}`)
+}
+
+async function withdraw(p) {
+  try {
+    await showConfirmDialog({
+      title: '撤回商品审核',
+      message: '仅管理员认领前可撤回；撤回后商品置为已下架，需修改后重新提交审核，不会直接上架。',
+    })
+  } catch {
+    return
+  }
+  try {
+    const data = await http.post(`/products/${p.id}/withdraw-review`)
+    showToast(data.detail || '已撤回审核并下架')
+  } catch {
+    // 失败不改本地状态；重新读取服务端当前状态与认领结果。
+  }
+  await load()
+}
+
+onMounted(load)
+onActivated(load)
 </script>
 
 <style scoped>
-.pending {
-  color: #ff976a;
+.history-page {
+  padding-bottom: calc(20px + var(--safe-bottom));
+}
+
+.listing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.listing-card {
+  padding: 13px 14px;
+}
+
+.listing-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.listing-card__title {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.listing-card__title:active {
+  color: var(--brand);
+}
+
+.listing-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.listing-card__reject {
+  margin: 6px 0 0;
+  color: var(--danger);
   font-size: 12px;
+  line-height: 1.5;
+}
+
+.listing-card__tip {
+  margin: 6px 0 0;
+  color: var(--brand-ink);
+  font-size: 12px;
+}
+
+.listing-card__actions + .listing-card__foot {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.listing-card__foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.listing-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--brand-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.listing-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 </style>

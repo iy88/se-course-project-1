@@ -1,56 +1,159 @@
 <template>
-  <div>
-    <van-nav-bar title="我的评价" left-arrow @click-left="$router.back()" fixed placeholder />
+  <div class="reviews-page">
+    <AppNavBar title="我的评价" />
+
     <van-tabs v-model:active="type" @change="load">
       <van-tab title="我发表的" name="published" />
       <van-tab title="我收到的" name="received" />
     </van-tabs>
-    <van-cell-group inset style="margin-top: 10px">
-      <div v-for="r in reviews" :key="r.id" class="review">
-        <div class="head">
-          <b>{{ r.other_party_name }}</b>
-          <van-rate :model-value="r.rating" readonly size="14" />
-        </div>
-        <div class="content">{{ r.content || '（未填写文字）' }}</div>
-        <div class="meta">交易#{{ r.trade_id }} · {{ fmtTime(r.created_at) }} <van-tag v-if="r.deleted">已处理</van-tag></div>
+
+    <div class="view">
+      <div v-if="error" class="error-banner">
+        <AppIcon name="alert" :size="18" />
+        <span class="error-banner__text">{{ error }}</span>
+        <van-button size="small" plain type="primary" @click="load">重新加载</van-button>
       </div>
-      <div v-if="!reviews.length" class="empty-tip">暂无评价</div>
-    </van-cell-group>
-    <van-notice-bar left-icon="info-o" text="评价仅在本人“我的评价”中查看，不公开展示；提交后不可自行修改或删除。" />
+
+      <div v-else-if="reviews.length" class="review-list">
+        <article v-for="r in reviews" :key="r.id" class="surface review-card">
+          <div class="review-card__head">
+            <span class="avatar-text review-card__avatar">{{ initialOf(r.other_party_name) }}</span>
+            <div class="review-card__who">
+              <span class="review-card__name">{{ r.other_party_name }}</span>
+              <span class="review-card__label">{{ type === 'published' ? '我发表的评价' : '我收到的评价' }}</span>
+            </div>
+            <van-rate :model-value="r.rating" readonly size="14" />
+          </div>
+
+          <p class="review-card__content">{{ r.content || '（未填写文字）' }}</p>
+
+          <div class="review-card__meta">
+            <span>交易 #{{ r.trade_id }}</span>
+            <span class="review-card__dot" aria-hidden="true">·</span>
+            <span>{{ fmtTime(r.created_at) }}</span>
+            <span v-if="r.deleted" class="pill review-card__deleted">已处理</span>
+          </div>
+        </article>
+      </div>
+
+      <EmptyState
+        v-else-if="loaded"
+        icon="comment"
+        title="暂无评价"
+      />
+
+      <div class="alert alert--info">
+        <AppIcon name="info" :size="16" />
+        <span>评价仅在本人“我的评价”中查看，不公开展示；提交后不可自行修改或删除。</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import AppIcon from '../components/AppIcon.vue'
+import AppNavBar from '../components/AppNavBar.vue'
+import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
 import { fmtTime } from '../api/labels'
 
 const reviews = ref([])
 const type = ref('published')
+const loaded = ref(false)
+const error = ref('')
+
+function initialOf(name) {
+  return name ? Array.from(name)[0] : '评'
+}
 
 async function load() {
-  reviews.value = await http.get('/me/reviews', { params: { type: type.value } })
+  error.value = ''
+  try {
+    reviews.value = await http.get('/me/reviews', { params: { type: type.value } })
+    loaded.value = true
+  } catch {
+    error.value = '评价加载失败，请稍后重试。'
+  }
 }
 
 onMounted(load)
 </script>
 
 <style scoped>
-.review {
-  padding: 10px 16px;
-  border-bottom: 1px solid #f2f3f5;
+.reviews-page {
+  padding-bottom: calc(20px + var(--safe-bottom));
 }
-.head {
+
+.review-list {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-card {
+  padding: 13px 14px;
+}
+
+.review-card__head {
+  display: flex;
   align-items: center;
+  gap: 9px;
 }
-.content {
-  margin: 6px 0;
-  font-size: 14px;
+
+.review-card__avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
 }
-.meta {
-  color: #969799;
-  font-size: 12px;
+
+.review-card__who {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.review-card__name {
+  font-size: 13.5px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-card__label {
+  color: var(--ink-meta);
+  font-size: 10.5px;
+}
+
+.review-card__content {
+  margin: 9px 0 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.review-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-meta);
+  font-size: 11.5px;
+}
+
+.review-card__dot {
+  color: var(--line-strong);
+}
+
+.review-card__deleted {
+  margin-left: 4px;
+  font-size: 10.5px;
 }
 </style>
