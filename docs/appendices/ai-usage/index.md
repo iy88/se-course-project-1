@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.17
-Version-Datetime: 2026-10-29T16:24:00+08:00
+Version: 0.2.18
+Version-Datetime: 2026-10-29T16:25:59+08:00
 -->
 
 # AI 使用档案索引
