@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.0
-' Version-Datetime: 2026-10-26T12:37:57+08:00
+' Version: 0.1.1
+' Version-Datetime: 2026-10-29T14:58:36+08:00
 title UC-10 · UC-C08 审核与处置沟通
 
 skinparam backgroundColor #FFFFFF
@@ -92,5 +92,6 @@ legend bottom
 核查、处置和审核限本人认领事项；同一事项仅一名认领人。
 禁发范围维护独立于商品事项；用户说明、申辩由认领管理员回复。
 商品审核与UC-C02同一次处理，依据提交结论时最新内容。
+平台管理员与认领管理员是同一角色R-04：认领后按事项归属称谓，不代表两个角色。
 endlegend
 @enduml

@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.0
-' Version-Datetime: 2026-10-26T12:37:57+08:00
+' Version: 0.1.1
+' Version-Datetime: 2026-10-29T14:58:36+08:00
 title UC-06 · UC-C04 收藏与咨询
 
 skinparam backgroundColor #FFFFFF
@@ -82,5 +82,6 @@ legend bottom
 收藏、评论与普通私聊是独立目标；普通私聊不以购买请求为前提。
 评论回复限该商品卖方；管理员移除与必要消息读取均限认领事项。
 交易IM按笔建立；普通IM、交易IM与管理沟通分别管理。
+认领管理员即R-04平台管理员在本人认领事项中的称谓，不是独立角色。
 endlegend
 @enduml
