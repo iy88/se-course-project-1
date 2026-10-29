@@ -1,51 +1,124 @@
 <template>
-  <el-card header="分类标签维护（单级多标签）">
-    <div class="toolbar">
-      <el-input v-model="newName" placeholder="新标签名称" style="width: 200px" />
-      <el-button type="primary" @click="create">创建公共标签</el-button>
-    </div>
-    <el-table :data="categories" v-loading="loading">
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column label="主名称" width="160">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'active' ? 'primary' : 'info'">{{ row.name }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="别名" min-width="200">
-        <template #default="{ row }">
-          <el-tag v-for="a in row.aliases" :key="a" closable type="info" style="margin-right: 6px" @close="removeAlias(row, a)">{{ a }}</el-tag>
-          <el-button size="small" text type="primary" @click="addAlias(row)">+别名</el-button>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="90">
-        <template #default="{ row }">{{ row.status === 'active' ? '启用' : '停用' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="240" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="rename(row)">改主名（旧名转别名）</el-button>
-          <el-button size="small" @click="toggleStatus(row)">{{ row.status === 'active' ? '停用' : '启用' }}</el-button>
-          <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-    <el-alert type="info" :closable="false" style="margin-top: 12px"
-      title="停用后新发布不能选择该标签；从未关联商品的标签可逻辑删除；改名后当前展示新名、历史保留旧名为别名。" />
-  </el-card>
+  <div class="page">
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">配置</p>
+        <h1>分类标签</h1>
+        <p class="sub">维护单级公共标签、别名与启停状态；停用后新发布不能选择该标签。</p>
+      </div>
+      <span class="result-count">共 {{ categories.length }} 个标签</span>
+    </header>
+
+    <el-card class="filter-card">
+      <div class="filter-bar">
+        <div class="filter-group">
+          <span class="filter-label">新标签</span>
+          <el-input
+            v-model="newName"
+            placeholder="输入新标签名称"
+            class="filter-input"
+            @keyup.enter="create"
+          />
+          <el-button type="primary" :loading="creating" @click="create">
+            <el-icon><AppIcon name="plus" /></el-icon>
+            创建公共标签
+          </el-button>
+        </div>
+      </div>
+    </el-card>
+
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon>
+      <template #default>
+        <el-button size="small" @click="load">重新加载</el-button>
+      </template>
+    </el-alert>
+
+    <el-card class="data-card">
+      <div class="table-scroll">
+        <el-table :data="categories" v-loading="loading" class="data-table" row-key="id">
+          <el-table-column prop="id" label="ID" width="64" />
+          <el-table-column label="主名称" width="168">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'active' ? 'primary' : 'info'" effect="light">{{ row.name }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="别名" min-width="230">
+            <template #default="{ row }">
+              <div class="alias-row">
+                <span v-for="a in row.aliases" :key="a" class="alias-chip">
+                  {{ a }}
+                  <button
+                    type="button"
+                    class="alias-remove"
+                    :aria-label="`移除别名 ${a}`"
+                    @click="removeAlias(row, a)"
+                  >
+                    <AppIcon name="close" :size="12" />
+                  </button>
+                </span>
+                <el-button size="small" text type="primary" @click="addAlias(row)">+ 别名</el-button>
+                <span v-if="!row.aliases?.length" class="muted-text">暂无别名</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="96">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'active' ? 'success' : 'info'" effect="plain">
+                {{ row.status === 'active' ? '启用' : '停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="268" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" @click="rename(row)">改主名</el-button>
+              <el-button size="small" @click="toggleStatus(row)">
+                {{ row.status === 'active' ? '停用' : '启用' }}
+              </el-button>
+              <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
+            </template>
+          </el-table-column>
+
+          <template #empty>
+            <div class="state-block">
+              <span class="state-icon"><AppIcon name="categories" :size="24" /></span>
+              <p class="state-title">暂无分类标签</p>
+              <el-button size="small" @click="load">刷新列表</el-button>
+            </div>
+          </template>
+        </el-table>
+      </div>
+    </el-card>
+
+    <el-alert
+      type="info"
+      :closable="false"
+      show-icon
+      title="停用后新发布不能选择该标签；从未关联商品的标签可逻辑删除；改名后当前展示新名、历史保留旧名为别名。"
+    />
+  </div>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api/http'
+import AppIcon from '../components/AppIcon.vue'
 
 const categories = ref([])
 const loading = ref(false)
+const creating = ref(false)
 const newName = ref('')
+const loadError = ref('')
+
+const serverDetail = (err) => (typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : '请求失败')
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
     categories.value = await http.get('/categories')
+  } catch (err) {
+    loadError.value = `分类列表加载失败：${serverDetail(err)}`
   } finally {
     loading.value = false
   }
@@ -53,42 +126,73 @@ async function load() {
 
 async function create() {
   if (!newName.value.trim()) return
-  await http.post('/categories', { name: newName.value })
-  ElMessage.success('已创建')
-  newName.value = ''
-  load()
+  creating.value = true
+  try {
+    await http.post('/categories', { name: newName.value })
+    ElMessage.success('已创建')
+    newName.value = ''
+    load()
+  } finally {
+    creating.value = false
+  }
 }
 
 async function rename(row) {
-  const { value } = await ElMessageBox.prompt('新的主名称（旧主名将保留为别名）', '修改主名', {
-    inputValue: row.name,
-  })
+  let value
+  try {
+    ;({ value } = await ElMessageBox.prompt('新的主名称（旧主名将保留为别名）', '修改主名', {
+      inputValue: row.name,
+    }))
+  } catch {
+    return
+  }
   await http.patch(`/categories/${row.id}`, { name: value })
   ElMessage.success('已修改')
   load()
 }
 
 async function toggleStatus(row) {
-  await http.patch(`/categories/${row.id}`, { status: row.status === 'active' ? 'disabled' : 'active' })
+  await http.patch(`/categories/${row.id}`, {
+    status: row.status === 'active' ? 'disabled' : 'active',
+  })
   load()
 }
 
 async function addAlias(row) {
-  const { value } = await ElMessageBox.prompt(`为「${row.name}」添加同义别名`, '新增别名')
+  let value
+  try {
+    ;({ value } = await ElMessageBox.prompt(`为「${row.name}」添加同义别名`, '新增别名'))
+  } catch {
+    return
+  }
   await http.post(`/categories/${row.id}/aliases`, { name: value })
   load()
 }
 
 async function removeAlias(row, alias) {
-  await ElMessageBox.confirm(`移除别名「${alias}」？不改变商品归属及历史。`, '移除别名')
-  const target = categories.value.find((c) => c.id === row.id)
-  // 后端按别名 ID 删除；此处先查列表拿不到 ID，直接按名称重建请求
-  await http.delete(`/categories/${row.id}/aliases/by-name?name=${encodeURIComponent(alias)}`).catch(() => null)
-  load()
+  try {
+    await ElMessageBox.confirm(
+      `移除别名「${alias}」？不改变商品归属及历史；移除后不再按该别名识别。`,
+      '移除别名',
+    )
+  } catch {
+    return
+  }
+  // 列表仅返回别名名称；按名称移除后必须重新读取，避免旧别名继续显示或被识别。
+  try {
+    await http.delete(`/categories/${row.id}/aliases/by-name?name=${encodeURIComponent(alias)}`)
+    ElMessage.success('别名已移除')
+  } finally {
+    await load()
+  }
 }
 
 async function remove(row) {
-  await ElMessageBox.confirm('仅从未关联商品的标签可删除，确认删除？', '删除标签', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm('仅从未关联商品的标签可删除，确认删除？', '删除标签', { type: 'warning' })
+  } catch {
+    return
+  }
   const resp = await http.delete(`/categories/${row.id}`)
   ElMessage.success(resp.detail)
   load()
@@ -98,9 +202,43 @@ onMounted(load)
 </script>
 
 <style scoped>
-.toolbar {
+.alias-row {
   display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.alias-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink-soft);
+  padding: 2px 4px 2px 8px;
+  font-size: 12px;
+}
+
+.alias-remove {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  padding: 2px;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.alias-remove:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.alias-remove:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
 }
 </style>
