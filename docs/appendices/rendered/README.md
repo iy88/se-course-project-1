@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.8
-Version-Datetime: 2026-10-28T19:49:20+08:00
+Version: 0.1.9
+Version-Datetime: 2026-10-29T16:36:24+08:00
 -->
 
 # 图源渲染索引
@@ -30,13 +30,13 @@ PNG 使用单一字体 PingFang SC（苹方），中文与西文均按该字体�
 | UC-01-系统用例图 | [PlantUML](../../appendices/models/UC-01-系统用例图.puml) | [PNG](UC-01-系统用例图.png) | 2040 × 2051 | 200 |
 | UC-02-子用例图 | [PlantUML](../../appendices/models/UC-02-子用例图.puml) | [PNG](UC-02-子用例图.png) | 2879 × 2635 | 200 |
 | UC-03-账户生命周期用例图 | [PlantUML](../../appendices/models/UC-03-账户生命周期用例图.puml) | [PNG](UC-03-账户生命周期用例图.png) | 962 × 1382 | 200 |
-| UC-04-发布与维护商品用例图 | [PlantUML](../../appendices/models/UC-04-发布与维护商品用例图.puml) | [PNG](UC-04-发布与维护商品用例图.png) | 1067 × 1922 | 200 |
+| UC-04-发布与维护商品用例图 | [PlantUML](../../appendices/models/UC-04-发布与维护商品用例图.puml) | [PNG](UC-04-发布与维护商品用例图.png) | 1067 × 1963 | 200 |
 | UC-05-检索商品用例图 | [PlantUML](../../appendices/models/UC-05-检索商品用例图.puml) | [PNG](UC-05-检索商品用例图.png) | 927 × 1066 | 200 |
-| UC-06-收藏与咨询用例图 | [PlantUML](../../appendices/models/UC-06-收藏与咨询用例图.puml) | [PNG](UC-06-收藏与咨询用例图.png) | 958 × 1543 | 200 |
+| UC-06-收藏与咨询用例图 | [PlantUML](../../appendices/models/UC-06-收藏与咨询用例图.puml) | [PNG](UC-06-收藏与咨询用例图.png) | 1030 × 1583 | 200 |
 | UC-07-请求与确认交易用例图 | [PlantUML](../../appendices/models/UC-07-请求与确认交易用例图.puml) | [PNG](UC-07-请求与确认交易用例图.png) | 1050 × 1708 | 200 |
 | UC-08-记录线下交付用例图 | [PlantUML](../../appendices/models/UC-08-记录线下交付用例图.puml) | [PNG](UC-08-记录线下交付用例图.png) | 1016 × 1014 | 200 |
 | UC-09-评价与举报用例图 | [PlantUML](../../appendices/models/UC-09-评价与举报用例图.puml) | [PNG](UC-09-评价与举报用例图.png) | 958 × 1106 | 200 |
-| UC-10-审核与处置沟通用例图 | [PlantUML](../../appendices/models/UC-10-审核与处置沟通用例图.puml) | [PNG](UC-10-审核与处置沟通用例图.png) | 958 × 1652 | 200 |
+| UC-10-审核与处置沟通用例图 | [PlantUML](../../appendices/models/UC-10-审核与处置沟通用例图.puml) | [PNG](UC-10-审核与处置沟通用例图.png) | 1205 × 1693 | 200 |
 | UC-11-了解商品状态用例图 | [PlantUML](../../appendices/models/UC-11-了解商品状态用例图.puml) | [PNG](UC-11-了解商品状态用例图.png) | 1045 × 685 | 200 |
 | UC-12-查看管理统计用例图 | [PlantUML](../../appendices/models/UC-12-查看管理统计用例图.puml) | [PNG](UC-12-查看管理统计用例图.png) | 900 × 670 | 200 |
 | UC-13-接收通知与待办用例图 | [PlantUML](../../appendices/models/UC-13-接收通知与待办用例图.puml) | [PNG](UC-13-接收通知与待办用例图.png) | 837 × 836 | 200 |

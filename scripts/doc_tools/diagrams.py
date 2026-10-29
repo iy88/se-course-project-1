@@ -2,13 +2,12 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
-import re
 import shutil
 import struct
 import subprocess
 import zlib
 
-from .common import PNG_SIGNATURE, timestamp, atomic_write, generated_markdown
+from .common import PNG_SIGNATURE, atomic_write, generated_markdown
 
 def png_chunks(data: bytes):
     if not data.startswith(PNG_SIGNATURE):
@@ -64,13 +63,11 @@ def render(root: Path, dpi: int, check: bool,
         record = sidecar.read_text() if sidecar.exists() else ""
         current = False
         if output.exists() and f"Source-SHA256: {digest}\n" in record:
-            _, _, physical_dpi = png_info(output.read_bytes())
-            current = physical_dpi is not None and abs(physical_dpi - dpi) < 0.1
-            current = current and f"PNG-SHA256: {hashlib.sha256(output.read_bytes()).hexdigest()}\n" in record
+            current = f"PNG-SHA256: {hashlib.sha256(output.read_bytes()).hexdigest()}\n" in record
         if current and not force:
             continue
         if check:
-            raise ValueError(f"Regenerate diagram at {dpi} DPI: {source.name}")
+            raise ValueError(f"Regenerate diagram: {source.name}")
         if not renderer:
             raise ValueError("PlantUML is required; use --plantuml to select its executable")
         env = {**os.environ, "PLANTUML_LIMIT_SIZE": "32768"}
@@ -83,13 +80,9 @@ def render(root: Path, dpi: int, check: bool,
             raise ValueError(source.name + ": " + result.stderr.decode(errors="replace")[:2000])
         data = png_resolution(result.stdout, dpi)
         width, height, _ = png_info(data)
-        source_version = re.search(
-            r"^'?\s*Version:\s*(\S+)\s*$", source.read_text(), re.M
-        )
-        version = re.search(r"^Version: (.+)$", record, re.M)
         record = (
-            f"Version: {source_version[1] if source_version else (version[1] if version else '0.1.0')}\nVersion-Datetime: {timestamp()}\n"
-            f"Source-SHA256: {digest}\nPNG-SHA256: {hashlib.sha256(data).hexdigest()}\nDPI: {dpi}\n"
+            f"Source-SHA256: {digest}\n"
+            f"PNG-SHA256: {hashlib.sha256(data).hexdigest()}\n"
         )
         pending.append((output, data, sidecar, record.encode()))
         print(f"Rendered {source.name}: {width} x {height}, {dpi} DPI", flush=True)
