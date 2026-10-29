@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.27
-Version-Datetime: 2026-10-28T22:21:36+08:00
+Version: 0.1.28
+Version-Datetime: 2026-10-29T13:42:14+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -9,9 +9,159 @@ Version-Datetime: 2026-10-28T22:21:36+08:00
 
 本分支保留后端 `backend/`、桌面管理端 `frontend/admin/` 和移动PWA `frontend/mobile/` 的开发实现，运行期数据位于被忽略的 `var/`。开发决策与运行入口见[开发阶段技术决策](bits/开发阶段技术决策.md)，开发档案见[AI-21](docs/appendices/ai-usage/AI-21-2026-10-25-开发阶段权限校验缺陷修复.md)及[AI-22](docs/appendices/ai-usage/AI-22-2026-10-25-开发阶段系统实现.md)。
 
-2026-10-28同步需求主线 `c4ee232`，A／B报告均已确认。既有代码基于此前需求基线；同步文档不表示代码已落实全部后续需求修订。历史测试结果沿用各档案的实际范围，本次合并不登记新的功能验收。下文需求阶段范围约束适用于需求材料维护，开发实现状态另按本分支记录说明。
+2026-10-28同步需求主线 `c4ee232`，A／B报告均已确认。随后按合并后的需求开展三端实现对齐、隔离副本并行开发和多轮代码审查；需求对应实现、修复轮次及实际验证结果见[需求同步并行修改计划](bits/需求同步并行修改计划.md)，本轮开发档案见[AI-23](docs/appendices/ai-usage/AI-23-2026-10-28-合并后实现对齐与并行审查.md)。历史测试及人工核验仅代表各自记录的范围，本轮自动化回归不替代系统人工验收。下文需求阶段范围约束适用于需求材料维护。
 
 本目录保存校园二手交易与物品流转平台的需求分析交付材料。全部14个主用例、14个用户故事及16个领域类均有独立详细文档。01—08按顺序构成需求规格说明书正文，详细材料以各目录索引为入口；正文详细展开关键US、UC、类及SC并展示关键图。需求正文及US／UC／SC／领域类分析已于2026-10-23获项目负责人确认，BR／TR已讨论接受；确认范围见[需求基线](docs/requirements/08-需求基线.md)。
+
+## 项目运行与配置
+
+### 环境与目录
+
+本节适用于 `llm-test-only` 分支的开发实现。准备 Python 3.12及以上、uv、Node.js 22及以上及npm；Python依赖由 [uv.lock](backend/uv.lock) 固定，两个前端分别使用各自的 `package-lock.json`。以下步骤从仓库根目录开始，三个服务分别在独立终端运行。
+
+| 服务／数据 | 位置 | 本地地址／用途 |
+|---|---|---|
+| FastAPI后端 | `backend/` | `http://127.0.0.1:8000`；业务API前缀 `/api/v1` |
+| 移动用户端 | `frontend/mobile/` | `http://localhost:5173`；移动布局及PWA |
+| 桌面管理端 | `frontend/admin/` | `http://localhost:5174`；审核、共享处理池及管理处置 |
+| SQLite数据库 | `var/db/app.db` | 启动时自动建表，已有SQLite库增量补齐冻结计时字段 |
+| 本地图片存储 | `var/storage/` | 上传图片，经后端签名URL访问 |
+
+`var/`、`.env`、虚拟环境、`node_modules/`及构建目录均由Git忽略。保留已有数据库和图片目录即可保留业务数据，不需要为升级删除数据库。
+
+### 后端配置
+
+配置定义见 [config.py](backend/app/core/config.py)。环境变量优先于 `.env`，未设置的项采用代码默认值；修改后重启后端。配置文件按**启动时的工作目录**查找，因此下列命令统一在 `backend/` 内执行，配置文件放 `backend/.env`，不放仓库根目录。
+
+先从[配置示例](backend/.env.example)创建本地配置，在 `backend/` 目录执行：
+
+```bash
+# -n 保留已经存在的 .env
+cp -n .env.example .env
+```
+
+示例默认使用无Redis的本地开发模式，关键配置为：
+
+```dotenv
+ENVIRONMENT=dev
+REDIS_URL=
+STORAGE_BACKEND=local
+DEV_EXPOSE_VERIFICATION_CODE=true
+```
+
+不要覆盖已有 `.env`；按需要合并这些配置。留空 `REDIS_URL` 使用进程内KV，验证码与频控状态会在进程重启时丢失。若使用Redis，改为 `REDIS_URL=redis://127.0.0.1:6379/0` 并先启动对应服务；默认值就是该地址。已配置Redis时连接失败会导致相关请求报错，不应把它当成自动切换到内存模式。
+
+| 环境变量 | 默认值 | 说明 |
+|---|---|---|
+| `APP_NAME` | `CampusMarket API` | 应用及健康检查名称 |
+| `ENVIRONMENT` | `dev` | 开发验证码返回条件之一；改为 `prod` 不会自动接入生产服务 |
+| `DATABASE_URL` | 仓库内 `var/db/app.db` 的绝对SQLite URL | 格式为 `sqlite+aiosqlite:///...`；本期仅实现SQLite |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` | 非空使用Redis，空字符串使用内存KV |
+| `STORAGE_BACKEND` | `local` | 使用本地存储；`oss`仅接口桩，不能作为可用配置 |
+| `STORAGE_LOCAL_ROOT` | 仓库内 `var/storage` 的绝对路径 | 自定义相对路径按后端启动目录解析 |
+| `JWT_SECRET` | 代码中的固定开发值 | 登录令牌签名密钥；共享环境中替换为独立随机值，HS256至少32字节 |
+| `JWT_ALGORITHM`／`JWT_EXPIRE_DAYS` | `HS256`／`7` | 令牌签名算法及有效天数 |
+| `FILE_URL_SECRET`／`FILE_URL_EXPIRE_SECONDS` | 固定开发值／`3600` | 图片URL签名密钥及有效秒数；密钥单独生成 |
+| `DEV_EXPOSE_VERIFICATION_CODE` | `true` | 仅与 `ENVIRONMENT=dev` 同时满足时返回 `dev_code` |
+| `TRADE_CONFIRM_TIMEOUT_DAYS` | `7` | 单方完成确认的有效等待天数，冻结期间暂停累计 |
+| `TIMEOUT_SCAN_INTERVAL_SECONDS` | `60` | 后台超时扫描间隔秒数 |
+| `COMMENT_MAX_LENGTH` | `500` | 评论长度上限 |
+| `COMMENT_RATE_LIMIT_COUNT`／`COMMENT_RATE_LIMIT_SECONDS` | `3`／`60` | 每用户评论允许次数／窗口秒数 |
+
+自定义数据库绝对路径示例为 `DATABASE_URL=sqlite+aiosqlite:////srv/campus/app.db`；自定义相对数据库路径按后端启动目录解析。未配置数据库与存储路径时，默认路径直接由仓库位置计算。
+
+可在后端依赖安装后运行以下命令生成一个随机密钥，分别生成两次后将结果填入 `JWT_SECRET` 和 `FILE_URL_SECRET`：
+
+```bash
+uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+前端沿用同源 `/api` 与 `/ws` 代理访问后端。
+
+当前没有真实邮件发送通道。开发模式的注册、找回密码和换邮箱通过接口返回的 `dev_code` 联调，界面会显示开发验证码；新用户注册仍须先获取并提交正确验证码。关闭该开关仅停止返回验证码，不会启用真实发信。
+
+### 安装、初始化与启动
+
+终端一：安装后端依赖、初始化演示数据并启动API。
+
+```bash
+cd backend
+uv sync --locked
+uv run python -m app.seed
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+种子脚本创建管理员、初始分类、禁发条目、演示用户及4件示例商品；按脚本中的账号／名称／标题检查已存在数据并跳过，不重置已有账号密码。仅需首次初始化或补齐演示数据时运行；后续直接启动API。演示数据直接写入，不代表真实邮箱验证或人工审核。
+
+| 用途 | 邮箱 | 初始密码 |
+|---|---|---|
+| 管理员（管理端登录） | `admin@campus.edu` | `admin123456` |
+| 张同学（移动端登录） | `zhang@campus.edu` | `secret123` |
+| 李同学（移动端登录） | `li@campus.edu` | `secret123` |
+| 王同学（移动端登录） | `wang@campus.edu` | `secret123` |
+
+终端二：从仓库根目录启动桌面管理端。
+
+```bash
+cd frontend/admin
+npm ci
+npm run dev -- --strictPort
+```
+
+终端三：从仓库根目录启动移动用户端。
+
+```bash
+cd frontend/mobile
+npm ci
+npm run dev -- --strictPort
+```
+
+依赖已安装且锁文件未变化时，可直接运行各端启动命令。`--strictPort` 在指定端口被占用时直接报错，避免Vite自动改端口后访问错服务。前端当前不读取 `VITE_API_URL` 等环境变量，API统一使用同源 `/api/v1`，WebSocket使用同源 `/ws`；两端 [Vite配置](frontend/mobile/vite.config.js)及[管理端配置](frontend/admin/vite.config.js)将 `/api` 和 `/ws` 代理到本机8000端口。更换后端地址／端口时，同时修改两端代理目标并重启Vite。
+
+后端启动后可检查：
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+交互式API文档为 `http://127.0.0.1:8000/docs`，OpenAPI描述为 `/openapi.json`。管理端从共享池认领事项后处理；私人交易读取与处置须使用本人认领且真正关联的事项，不能把管理员登录或先前商品审核当作任意交易权限。
+
+### 前端开发缓存与排错
+
+两端 Vite 的依赖预构建缓存分别位于各自项目根目录：`frontend/admin/.vite/`、`frontend/mobile/.vite/`。该目录已被 `.gitignore` 忽略，不写入共享或重装的 `node_modules`。安装或更新依赖前先停止对应端的 Vite 开发服务，完成后重新启动；不要依赖旧开发服务继续使用重新安装前的预构建结果。若出现 `504 Outdated Optimize Dep`，停止并重新启动对应端 Vite。浏览器仍持有旧页面资源时，刷新当前页面即可更新该页缓存。
+
+### 回归、构建与预览
+
+各命令分别从仓库根目录执行：
+
+```bash
+# 后端测试：临时SQLite、内存KV及临时图片目录
+(cd backend && uv run pytest -q)
+
+# 移动端生产构建
+(cd frontend/mobile && npm run build)
+
+# 管理端生产构建
+(cd frontend/admin && npm run build)
+```
+
+构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。本轮需求对齐后的自动化验证结果见[并行修改与审查计划](bits/需求同步并行修改计划.md)；命令构建通过与人工功能验收分别记录。
+
+先启动后端，再在两个独立终端预览构建产物：
+
+```bash
+(cd frontend/mobile && npm run preview -- --port 4173 --strictPort)
+```
+
+```bash
+(cd frontend/admin && npm run preview -- --port 4174 --strictPort)
+```
+
+Vite预览沿用现有开发代理，可在本机联调；正式托管静态产物时需自行配置 `/api` 的HTTP反向代理、`/ws` 的WebSocket升级，以及前端路由回退到 `index.html`。两端均使用根路径，宜用不同域名或端口提供各自根目录，不直接拼接到同一站点的任意子路径。移动端PWA的Service Worker由生产构建生成，安装与缓存需在HTTPS或localhost安全上下文验证；业务操作仍依赖在线API。
+
+局域网手机访问时，可使用 `npm run dev -- --host 0.0.0.0 --strictPort`，手机访问开发机IP的5173端口；代理仍由开发机连接本机后端。普通局域网HTTP可用于页面联调，但不等于已满足PWA安装条件。
+
+当前运行方案面向单进程开发：WebSocket连接管理在进程内，内存KV亦不跨进程共享，后台扫描随后端启动。MySQL、OSS、真实邮件与多实例广播尚未实现，不因静态构建成功就视为生产部署完成。
 
 ## 成员分工
 
