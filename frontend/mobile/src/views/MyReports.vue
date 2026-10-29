@@ -1,20 +1,21 @@
 <template>
   <div class="reports-page">
-    <AppNavBar title="我的举报 / 我收到的举报" />
+    <AppNavBar title="举报记录" />
 
     <van-tabs v-model:active="tab">
       <van-tab title="我的举报" name="mine" />
       <van-tab title="我收到的" name="received" />
+      <van-tab title="公开结果" name="public" />
     </van-tabs>
 
     <div class="view">
-      <div v-if="error" class="error-banner">
-        <AppIcon name="alert" :size="18" />
-        <span class="error-banner__text">{{ error }}</span>
-        <van-button size="small" plain type="primary" @click="load">重新加载</van-button>
-      </div>
+      <template v-if="tab === 'mine'">
+        <div v-if="mineError" class="error-banner">
+          <AppIcon name="alert" :size="18" />
+          <span class="error-banner__text">{{ mineError }}</span>
+          <van-button size="small" plain type="primary" :loading="mineLoading" @click="loadMine">重试</van-button>
+        </div>
 
-      <template v-else-if="tab === 'mine'">
         <div v-if="mine.length" class="report-list">
           <article v-for="r in mine" :key="r.id" class="surface report-card">
             <div class="report-card__head">
@@ -28,31 +29,70 @@
             <div v-if="r.result_confirmed" class="report-card__result">
               <span class="report-card__label">处理结论</span>
               <p>{{ r.public_result || '—' }}</p>
-              <van-button
-                v-if="r.case_id && r.status === 'processing' && session.user?.status !== 'banned'"
-                size="small"
-                plain
-                type="primary"
-                @click="supplement(r)"
-              >
-                补充说明
-              </van-button>
             </div>
 
             <div v-for="s in r.supplements" :key="s.id" class="report-card__supplement">
               补充：{{ s.content }}
             </div>
+
+            <div v-if="supplement.reportId === r.id" class="report-card__editor">
+              <van-field
+                v-model="supplement.content"
+                type="textarea"
+                label="补充内容"
+                :rows="3"
+                maxlength="2000"
+                show-word-limit
+                :disabled="supplement.submitting"
+                placeholder="补充说明或证据（必填，最多 2000 字）"
+              />
+              <p v-if="supplement.error" class="report-card__error">{{ supplement.error }}</p>
+              <div class="report-card__editor-actions">
+                <van-button size="small" :disabled="supplement.submitting" @click="closeSupplement">取消</van-button>
+                <van-button
+                  size="small"
+                  type="primary"
+                  :loading="supplement.submitting"
+                  :disabled="supplement.submitting || !supplement.content.trim()"
+                  @click="submitSupplement"
+                >
+                  提交
+                </van-button>
+              </div>
+            </div>
+            <van-button
+              v-else-if="canSupplement(r)"
+              size="small"
+              plain
+              type="primary"
+              class="report-card__supplement-btn"
+              @click="openSupplement(r)"
+            >
+              补充说明
+            </van-button>
           </article>
         </div>
 
+        <div v-else-if="mineLoading" class="tab-loading">
+          <van-loading size="18" />
+        </div>
+
         <EmptyState
-          v-else-if="loaded"
+          v-else-if="mineLoaded && !mineError"
           icon="shield"
           title="暂无举报记录"
         />
       </template>
 
-      <template v-else>
+      <template v-else-if="tab === 'received'">
+        <div v-if="receivedError" class="error-banner">
+          <AppIcon name="alert" :size="18" />
+          <span class="error-banner__text">{{ receivedError }}</span>
+          <van-button size="small" plain type="primary" :loading="receivedLoading" @click="loadReceived">
+            重试
+          </van-button>
+        </div>
+
         <div v-if="received.length" class="report-list">
           <template v-for="r in received" :key="r.id">
             <router-link v-if="r.case_id" :to="`/cases/${r.case_id}`" class="surface report-card report-card--link">
@@ -77,20 +117,69 @@
           </template>
         </div>
 
+        <div v-else-if="receivedLoading" class="tab-loading">
+          <van-loading size="18" />
+        </div>
+
         <EmptyState
-          v-else-if="loaded"
+          v-else-if="receivedLoaded && !receivedError"
           icon="info"
           title="暂无我收到的举报"
-          hint="仅显示已实际处置的事项；问询阶段请从问询通知进入。"
         />
+      </template>
+
+      <template v-else>
+        <div v-if="publicError" class="error-banner">
+          <AppIcon name="alert" :size="18" />
+          <span class="error-banner__text">{{ publicError }}</span>
+          <van-button size="small" plain type="primary" :loading="publicLoading" @click="retryPublic">
+            重试
+          </van-button>
+        </div>
+
+        <div v-if="publicItems.length" class="report-list">
+          <article v-for="r in publicItems" :key="r.id" class="surface report-card">
+            <div class="report-card__head">
+              <span class="report-card__target">{{ targetTypeLabel(r.target_type) }}</span>
+              <span class="pill" :class="statusTone(r.status)">{{ reportStatusLabels[r.status] || r.status }}</span>
+              <span class="report-card__time">{{ fmtTime(r.closed_at) || '—' }}</span>
+            </div>
+            <p class="report-card__reason">
+              <span class="report-card__label">结果</span>{{ r.public_result || '—' }}
+            </p>
+          </article>
+        </div>
+
+        <div v-else-if="publicLoading" class="tab-loading">
+          <van-loading size="18" />
+        </div>
+
+        <EmptyState
+          v-else-if="publicLoaded && !publicError"
+          icon="shield"
+          title="暂无公开结果"
+        />
+
+        <van-button
+          v-if="publicLoaded && publicItems.length && publicHasMore && !publicError"
+          class="public-more"
+          block
+          plain
+          type="primary"
+          :loading="publicLoading"
+          :disabled="publicLoading"
+          @click="loadPublic(false)"
+        >
+          加载更多
+        </van-button>
       </template>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
-import { showDialog } from 'vant'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -98,12 +187,29 @@ import http from '../api/http'
 import { fmtTime, reportStatusLabels } from '../api/labels'
 import { useSession } from '../stores/session'
 
+const PAGE_SIZE = 20
+
+const session = useSession()
 const tab = ref('mine')
 const mine = ref([])
 const received = ref([])
-const session = useSession()
-const error = ref('')
-const loaded = ref(false)
+const publicItems = ref([])
+const supplement = reactive({ reportId: null, content: '', error: '', submitting: false })
+
+const mineLoading = ref(false)
+const receivedLoading = ref(false)
+const publicLoading = ref(false)
+
+const mineLoaded = ref(false)
+const receivedLoaded = ref(false)
+const publicLoaded = ref(false)
+
+const mineError = ref('')
+const receivedError = ref('')
+const publicError = ref('')
+
+const publicOffset = ref(0)
+const publicHasMore = ref(true)
 
 const statusTone = (s) =>
   ({
@@ -113,29 +219,153 @@ const statusTone = (s) =>
     handled: 'pill--ok',
   }[s] || '')
 
-async function load() {
-  error.value = ''
+const targetTypeLabels = {
+  product: '商品',
+  comment: '评论',
+  message: '消息',
+  review: '评价',
+  user: '用户',
+}
+const targetTypeLabel = (type) => targetTypeLabels[type] || type
+
+function errorText(err, fallback) {
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (!item || typeof item !== 'object') return ''
+        const message = item.msg || item.message
+        if (typeof message !== 'string' || !message.trim()) return ''
+        const field = Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : ''
+        return field ? `${field}：${message}` : message
+      })
+      .filter(Boolean)
+    if (messages.length) return messages.join('；')
+    return fallback
+  }
+  if (detail && typeof detail === 'object') {
+    const message = detail.msg || detail.message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return fallback
+}
+
+async function loadMine() {
+  if (mineLoading.value) return
+  mineLoading.value = true
+  mineError.value = ''
   try {
     mine.value = await http.get('/reports/mine')
-    received.value = await http.get('/reports/received')
-    loaded.value = true
+    mineLoaded.value = true
   } catch {
-    error.value = '举报记录加载失败，请稍后重试。'
+    mineError.value = '我的举报加载失败，请稍后重试。'
+  } finally {
+    mineLoading.value = false
   }
 }
 
-async function supplement(r) {
-  const { value } = await showDialog({
-    title: '补充说明或证据',
-    message: '同一事项内补充，结案后不再接受。',
-    showCancelButton: true,
-  }).catch(() => ({ value: null }))
-  if (!value) return
-  await http.post(`/reports/${r.id}/supplements`, { content: value })
-  load()
+async function loadReceived() {
+  if (receivedLoading.value) return
+  receivedLoading.value = true
+  receivedError.value = ''
+  try {
+    received.value = await http.get('/reports/received')
+    receivedLoaded.value = true
+  } catch {
+    receivedError.value = '我收到的举报加载失败，请稍后重试。'
+  } finally {
+    receivedLoading.value = false
+  }
 }
 
-onMounted(load)
+async function loadPublic(reset = false) {
+  if (publicLoading.value) return
+  if (reset) {
+    publicItems.value = []
+    publicOffset.value = 0
+    publicLoaded.value = false
+    publicHasMore.value = true
+  }
+  if (!publicHasMore.value && !reset) return
+  publicLoading.value = true
+  publicError.value = ''
+  try {
+    const batch = await http.get('/reports/public', {
+      params: { offset: publicOffset.value, limit: PAGE_SIZE },
+    })
+    const rows = Array.isArray(batch) ? batch : []
+    const seen = new Set(publicItems.value.map((item) => item.id))
+    const fresh = rows.filter((item) => item && !seen.has(item.id))
+    publicItems.value = [...publicItems.value, ...fresh]
+    publicOffset.value += rows.length
+    // 空批次或整批均为已加载条目时不再提供“加载更多”，避免重复与死循环。
+    publicHasMore.value = rows.length === PAGE_SIZE && fresh.length > 0
+    publicLoaded.value = true
+  } catch {
+    publicError.value = '公开结果加载失败，请稍后重试。'
+  } finally {
+    publicLoading.value = false
+  }
+}
+
+function retryPublic() {
+  loadPublic(publicItems.value.length === 0)
+}
+
+function canSupplement(report) {
+  return ['pending', 'processing'].includes(report.status) && session.user?.status !== 'banned'
+}
+
+function openSupplement(report) {
+  if (supplement.submitting) return
+  supplement.reportId = report.id
+  supplement.content = ''
+  supplement.error = ''
+}
+
+function closeSupplement() {
+  if (supplement.submitting) return
+  supplement.reportId = null
+  supplement.content = ''
+  supplement.error = ''
+}
+
+async function submitSupplement() {
+  if (!supplement.reportId || supplement.submitting) return
+  const content = supplement.content.trim()
+  if (!content) {
+    supplement.error = '请填写补充内容后再提交。'
+    return
+  }
+  if (content.length > 2000) {
+    supplement.error = '补充内容最多 2000 字。'
+    return
+  }
+  const reportId = supplement.reportId
+  supplement.submitting = true
+  supplement.error = ''
+  try {
+    await http.post(`/reports/${reportId}/supplements`, { content })
+    showToast('补充已提交')
+    supplement.reportId = null
+    supplement.content = ''
+    await loadMine()
+  } catch (err) {
+    supplement.error = errorText(err, '补充提交失败，请稍后重试。')
+  } finally {
+    supplement.submitting = false
+  }
+}
+
+watch(tab, (value) => {
+  if (value === 'mine' && !mineLoaded.value && !mineLoading.value) loadMine()
+  if (value === 'received' && !receivedLoaded.value && !receivedLoading.value) loadReceived()
+  if (value === 'public' && !publicLoaded.value && !publicLoading.value) loadPublic(true)
+})
+
+onMounted(loadMine)
 </script>
 
 <style scoped>
@@ -222,6 +452,34 @@ onMounted(load)
   line-height: 1.55;
 }
 
+.report-card__supplement-btn {
+  margin-top: 9px;
+}
+
+.report-card__editor {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.report-card__editor :deep(.van-field) {
+  padding: 7px 0;
+}
+
+.report-card__error {
+  margin: 4px 0 0;
+  color: var(--danger, #b3261e);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.report-card__editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .report-card__foot {
   display: flex;
   align-items: center;
@@ -233,5 +491,15 @@ onMounted(load)
 
 .report-card__arrow {
   color: var(--ink-faint);
+}
+
+.tab-loading {
+  display: flex;
+  justify-content: center;
+  padding: 26px 0;
+}
+
+.public-more {
+  margin-top: 12px;
 }
 </style>

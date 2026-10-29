@@ -451,7 +451,29 @@ const tradeWaitText = computed(() => {
   return '无'
 })
 
-const serverDetail = (err) => err?.response?.data?.detail || '请求失败'
+const serverDetail = (err) => {
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (!item || typeof item !== 'object') return ''
+        const message = item.msg || item.message
+        if (typeof message !== 'string' || !message.trim()) return ''
+        const field = Array.isArray(item.loc) ? item.loc.filter((part) => part !== 'body').join('.') : ''
+        return field ? `${field}：${message}` : message
+      })
+      .filter(Boolean)
+    if (messages.length) return messages.join('；')
+    return '请求失败'
+  }
+  if (detail && typeof detail === 'object') {
+    const message = detail.msg || detail.message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return '请求失败'
+}
 
 async function load(keepActionError = false) {
   loading.value = true
@@ -584,7 +606,12 @@ async function restoreDisplay() {
   }
 }
 
-const roleLabel = (r) => ({ admin: '管理员', user: '用户', system: '系统' }[r] || r)
+const roleLabel = (r) => {
+  if (r === 'user' && ['trade_dispute', 'abnormal_trade'].includes(detail.value?.case_type)) {
+    return '交易参与方'
+  }
+  return ({ admin: '管理员', user: '用户', system: '系统' }[r] || r)
+}
 const kindLabel = (k) =>
   ({ inquiry: '问询', statement: '说明', appeal: '申辩', reply: '回复', notice: '留痕' }[k] || k)
 const fmtDuration = (seconds) => {

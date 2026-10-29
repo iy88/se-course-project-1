@@ -4,9 +4,6 @@
       <div>
         <p class="eyebrow">治理</p>
         <h1>商品管理</h1>
-        <p class="sub">
-          管理端不提供全量商品浏览；商品内容通过认领的审核或举报事项查看，分类纠正针对具体商品执行。
-        </p>
       </div>
     </header>
 
@@ -14,21 +11,87 @@
       <template #header>
         <div class="card-head-row">
           <div>
-            <span class="card-title">商品检索范围</span>
+            <span class="card-title">公开商品搜索</span>
           </div>
         </div>
       </template>
       <div class="filter-bar">
         <div class="filter-group">
-          <span class="filter-label">检索</span>
+          <span class="filter-label">搜索</span>
           <el-input
             v-model="keyword"
-            placeholder="管理端不提供按商品内容检索"
-            disabled
+            placeholder="搜索商品名称、描述或标签"
+            clearable
+            maxlength="100"
             class="filter-input product-search"
+            @keyup.enter="submitSearch"
+            @clear="clearSearch"
           />
         </div>
-        <span class="result-count">仅通过事项查看商品</span>
+        <el-button type="primary" :loading="searchLoading" :disabled="searchLoading" @click="submitSearch">
+          搜索
+        </el-button>
+        <el-button :disabled="!keyword && !hasSearched" @click="clearSearch">清空</el-button>
+        <span v-if="hasSearched && !searchError" class="result-count">共 {{ searchTotal }} 件</span>
+      </div>
+
+      <el-alert
+        v-if="searchError"
+        :title="searchError"
+        type="error"
+        :closable="false"
+        show-icon
+        class="search-alert"
+      >
+        <template #default>
+          <el-button size="small" :loading="searchLoading" @click="searchProducts(searchPage)">重试</el-button>
+        </template>
+      </el-alert>
+
+      <div v-if="hasSearched && !searchError" v-loading="searchLoading" class="search-results">
+        <el-table v-if="searchItems.length" :data="searchItems" row-key="id" size="small" border>
+          <el-table-column label="商品" min-width="220">
+            <template #default="{ row }">
+              <div class="product-title">{{ row.title }}</div>
+              <span class="product-id">#{{ row.id }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="价格" width="100">
+            <template #default="{ row }">{{ fmtPrice(row.price_cents) }}</template>
+          </el-table-column>
+          <el-table-column label="标签" min-width="150">
+            <template #default="{ row }">{{ row.tag_names?.join('、') || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="发布者" width="120">
+            <template #default="{ row }">{{ row.seller_name || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="发布时间" width="170">
+            <template #default="{ row }">{{ fmtTime(row.created_at) || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" type="primary" plain :disabled="searchLoading" @click="pickProduct(row)">
+                填入 ID
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <el-empty
+          v-else-if="!searchLoading && !searchError"
+          :description="searchMessage || '未找到公开可交易商品'"
+        />
+
+        <el-pagination
+          v-if="searchTotal > searchPageSize"
+          class="search-pagination"
+          layout="total, prev, pager, next"
+          :current-page="searchPage"
+          :page-size="searchPageSize"
+          :total="searchTotal"
+          :disabled="searchLoading"
+          @current-change="searchProducts"
+        />
       </div>
     </el-card>
 
@@ -81,11 +144,10 @@
               placeholder="纠正原因（必填，将通知卖方）"
             />
           </el-form-item>
-          <el-form-item class="span-2 submit-row">
+          <el-form-item class="span-2">
             <el-button type="primary" :loading="submitting" @click="submitCorrection">
               执行纠正
             </el-button>
-            <span class="inline-note">纠正会记录依据并通知卖方；不改变商品其他状态。</span>
           </el-form-item>
         </div>
       </el-form>
@@ -97,8 +159,12 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import http from '../api/http'
+import { fmtTime } from '../api/time'
+
+const PAGE_SIZE = 10
 
 const keyword = ref('')
+const committedKeyword = ref('')
 const categories = ref([])
 const categoriesLoading = ref(false)
 const categoriesError = ref('')
@@ -106,7 +172,18 @@ const actionError = ref('')
 const submitting = ref(false)
 const correctForm = reactive({ product_id: null, category_ids: [], reason: '' })
 
+const searchItems = ref([])
+const searchTotal = ref(0)
+const searchPage = ref(1)
+const searchPageSize = ref(PAGE_SIZE)
+const searchLoading = ref(false)
+const searchError = ref('')
+const searchMessage = ref('')
+const hasSearched = ref(false)
+let searchRequestId = 0
+
 const serverDetail = (err) => (typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : '请求失败')
+const fmtPrice = (cents) => `￥${(Number(cents || 0) / 100).toFixed(2)}`
 
 async function loadCategories() {
   categoriesLoading.value = true
@@ -120,6 +197,57 @@ async function loadCategories() {
   }
 }
 
+async function searchProducts(page = 1) {
+  const targetPage = Math.max(1, Number(page) || 1)
+  const requestId = ++searchRequestId
+  hasSearched.value = true
+  searchLoading.value = true
+  searchError.value = ''
+  try {
+    const params = { page: targetPage, page_size: searchPageSize.value }
+    if (committedKeyword.value) params.keyword = committedKeyword.value
+    const data = await http.get('/products/search', { params })
+    // 只接收最后一次请求的结果，避免较慢的旧响应覆盖新搜索结果。
+    if (requestId !== searchRequestId) return
+    searchItems.value = Array.isArray(data?.items) ? data.items : []
+    searchTotal.value = Number(data?.total) || 0
+    searchPage.value = targetPage
+    searchMessage.value = data?.message || ''
+  } catch (err) {
+    if (requestId !== searchRequestId) return
+    searchItems.value = []
+    searchTotal.value = 0
+    searchPage.value = targetPage
+    searchMessage.value = ''
+    searchError.value = `公开商品搜索失败：${serverDetail(err)}`
+  } finally {
+    if (requestId === searchRequestId) searchLoading.value = false
+  }
+}
+
+function submitSearch() {
+  committedKeyword.value = keyword.value.trim()
+  searchProducts(1)
+}
+
+function clearSearch() {
+  searchRequestId += 1
+  keyword.value = ''
+  committedKeyword.value = ''
+  searchItems.value = []
+  searchTotal.value = 0
+  searchPage.value = 1
+  searchMessage.value = ''
+  searchError.value = ''
+  hasSearched.value = false
+  searchLoading.value = false
+}
+
+function pickProduct(row) {
+  correctForm.product_id = row.id
+  ElMessage.success(`已选择商品 #${row.id}`)
+}
+
 async function submitCorrection() {
   if (!correctForm.product_id || !correctForm.category_ids.length || !correctForm.reason.trim()) {
     return ElMessage.warning('请完整填写商品 ID、分类与纠正原因')
@@ -129,7 +257,7 @@ async function submitCorrection() {
   try {
     await http.post(`/admin/products/${correctForm.product_id}/correct-category`, {
       category_ids: correctForm.category_ids,
-      reason: correctForm.reason,
+      reason: correctForm.reason.trim(),
     })
     ElMessage.success('分类纠正完成并通知卖方')
     correctForm.reason = ''
@@ -145,7 +273,43 @@ onMounted(loadCategories)
 
 <style scoped>
 .product-search {
-  width: 420px;
+  width: min(420px, 100%);
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.search-results {
+  margin-top: 14px;
+  min-height: 72px;
+}
+
+.search-alert {
+  margin-top: 12px;
+}
+
+.search-pagination {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.result-count {
+  color: var(--ink-meta);
+  font-size: 12px;
+}
+
+.product-title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.product-id {
+  color: var(--ink-meta);
+  font-size: 11.5px;
 }
 
 .category-alert {
@@ -158,12 +322,6 @@ onMounted(loadCategories)
 
 .full-control :deep(.el-input__wrapper) {
   width: 100%;
-}
-
-.submit-row :deep(.el-form-item__content) {
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
 }
 
 .correction-form {

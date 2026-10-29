@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.29
-Version-Datetime: 2026-10-29T14:12:51+08:00
+Version: 0.1.30
+Version-Datetime: 2026-10-29T15:50:59+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -145,7 +145,16 @@ curl http://127.0.0.1:8000/api/health
 (cd frontend/admin && npm run build)
 ```
 
-构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。本轮需求对齐后的自动化验证结果见[并行修改与审查计划](bits/需求同步并行修改计划.md)；命令构建通过与人工功能验收分别记录。
+真实 HTTP 生命周期测试补充 pytest 夹具测试：对运行中的开发服务与开发库按现有 10 个阶段执行真实流程，会新增账号、商品、图片、交易与通知等演示数据（不可清理，勿对生产运行）。覆盖核对只统计检查项编号与实际执行状态，不代表全部验收条件语义已验证；说明见 [e2e_lifecycle](backend/tests/e2e_lifecycle/README.md)：
+
+```bash
+cd backend/tests/e2e_lifecycle
+../../.venv/bin/python e2e_runner.py --base-url http://127.0.0.1:8000
+```
+
+`--db-path` 与 `--results-dir` 未显式指定时默认使用仓库内 `var/db/app.db` 与 `var/e2e-results`；后端使用其他数据库时再传 `--db-path`。
+
+构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。本轮需求对齐后的自动化验证结果见[并行修改与审查计划](bits/需求同步并行修改计划.md)；最近一次真实开发环境 API 测试、补充数据与缺陷记录见[开发环境真实API测试与生命周期数据](bits/开发环境真实API测试与生命周期数据.md)。命令构建、真实 HTTP 测试通过与人工功能验收分别记录。
 
 先启动后端，再在两个独立终端预览构建产物：
 

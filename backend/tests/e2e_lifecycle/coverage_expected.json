@@ -1,0 +1,3520 @@
+{
+ "meta": {
+  "source": "/tmp/project1-live-e2e/COVERAGE.md",
+  "requirements_baseline": "docs/requirements 04(v0.4.8)/05(v0.2.17)/07(v0.2.9); user-stories index v0.1.7; scenarios index v0.1.3; use-cases index v0.1.10; 子用例分解 v0.1.5",
+  "generated_by": "coverage-analyst (read-only analysis)",
+  "counts": {
+   "us": 14,
+   "ac": 105,
+   "sc_groups": 12,
+   "sc_branches": 109,
+   "use_cases": 14,
+   "sub_use_cases": 66,
+   "ac_per_us": {
+    "US-01": 8,
+    "US-02": 9,
+    "US-03": 6,
+    "US-04": 9,
+    "US-05": 11,
+    "US-06": 6,
+    "US-07": 7,
+    "US-08": 9,
+    "US-09": 6,
+    "US-10": 6,
+    "US-11": 6,
+    "US-12": 7,
+    "US-13": 7,
+    "US-14": 8
+   },
+   "sc_branches_per_group": {
+    "SC-01": 12,
+    "SC-02": 17,
+    "SC-03": 9,
+    "SC-04": 9,
+    "SC-05": 13,
+    "SC-06": 8,
+    "SC-07": 13,
+    "SC-08": 6,
+    "SC-09": 10,
+    "SC-10": 4,
+    "SC-11": 4,
+    "SC-12": 4
+   }
+  },
+  "notes": [
+   "items=US AC 行（us/ac/type/sc/steps/expected/data/precondition）；sc_branches=SC 分支行（category/related/ac/steps/expected）。",
+   "精确端点/payload 以 API_CONTRACT.md 为准；难模拟状态见 COVERAGE.md 第6章；缺口见第8.2节。"
+  ]
+ },
+ "items": [
+  {
+   "us": "US-01",
+   "ac": "US-01-AC-01",
+   "type": "N",
+   "sc": "SC-01-01",
+   "steps": [
+    "`POST /auth/register/send-code {email}` 取 `dev_code`",
+    "`POST /auth/register {email,display_name,password,code}`",
+    "`POST /auth/login`",
+    "`GET /auth/me`"
+   ],
+   "expected": "②200 TokenOut：`user.id>0`、email 一致；③同凭证 200；④身份一致；`users` 新增 1 行且 email 唯一",
+   "data": "新增普通账户（normal/user，唯一 ID）；验证码已消费；无重复账户行",
+   "precondition": "未注册邮箱 `t-a@campus.edu`；dev 环境验证码随 `send-code` 返回",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-01",
+   "ac": "US-01-AC-02",
+   "type": "R",
+   "sc": "SC-01-02、SC-01-09",
+   "steps": [
+    "对 `L` 邮箱重复 send-code + register（换显示名）",
+    "`Z` 登录：`POST /auth/email/send-code {target:new,new_email: L 邮箱}` → `POST /auth/email/change`"
+   ],
+   "expected": "①拒绝（400/409，提示邮箱已被使用），`users` 行数不变、不合并 ②拒绝；`GET /auth/me` 原邮箱与 `user.id` 不变",
+   "data": "无新账户；被占用邮箱仍归原账户；换邮箱失败无半更新",
+   "precondition": "`L` 邮箱已被占用",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-01",
+   "ac": "US-01-AC-03",
+   "type": "N/R",
+   "sc": "SC-01-03、SC-01-08",
+   "steps": [
+    "`POST /auth/login` 正确",
+    "`POST /auth/logout`",
+    "不带 token `GET /products/search`",
+    "连续 5 次错误密码 login",
+    "第 6 次正确密码 login"
+   ],
+   "expected": "①200 token ②200 ③401 ④每均 401 ⑤仍 200（不因失败次数锁定）；服务端无失败计数副作用",
+   "data": "账户保持 normal；无失败次数/锁定写入；退出为客户端丢弃 token（服务端 JWT 失效不可验证，见第 8 章 R-05）",
+   "precondition": "已注册 `Z`；首版无失败计数/锁定",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-01",
+   "ac": "US-01-AC-04",
+   "type": "N",
+   "sc": "SC-01-04",
+   "steps": [
+    "`POST /auth/forgot-password/send-code {email}`",
+    "`POST /auth/forgot-password/reset {email,code,new_password}`",
+    "旧密码 login",
+    "新密码 login",
+    "`GET /auth/me`"
+   ],
+   "expected": "③401；④200；⑤`user.id` 不变（仅凭证更新），重置不需要管理员人工介入",
+   "data": "`password_hash` 更新；`user.id` 稳定；旧密码失效",
+   "precondition": "已注册 `Z` 忘记密码",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-01",
+   "ac": "US-01-AC-05",
+   "type": "N/R",
+   "sc": "SC-01-08、SC-01-09",
+   "steps": [
+    "`POST /auth/change-password {current_password: 错误}`",
+    "正确当前密码改密",
+    "换邮箱：`POST /auth/email/send-code {target:old}` + `{target:new}` → `POST /auth/email/change`",
+    "新邮箱 login",
+    "旧邮箱 login"
+   ],
+   "expected": "①拒绝且原密码仍有效 ②200；旧密码 401、新密码 200 ③成功 ④200 ⑤401；`user.id` 不变",
+   "data": "密码/邮箱逐一变更成功；未完成双验证时不生效；审计仍按 user.id",
+   "precondition": "已登录 `Z`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-01",
+   "ac": "US-01-AC-06",
+   "type": "N",
+   "sc": "SC-01-10",
+   "steps": [
+    "`PATCH /auth/profile` 改显示名称",
+    "`GET /products/mine`、`/trades/mine`、`/notifications`",
+    "`ADM GET /admin/cases` 看历史事项",
+    "换邮箱生效后重复核对"
+   ],
+   "expected": "①200 新名称 ②③历史记录仍归属同一 `user.id`（seller_id/buyer_id/actor_id 不变）、当前展示新名 ④换邮箱后 user.id 不变",
+   "data": "user.id 稳定；历史与审计主体不变；旧名只留历史上下文",
+   "precondition": "`Z` 已有历史商品/交易/通知/评价",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-01",
+   "ac": "US-01-AC-07",
+   "type": "R/N",
+   "sc": "SC-01-06、SC-01-12（联动 DT-03/D-52/D-51）",
+   "steps": [
+    "`ADM POST /admin/users/{B1}/ban {reason}`",
+    "`B1` login",
+    "`B1` 读：公开商品/本人收藏/本人发表与收到评价",
+    "`B1` 写：`POST /products`、评论、收藏、发 IM、提交举报、评价",
+    "查被关闭请求、被冻结交易、通知、分支",
+    "`B1 GET /me/cases` 与 `POST /me/cases/{id}/appeal`",
+    "`ADM POST /admin/users/{B1}/unban`"
+   ],
+   "expected": "②200 可登录 ③200 只读可用 ④全部 403（仅处置沟通例外）⑤待接受请求 closed、close_reason=相关账户被封禁、分支 archived、双方收通知；进行中交易 frozen=true 且单方确认剩余等待不再下降 ⑥200 ⑦原权限恢复；原非在售商品不自动上架；关闭请求不重开",
+   "data": "status banned→normal；restriction active→lifted；关闭请求/分支/通知/计时暂停历史全部保留；解封按 case 恢复因该封禁停止的展示",
+   "precondition": "预置 `B1`：`P-BAN`（listed）、待接受请求 1 条（B1 为买方）、进行中且已有单方确认的交易 1 笔（B1 为一方）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-01",
+   "ac": "US-01-AC-08",
+   "type": "R",
+   "sc": "SC-01-11",
+   "steps": [
+    "`POST /auth/register` 缺 code → 422",
+    "send-code(A) 后用 A 的码注册 B 邮箱",
+    "错误验证码注册",
+    "随后用 A 邮箱正常验证注册"
+   ],
+   "expected": "①②③均拒绝且不创建账户、不占用邮箱、不分配正式 user.id ④可成功",
+   "data": "`users` 无新增行；A 邮箱未被占用；不存在“半账户”",
+   "precondition": "邮箱未验证/验证后换邮箱",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-01",
+   "type": "N",
+   "sc": "SC-02-01、SC-10-01",
+   "steps": [
+    "`POST /files/upload`",
+    "`POST /products {title,description,price_cents,image_keys,tags:[{category_id} 或 {new_name}]}`",
+    "`GET /products/{id}`",
+    "`ADM GET /admin/cases?type=product_review`",
+    "`ADM POST /admin/cases/{case}/claim`",
+    "`ADM POST /admin/products/cases/{case}/review {result:approved, tag_decisions}`",
+    "`Z GET /products/search`",
+    "`Z GET /products/{id}`",
+    "`L GET /notifications`、`GET /categories`"
+   ],
+   "expected": "②200 `pending_review` 且不进入搜索 ③本人可见待审状态 ④事项在共享池 ⑤唯一认领 ⑥200 商品 `listed`、审核记录 approved（审核者/时间/依据）、标签生效 ⑦出现在售结果 ⑧详情 200 ⑨收到 review_result 通知；新标签出现在分类列表",
+   "data": "商品 listed；`review_record=approved`（含审核者/时间/结论）；case disposed；product_tag 关联；新标签 active；通知 1 条",
+   "precondition": "`L` 登录；已上传图片 key；已有标签或新标签申请",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-02",
+   "type": "R/N",
+   "sc": "SC-02-02、SC-02-15、SC-10-02",
+   "steps": [
+    "`ADM claim` 审核事项",
+    "`ADM POST /admin/products/cases/{case}/review {result:rejected, reason:\"退回补充：请更换或补充标签\"}`",
+    "`L GET /products/{id}`",
+    "`L POST /products/{id}/resubmit {description}`",
+    "`L GET /products/{id}/review-records`",
+    "`L GET /products/mine`",
+    "`Z search`"
+   ],
+   "expected": "②200 商品 rejected ③`reject_reason` 可见 ④200 回到 `pending_review`（新审核记录+新事项）⑤2 条记录（旧 rejected 与旧内容快照保留 + 新 pending）⑥我的商品含原因 ⑦仍不入搜索",
+   "data": "审核记录追加不覆盖；商品转待审核；旧原因保留；新 CASE-REV 进入共享池",
+   "precondition": "预置 `P-REJ`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-03",
+   "type": "N",
+   "sc": "SC-02-05、SC-02-10",
+   "steps": [
+    "`L PATCH /products/{id} {description}`",
+    "`Z GET /products/{id}`",
+    "`Z GET /notifications`",
+    "`Z GET /trades/mine`",
+    "`L GET /products/{id}/edit-history`"
+   ],
+   "expected": "①200 保持 listed ②详情 200 显示新描述 ③收到 product_edited 通知（关联商品/变更入口）④请求仍 pending_acceptance ⑤历史含前后内容/修改人/时间",
+   "data": "编辑历史 2+ 条；请求未关闭；通知已发；展示不中断",
+   "precondition": "`P-PUB` 上存在 `Z` 的待接受请求 `T-PEND`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-04",
+   "type": "R",
+   "sc": "SC-02-06",
+   "steps": [
+    "`L PATCH /products/{id}` 改 title/price/category",
+    "`ADM POST /admin/products/{id}/correct-category {category_ids,reason}`",
+    "`L GET /notifications`",
+    "`GET /trades/{id}`"
+   ],
+   "expected": "①全部拒绝（409/403），商品仍 in_transaction ②200 纠类留 edit-history（前后、原因、操作人、时间）③收到 product_edited 通知 ④交易状态/约定/历史交易内容不变",
+   "data": "交易中关键内容未变；纠类历史 1 条；通知 1 条；交易无副作用",
+   "precondition": "`P-TRADE` 处于 in_transaction（`L` 卖方）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-05",
+   "type": "N",
+   "sc": "SC-02-08",
+   "steps": [
+    "`L POST /products/{id}/delist`",
+    "`D GET /trades/{id}`",
+    "`D GET /notifications`",
+    "`D GET /conversations`",
+    "`Z search`"
+   ],
+   "expected": "①200 商品 delisted ②status=closed、close_reason=商品已下架 ③收到 request_closed 附原因 ④对应交易分支 archived=true ⑤搜索不含",
+   "data": "商品 delisted；请求 closed；分支归档；通知；无锁单",
+   "precondition": "`P-PUB` 有 `D` 的待接受请求且无锁单",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-06",
+   "type": "N",
+   "sc": "SC-02-16",
+   "steps": [
+    "`L POST /products/{id}/relist`",
+    "`Z search`",
+    "`Z POST /trades/requests {product_id}`",
+    "核对旧交易/旧分支"
+   ],
+   "expected": "①200 listed ②结果含该商品 ③200 新 pending_acceptance + 新分支 + 卖方通知 ④旧交易历史保留、不复用旧分支",
+   "data": "商品 listed；新交易/新分支独立；旧历史保留",
+   "precondition": "`P-DELIST`（审核有效、无限/封禁）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-07",
+   "type": "R",
+   "sc": "SC-02-17",
+   "steps": [
+    "`F1 POST /products`",
+    "`F1 POST /products/{无关商品}/delist`",
+    "`F1 POST /products/{无关商品}/relist`",
+    "`F1 PATCH /products/{无关商品}` 合规微调",
+    "`B1` 重复上面四项"
+   ],
+   "expected": "①②③ 均 403（仅冻结：禁发布/下架/上架）④200（无关商品合规编辑仍允许）⑤ `B1` 四项全部 403（封禁优先）",
+   "data": "无商品状态改变；冻结/封禁记录保持；若编辑成功则留编辑历史",
+   "precondition": "`F1` 账户 normal、存在有效交易冻结；`B1` 已封禁",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-08",
+   "type": "N/R",
+   "sc": "SC-02-11",
+   "steps": [
+    "`Z GET /prohibited-items`",
+    "无 token `GET /prohibited-items`",
+    "`Z POST/PUT/DELETE /prohibited-items`",
+    "`ADM POST /prohibited-items {group_name,content}`",
+    "`Z` 再 GET"
+   ],
+   "expected": "①200 返回当前细目（≥BR-13 六类）②401 ③403、原范围保持 ④200 记录修改人/时间 ⑤看到最新条目",
+   "data": "禁发范围读写分离；普通用户只读；最新内容即时可见",
+   "precondition": "已登录用户；未登录访客；`ADM`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-02",
+   "ac": "US-02-AC-09",
+   "type": "N/R",
+   "sc": "SC-02-13、SC-02-14、SC-02-15",
+   "steps": [
+    "`L PATCH /products/{P-PENDING}` 改内容+撤回标签申请",
+    "`ADM claim` 后 `review` → 核对 `content_json` 为最新内容",
+    "`L POST /products/{P-PENDING3}/withdraw-review`",
+    "`L POST /products/{P-PENDING3}/resubmit`",
+    "`L POST /products/{P-PENDING2}/withdraw-review`"
+   ],
+   "expected": "①200 仍 pending_review、不重排队（同一 case）②审核依据为最新内容（快照刷新）③200 商品 delisted、`review_result=withdrawn` ④200 回到 pending_review（新记录、不直接公开）⑤409 拒绝撤回、状态保持",
+   "data": "审核记录 withdrawn/pending/approved 历史齐全；撤回后重新审核；已认领不得撤回",
+   "precondition": "`P-PENDING`（未认领）、`P-PENDING2`（已认领未审）、`P-PENDING3`（未认领，用于撤回后重提）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-03",
+   "ac": "US-03-AC-01",
+   "type": "N",
+   "sc": "SC-03-01",
+   "steps": [
+    "`Z GET /products/search?keyword=教材&category_names=教材书籍&category_names=文具用品&price_min_cents=10000&price_max_cents=20000`",
+    "同条件改用 `category_ids`",
+    "单条件价格区间（端点值）"
+   ],
+   "expected": "仅 `P-MT` 命中；价格端点可命中；`total` 与 `items` 一致",
+   "data": "商品状态不变；检索不写库",
+   "precondition": "`P-MT`（教材书籍+文具用品，20000）、`P-PUB`（教材书籍，10000）、`P-PUB2`（30000）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-03",
+   "ac": "US-03-AC-02",
+   "type": "N",
+   "sc": "SC-03-01、SC-10-04",
+   "steps": [
+    "`ADM PATCH /categories/{id} {name:新主名}`",
+    "`Z GET /categories`",
+    "`search?category_names=新主名`／旧名/别名",
+    "`search?category_ids=`"
+   ],
+   "expected": "新旧名称定位同一分类、结果集一致、同一商品只出现一次；别名不重复计标签",
+   "data": "分类身份与商品归属不变；别名集合更新",
+   "precondition": "`CAT-ALIAS`（主名曾改，旧名为活跃别名）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-03",
+   "ac": "US-03-AC-03",
+   "type": "N/A",
+   "sc": "SC-03-02",
+   "steps": [
+    "`search?keyword=不存在词`",
+    "`search?price_min_cents=1&price_max_cents=2`",
+    "仅分页无筛选"
+   ],
+   "expected": "①②③ 均 `items=[]`、`total=0`、`message=无匹配商品`（无筛选时为“暂无在售商品”）；不返回非公开商品",
+   "data": "无",
+   "precondition": "无匹配条件；不存在的关键词",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-03",
+   "ac": "US-03-AC-04",
+   "type": "N",
+   "sc": "SC-03-04、SC-04-01",
+   "steps": [
+    "`Z search`",
+    "`Z GET /products/{id}`",
+    "`Z POST /products/{id}/comments`",
+    "`Z GET /favorites`"
+   ],
+   "expected": "①在售结果不含 ②200 且 `status=in_transaction` ③201 评论成功 ④原收藏仍有效",
+   "data": "商品/收藏状态不变；详情与评论资格保持",
+   "precondition": "`P-TRADE` 处于 in_transaction；`Z` 已收藏该商品",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-03",
+   "ac": "US-03-AC-05",
+   "type": "R",
+   "sc": "SC-03-05",
+   "steps": [
+    "`W search`",
+    "`W GET /products/{P-DELIST}`、`{P-RESTRICT}`",
+    "`W GET /favorites`（含 P-RESTRICT 的收藏）",
+    "`Z GET /products/{P-DELIST}`"
+   ],
+   "expected": "①均不在结果 ②均 404（不泄露）③仅“已失效”提示、无标题/图片/详情入口 ④200（D-43 历史买方，仅未撤销公开时）；`P-RESTRICT` 对非卖方一律 404",
+   "data": "收藏记录保留但不可见；撤销公开优先于历史资格",
+   "precondition": "`P-DELIST`（已下架）、`P-RESTRICT`（撤销公开）；`W` 第三方；`Z` 曾请求过 `P-DELIST`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-03",
+   "ac": "US-03-AC-06",
+   "type": "R",
+   "sc": "SC-03-03、SC-01-05",
+   "steps": [
+    "无 token `GET /products/search`",
+    "`GET /products/{id}`",
+    "`GET /products/{id}/comments`",
+    "`GET /auth/register` 对照"
+   ],
+   "expected": "①②③ 401 并引导登录、不返回业务内容 ④ 不要求登录",
+   "data": "无",
+   "precondition": "无 Authorization",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-01",
+   "type": "N",
+   "sc": "SC-03-01、SC-03-06、SC-03-04",
+   "steps": [
+    "`Z POST /favorites/{P-PUB}`",
+    "`Z GET /favorites`",
+    "`W GET /favorites`",
+    "`Z POST /favorites/{P-TRADE}`",
+    "`Z` 重复收藏"
+   ],
+   "expected": "①201/200 ②清单含该商品 ③仅 W 本人清单、不含 Z 的 ④200 且收藏有效（交易中仍有效）⑤幂等不产生重复行",
+   "data": "收藏按收藏者归属；交易中收藏保持有效；他人不可见",
+   "precondition": "`Z`、`W`；`P-PUB`、`P-TRADE`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-02",
+   "type": "R/N",
+   "sc": "SC-03-07、SC-03-05、SC-03-08",
+   "steps": [
+    "`Z GET /favorites`",
+    "`Z DELETE /favorites/{id}`",
+    "再 GET",
+    "`B1 GET /favorites`",
+    "`B1 POST/DELETE /favorites/{id}`"
+   ],
+   "expected": "①失效项仅通用“已失效”提示、无内容 ②200 ③清单不含 ④200 只读 ⑤403 禁止收藏/取消",
+   "data": "失效提示不区分原因；取消后记录移除；封禁只读",
+   "precondition": "`Z` 有失效收藏（P-DELIST/P-RESTRICT）；`B1` 已封禁",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-03",
+   "type": "N/R",
+   "sc": "SC-04-01、SC-04-02、SC-04-03、SC-04-04",
+   "steps": [
+    "`Z POST /products/{P-PUB}/comments`",
+    "`L` 回复 Z 的评论",
+    "`E` 回复 Z 的评论（非卖方）",
+    "`Z` 对 P-DELIST 评论",
+    "`Z DELETE` 本人评论",
+    "`L DELETE` Z 的评论",
+    "`ADM` 举报决策 `remove_content=true`"
+   ],
+   "expected": "①201 公开展示 ②200 公开回复 ③403 不支持买方互回 ④409/403 ⑤200 逻辑删除 ⑥403 ⑦评论移除、留理由、通知作者",
+   "data": "评论记录含作者/回复对象/删除标记与理由；已下架禁新增",
+   "precondition": "`P-PUB`（可评论）、`P-DELIST`（不可评论）；`Z`、`L`（卖方）、`E`；`ADM` 已认领违规举报",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-04",
+   "type": "N/R",
+   "sc": "SC-04-05、SC-04-06",
+   "steps": [
+    "`Z POST /conversations/normal {peer_id:W}`",
+    "同 pair 再发",
+    "`Z` 向自己发起",
+    "`Z POST /conversations/{id}/messages`",
+    "`W GET /conversations/unread-summary`"
+   ],
+   "expected": "①201 会话 ②复用同一 `conversation.id` ③400 拒绝 ④200 ⑤收到未读",
+   "data": "`C-IM-N` 唯一；不向本人发起；不依赖商品",
+   "precondition": "`Z`、`W` 无商品/购买请求关系",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-05",
+   "type": "N",
+   "sc": "SC-04-06",
+   "steps": [
+    "`GET /conversations`",
+    "`Z` 在交易分支发消息",
+    "`Z` 在普通私聊发消息",
+    "`L` 拒绝请求",
+    "再查两类会话"
+   ],
+   "expected": "①同一双人入口下出现 `type=trade` 分支与普通会话 ②③消息归属分别保留、不混 ④分支 archived ⑤归档分支历史可读、普通私聊独立继续",
+   "data": "每笔请求独立分支；普通私聊历史不迁移",
+   "precondition": "`Z` 已对 `P-PUB` 请求（`T-PEND`）；已有普通私聊 `C-IM-N`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-06",
+   "type": "N",
+   "sc": "SC-11-02、SC-04-06",
+   "steps": [
+    "`W GET /notifications`",
+    "`W GET /conversations`",
+    "`W GET /conversations/{C-IM-N}`",
+    "`W POST /conversations/{C-IM-N}/read {last_displayed_message_id:第1条}`",
+    "`W POST /notifications/{id}/read`",
+    "复查未读"
+   ],
+   "expected": "①②不标读 ③查看历史不标读 ④仅第 1 条已读 ⑤通知已读 ⑥聊天剩余未读与其他分支未读均保持",
+   "data": "分支级已读指针；通知已读与聊天未读互不影响",
+   "precondition": "`C-IM-N` 3 条未读、`C-IM-T` 有未读、通知有未读",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-07",
+   "type": "R",
+   "sc": "SC-04-08",
+   "steps": [
+    "`p`/`q` 发 `C-IM-N`（普通私聊）",
+    "发交易 A 分支",
+    "发交易 B 分支",
+    "`p–s`、`q–t` 发送",
+    "读各类历史"
+   ],
+   "expected": "①②③ 全部 403（禁发）、历史 GET 200 可读 ④200 不受影响 ⑤冻结保持、分支不归档",
+   "data": "冻结只覆盖 p、q 两人组合的两类 IM；不扩散第三方；账户封禁另适用",
+   "precondition": "`p`、`q` 之间有交易 A 冻结，另有交易 B；`p–s`、`q–t` 普通会话存在",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-08",
+   "type": "R",
+   "sc": "SC-04-09",
+   "steps": [
+    "成员 `GET /conversations/{id}`",
+    "`POST /conversations/{id}/messages`",
+    "`POST /conversations/{id}/to-normal`",
+    "普通私聊发送"
+   ],
+   "expected": "①200 历史可读 ②409 拒绝发送 ③200 返回普通会话 id、旧消息不迁移 ④200",
+   "data": "归档及历史保持；转入须用户选择",
+   "precondition": "已归档分支：`T-REJ`/`T-WD`/`T-CLOSED`/`T-DONE`/`T-TERM` 各一",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-04",
+   "ac": "US-04-AC-09",
+   "type": "N",
+   "sc": "SC-03-09",
+   "steps": [
+    "`ADM` 举报决策 `restrict_display` 后 `Z GET /favorites`",
+    "`ADM POST /admin/products/{id}/restore-display {case_id,reason}`",
+    "`Z GET /favorites`",
+    "对照 P-DELIST 项"
+   ],
+   "expected": "①失效提示 ②200 仅解除该来源展示限制 ③该收藏自动恢复有效 ④仍失效（商品已下架，不泄露内容）",
+   "data": "原收藏关系保留，按当前展示资格恢复/保持失效",
+   "precondition": "`Z` 收藏 `P-RESTRICT` 且已失效；对照 `P-DELIST` 收藏",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-01",
+   "type": "N",
+   "sc": "SC-05-01（前段）、SC-04-06",
+   "steps": [
+    "`Z POST /trades/requests {product_id}`",
+    "`GET /trades/{id}`",
+    "`L GET /notifications`",
+    "`L GET /conversations`",
+    "`Z` 重复提交"
+   ],
+   "expected": "①200 `pending_acceptance`；商品仍 listed（未锁单）②独立分支+系统消息 ③request_created ④交易分支存在 ⑤返回 `existing` 同一 id，不重复分支/通知",
+   "data": "独立请求记录+交易分支+通知；不提前锁单",
+   "precondition": "`P-PUB` listed；`Z` 非卖方；无重复请求",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-02",
+   "type": "N/R",
+   "sc": "SC-05-05、SC-05-02",
+   "steps": [
+    "`L POST /trades/{Z_trade}/accept`",
+    "GET 商品与 D 的请求",
+    "`D GET /notifications`",
+    "`W` 接受/拒绝 Z 的请求",
+    "对同一请求二次接受"
+   ],
+   "expected": "①200 ②商品 `in_transaction`；D 请求 `closed` 原因“商品已被其他用户锁单”③request_closed 通知 ④403 ⑤409",
+   "data": "仅一笔锁单；其余关闭并分记原因；分别通知买方",
+   "precondition": "`P-PUB` 上 `Z`、`D` 各一条待接受请求",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-03",
+   "type": "N/R",
+   "sc": "SC-05-06、SC-05-07、SC-05-03",
+   "steps": [
+    "`L reject D` 的请求 {reason}",
+    "`D` 再次请求同一商品",
+    "`Z withdraw` 本人请求",
+    "`W withdraw` Z 的请求",
+    "`L` 接受后再 withdraw"
+   ],
+   "expected": "①200 已拒绝+原因，分支归档 ②200 新请求/新分支 ③200 已撤回+L 通知 ④403 ⑤409",
+   "data": "已拒绝/已撤回分别记录；归档；后续可另发新请求",
+   "precondition": "待接受请求 `T-PEND-D`、`T-PEND`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-04",
+   "type": "N/R",
+   "sc": "SC-05-01（约定段）、4.15",
+   "steps": [
+    "`Z POST /trades/{id}/agreements` 全要素",
+    "`L POST /trades/{id}/agreements/{aid}/confirm`",
+    "另笔：提出后 `L reject`",
+    "GET 交易与约定历史"
+   ],
+   "expected": "①200 `proposed` ②200 `confirmed`、`current_agreement_id` 生效 ③提案 `rejected`、交易仍 in_progress/待约定、锁单保持 ④要素与历史可见",
+   "data": "约定要素（时间/地点/方式/金额/支付方式/时点）完整；拒绝只结束提案",
+   "precondition": "`T-ACC`（进行中、约定待确认）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-05",
+   "type": "N/R",
+   "sc": "SC-05-13（未同意半）、4.15",
+   "steps": [
+    "`Z POST agreements` 变更",
+    "`L reject` 变更",
+    "GET 交易",
+    "`Z POST cancel`"
+   ],
+   "expected": "①200 ②rejected ③原约定仍 confirmed、当前确认/计时保持 ④200 但仅“取消申请/待对方同意”，不直接终止",
+   "data": "原约定、确认与计时保留；变更历史留；不恢复首约前取消权",
+   "precondition": "`T-AGR` 已有有效约定",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-06",
+   "type": "N/R",
+   "sc": "SC-05-10",
+   "steps": [
+    "首约前 `Z cancel`",
+    "另例首约前 `L cancel` → `Z POST /cancel/confirm`",
+    "约定后任一方 cancel → 对方 confirm",
+    "取消后未同意时 GET"
+   ],
+   "expected": "①200 `terminated`（直接）②200 terminated（同意生效）③terminated ④未同意保持 in_progress",
+   "data": "已终止计失败；解锁单/本笔冻结；分支归档；商品默认下架/明确继续；历史保留",
+   "precondition": "`T-ACC`（首约前）、`T-AGR`（约定后）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-07",
+   "type": "N",
+   "sc": "SC-05-08",
+   "steps": [
+    "`Z POST /trades/{id}/confirmations`",
+    "`L GET /trades/{id}`",
+    "`L POST confirmations`",
+    "双方通知/分支/商品"
+   ],
+   "expected": "①200 单方进度、L 收 confirm_progress、开始计时 ②可见本人确认 ③200 completed、trade_completed 通知 ④分支 archived、商品默认 delisted",
+   "data": "双方确认记录与时间；完成；归档解本笔冻结",
+   "precondition": "`T-AGR`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-08",
+   "type": "N/R",
+   "sc": "SC-06-01、SC-06-07、SC-06-05",
+   "steps": [
+    "`Z POST confirmations`",
+    "`Z POST /disputes/resolve`",
+    "`L POST /disputes/resolve`",
+    "GET 交易",
+    "任一方再 confirm"
+   ],
+   "expected": "①409 普通流程须先恢复 ②200 待双方 ③200 恢复 in_progress、当前确认清空、历史保留、有约定回“待完成”④`confirm_wait_started_at` 为空 ⑤200 新确认并重新计时",
+   "data": "清当前确认、保留约定与历史；恢复不启动计时",
+   "precondition": "`T-DISP`（已有有效约定+历史确认）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-09",
+   "type": "A",
+   "sc": "SC-05-09、SC-09-01",
+   "steps": [
+    "时间起点前移 8 天（第 6 章方案 B）",
+    "等待一次后台扫描",
+    "`GET /trades/{id}`",
+    "`GET /me/cases`",
+    "`GET /notifications`"
+   ],
+   "expected": "③`abnormal`+`frozen=true` ④CASE-ABN 进入共享池 ⑤双方 trade_abnormal；不自动完成/取消、锁单保持",
+   "data": "异常交易+冻结+事项+通知；计时结束；模拟方式与证据边界见第 6 章",
+   "precondition": "`T-HALF`（单方确认、等待中）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-10",
+   "type": "N",
+   "sc": "SC-02-09、SC-05-01（尾）、SC-05-10",
+   "steps": [
+    "GET 交易",
+    "GET 商品",
+    "GET 会话",
+    "`L POST /products/{id}/relist`",
+    "GET transitions"
+   ],
+   "expected": "①completed/terminated ②商品默认 delisted、锁单释放 ③分支 archived、本笔冻结解除 ④200 listed（资格允许）⑤历史保留",
+   "data": "默认下架；卖方明确继续才上架；其他限制保持",
+   "precondition": "`T-DONE`、`T-TERM`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-05",
+   "ac": "US-05-AC-11",
+   "type": "N/A",
+   "sc": "SC-05-13（生效半）、SC-09-10",
+   "steps": [
+    "双方 `POST agreements` + 对方 `confirm`",
+    "GET 交易确认状态",
+    "任一方 `POST confirmations`",
+    "GET 计时"
+   ],
+   "expected": "①200 变更生效 ②当前确认 `is_current=false`、旧计时结束、历史保留、不自动计时 ③200 ④新计时完整 7 天窗口",
+   "data": "清当前确认、停旧计时、留历史；重新确认后才完整计时",
+   "precondition": "`T-HALF`（已有有效约定+单方完成确认）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-06",
+   "ac": "US-06-AC-01",
+   "type": "R",
+   "sc": "SC-05-08（前置）、规则补测 BR-04",
+   "steps": [
+    "`Z POST /trades/{id}/confirmations`",
+    "GET 交易"
+   ],
+   "expected": "①409 提示须先确认交易约定 ②无确认记录",
+   "data": "拒绝且无副作用",
+   "precondition": "`T-ACC`（无有效约定）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-06",
+   "ac": "US-06-AC-02",
+   "type": "N",
+   "sc": "SC-05-08",
+   "steps": [
+    "`Z POST /trades/{id}/confirmations {note}`",
+    "GET 交易/确认"
+   ],
+   "expected": "①200 记录 `confirmer_id=Z`、确认时间、可选说明、`is_current=true`；一次声明同时涵盖交付+支付，不产生第二个交付步骤",
+   "data": "声明记录（不代表平台核实）",
+   "precondition": "`T-AGR`（约定已确认）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-06",
+   "ac": "US-06-AC-03",
+   "type": "N",
+   "sc": "SC-05-08（双确认）",
+   "steps": [
+    "`L POST confirmations`",
+    "GET 交易与确认列表"
+   ],
+   "expected": "①200 `completed` ②两份确认互不覆盖、各自保留，触发完成联动",
+   "data": "completed；两条确认历史",
+   "precondition": "`T-AGR` 已有 Z 确认",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-06",
+   "ac": "US-06-AC-04",
+   "type": "N",
+   "sc": "SC-06-01、SC-06-07",
+   "steps": [
+    "双方 `POST /disputes/resolve`",
+    "GET 当前确认",
+    "任一方再 `POST confirmations`",
+    "GET 计时"
+   ],
+   "expected": "①恢复 in_progress ②当前确认清空、历史行保留 ③新记录 ④新计时开始",
+   "data": "清当前标记、不删历史；重新确认产生新记录",
+   "precondition": "`T-DISP`（含历史确认）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-06",
+   "ac": "US-06-AC-05",
+   "type": "R",
+   "sc": "SC-06-03、规则补测 BR-29",
+   "steps": [
+    "尝试修改/删除本人确认（无对应端点则验证 404/405）",
+    "`ADM` 在相关事项内调整/回复",
+    "GET transitions/确认"
+   ],
+   "expected": "①用户无自行改删能力 ②管理调整留原记录、前后值、主体、时间、依据并通知 ③原记录保留",
+   "data": "历史不删除；管理更正留据",
+   "precondition": "`Z` 已提交确认",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-06",
+   "ac": "US-06-AC-06",
+   "type": "R/N",
+   "sc": "SC-06-04、SC-12-01",
+   "steps": [
+    "`L GET /trades/{id}` 与 transitions",
+    "`W GET /trades/{id}`",
+    "`ADM` 未认领时 `GET /admin/trades/{id}`",
+    "`ADM` 认领该事项后 GET"
+   ],
+   "expected": "①200 ②403/404 ③403 ④200 限必要范围；记录语义为声明而非平台核实",
+   "data": "权限按参与方/认领事项隔离",
+   "precondition": "交易双方 `Z`/`L`、第三方 `W`、`ADM`/`ADM2`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-07",
+   "ac": "US-07-AC-01",
+   "type": "N/R/A",
+   "sc": "SC-07-01、SC-07-02、SC-07-03",
+   "steps": [
+    "`Z POST /trades/{T-DONE}/review {rating:5,content}`",
+    "重复提交",
+    "`L` 同样提交",
+    "对未完成交易提交",
+    "代他人提交",
+    "`GET /me/reviews?type=published` 与 `received`"
+   ],
+   "expected": "①201 保存 ②409 重复拒绝 ③201 双方各一条 ④409 未完成拒绝 ⑤403 代评拒绝 ⑥仅本人归属可见，商品页/公开列表不展示",
+   "data": "每方每笔唯一评价（1—5 分+文字）；仅在“我的评价”按发表/收到",
+   "precondition": "已完成交易 `T-DONE`；未完成交易 `T-AGR`；`Z`/`L`/`E`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-07",
+   "ac": "US-07-AC-02",
+   "type": "R",
+   "sc": "SC-07-03、SC-07-13",
+   "steps": [
+    "用户尝试修改/删除评价（无端点则 404/405）",
+    "`ADM` 举报决策 `remove_content=true` 针对评价"
+   ],
+   "expected": "①用户无法修改或自行删除 ②评价逻辑删除、记录理由、通知作者",
+   "data": "违规评价删除标记与理由；原记录保留",
+   "precondition": "已有评价",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-07",
+   "ac": "US-07-AC-03",
+   "type": "N/R",
+   "sc": "SC-07-04、SC-07-05",
+   "steps": [
+    "`E POST /reports {target_type:product,target_id:P-PUB,reason:\"违规描述\"}`",
+    "不带证据提交（`evidence_keys` 省略）",
+    "同用户同对象再报（未结）",
+    "GET /reports/mine"
+   ],
+   "expected": "①201 生成 CASE-RPT 进共享池 ②允许（说明/截图可选）③返回 `existing_report_id` 不新建 ④可查本人举报；不自动判定违规",
+   "data": "举报记录+事项；未结补充而非新建",
+   "precondition": "`E` 登录；`P-PUB` 存在",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-07",
+   "ac": "US-07-AC-04",
+   "type": "R/N",
+   "sc": "SC-07-04、SC-07-11、规则补测 BR-25",
+   "steps": [
+    "未结：`POST /reports/{id}/supplements {content}`",
+    "结案（ADM decision）后再补充",
+    "结案后再提交同对象举报",
+    "GET /reports/mine"
+   ],
+   "expected": "①200 在原事项补充 ②409 归档不再接受 ③拒绝（400/409，提示已处理）④结论与历史可见",
+   "data": "未结补充；结案归档只读、不重开",
+   "precondition": "CASE-RPT 未结/已结",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-07",
+   "ac": "US-07-AC-05",
+   "type": "N/R",
+   "sc": "SC-07-08、SC-07-06",
+   "steps": [
+    "`ADM POST /admin/reports/cases/{id}/decision {outcome:unfounded,reason,public_summary}`",
+    "`E GET /notifications`",
+    "`E GET /reports/mine`",
+    "`L`（被举报人）通知",
+    "第三方 `W` 能否读取公开结果（缺口见 R-06）"
+   ],
+   "expected": "②收到 report_result 含可公开结论/原因 ③`result_confirmed=true`、`public_result` 可见 ④未被主动告知 ⑤匿名公开（不含用户/管理员信息）",
+   "data": "举报关闭、case disposed、匿名结论留存",
+   "precondition": "`ADM` 已认领 CASE-RPT",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-07",
+   "ac": "US-07-AC-06",
+   "type": "R/N",
+   "sc": "SC-07-11",
+   "steps": [
+    "`E GET /reports/mine`",
+    "新用户或他人对失效对象提交举报",
+    "`E GET /reports/mine` 关联内容",
+    "受处置用户申辩入口"
+   ],
+   "expected": "①既有举报保留且可读 ②400 对象不存在或已失效 ③关联内容按举报资格可读 ④不因举报身份开放对方申辩",
+   "data": "逻辑删除不硬删；关联保留",
+   "precondition": "已有举报对象已失效（评论逻辑删除/商品下架）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-07",
+   "ac": "US-07-AC-07",
+   "type": "R/N",
+   "sc": "SC-01-06、SC-07-07、SC-09-04",
+   "steps": [
+    "`F1` 评价既往已完成交易",
+    "`F1` 提交其他问题举报",
+    "`B1` 评价既往完成交易",
+    "`B1` 新增举报",
+    "两者既有记录读取"
+   ],
+   "expected": "①②200 允许（仅冻结保留无关权限）③④403 拒绝 ⑤只读保留",
+   "data": "仅冻结不影响评价/其他举报；封禁禁新增",
+   "precondition": "仅交易冻结的 `F1`；已封禁 `B1`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-01",
+   "type": "R",
+   "sc": "SC-07-10、SC-02-04、SC-09-03",
+   "steps": [
+    "`ADM2` 对未认领事项执行 review/decision/inquiry/dispose",
+    "`ADM claim`",
+    "`ADM2` 再执行",
+    "`ADM`/`ADM2` GET 事项详情"
+   ],
+   "expected": "①403 ②200 唯一认领 ③403 ④认领人 200、非认领人 403",
+   "data": "事项 `claimed_by_id` 唯一；越权无状态变化",
+   "precondition": "共享池事项（CASE-REV/CASE-RPT/CASE-ABN）；`ADM`、`ADM2`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-02",
+   "type": "N/R",
+   "sc": "SC-02-01、SC-02-02、SC-10-01、SC-10-02",
+   "steps": [
+    "`ADM review {approved, tag_decisions:[approve_new/map_alias]}`",
+    "另例 `review {rejected, reason:\"退回补充：请更换或补充标签\"}`",
+    "通知卖方"
+   ],
+   "expected": "①listed、标签批准并公开/别名生效、通知通过 ②rejected、原因可见、通知未通过 ③记录审核者/时间/结论/原因",
+   "data": "`review_record`（审核者/时间/结论/原因）；标签申请状态；通知",
+   "precondition": "`P-PENDING`；`ADM` 已认领；标签申请 pending",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-03",
+   "type": "R/N",
+   "sc": "SC-07-06、SC-07-05",
+   "steps": [
+    "`ADM claim`",
+    "`decision {outcome:unfounded,reason,public_summary}`",
+    "举报人通知",
+    "被举报人通知"
+   ],
+   "expected": "②`unfounded`、`public_result` ③report_result ④不主动告知被举报人（无 disposal 通知）；不推定平台外事实",
+   "data": "举报结案、无法认定记录；不产生处置限制",
+   "precondition": "CASE-RPT（证据不足）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-04",
+   "type": "N",
+   "sc": "SC-07-07、SC-07-13",
+   "steps": [
+    "`ADM decision {outcome:handled, actions:{remove_content/restrict_display/freeze_trade/ban_user}}`",
+    "受影响者 `GET /notifications`",
+    "查商品/交易/账户状态"
+   ],
+   "expected": "②disposal 通知含原因、处置范围、申辩入口，不披露举报人 ③商品停展、交易冻结、账户封禁按 actions 生效",
+   "data": "case disposed；restriction/frozen/display 记录；通知",
+   "precondition": "CASE-RPT（认定违规，涉及交易/无关评论）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-05",
+   "type": "N/R",
+   "sc": "SC-07-12、SC-07-13（联动 UC-C08-01）",
+   "steps": [
+    "`ADM POST /admin/cases/{id}/inquiry {content}`",
+    "subject `GET /notifications`",
+    "subject `POST /me/cases/{id}/statement`",
+    "`ADM` 实际处置（ban/freeze/remove）",
+    "affected `GET /notifications`",
+    "affected `POST /me/cases/{id}/appeal`",
+    "`ADM POST /admin/cases/{id}/messages` 回复"
+   ],
+   "expected": "①inquiry 通知（不披露举报人）③statement 记录、问询不改状态 ④disposal 通知 ⑥appeal 记录、不自动撤销处置 ⑦appeal_result 通知；说明与申辩分别记录；举报人不能读申辩",
+   "data": "DisposalMessage：inquiry/statement/disposal/appeal/reply 五类留痕",
+   "precondition": "CASE-RPT 已认领、有 subject_user",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-06",
+   "type": "R/N",
+   "sc": "SC-06-03、SC-09-04、SC-09-05、SC-09-07、SC-09-08",
+   "steps": [
+    "双方 confirm/agreement/cancel/IM → 拒绝",
+    "`ADM POST /admin/trades/{id}/freeze` 或 `/unfreeze`（需 `case_id`）",
+    "`ADM POST /admin/trades/{id}/adjust {to_status,reason,case_id}`",
+    "GET transitions",
+    "双方通知"
+   ],
+   "expected": "①写操作 403/409、只读 200 ②200 记录原因 ③200 前后状态/主体/时间/原因/依据 ④transition 链完整 ⑤trade_frozen/trade_unfrozen/trade_adjusted；不伪造用户确认",
+   "data": "frozen 标记、transition、`basis_case_id`、通知",
+   "precondition": "`T-FROZEN` + 已认领 CASE-DISP/ABN",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-07",
+   "type": "R/N",
+   "sc": "SC-07-09、SC-01-07、SC-03-09",
+   "steps": [
+    "`ADM POST /admin/users/{B1}/unban`",
+    "`B1` 写操作复测",
+    "GET 商品/收藏/交易",
+    "原非在售商品"
+   ],
+   "expected": "①200 restriction lifted ②原权限恢复 ③因该封禁停展商品恢复原展示资格 ④不自动上架、关闭请求不重开；其他有效限制保持",
+   "data": "restriction lifted；仅恢复该来源展示；其他限制保留",
+   "precondition": "`B1` 已封禁（商品停展/交易冻结）；`CASE-BAN`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-08",
+   "type": "N/R",
+   "sc": "SC-02-12",
+   "steps": [
+    "`ADM POST /prohibited-items` 新增",
+    "`ADM PUT /prohibited-items/{id}` 更新",
+    "`ADM DELETE`（逻辑维护）",
+    "`Z GET` 最新",
+    "`Z` 尝试修改",
+    "未登录访问"
+   ],
+   "expected": "①②③授权者成功并记录修改主体/时间（至少覆盖 BR-13 六类）④后续查看返回最新范围 ⑤403 ⑥401；审核使用该范围",
+   "data": "prohibited_item 记录 updated_by/time；普通用户只读",
+   "precondition": "`ADM`、`Z`、未登录",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-08",
+   "ac": "US-08-AC-09",
+   "type": "R",
+   "sc": "SC-02-12、SC-01-05",
+   "steps": [
+    "`Z POST/PUT/DELETE /prohibited-items`",
+    "未登录执行同操作"
+   ],
+   "expected": "全部 403/401 拒绝；原范围保持",
+   "data": "无变化",
+   "precondition": "`Z`、未登录访客",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-09",
+   "ac": "US-09-AC-01",
+   "type": "N",
+   "sc": "SC-02-01、SC-02-02",
+   "steps": [
+    "卖方 `GET /products/{id}`",
+    "`Z search`",
+    "`Z GET /products/{id}`",
+    "`Z GET /products/{id}/comments`"
+   ],
+   "expected": "①`pending_review`/`rejected`+原因 ②搜索不含 ③404（非本人不可见）④拒绝访问",
+   "data": "状态与原因在“我的商品”可见；公开入口不展示",
+   "precondition": "`P-PENDING`、`P-REJ`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-09",
+   "ac": "US-09-AC-02",
+   "type": "N",
+   "sc": "SC-05-05、SC-03-04、SC-04-01",
+   "steps": [
+    "`L accept`",
+    "`Z search`",
+    "`Z GET /products/{id}`",
+    "`Z POST comments`",
+    "`D` 再请求"
+   ],
+   "expected": "①商品 `in_transaction` ②退出在售搜索 ③200 详情 ④201 评论 ⑤404/409 不再收新请求",
+   "data": "锁单；详情/评论资格按 BR-14 保留",
+   "precondition": "`P-PUB` 接受一条请求后",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-09",
+   "ac": "US-09-AC-03",
+   "type": "N",
+   "sc": "SC-02-09、SC-05-10",
+   "steps": [
+    "结束后 `GET /products/{id}`",
+    "卖方不操作",
+    "卖方 `relist` 后 GET"
+   ],
+   "expected": "①默认 `delisted` ②保持 ③200 `listed`（资格满足时）",
+   "data": "默认下架；明确继续才上架；后续新交易独立",
+   "precondition": "`T-DONE`、`T-TERM`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-09",
+   "ac": "US-09-AC-04",
+   "type": "N",
+   "sc": "SC-02-16",
+   "steps": [
+    "`L POST /products/{id}/relist`",
+    "`Z search`",
+    "`Z POST /trades/requests`"
+   ],
+   "expected": "①200 listed ②可见 ③新交易/新分支独立",
+   "data": "商品 listed；旧交易历史保留",
+   "precondition": "`P-DELIST`（审核有效、限制允许）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-09",
+   "ac": "US-09-AC-05",
+   "type": "R/N",
+   "sc": "SC-07-07、SC-07-09、SC-03-05",
+   "steps": [
+    "`W GET` 旧链接",
+    "`ADM restore-display`（卖方仍封禁时应 409）",
+    "解封后再解除限制",
+    "`W GET`"
+   ],
+   "expected": "①拒绝公开详情 ②拒绝或只解除该来源限制 ③仅恢复原展示资格 ④200（原在售则恢复；原非在售保持 delisted），不解锁单",
+   "data": "`display_restricted` 前后值、依据 case、编辑历史留痕",
+   "precondition": "`P-RESTRICT`（管理处置撤销公开）；卖方曾封禁的情形",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-09",
+   "ac": "US-09-AC-06",
+   "type": "R/N",
+   "sc": "SC-03-05、SC-12-01",
+   "steps": [
+    "`W GET /products/{id}`",
+    "`Z GET /products/{id}`",
+    "`Z GET /products/mine`",
+    "`Z GET /me/cases`"
+   ],
+   "expected": "①404 ②200（D-43 历史买方）③含该商品全状态 ④既有事项按资格可读",
+   "data": "公开详情不可访问；本人历史/事项按资格保留",
+   "precondition": "`P-DELIST`；`Z` 曾有已结束请求",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-10",
+   "ac": "US-10-AC-01",
+   "type": "R",
+   "sc": "SC-08-03",
+   "steps": [
+    "`Z GET /admin/stats`",
+    "无 token `GET /admin/stats`"
+   ],
+   "expected": "①403 拒绝 ②401",
+   "data": "无",
+   "precondition": "`Z` 登录；未登录",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-10",
+   "ac": "US-10-AC-02",
+   "type": "N",
+   "sc": "SC-08-01",
+   "steps": [
+    "`ADM GET /admin/stats` → 与 `GET /admin/users?status=banned`、`GET /admin/cases` 计数、`GET /products/search` 等逐项对照"
+   ],
+   "expected": "返回用户总数（含封禁）与封禁数单列、各状态商品数、待处理审核/举报事项数、completed/terminated/disputed 交易数；商品状态计数与待办数分别统计",
+   "data": "查询不写库",
+   "precondition": "已有用户/封禁用户/各状态商品/待审事项/举报事项/各状态交易",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-10",
+   "ac": "US-10-AC-03",
+   "type": "N",
+   "sc": "SC-08-02",
+   "steps": [
+    "`ADM GET /admin/stats`（不带 from/to）"
+   ],
+   "expected": "完成交易范围统计不返回默认范围结果（`range_completed` 为空/未计算），要求显式选择范围或“全部”",
+   "data": "无",
+   "precondition": "未选择时间范围",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-10",
+   "ac": "US-10-AC-04",
+   "type": "N",
+   "sc": "SC-08-02",
+   "steps": [
+    "`ADM GET /admin/stats?from=YYYY-MM-DD&to=YYYY-MM-DD`；再对比查询时点状态数"
+   ],
+   "expected": "范围内完成交易数按“结果确认时间”计算，与查询时点状态指标分别标明；不混用",
+   "data": "无",
+   "precondition": "已有 completed 交易（不同时间）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-10",
+   "ac": "US-10-AC-05",
+   "type": "N",
+   "sc": "SC-08-04",
+   "steps": [
+    "`ADM GET /admin/stats?from=1990-01-01&to=1990-01-02`"
+   ],
+   "expected": "返回 `range_completed=0` 或空结果，不报错、不推断原因",
+   "data": "无",
+   "precondition": "选择无数据范围",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-10",
+   "ac": "US-10-AC-06",
+   "type": "N/R",
+   "sc": "SC-08-05、SC-08-06",
+   "steps": [
+    "`ADM GET /admin/stats`",
+    "检查响应字段",
+    "尝试查询金额/流水（无该能力）"
+   ],
+   "expected": "①terminated 计失败；rejected/withdrawn/closed 不计入已接受交易的失败数；disputed 单独计数 ②无真实付款金额/流水/成交收入字段",
+   "data": "统计为派生量，不记录资金",
+   "precondition": "存在 rejected/withdrawn/closed/terminated/completed/disputed 各一笔",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-11",
+   "ac": "US-11-AC-01",
+   "type": "N",
+   "sc": "SC-11-01、SC-05-01、SC-04-06",
+   "steps": [
+    "`Z POST /trades/requests`",
+    "`L GET /notifications`",
+    "`L GET /notifications/todos`",
+    "`L GET /conversations`"
+   ],
+   "expected": "②request_created 通知关联同一 trade/conversation ④交易分支存在；不重复生成请求/分支/通知",
+   "data": "通知与分支同源；请求仅一条",
+   "precondition": "`P-PUB`；`Z` 提交请求",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-11",
+   "ac": "US-11-AC-02",
+   "type": "N/R",
+   "sc": "SC-11-02、SC-11-04",
+   "steps": [
+    "`GET /notifications` 列表",
+    "`GET /notifications/unread-count`",
+    "`POST /notifications/{id}/read`",
+    "再查未读数与 todos",
+    "完成对应业务后再查 todos"
+   ],
+   "expected": "①②不标读 ③仅该条已读、未读-1 ④待办数量不变（已读不消除待办）⑤办结/无需本人处理后自动移出，通知历史保留",
+   "data": "通知已读与待办分别维护",
+   "precondition": "用户有 3 条未读通知 + 1 条待办",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-11",
+   "ac": "US-11-AC-03",
+   "type": "N",
+   "sc": "SC-11-02、SC-04-06",
+   "steps": [
+    "读完全部通知",
+    "`GET /conversations`、`GET /conversations/{id}` 未读",
+    "`POST /conversations/{id}/read`"
+   ],
+   "expected": "①通知已读 ②聊天未读保持不变 ③仅该分支已展示消息标读",
+   "data": "两类已读独立",
+   "precondition": "通知与聊天均未读",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-11",
+   "ac": "US-11-AC-04",
+   "type": "R/N",
+   "sc": "SC-11-03",
+   "steps": [
+    "从通知进入交易详情",
+    "尝试执行失效操作（如接受已撤回请求）",
+    "GET 当前状态"
+   ],
+   "expected": "①显示当前状态并重新校验 ②409/403 拒绝 ③历史与通知保留",
+   "data": "旧入口不授予失效操作",
+   "precondition": "旧通知指向已撤回/已关闭/已完成交易",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-11",
+   "ac": "US-11-AC-05",
+   "type": "N",
+   "sc": "SC-11-01、4.17 全事件表",
+   "steps": [
+    "逐事件触发后检查接收方、内容与关联入口；重点：单方确认只提醒尚未确认方、交易完成通知双方、管理员不接收站内通知"
+   ],
+   "expected": "接收方与内容符合 4.17；单方确认不通知“已完成”；管理员待办来自共享池、个人通知为空",
+   "data": "通知记录含类型/接收人/来源业务/未读状态",
+   "precondition": "触发各业务事件（见第 7 章 7.4 通知矩阵）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-11",
+   "ac": "US-11-AC-06",
+   "type": "R",
+   "sc": "SC-11-03、SC-06-04",
+   "steps": [
+    "`W POST /notifications/{他人id}/read`",
+    "`W` 访问 L 的交易/事项详情",
+    "已读后尝试用通知代替接受/确认"
+   ],
+   "expected": "①404 ②403/404 ③业务操作仍须明确执行，已读不代确认（409/无副作用）",
+   "data": "越权无变化",
+   "precondition": "`W` 持他人通知 id；`L` 的交易/事项链接",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-12",
+   "ac": "US-12-AC-01",
+   "type": "N",
+   "sc": "SC-12-01",
+   "steps": [
+    "`Z GET /products/mine`"
+   ],
+   "expected": "返回全部状态商品、审核原因（rejected）、待接受请求数；按本人归属",
+   "data": "只读；不新增权限",
+   "precondition": "`Z` 有 pending/rejected/listed/in_transaction/delisted 多状态商品及关联请求",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-12",
+   "ac": "US-12-AC-02",
+   "type": "N",
+   "sc": "SC-12-01",
+   "steps": [
+    "`GET /trades/mine?role=all`",
+    "`?role=buyer`",
+    "`?role=seller`",
+    "尝试删除/重开结束记录"
+   ],
+   "expected": "①②③覆盖两种身份全部状态 ④无删除/重开能力（404/405）；结束记录只读、历史保留",
+   "data": "只读聚合；不改变交易状态",
+   "precondition": "`Z` 同时有买方、卖方身份的请求与交易",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-12",
+   "ac": "US-12-AC-03",
+   "type": "R/N",
+   "sc": "SC-12-01、SC-07-02、SC-07-03",
+   "steps": [
+    "`Z GET /me/reviews?type=published`",
+    "`?type=received`",
+    "`W` 读取 Z 评价（无接口/403）",
+    "商品下架后重复",
+    "尝试改删"
+   ],
+   "expected": "①②仅本人归属、关联交易 ④下架不影响读取 ③⑤拒绝越权/改删",
+   "data": "评价按发表/收到归属；不可改删",
+   "precondition": "`Z` 发表/收到评价；商品已下架后",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-12",
+   "ac": "US-12-AC-04",
+   "type": "N",
+   "sc": "SC-12-02",
+   "steps": [
+    "`Z GET /reports/mine`",
+    "`Z GET /reports/received`",
+    "`Z GET /me/cases`",
+    "从问询/处置通知进入"
+   ],
+   "expected": "①本人举报独立可查 ②仅已实际处置事项、隐去举报人 ③有资格沟通入口 ④问询阶段经通知提交说明、处置后经列表提交申辩",
+   "data": "两入口独立；未处置不额外披露",
+   "precondition": "`Z` 有本人举报；`Z` 有已实际处置的“收到举报”；有处于问询阶段事项",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-12",
+   "ac": "US-12-AC-05",
+   "type": "R/N",
+   "sc": "SC-12-03",
+   "steps": [
+    "`Z GET /reports/mine` 关联内容",
+    "新举报失效对象",
+    "`W GET /me/cases/{Z 的 id}`"
+   ],
+   "expected": "①既有举报关联内容可读 ②400 失败、不新建 ③403/404 拒绝",
+   "data": "不开放对方申辩及其他私有记录",
+   "precondition": "举报对象已失效（逻辑删除/下架）；`W` 越权",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-12",
+   "ac": "US-12-AC-06",
+   "type": "R",
+   "sc": "SC-12-01、SC-12-03、SC-11-03",
+   "steps": [
+    "已结束交易上执行 accept/confirm",
+    "他人商品执行 edit/delist",
+    "他人事项执行 statement/appeal"
+   ],
+   "expected": "全部按当前状态与资格拒绝（403/404/409）；聚合入口不增加访问、删除、重开权限",
+   "data": "重新校验；无副作用",
+   "precondition": "从聚合入口进入后对象状态/资格已变化",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-12",
+   "ac": "US-12-AC-07",
+   "type": "N/R",
+   "sc": "SC-12-04、BR-11、D-43",
+   "steps": [
+    "卖方 `PATCH /products/{id}`",
+    "`Z GET /products/{id}/edit-history`",
+    "`Z GET /notifications`",
+    "对照未结束请求买方"
+   ],
+   "expected": "②可看请求对应内容及之后变更 ③已结束请求/交易不再收到 product_edited 通知 ④未结束买方仍收到；不扩大其他私人记录访问",
+   "data": "编辑历史保留；已结束记录只读",
+   "precondition": "`Z` 的请求已结束（撤回/拒绝/关闭/完成/终止）后商品再被编辑",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-13",
+   "ac": "US-13-AC-01",
+   "type": "N",
+   "sc": "SC-10-01",
+   "steps": [
+    "`L POST /products {tags:[{new_name:\"实验器材\"}]}`",
+    "`ADM claim` + `review {approved, tag_decisions:[approve_new]}`",
+    "`GET /categories`；另例同义名走 `map_alias`"
+   ],
+   "expected": "①200 pending、申请 pending ②200 商品 listed、新标签公开/别名生效 ③新标签可选；商品未通过时不批准不公开",
+   "data": "标签申请状态 approved_new/approved_alias；分类 active",
+   "precondition": "卖方 `L` 缺少合适标签；`ADM` 待审",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-13",
+   "ac": "US-13-AC-02",
+   "type": "N/R",
+   "sc": "SC-10-02",
+   "steps": [
+    "`ADM review {approved, tag_decisions:[{decision:reject,...}]}` 并保留已有标签",
+    "另例无合适已有标签时 `review {rejected, reason:\"退回补充：请更换或补充标签\"}`"
+   ],
+   "expected": "①说明原因后通过，商品不被标签问题阻塞 ②按不通过记录退回补充原因，卖方修改后可重提",
+   "data": "审核结论与原因留存",
+   "precondition": "申请标签不合适但商品合规",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-13",
+   "ac": "US-13-AC-03",
+   "type": "N/R",
+   "sc": "SC-10-03、SC-10-04",
+   "steps": [
+    "`ADM PATCH /categories/{id} {name:新主名}`",
+    "`GET /categories`",
+    "`search?category_names=旧名`/新名",
+    "`ADM DELETE /categories/{id}/aliases/by-name`",
+    "再按旧名搜索/筛选/打开历史链接"
+   ],
+   "expected": "②旧名保留别名、当前展示新名 ③新旧名均定位同一分类 ④200 移除别名 ⑤旧名不再识别（无匹配/空结果），分类身份与商品归属不变，历史仅保留当时名称",
+   "data": "分类身份稳定；别名集合/历史名称分离",
+   "precondition": "`CAT-ALIAS`（有活跃别名）；历史交易/链接",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-13",
+   "ac": "US-13-AC-04",
+   "type": "N",
+   "sc": "SC-10-03",
+   "steps": [
+    "`ADM PATCH /categories/{id}` 停用",
+    "卖方新发布选该标签",
+    "已有商品筛选",
+    "`GET /categories`"
+   ],
+   "expected": "①200 停用 ②400 新发布不可选 ③已有商品保留、仍有公开在售时保留筛选入口 ④按状态返回",
+   "data": "仅停用；旧商品/交易不受影响",
+   "precondition": "`CAT-DISABLED`（有关联在售商品）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-13",
+   "ac": "US-13-AC-05",
+   "type": "N",
+   "sc": "SC-10-03",
+   "steps": [
+    "`ADM DELETE /categories/{CAT-DELETED}`",
+    "`GET /categories`",
+    "对有关联分类 DELETE"
+   ],
+   "expected": "①200 逻辑删除、保留依据 ②不再列出 ③拒绝/提示仅停用",
+   "data": "逻辑删除；关联分类不可删",
+   "precondition": "`CAT-DELETED`（从未关联）；有关联分类",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-13",
+   "ac": "US-13-AC-06",
+   "type": "N",
+   "sc": "SC-10-03、SC-02-06",
+   "steps": [
+    "`ADM POST /admin/products/{id}/correct-category {category_ids,reason}` → `L GET /notifications` → GET 交易与历史内容"
+   ],
+   "expected": "200 记录前后分类、原因、执行者、时间并通知卖方；不改变交易状态、约定及历史交易内容",
+   "data": "纠类留据；交易无副作用",
+   "precondition": "`P-TRADE` 交易中（卖方 `L`）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-13",
+   "ac": "US-13-AC-07",
+   "type": "N",
+   "sc": "SC-03-01、SC-10-01",
+   "steps": [
+    "`search?keyword=&category_ids=多标签&price_min_cents&price_max_cents`；再以别名参与筛选"
+   ],
+   "expected": "全部所选标签均匹配且同时满足关键词与价格；同义别名不重复计作多个标签；端点包含",
+   "data": "检索只读；标签语义一致",
+   "precondition": "`P-MT` 多标签；别名场景",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-14",
+   "ac": "US-14-AC-01",
+   "type": "A",
+   "sc": "SC-09-01、SC-05-09、SC-09-02",
+   "steps": [
+    "起点前移 8 天（第 6 章方案 B）",
+    "等一次后台扫描",
+    "`GET /trades/{id}`",
+    "`GET /products/{id}`",
+    "`GET /me/cases`",
+    "`GET /notifications`"
+   ],
+   "expected": "③`abnormal`+`frozen=true` ④商品仍 in_transaction（锁单保持）⑤CASE-ABN 进池 ⑥双方 trade_abnormal；不自动完成/取消",
+   "data": "异常交易+冻结+事项+通知；`confirm_wait_*` 清空",
+   "precondition": "`T-HALF`（单方确认、未争议、未冻结）",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-14",
+   "ac": "US-14-AC-02",
+   "type": "N",
+   "sc": "SC-06-01、SC-06-07、SC-09-10",
+   "steps": [
+    "任一方 `POST /disputes {description}`（原计时结束）",
+    "双方 `POST /disputes/resolve`",
+    "任一方 `POST confirmations`",
+    "GET 计时"
+   ],
+   "expected": "①`disputed`、`confirm_wait_started_at=null` ②恢复 in_progress、不启动计时 ③200 ④新完整 7 天计时",
+   "data": "争议视为回应；恢复后重新确认才完整计时",
+   "precondition": "`T-HALF` 等待中",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-14",
+   "ac": "US-14-AC-03",
+   "type": "R",
+   "sc": "SC-09-03",
+   "steps": [
+    "`ADM2` 处置未认领 CASE-ABN",
+    "`ADM claim`",
+    "`ADM` 处置",
+    "`ADM2 GET /admin/cases/{id}`"
+   ],
+   "expected": "①403 ②200 唯一认领 ③200 可处置（调整/回复）④403；私人访问限必要范围",
+   "data": "事项归属唯一；越权无变化",
+   "precondition": "CASE-ABN 在共享池；`ADM`、`ADM2`",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-14",
+   "ac": "US-14-AC-04",
+   "type": "R",
+   "sc": "SC-09-04、SC-09-10、SC-04-08",
+   "steps": [
+    "双方 confirm/agreement/cancel/IM → 拒绝",
+    "`ADM GET /admin/trades/{id}` 记录 `confirm_wait_remaining_seconds`",
+    "冻结中等待 60—120s 后再取",
+    "`ADM unfreeze`（有依据）",
+    "解冻后再取"
+   ],
+   "expected": "①403/409、只读 200 ②③冻结期间 remaining 不下降（暂停累计）④200 ⑤解冻后 remaining 从暂停点续算（仅扣除解冻后经过时间）；双方 IM 禁发仅限组合，第三方会话不受影响",
+   "data": "保留当前确认、`confirm_wait_paused_at`、剩余时间；解冻续算",
+   "precondition": "`T-FROZEN`（进行中已有单方确认）；对照第三方会话",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-14",
+   "ac": "US-14-AC-05",
+   "type": "N",
+   "sc": "SC-09-06、SC-09-08",
+   "steps": [
+    "`ADM POST /admin/trades/{id}/adjust {to_status:in_progress, reason, case_id}` → GET 交易与 transitions"
+   ],
+   "expected": "200 清当前确认、保留有效约定与历史；**恢复不自动解冻**（frozen 仍 true）；不启动计时；记录前后状态/主体/时间/依据",
+   "data": "约定保留；确认清空留历史；冻结标记保持",
+   "precondition": "`T-ABN`/`T-FROZEN` + 已认领 CASE-ABN",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-14",
+   "ac": "US-14-AC-06",
+   "type": "N",
+   "sc": "SC-09-07、SC-09-08",
+   "steps": [
+    "`ADM adjust {to_status:completed 或 terminated, reason, case_id}` → GET 交易/商品/会话/通知"
+   ],
+   "expected": "200 结束交易：解本笔冻结与锁单、分支归档、商品默认下架（卖方明确继续才上架）、其他限制保持、双方通知、依据留痕",
+   "data": "completed/terminated；frozen=false；归档；商品 delisted（或按资格 listed）",
+   "precondition": "`T-ABN`/`T-FROZEN` 已认领",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-14",
+   "ac": "US-14-AC-07",
+   "type": "N",
+   "sc": "SC-09-05",
+   "steps": [
+    "subject `GET /me/cases/{id}`",
+    "`POST /me/cases/{id}/appeal`",
+    "`ADM POST /admin/cases/{id}/messages` 回复",
+    "subject 通知"
+   ],
+   "expected": "②200 记录申辩、不自动撤销任何处置 ③200 回复 ④appeal_result 通知；说明/申辩/回复分别留痕",
+   "data": "DisposalMessage 记录；处置维持到有据调整",
+   "precondition": "subject 有 CASE-ABN 访问资格",
+   "source": "US-AC"
+  },
+  {
+   "us": "US-14",
+   "ac": "US-14-AC-08",
+   "type": "A",
+   "sc": "SC-09-09、BR-08、D-48",
+   "steps": [
+    "`ADM POST /admin/trades/A/adjust {to_status:in_progress, case_id}`",
+    "GET A/B/商品/分支/限制"
+   ],
+   "expected": "①409 提示同商品已有锁单、先按该笔处理 ②A 仍 completed、B 仍 in_progress、商品仍 in_transaction、分支/限制均不变；不自动终止 B",
+   "data": "拒绝恢复不产生副作用；需先处理 B 后重试",
+   "precondition": "`P-D48-A` 旧交易 A 已 completed；同商品新交易 B 在 in_progress 锁单",
+   "source": "US-AC"
+  }
+ ],
+ "sc_branches": [
+  {
+   "sc": "SC-01-01",
+   "category": "正常",
+   "related": "US-01-AC-01",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-01"
+   ],
+   "steps": [
+    "未注册邮箱→send-code→register→login"
+   ],
+   "expected": "唯一 user ID、唯一邮箱、可登录",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-02",
+   "category": "异常",
+   "related": "US-01-AC-02",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-02"
+   ],
+   "steps": [
+    "已被占用邮箱重复注册"
+   ],
+   "expected": "拒绝、不合并、不新增账户",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-03",
+   "category": "异常",
+   "related": "US-01-AC-03",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-03"
+   ],
+   "steps": [
+    "错误密码（含连续多次）登录"
+   ],
+   "expected": "拒绝；不设阈值、不自动锁定",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-04",
+   "category": "正常",
+   "related": "US-01-AC-04",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-04"
+   ],
+   "steps": [
+    "绑定邮箱 send-code→reset"
+   ],
+   "expected": "自助重置；user ID 不变",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-05",
+   "category": "权限",
+   "related": "US-03-AC-06、US-08-AC-09",
+   "us": [
+    "US-03",
+    "US-08"
+   ],
+   "ac": [
+    "US-03-AC-06",
+    "US-08-AC-09"
+   ],
+   "steps": [
+    "未登录访问列表/搜索/详情/评论、尝试维护"
+   ],
+   "expected": "401 引导登录；无业务内容",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-06",
+   "category": "权限／状态转换",
+   "related": "US-01-AC-07、US-04-AC-02",
+   "us": [
+    "US-01",
+    "US-04"
+   ],
+   "ac": [
+    "US-01-AC-07",
+    "US-04-AC-02"
+   ],
+   "steps": [
+    "封禁 `B1` 登录并尝试发布/交易/评论/IM/收藏"
+   ],
+   "expected": "可登录、只读；写操作 403；收藏只读",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-07",
+   "category": "状态转换",
+   "related": "US-08-AC-07、US-01-AC-07",
+   "us": [
+    "US-01",
+    "US-08"
+   ],
+   "ac": [
+    "US-01-AC-07",
+    "US-08-AC-07"
+   ],
+   "steps": [
+    "`ADM unban`"
+   ],
+   "expected": "恢复原权限；仅恢复因该封禁停展的展示；记录保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-08",
+   "category": "正常／权限",
+   "related": "US-01-AC-03、US-01-AC-05",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-03",
+    "US-01-AC-05"
+   ],
+   "steps": [
+    "改密（验证旧密码）、换邮箱（验证新旧+唯一）、改名、退出"
+   ],
+   "expected": "规则逐项生效；user ID 不变；旧名仅留历史",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-09",
+   "category": "异常",
+   "related": "US-01-AC-02、US-01-AC-05",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-02",
+    "US-01-AC-05"
+   ],
+   "steps": [
+    "换邮箱目标已被占用"
+   ],
+   "expected": "拒绝；原邮箱与 user ID 保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-10",
+   "category": "历史／审计",
+   "related": "US-01-AC-06",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-06"
+   ],
+   "steps": [
+    "改名/换邮箱后按 user ID 核对历史业务"
+   ],
+   "expected": "历史与操作主体仍归原 user ID",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-11",
+   "category": "异常／资格",
+   "related": "US-01-AC-08",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-08"
+   ],
+   "steps": [
+    "未验证/验证失败/验证后换邮箱注册"
+   ],
+   "expected": "拒绝创建；不占用邮箱；不分配正式 user ID",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-01-12",
+   "category": "状态转换／关联",
+   "related": "US-01-AC-07（D-51/D-52）",
+   "us": [
+    "US-01"
+   ],
+   "ac": [
+    "US-01-AC-07"
+   ],
+   "steps": [
+    "封禁 `B1`：有商品、待接受请求、进行中+单方确认交易"
+   ],
+   "expected": "待接受请求关闭+通知+分支归档；进行中交易冻结、计时暂停；解除不重开",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-01",
+   "category": "正常",
+   "related": "US-02-AC-01",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-01"
+   ],
+   "steps": [
+    "发布→`ADM` 认领→审核通过（含标签）"
+   ],
+   "expected": "新增商品/审核记录；转 listed、可检索",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-02",
+   "category": "异常",
+   "related": "US-02-AC-02",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-02"
+   ],
+   "steps": [
+    "认领后按 BR-13 不通过并记录原因"
+   ],
+   "expected": "rejected、原因可见、可修改重提",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-03",
+   "category": "权限",
+   "related": "US-02-AC-03/04（非所有者）",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-03"
+   ],
+   "steps": [
+    "非商品所有者修改关键内容"
+   ],
+   "expected": "拒绝（404/403）；无变化",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-04",
+   "category": "权限",
+   "related": "US-08-AC-01",
+   "us": [
+    "US-08"
+   ],
+   "ac": [
+    "US-08-AC-01"
+   ],
+   "steps": [
+    "非认领管理员执行审核结论"
+   ],
+   "expected": "403；审核结论限认领人",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-05",
+   "category": "状态保持",
+   "related": "US-02-AC-03",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-03"
+   ],
+   "steps": [
+    "允许编辑商品（可能有未结束请求）改内容"
+   ],
+   "expected": "不二审、不暂停展示、不关闭请求；留前后内容；通知相关买方",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-06",
+   "category": "权限／异常",
+   "related": "US-02-AC-04、US-13-AC-06",
+   "us": [
+    "US-02",
+    "US-13"
+   ],
+   "ac": [
+    "US-02-AC-04",
+    "US-13-AC-06"
+   ],
+   "steps": [
+    "交易中卖方改关键内容；管理员纠类"
+   ],
+   "expected": "卖方拒绝；管理员留据纠类并通知，不改约定/状态/历史交易内容",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-07",
+   "category": "异常",
+   "related": "补测 BR-09",
+   "us": [],
+   "ac": [],
+   "steps": [
+    "存在未结束锁单交易时卖方主动下架"
+   ],
+   "expected": "409/403 拒绝；须先按阶段取消或由管理员终止",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-08",
+   "category": "状态转换",
+   "related": "US-02-AC-05",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-05"
+   ],
+   "steps": [
+    "无锁单、有待接受请求时下架"
+   ],
+   "expected": "商品 delisted；请求 closed 原因商品已下架；分支归档",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-09",
+   "category": "状态转换",
+   "related": "US-05-AC-10、US-09-AC-03",
+   "us": [
+    "US-05",
+    "US-09"
+   ],
+   "ac": [
+    "US-05-AC-10",
+    "US-09-AC-03"
+   ],
+   "steps": [
+    "本笔完成/有效取消/终止后卖方选择上架"
+   ],
+   "expected": "默认 delisted；明确继续且资格满足才 listed；解本笔锁单/冻结",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-10",
+   "category": "正常／异常",
+   "related": "US-02-AC-03（E-07）",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-03"
+   ],
+   "steps": [
+    "卖方编辑后可能被举报实质变化"
+   ],
+   "expected": "留前后内容/修改人/时间；不自动识别实质变化；管理员必要范围核查",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-11",
+   "category": "正常／权限",
+   "related": "US-02-AC-08",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-08"
+   ],
+   "steps": [
+    "已登录用户查看禁发范围"
+   ],
+   "expected": "返回当前细目；普通用户只读",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-12",
+   "category": "管理／权限",
+   "related": "US-08-AC-08/09、US-02-AC-08",
+   "us": [
+    "US-02",
+    "US-08"
+   ],
+   "ac": [
+    "US-02-AC-08",
+    "US-08-AC-08"
+   ],
+   "steps": [
+    "管理员维护禁发细目并保存；普通用户/未登录尝试"
+   ],
+   "expected": "授权者成功并记录主体/时间；其余 403/401；原范围保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-13",
+   "category": "状态保持",
+   "related": "US-02-AC-09",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-09"
+   ],
+   "steps": [
+    "待审核期间（认领前后）修改内容/标签/撤回申请"
+   ],
+   "expected": "保持 pending_review、不重新排队；结论依据最新内容",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-14",
+   "category": "状态转换／权限",
+   "related": "US-02-AC-09（D-46）",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-09"
+   ],
+   "steps": [
+    "待审核商品：认领前撤回 / 认领后撤回"
+   ],
+   "expected": "认领前允许→delisted、保留记录；认领后 409、状态保持",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-15",
+   "category": "状态转换",
+   "related": "US-02-AC-09、US-02-AC-02",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-02",
+    "US-02-AC-09"
+   ],
+   "steps": [
+    "撤回后（未过审）修改后重新提交"
+   ],
+   "expected": "重新进 pending_review+共享池；不得直接公开；历史保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-16",
+   "category": "状态转换",
+   "related": "US-02-AC-06、US-09-AC-04",
+   "us": [
+    "US-02",
+    "US-09"
+   ],
+   "ac": [
+    "US-02-AC-06",
+    "US-09-AC-04"
+   ],
+   "steps": [
+    "已下架、审核有效、限制允许的本人商品重新上架"
+   ],
+   "expected": "转 listed；旧交易历史保留；新请求独立",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-02-17",
+   "category": "权限／冻结",
+   "related": "US-02-AC-07（D-50）",
+   "us": [
+    "US-02"
+   ],
+   "ac": [
+    "US-02-AC-07"
+   ],
+   "steps": [
+    "仅交易冻结：发布新商品/下架/上架；无关商品合规编辑"
+   ],
+   "expected": "前三者 403；无关商品编辑 200；封禁账户另按写限制",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-01",
+   "category": "正常",
+   "related": "US-03-AC-01、US-04-AC-01",
+   "us": [
+    "US-03",
+    "US-04"
+   ],
+   "ac": [
+    "US-03-AC-01",
+    "US-04-AC-01"
+   ],
+   "steps": [
+    "组合条件检索并收藏"
+   ],
+   "expected": "返回符合条件商品；新增收藏",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-02",
+   "category": "异常",
+   "related": "US-03-AC-03",
+   "us": [
+    "US-03"
+   ],
+   "ac": [
+    "US-03-AC-03"
+   ],
+   "steps": [
+    "无匹配条件检索"
+   ],
+   "expected": "空列表+“无匹配商品”；不暴露非公开商品",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-03",
+   "category": "权限",
+   "related": "US-03-AC-06、SC-01-05",
+   "us": [
+    "US-03"
+   ],
+   "ac": [
+    "US-03-AC-06"
+   ],
+   "steps": [
+    "未登录检索/详情"
+   ],
+   "expected": "401 引导登录",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-04",
+   "category": "权限／状态保持",
+   "related": "US-03-AC-04、US-09-AC-02",
+   "us": [
+    "US-03",
+    "US-09"
+   ],
+   "ac": [
+    "US-03-AC-04",
+    "US-09-AC-02"
+   ],
+   "steps": [
+    "交易中/已下架商品的搜索与详情"
+   ],
+   "expected": "交易中退出搜索但登录可看详情、收藏保持；下架无公开详情",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-05",
+   "category": "状态转换",
+   "related": "US-03-AC-05、US-04-AC-02/09",
+   "us": [
+    "US-03",
+    "US-04"
+   ],
+   "ac": [
+    "US-03-AC-05",
+    "US-04-AC-02"
+   ],
+   "steps": [
+    "商品被撤销公开访问后看搜索/收藏/旧链接"
+   ],
+   "expected": "搜索无入口；收藏仅失效提示；旧链接 404、不复校验泄露",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-06",
+   "category": "权限",
+   "related": "US-04-AC-01",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-01"
+   ],
+   "steps": [
+    "查看他人收藏清单"
+   ],
+   "expected": "拒绝；清单仅本人可见",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-07",
+   "category": "正常",
+   "related": "US-04-AC-02",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-02"
+   ],
+   "steps": [
+    "取消本人收藏（含失效项）"
+   ],
+   "expected": "移除记录；失效项也可取消",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-08",
+   "category": "权限",
+   "related": "US-04-AC-02（BR-32）",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-02"
+   ],
+   "steps": [
+    "封禁账户查看/调整收藏"
+   ],
+   "expected": "查看允许；收藏与取消 403",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-03-09",
+   "category": "状态转换／权限",
+   "related": "US-04-AC-09",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-09"
+   ],
+   "steps": [
+    "管理处置解除后重新读取清单"
+   ],
+   "expected": "恢复公开资格则自动恢复有效；仍有其他限制/下架保持失效",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-01",
+   "category": "正常",
+   "related": "US-04-AC-03",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-03"
+   ],
+   "steps": [
+    "登录用户评论公开可交易/交易中商品"
+   ],
+   "expected": "校验通过后公开展示；评论与私聊分别提供",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-02",
+   "category": "正常",
+   "related": "US-04-AC-03",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-03"
+   ],
+   "steps": [
+    "该商品卖方回复买方评论"
+   ],
+   "expected": "公开展示回复；不支持买方互相回复",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-03",
+   "category": "异常",
+   "related": "US-04-AC-03",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-03"
+   ],
+   "steps": [
+    "对已下架/撤销公开商品评论或回复"
+   ],
+   "expected": "拒绝新增；旧评论按作者/管理权限处理",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-04",
+   "category": "权限",
+   "related": "US-04-AC-03（BR-17/34）",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-03"
+   ],
+   "steps": [
+    "删除评论：作者/他人/认领管理员移除"
+   ],
+   "expected": "作者可逻辑删除本人；他人不可；管理员留理由移除",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-05",
+   "category": "异常",
+   "related": "US-04-AC-04、SC-05-04",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-04"
+   ],
+   "steps": [
+    "向本人发起普通私聊"
+   ],
+   "expected": "拒绝；向他人可独立发起",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-06",
+   "category": "正常",
+   "related": "US-04-AC-04/05、US-05-AC-01",
+   "us": [
+    "US-04",
+    "US-05"
+   ],
+   "ac": [
+    "US-04-AC-04",
+    "US-05-AC-01"
+   ],
+   "steps": [
+    "普通私聊复用、购买请求开分支、结束归档"
+   ],
+   "expected": "普通私聊按双人复用；每笔请求独立分支；结束归档留历史",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-07",
+   "category": "权限",
+   "related": "补测 BR-18/19/34、US-06-AC-06",
+   "us": [
+    "US-06"
+   ],
+   "ac": [
+    "US-06-AC-06"
+   ],
+   "steps": [
+    "非会话成员/未认领管理员查看会话"
+   ],
+   "expected": "拒绝；管理员仅认领举报/争议事项必要范围",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-08",
+   "category": "权限／异常",
+   "related": "US-04-AC-07、US-14-AC-04",
+   "us": [
+    "US-04",
+    "US-14"
+   ],
+   "ac": [
+    "US-04-AC-07",
+    "US-14-AC-04"
+   ],
+   "steps": [
+    "封禁用户发送；p、q 交易 A 冻结时对照 p–s、q–t"
+   ],
+   "expected": "封禁禁发；A 冻结使 p、q 两类 IM 全部禁发；第三方组合不受影响",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-04-09",
+   "category": "历史／发送资格",
+   "related": "US-04-AC-08",
+   "us": [
+    "US-04"
+   ],
+   "ac": [
+    "US-04-AC-08"
+   ],
+   "steps": [
+    "重新打开已归档交易分支并尝试发送"
+   ],
+   "expected": "历史可读；发送 409；可转入普通私聊但不迁移旧消息",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-01",
+   "category": "正常",
+   "related": "US-05-AC-01/04/07/10",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-01"
+   ],
+   "steps": [
+    "请求→接受→双方约定→各自确认完成"
+   ],
+   "expected": "请求/分支/通知独立；双确认完成；归档；商品默认下架或明确继续",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-02",
+   "category": "权限",
+   "related": "US-05-AC-02",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-02"
+   ],
+   "steps": [
+    "非该商品卖方接受/拒绝请求"
+   ],
+   "expected": "403 拒绝；无变化",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-03",
+   "category": "权限",
+   "related": "US-05-AC-03",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-03"
+   ],
+   "steps": [
+    "非请求发起人撤回"
+   ],
+   "expected": "403 拒绝；无变化",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-04",
+   "category": "权限／异常",
+   "related": "补测 BR-02、SC-04-05",
+   "us": [],
+   "ac": [],
+   "steps": [
+    "对自己商品发起请求或向本人私聊"
+   ],
+   "expected": "拒绝；无变化",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-05",
+   "category": "状态转换",
+   "related": "US-05-AC-02（TR-12/DT-01）",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-02"
+   ],
+   "steps": [
+    "同商品多条待接受请求，卖方接受一条"
+   ],
+   "expected": "被接受进行中；其余 closed 原因“商品已被其他用户锁单”；商品交易中",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-06",
+   "category": "异常",
+   "related": "US-05-AC-03（TR-12）",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-03"
+   ],
+   "steps": [
+    "卖方主动拒绝待接受请求"
+   ],
+   "expected": "rejected；商品原状态不变",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-07",
+   "category": "异常",
+   "related": "US-05-AC-03（TR-13）",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-03"
+   ],
+   "steps": [
+    "卖方接受前买方撤回"
+   ],
+   "expected": "withdrawn；商品原状态不变",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-08",
+   "category": "状态转换",
+   "related": "US-05-AC-07、US-06-AC-02/03",
+   "us": [
+    "US-05",
+    "US-06"
+   ],
+   "ac": [
+    "US-05-AC-07",
+    "US-06-AC-02"
+   ],
+   "steps": [
+    "有生效约定后任一方统一完成确认"
+   ],
+   "expected": "仅记录该方进度并通知另一方、开始计时；双确认才完成",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-09",
+   "category": "异常",
+   "related": "US-05-AC-09、SC-09-01",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-09"
+   ],
+   "steps": [
+    "单方确认后另一方 7 天未回应"
+   ],
+   "expected": "转 abnormal+frozen；不自动完成/取消（模拟见第 6 章）",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-10",
+   "category": "状态转换",
+   "related": "US-05-AC-06",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-06"
+   ],
+   "steps": [
+    "首约前买方直接取消/卖方申请；约定后双方协商取消"
+   ],
+   "expected": "未同意不生效；有效取消 terminated 计失败、解锁单/本笔冻结；商品默认下架",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-11",
+   "category": "权限／异常",
+   "related": "US-01-AC-07、US-14-AC-04",
+   "us": [
+    "US-01",
+    "US-14"
+   ],
+   "ac": [
+    "US-01-AC-07",
+    "US-14-AC-04"
+   ],
+   "steps": [
+    "一方封禁或交易冻结时推进交易"
+   ],
+   "expected": "暂停双方上架/交易操作、禁双方 IM；历史与进度保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-12",
+   "category": "状态保持",
+   "related": "补测 BR-02/BR-05、DT-01",
+   "us": [],
+   "ac": [],
+   "steps": [
+    "双方均未确认且未超时，无操作"
+   ],
+   "expected": "保持进行中；待接受请求不自动过期、不自动取消",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-05-13",
+   "category": "状态保持／变更",
+   "related": "US-05-AC-05、US-05-AC-11（D-49）",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-05",
+    "US-05-AC-11"
+   ],
+   "steps": [
+    "已有单方确认后提出变更：未同意/双方同意"
+   ],
+   "expected": "未同意保留原约定+确认+计时；生效清当前确认、停旧计时、不自动计时；重新确认后完整 7 天",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-06-01",
+   "category": "正常",
+   "related": "US-05-AC-08、US-06-AC-04",
+   "us": [
+    "US-05",
+    "US-06"
+   ],
+   "ac": [
+    "US-05-AC-08",
+    "US-06-AC-04"
+   ],
+   "steps": [
+    "发起争议→双方共同确认解决或认领管理员解决→恢复进行中"
+   ],
+   "expected": "不自动解封/解冻；清当前确认留历史；恢复不启动计时；重新确认后才计时",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-06-02",
+   "category": "异常",
+   "related": "补测 BR-07、DT-04",
+   "us": [],
+   "ac": [],
+   "steps": [
+    "已有争议、双方仍未达成一致"
+   ],
+   "expected": "保持 disputed+锁单；记录保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-06-03",
+   "category": "权限／状态转换",
+   "related": "US-08-AC-06（BR-08）",
+   "us": [
+    "US-08"
+   ],
+   "ac": [
+    "US-08-AC-06"
+   ],
+   "steps": [
+    "认领管理员有依据调整全部状态"
+   ],
+   "expected": "通知双方；记录前后/主体/时间/原因/依据；不伪造确认、不当作核实付款",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-06-04",
+   "category": "权限",
+   "related": "US-06-AC-06、US-11-AC-06",
+   "us": [
+    "US-06",
+    "US-11"
+   ],
+   "ac": [
+    "US-06-AC-06",
+    "US-11-AC-06"
+   ],
+   "steps": [
+    "交易双方/认领管理员/第三方查看争议记录"
+   ],
+   "expected": "双方可看本人记录；管理员限必要范围；第三方及非认领管理员拒绝",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-06-05",
+   "category": "权限",
+   "related": "US-05-AC-08、US-06-AC-01",
+   "us": [
+    "US-05",
+    "US-06"
+   ],
+   "ac": [
+    "US-05-AC-08",
+    "US-06-AC-01"
+   ],
+   "steps": [
+    "争议未恢复时普通用户直接确认完成"
+   ],
+   "expected": "拒绝；须先恢复进行中；管理员按 BR-08 例外",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-06-06",
+   "category": "状态转换",
+   "related": "US-05-AC-06（TR-18）",
+   "us": [
+    "US-05"
+   ],
+   "ac": [
+    "US-05-AC-06"
+   ],
+   "steps": [
+    "未冻结且有资格的争议双方共同同意终止"
+   ],
+   "expected": "terminated、计失败、解除锁单；争议历史保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-06-07",
+   "category": "状态转换",
+   "related": "US-05-AC-08、US-06-AC-04（TR-19）",
+   "us": [
+    "US-05",
+    "US-06"
+   ],
+   "ac": [
+    "US-05-AC-08",
+    "US-06-AC-04"
+   ],
+   "steps": [
+    "恢复后双方重新确认"
+   ],
+   "expected": "恢复不启动计时；重新提交完成确认后完整 7 天；有约定回待完成、无约定回待约定",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-06-08",
+   "category": "异常／状态保持",
+   "related": "补测 4.19、TR-19",
+   "us": [],
+   "ac": [],
+   "steps": [
+    "已有争议/已终止的同一操作重复提交"
+   ],
+   "expected": "返回已有结果；不重复创建事项/推进状态；旧结束记录不重开",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-01",
+   "category": "正常",
+   "related": "US-07-AC-01",
+   "us": [
+    "US-07"
+   ],
+   "ac": [
+    "US-07-AC-01"
+   ],
+   "steps": [
+    "已完成交易一方提交评价（1—5 分+文字）"
+   ],
+   "expected": "保存每方每笔唯一评价；仅“我的评价”按发表/收到可见",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-02",
+   "category": "异常",
+   "related": "US-07-AC-01",
+   "us": [
+    "US-07"
+   ],
+   "ac": [
+    "US-07-AC-01"
+   ],
+   "steps": [
+    "交易未完成时提交评价"
+   ],
+   "expected": "拒绝；无变化",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-03",
+   "category": "异常",
+   "related": "US-07-AC-01/02",
+   "us": [
+    "US-07"
+   ],
+   "ac": [
+    "US-07-AC-01"
+   ],
+   "steps": [
+    "已评价本笔再提交/代他人/修改删除"
+   ],
+   "expected": "拒绝；不支持自行修改删除",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-04",
+   "category": "正常",
+   "related": "US-07-AC-03（BR-25/34）",
+   "us": [
+    "US-07"
+   ],
+   "ac": [
+    "US-07-AC-03"
+   ],
+   "steps": [
+    "未被封禁用户举报对象+原因（证据可选）"
+   ],
+   "expected": "生成待处理举报进共享池；不自动判违规",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-05",
+   "category": "权限",
+   "related": "US-07-AC-03、US-08-AC-03",
+   "us": [
+    "US-07",
+    "US-08"
+   ],
+   "ac": [
+    "US-07-AC-03",
+    "US-08-AC-03"
+   ],
+   "steps": [
+    "期望举报自动下架/封禁"
+   ],
+   "expected": "无自动处置；须认领管理员核查",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-06",
+   "category": "异常",
+   "related": "US-08-AC-03、US-07-AC-05",
+   "us": [
+    "US-07",
+    "US-08"
+   ],
+   "ac": [
+    "US-07-AC-05",
+    "US-08-AC-03"
+   ],
+   "steps": [
+    "证据不足核查"
+   ],
+   "expected": "记录“无法认定/不予处理”；不推定平台外事实；通知举报人",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-07",
+   "category": "状态转换",
+   "related": "US-08-AC-04（BR-32/33/TR-09）",
+   "us": [
+    "US-08"
+   ],
+   "ac": [
+    "US-08-AC-04"
+   ],
+   "steps": [
+    "判定违规涉及交易：封禁/冻结/撤销展示"
+   ],
+   "expected": "冻结交易进度、禁双方 IM、暂停上架交易、撤销涉事商品公开",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-08",
+   "category": "正常",
+   "related": "US-07-AC-05",
+   "us": [
+    "US-07"
+   ],
+   "ac": [
+    "US-07-AC-05"
+   ],
+   "steps": [
+    "处置完成后查看举报结果"
+   ],
+   "expected": "确认后匿去用户/管理员信息向登录用户公开；确认前不可见",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-09",
+   "category": "状态转换",
+   "related": "US-08-AC-07（TR-10）",
+   "us": [
+    "US-08"
+   ],
+   "ac": [
+    "US-08-AC-07"
+   ],
+   "steps": [
+    "管理员确认解除限制"
+   ],
+   "expected": "恢复原权限与因处置停止的展示；原非在售不自动在售",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-10",
+   "category": "权限",
+   "related": "US-08-AC-01",
+   "us": [
+    "US-08"
+   ],
+   "ac": [
+    "US-08-AC-01"
+   ],
+   "steps": [
+    "事项已被他人认领后非认领人处置"
+   ],
+   "expected": "403；同一事项仅一名认领人",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-11",
+   "category": "异常／权限",
+   "related": "US-07-AC-06、US-12-AC-05",
+   "us": [
+    "US-07",
+    "US-12"
+   ],
+   "ac": [
+    "US-07-AC-06",
+    "US-12-AC-05"
+   ],
+   "steps": [
+    "举报对象已删除/失效后查看既有举报或新举报"
+   ],
+   "expected": "既有举报保留关联可读；新举报失败；不恢复公开、不开放申辩",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-12",
+   "category": "正常／流程",
+   "related": "US-08-AC-05",
+   "us": [
+    "US-08"
+   ],
+   "ac": [
+    "US-08-AC-05"
+   ],
+   "steps": [
+    "管理员发起问询并发送问询通知"
+   ],
+   "expected": "被询问用户从通知提交说明；问询不改状态、不表示违规；处置另行通知",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-07-13",
+   "category": "状态转换／处置",
+   "related": "US-07-AC-02、US-08-AC-04",
+   "us": [
+    "US-07",
+    "US-08"
+   ],
+   "ac": [
+    "US-07-AC-02",
+    "US-08-AC-04"
+   ],
+   "steps": [
+    "违规内容移除：涉交易 vs 无关评论/评价"
+   ],
+   "expected": "涉交易仍冻结+限制+撤销涉事商品访问；无关内容仅移除违规对象；通知与历史留存",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-08-01",
+   "category": "正常",
+   "related": "US-10-AC-02",
+   "us": [
+    "US-10"
+   ],
+   "ac": [
+    "US-10-AC-02"
+   ],
+   "steps": [
+    "管理员查看查询时点指标"
+   ],
+   "expected": "用户数含封禁+封禁单列、各状态商品数、待处理审核/举报事项数、completed/terminated/disputed 交易数；分类计数与待办分别统计",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-08-02",
+   "category": "正常",
+   "related": "US-10-AC-03/04",
+   "us": [
+    "US-10"
+   ],
+   "ac": [
+    "US-10-AC-03"
+   ],
+   "steps": [
+    "管理员显式选择范围或全部"
+   ],
+   "expected": "按结果确认时间统计范围内完成交易数；不套用默认范围",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-08-03",
+   "category": "权限",
+   "related": "US-10-AC-01",
+   "us": [
+    "US-10"
+   ],
+   "ac": [
+    "US-10-AC-01"
+   ],
+   "steps": [
+    "普通校园用户访问统计"
+   ],
+   "expected": "403 拒绝",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-08-04",
+   "category": "异常",
+   "related": "US-10-AC-05",
+   "us": [
+    "US-10"
+   ],
+   "ac": [
+    "US-10-AC-05"
+   ],
+   "steps": [
+    "所选范围无数据"
+   ],
+   "expected": "空结果/零计数；不报错、不推测原因",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-08-05",
+   "category": "状态转换／正常",
+   "related": "US-10-AC-06",
+   "us": [
+    "US-10"
+   ],
+   "ac": [
+    "US-10-AC-06"
+   ],
+   "steps": [
+    "范围内含 terminated/rejected/withdrawn/closed"
+   ],
+   "expected": "terminated 计失败；rejected/withdrawn/closed 不计入已接受失败数",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-08-06",
+   "category": "异常",
+   "related": "US-10-AC-06",
+   "us": [
+    "US-10"
+   ],
+   "ac": [
+    "US-10-AC-06"
+   ],
+   "steps": [
+    "期望查询成交金额/流水"
+   ],
+   "expected": "不提供真实付款金额、流水或成交收入；无对应字段/能力",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-01",
+   "category": "正常",
+   "related": "US-14-AC-01、US-05-AC-09",
+   "us": [
+    "US-05",
+    "US-14"
+   ],
+   "ac": [
+    "US-05-AC-09",
+    "US-14-AC-01"
+   ],
+   "steps": [
+    "单方确认有效等待累计超 7 天→扫描转异常→认领处置"
+   ],
+   "expected": "冻结+异常+事项+通知；处置后恢复（模拟见第 6 章）",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-02",
+   "category": "异常／状态保持",
+   "related": "US-14-AC-01（BR-05/08）",
+   "us": [
+    "US-14"
+   ],
+   "ac": [
+    "US-14-AC-01"
+   ],
+   "steps": [
+    "异常交易等待或期望自动结束"
+   ],
+   "expected": "不按等待/约定到期自动完成或取消；无固定处理时限",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-03",
+   "category": "权限",
+   "related": "US-14-AC-03、US-08-AC-01",
+   "us": [
+    "US-08",
+    "US-14"
+   ],
+   "ac": [
+    "US-08-AC-01",
+    "US-14-AC-03"
+   ],
+   "steps": [
+    "非认领管理员处置异常事项"
+   ],
+   "expected": "403；无变化",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-04",
+   "category": "权限／异常",
+   "related": "US-14-AC-04、US-08-AC-06",
+   "us": [
+    "US-08",
+    "US-14"
+   ],
+   "ac": [
+    "US-08-AC-06",
+    "US-14-AC-04"
+   ],
+   "steps": [
+    "冻结交易中双方发起新交易/上架/发 IM"
+   ],
+   "expected": "暂停相应操作；历史与进度只读保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-05",
+   "category": "异常",
+   "related": "US-14-AC-07、US-08-AC-05",
+   "us": [
+    "US-08",
+    "US-14"
+   ],
+   "ac": [
+    "US-08-AC-05",
+    "US-14-AC-07"
+   ],
+   "steps": [
+    "处置中用户需要说明/反驳/申诉"
+   ],
+   "expected": "经处置通知与沟通单进行；不恢复买卖双方 IM；说明/申辩分别留痕",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-06",
+   "category": "状态转换",
+   "related": "US-14-AC-05、US-06-AC-04",
+   "us": [
+    "US-06",
+    "US-14"
+   ],
+   "ac": [
+    "US-06-AC-04",
+    "US-14-AC-05"
+   ],
+   "steps": [
+    "管理恢复进行中，或有依据仅解除冻结"
+   ],
+   "expected": "恢复：保留有效约定、清当前确认、**不自动解冻**；仅解冻：保留当前确认并续算剩余；解除具体冻结不解其他限制",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-07",
+   "category": "权限／状态转换",
+   "related": "US-14-AC-06、US-08-AC-06",
+   "us": [
+    "US-08",
+    "US-14"
+   ],
+   "ac": [
+    "US-08-AC-06",
+    "US-14-AC-06"
+   ],
+   "steps": [
+    "冻结交易双方取消/管理员管理终止"
+   ],
+   "expected": "双方禁止操作；管理员有依据终止后解锁单/本笔冻结、归档、商品按结束选择；其他限制保留",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-08",
+   "category": "状态转换",
+   "related": "US-14-AC-05/06（BR-08/33）",
+   "us": [
+    "US-14"
+   ],
+   "ac": [
+    "US-14-AC-05"
+   ],
+   "steps": [
+    "管理员核查后调整为任意交易状态"
+   ],
+   "expected": "全部调整留前后状态/操作人/时间/原因/依据；完成/终止自动解本笔冻结；不伪造确认",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-09",
+   "category": "权限／关联一致性",
+   "related": "US-14-AC-08（D-48）",
+   "us": [
+    "US-14"
+   ],
+   "ac": [
+    "US-14-AC-08"
+   ],
+   "steps": [
+    "旧交易 A 已结束、同商品后续交易 B 仍锁单时恢复 A"
+   ],
+   "expected": "409 拒绝；不自动终止/释放 B；A、B、商品、分支、限制保持",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-09-10",
+   "category": "计时／冻结",
+   "related": "US-14-AC-04、US-05-AC-11（D-51）",
+   "us": [
+    "US-05",
+    "US-14"
+   ],
+   "ac": [
+    "US-05-AC-11",
+    "US-14-AC-04"
+   ],
+   "steps": [
+    "进行中已有单方确认，因处置/封禁冻结后仅解除对应限制"
+   ],
+   "expected": "冻结期间不累计、不因自然时间转异常；原确认有效且无其他限制时续算剩余；有清空事件则结束旧计时",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-10-01",
+   "category": "正常",
+   "related": "US-13-AC-01、US-02-AC-01",
+   "us": [
+    "US-02",
+    "US-13"
+   ],
+   "ac": [
+    "US-02-AC-01",
+    "US-13-AC-01"
+   ],
+   "steps": [
+    "发布时至少选一已有标签或申请新标签；同义名可作别名"
+   ],
+   "expected": "多选单级标签；商品通过时一并批准；未通过不单独公开",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-10-02",
+   "category": "异常",
+   "related": "US-13-AC-02（BR-13）",
+   "us": [
+    "US-13"
+   ],
+   "ac": [
+    "US-13-AC-02"
+   ],
+   "steps": [
+    "新标签不合适而商品合规"
+   ],
+   "expected": "有合适已有标签则说明原因后通过；无则按不通过记录“退回补充”；不因名称当然拒绝商品",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-10-03",
+   "category": "权限／状态转换",
+   "related": "US-13-AC-03/04/05/06",
+   "us": [
+    "US-13"
+   ],
+   "ac": [
+    "US-13-AC-03"
+   ],
+   "steps": [
+    "创建、改名、别名移除、停用、逻辑删除、纠类"
+   ],
+   "expected": "同义名同一分类；改名留旧别名及历史；有关联仅停用/从未关联可逻辑删；纠类留据通知卖方；普通用户不可维护",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-10-04",
+   "category": "状态转换／检索",
+   "related": "US-13-AC-03、US-03-AC-02（D-45）",
+   "us": [
+    "US-03",
+    "US-13"
+   ],
+   "ac": [
+    "US-03-AC-02",
+    "US-13-AC-03"
+   ],
+   "steps": [
+    "移除别名后按旧别名搜索/筛选/旧链接"
+   ],
+   "expected": "不再解析为原分类；未命中显示无匹配；身份与归属不变；历史仅保留当时名称",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-11-01",
+   "category": "正常",
+   "related": "US-11-AC-01/05",
+   "us": [
+    "US-11"
+   ],
+   "ac": [
+    "US-11-AC-01"
+   ],
+   "steps": [
+    "请求、审核、约定、取消、完成、问询或处置事件生效"
+   ],
+   "expected": "向规定接收方发送关联事项通知；内容符合角色、区分申请与结果；通知中心与交易分支定位同一请求；管理员待办来自共享池、不发通知",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-11-02",
+   "category": "状态转换",
+   "related": "US-11-AC-02/03、US-04-AC-06",
+   "us": [
+    "US-04",
+    "US-11"
+   ],
+   "ac": [
+    "US-04-AC-06",
+    "US-11-AC-02"
+   ],
+   "steps": [
+    "有未读通知与多个聊天分支：访问列表/打开具体通知/具体分支"
+   ],
+   "expected": "列表不标读；打开通知才已读；仅具体分支已展示消息标读；互不代替业务确认",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-11-03",
+   "category": "权限",
+   "related": "US-11-AC-04/06、US-12-AC-06",
+   "us": [
+    "US-11",
+    "US-12"
+   ],
+   "ac": [
+    "US-11-AC-04",
+    "US-12-AC-06"
+   ],
+   "steps": [
+    "旧通知、他人通知或事项权限已改变时打开入口"
+   ],
+   "expected": "重新核查当前资格/状态；不泄露他人记录；不接受已撤回请求",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-11-04",
+   "category": "待办／当前状态",
+   "related": "US-11-AC-02（D-53）",
+   "us": [
+    "US-11"
+   ],
+   "ac": [
+    "US-11-AC-02"
+   ],
+   "steps": [
+    "有需响应事项：看待办、读通知、完成业务"
+   ],
+   "expected": "未读转已读不移出待办；办结或无需本人处理后自动移出；旧入口重校验资格",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-12-01",
+   "category": "正常",
+   "related": "US-12-AC-01/02/03",
+   "us": [
+    "US-12"
+   ],
+   "ac": [
+    "US-12-AC-01"
+   ],
+   "steps": [
+    "查看我的商品、交易、收藏、评价（多状态/双身份）"
+   ],
+   "expected": "商品全状态及原因/请求可查；交易全状态双身份区分；评价分发表/收到；结束记录只读、不新增删改权",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-12-02",
+   "category": "正常／权限",
+   "related": "US-12-AC-04、US-07-AC-05",
+   "us": [
+    "US-07",
+    "US-12"
+   ],
+   "ac": [
+    "US-07-AC-05",
+    "US-12-AC-04"
+   ],
+   "steps": [
+    "从我的举报/我收到的举报或问询/处置通知进入"
+   ],
+   "expected": "问询经通知提交说明；已处置经列表提交申辩；收到事项仅列已处置、隐举报人；说明/申辩分别记录；举报人不读对方申辩",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-12-03",
+   "category": "权限",
+   "related": "US-12-AC-05/06、US-07-AC-06",
+   "us": [
+    "US-07",
+    "US-12"
+   ],
+   "ac": [
+    "US-07-AC-06",
+    "US-12-AC-05"
+   ],
+   "steps": [
+    "他人入口或已删除对象的既有举报"
+   ],
+   "expected": "本人已有举报可看关联内容；失效后新举报失败；其他私人内容不开放；仅逻辑删除",
+   "source": "SC-branch"
+  },
+  {
+   "sc": "SC-12-04",
+   "category": "历史／通知",
+   "related": "US-12-AC-07（D-43、BR-11）",
+   "us": [
+    "US-12"
+   ],
+   "ac": [
+    "US-12-AC-07"
+   ],
+   "steps": [
+    "请求已撤回/拒绝/关闭或交易已完成/终止后商品再编辑"
+   ],
+   "expected": "按本人买方资格可看请求对应内容及之后变更；不向已结束请求/交易发变更通知；不开放其他私人记录",
+   "source": "SC-branch"
+  }
+ ]
+}

@@ -1,11 +1,13 @@
 """管理事项（C-13/BR-34）：共享池、认领、详情、问询、沟通与结论。"""
 
+from typing import Annotated
+
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import select, update
 
 from app.api.deps import CurrentAdmin, CurrentUser, DbSession
-from app.models import DisposalCase, Product, Trade, User
+from app.models import DisposalCase, Product, User
 from app.models.enums import CaseStatus, CaseType
 from app.services import cases as case_service
 from app.services.cases import ensure_claimant
@@ -19,11 +21,12 @@ class ClaimOut(BaseModel):
 
 
 class CaseMessageIn(BaseModel):
-    content: str = Field(min_length=1, max_length=2000)
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
 class InquiryIn(BaseModel):
-    content: str = Field(min_length=1, max_length=2000)  # 需要本人说明的内容范围
+    # 需要本人说明的内容范围；先去空白再校验，全空白不得写入沟通单。
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
 class DisposeIn(BaseModel):
@@ -195,11 +198,21 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
 
 @router.post("/{case_id}/inquiry")
 async def send_inquiry(case_id: int, body: InquiryIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """发起问询：向被询问用户发送问询通知，从通知进入提交说明（BR-26）。"""
+    """发起问询：向全部有沟通资格的参与方发送问询通知（BR-26/33）。"""
     case = await _case_or_404(db, case_id)
+    # 待处理事项尚未进入认领者的处理上下文，直接按状态拒绝；其余状态先校验认领人，
+    # 避免非认领管理员借问询接口探测他人在办/已处置事项。
+    if case.status == CaseStatus.PENDING.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "仅处理中的事项可发起问询")
     await ensure_claimant(case, admin.id)
-    if case.subject_user_id is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该事项无被询问用户")
+    # 问询只在认领后的处理中阶段开放；disposed 已归档。
+    if case.status == CaseStatus.DISPOSED.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置，不能重新发起问询")
+    if case.status != CaseStatus.PROCESSING.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "仅处理中的事项可发起问询")
+    recipients = await case_service.case_participant_ids(db, case)
+    if not recipients:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该事项无可问询用户")
     await case_service.add_case_message(
         db, case, sender_id=admin.id,
         role=case_service.DisposalMessageRole.ADMIN,
@@ -209,7 +222,7 @@ async def send_inquiry(case_id: int, body: InquiryIn, admin: CurrentAdmin, db: D
     from app.services.notifications import notify
 
     await notify(
-        db, [case.subject_user_id], "inquiry", "管理员向您发起问询",
+        db, recipients, "inquiry", "管理员向您发起问询",
         f"事项「{case.title}」需要您说明：{body.content.strip()[:100]}。请从本通知进入提交说明。",
         link_type="case", link_id=case.id,
     )
@@ -228,13 +241,8 @@ async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db
         kind=case_service.DisposalMessageKind.REPLY,
         content=body.content.strip(),
     )
-    recipients = []
-    if case.subject_user_id:
-        recipients.append(case.subject_user_id)
-    if case.trade_id:
-        trade = await db.get(Trade, case.trade_id)
-        if trade:
-            recipients += [trade.buyer_id, trade.seller_id]
+    # 统一按事项资格取接收人并去重，避免同一用户收到多条相同通知。
+    recipients = await case_service.case_participant_ids(db, case)
     if recipients:
         from app.services.notifications import notify
 
