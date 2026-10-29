@@ -59,6 +59,9 @@ class Trade(Base):
 
     # 单方确认进度与 7 天等待计时（BR-05）；争议/恢复时清空
     confirm_wait_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # D-51：冻结时暂停原等待；暂停时刻与剩余秒数单独保存，解冻后按剩余续算
+    confirm_wait_paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirm_wait_remaining_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # 取消申请（BR-06：约定前卖方取消须买方同意；约定后双方同意）
     cancel_requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

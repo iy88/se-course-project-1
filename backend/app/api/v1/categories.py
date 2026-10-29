@@ -104,6 +104,12 @@ async def add_alias(category_id: int, body: CategoryAliasIn, admin: CurrentAdmin
     name = body.name.strip()
     if not name or name == category.name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "别名不能为空且不能与主名相同")
+    # 别名不得与其他分类当前主名冲突（4.16）；同名同义只能指向一个分类。
+    principal_conflict = await db.scalar(
+        select(Category).where(Category.name == name, Category.deleted_at.is_(None))
+    )
+    if principal_conflict:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "别名与其他分类主名冲突")
     exists = await db.scalar(select(CategoryAlias).where(CategoryAlias.name == name, CategoryAlias.removed_at.is_(None)))
     if exists:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "别名已存在")
@@ -112,24 +118,6 @@ async def add_alias(category_id: int, body: CategoryAliasIn, admin: CurrentAdmin
     aliases = (
         await db.execute(
             select(CategoryAlias).where(CategoryAlias.category_id == category.id, CategoryAlias.removed_at.is_(None))
-        )
-    ).scalars().all()
-    return CategoryOut(id=category.id, name=category.name, status=category.status, aliases=[a.name for a in aliases])
-
-
-@router.delete("/{category_id}/aliases/{alias_id}", response_model=CategoryOut)
-async def remove_alias(category_id: int, alias_id: int, admin: CurrentAdmin, db: DbSession) -> CategoryOut:
-    """移除别名不改变归属及历史（4.16）。"""
-    await get_active_category_or_404(db, category_id)
-    alias = await db.get(CategoryAlias, alias_id)
-    if not alias or alias.category_id != category_id or alias.removed_at is not None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "别名不存在")
-    alias.removed_at = datetime.now(UTC)
-    await db.commit()
-    category = await db.get(Category, category_id)
-    aliases = (
-        await db.execute(
-            select(CategoryAlias).where(CategoryAlias.category_id == category_id, CategoryAlias.removed_at.is_(None))
         )
     ).scalars().all()
     return CategoryOut(id=category.id, name=category.name, status=category.status, aliases=[a.name for a in aliases])
@@ -153,6 +141,24 @@ async def remove_alias_by_name(
     alias.removed_at = datetime.now(UTC)
     await db.commit()
     return {"detail": "别名已移除"}
+
+
+@router.delete("/{category_id}/aliases/{alias_id}", response_model=CategoryOut)
+async def remove_alias(category_id: int, alias_id: int, admin: CurrentAdmin, db: DbSession) -> CategoryOut:
+    """移除别名不改变归属及历史（4.16）。"""
+    await get_active_category_or_404(db, category_id)
+    alias = await db.get(CategoryAlias, alias_id)
+    if not alias or alias.category_id != category_id or alias.removed_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "别名不存在")
+    alias.removed_at = datetime.now(UTC)
+    await db.commit()
+    category = await db.get(Category, category_id)
+    aliases = (
+        await db.execute(
+            select(CategoryAlias).where(CategoryAlias.category_id == category_id, CategoryAlias.removed_at.is_(None))
+        )
+    ).scalars().all()
+    return CategoryOut(id=category.id, name=category.name, status=category.status, aliases=[a.name for a in aliases])
 
 
 @router.delete("/{category_id}")

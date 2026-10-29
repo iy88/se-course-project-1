@@ -5,9 +5,9 @@ import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.db.migrations import upgrade_additive_schema
 from app.db.session import Base, engine
 from app.ws.endpoint import ws_endpoint
 from app.ws.manager import manager
@@ -17,6 +17,8 @@ from app.ws.manager import manager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # D-51：已有 SQLite 库只追加缺失列，不重建、不清空。
+        await conn.run_sync(upgrade_additive_schema)
     task = asyncio.create_task(_timeout_scan_loop())
     yield
     task.cancel()
@@ -39,13 +41,6 @@ async def _timeout_scan_loop() -> None:
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     from app.api.v1 import api_router
 

@@ -1,7 +1,7 @@
 """禁发范围（C-16）：登录用户发布前查看；仅管理员维护（BR-13/22）。"""
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from app.api.deps import CurrentAdmin, CurrentUser, DbSession
@@ -16,6 +16,8 @@ class ProhibitedItemIn(BaseModel):
 
 
 class ProhibitedItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     group_name: str
     content: str

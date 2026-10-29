@@ -24,11 +24,12 @@ class ProductStatus(StrEnum):
 
 
 class ReviewResult(StrEnum):
-    """C-04 审核记录结论（退回补充作为不通过原因记录）。"""
+    """C-04 审核记录结论（退回补充作为不通过原因记录；撤回仅结束该次审核记录）。"""
 
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"  # 卖方在认领前撤回，商品置为已下架（D-46，非商品生命周期状态）
 
 
 class TradeStatus(StrEnum):

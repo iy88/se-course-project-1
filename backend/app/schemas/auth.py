@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.enums import AccountStatus, UserRole
 
@@ -15,6 +15,7 @@ class UserOut(BaseModel):
     display_name: str
     role: UserRole
     status: AccountStatus
+    has_frozen_trade: bool = False  # 当前是否存在有效交易冻结（D-50，供前端刷新限制）
     created_at: datetime
 
 
@@ -29,6 +30,14 @@ class RegisterIn(BaseModel):
     email: EmailStr
     display_name: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=6, max_length=72)
+    code: str = Field(pattern=r"^\d{6}$")  # 注册邮箱验证码（D-47）
+
+    @field_validator("display_name")
+    @classmethod
+    def _display_name_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("显示名称不能为空白")
+        return value.strip()
 
 
 class LoginIn(BaseModel):
@@ -69,9 +78,16 @@ class SendEmailChangeCodeIn(BaseModel):
 
 class ChangeEmailIn(BaseModel):
     new_email: EmailStr
-    old_code: str = Field(min_length=6, max_length=6)
-    new_code: str = Field(min_length=6, max_length=6)
+    old_code: str = Field(pattern=r"^[0-9]{6}$")
+    new_code: str = Field(pattern=r"^[0-9]{6}$")
 
 
 class ProfileUpdateIn(BaseModel):
     display_name: str = Field(min_length=1, max_length=64)
+
+    @field_validator("display_name")
+    @classmethod
+    def _display_name_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("显示名称不能为空白")
+        return value.strip()

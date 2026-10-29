@@ -78,10 +78,20 @@ async def make_admin(db: AsyncSession, email: str = "admin@test.edu") -> User:
     return user
 
 
+async def send_register_code(client, email: str) -> str:
+    """D-47：注册前取得当前邮箱的验证码（开发环境随响应返回）。"""
+    resp = await client.post("/api/v1/auth/register/send-code", json={"email": email})
+    assert resp.status_code == 200, resp.text
+    code = resp.json()["dev_code"]
+    assert code
+    return code
+
+
 async def register(client, email: str, name: str = "用户", password: str = "secret123") -> dict:
+    code = await send_register_code(client, email)
     resp = await client.post(
         "/api/v1/auth/register",
-        json={"email": email, "display_name": name, "password": password},
+        json={"email": email, "display_name": name, "password": password, "code": code},
     )
     assert resp.status_code == 200, resp.text
     return resp.json()

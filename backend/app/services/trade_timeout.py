@@ -1,4 +1,8 @@
-"""单方确认 7 天未回应超时识别（BR-05、TR-14）：系统转异常并冻结，进入共享池。"""
+"""单方确认 7 天未回应超时识别（BR-05、TR-14）：系统转异常并冻结，进入共享池。
+
+D-51：冻结中的交易绝不按自然墙钟累计；解冻后由 trade_wait 续算剩余时间。
+SQLite 可能返回 naive datetime，统一按 UTC 解释后再比较。
+"""
 
 from datetime import UTC, datetime, timedelta
 
@@ -7,10 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
-from app.models import Trade, TradeTransition
+from app.models import CompletionConfirmation, Trade, TradeTransition
 from app.models.enums import CaseType, TradeStatus
 from app.services.cases import create_case
 from app.services.notifications import notify
+from app.services.trade_wait import as_utc, clear_wait_state
 
 SYSTEM = "system"
 
@@ -22,15 +27,24 @@ async def scan_once(db: AsyncSession | None = None) -> int:
         db = SessionLocal()
     try:
         days = get_settings().trade_confirm_timeout_days
-        deadline = datetime.now(UTC) - timedelta(days=days)
+        threshold = timedelta(days=days)
+        now = datetime.now(UTC)
         result = await db.execute(
             select(Trade).where(
                 Trade.status == TradeStatus.IN_PROGRESS.value,
                 Trade.confirm_wait_started_at.is_not(None),
-                Trade.confirm_wait_started_at < deadline,
+                Trade.confirm_wait_paused_at.is_(None),
+                Trade.frozen.is_(False),
+                Trade.confirmations.any(CompletionConfirmation.is_current.is_(True)),
             )
         )
-        trades = list(result.scalars())
+        trades = []
+        for trade in result.scalars():
+            started = as_utc(trade.confirm_wait_started_at)
+            if started is None:
+                continue
+            if now - started >= threshold:
+                trades.append(trade)
         for trade in trades:
             await _to_abnormal(db, trade)
         await db.commit()
@@ -41,12 +55,14 @@ async def scan_once(db: AsyncSession | None = None) -> int:
 
 
 async def _to_abnormal(db: AsyncSession, trade: Trade) -> None:
-    now = datetime.now(UTC)
+    from app.services.trade_wait import now_utc
+
+    now = now_utc()
     trade.status = TradeStatus.ABNORMAL.value
     trade.frozen = True
     trade.frozen_reason = "单方完成确认后超过7天未回应，转异常交易处理"
     trade.frozen_at = now
-    trade.confirm_wait_started_at = None
+    clear_wait_state(trade)
     db.add(
         TradeTransition(
             trade_id=trade.id,

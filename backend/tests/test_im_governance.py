@@ -18,6 +18,18 @@ async def setup(client, db):
     return admin_h, seller_h, buyer_h
 
 
+async def _claimed_trade_case(client, admin_h, db, trade_id: int) -> int:
+    """R5 合法夹具：创建与交易直接相关的事项并由管理员认领。"""
+    from app.models import DisposalCase
+
+    case = DisposalCase(case_type="trade_dispute", title=f"管理交易事项-{trade_id}", trade_id=trade_id)
+    db.add(case)
+    await db.commit()
+    resp = await client.post(f"/api/v1/admin/cases/{case.id}/claim", headers=admin_h)
+    assert resp.status_code == 200, resp.text
+    return case.id
+
+
 async def test_trade_branch_and_normal_chat(client, setup):
     """两类 IM 分开：交易分支独立、普通私聊复用（BR-18）。"""
     admin_h, seller_h, buyer_h = setup
@@ -58,7 +70,7 @@ async def test_trade_branch_and_normal_chat(client, setup):
     assert branch_item["unread"] >= 1
 
 
-async def test_freeze_blocks_pair_im_not_third_party(client, setup):
+async def test_freeze_blocks_pair_im_not_third_party(client, setup, db):
     """冻结 p、q：两类 IM 禁发、历史可读；p–s 不受影响（US-04-AC-07／BR-33）。"""
     admin_h, seller_h, buyer_h = setup
     third_h = await user_headers(client, "t3@t.com", "第三方")
@@ -69,8 +81,13 @@ async def test_freeze_blocks_pair_im_not_third_party(client, setup):
     branch_id = trade["conversation_id"]
     # 建立卖方-第三方普通私聊
     normal_st = (await client.post("/api/v1/conversations/normal", headers=seller_h, json={"peer_user_id": trade["buyer"]["id"]}))
-    # 管理员冻结该交易
-    resp = await client.post(f"/api/v1/admin/trades/{r['id']}/freeze", headers=admin_h, json={"reason": "涉嫌违规，暂停处理"})
+    # 管理员冻结该交易（合法相关认领事项上下文）
+    case_id = await _claimed_trade_case(client, admin_h, db, r["id"])
+    resp = await client.post(
+        f"/api/v1/admin/trades/{r['id']}/freeze",
+        headers=admin_h,
+        json={"reason": "涉嫌违规，暂停处理", "case_id": case_id},
+    )
     assert resp.status_code == 200
     # p-q 交易分支禁发、历史可读
     resp = await client.post(f"/api/v1/conversations/{branch_id}/messages", headers=buyer_h, json={"content": "?"})
@@ -86,7 +103,11 @@ async def test_freeze_blocks_pair_im_not_third_party(client, setup):
     resp = await client.post(f"/api/v1/conversations/{normal_st3.json()['id']}/messages", headers=seller_h, json={"content": "正常聊天"})
     assert resp.status_code == 200
     # 解除冻结后恢复发送
-    await client.post(f"/api/v1/admin/trades/{r['id']}/unfreeze", headers=admin_h, json={"reason": "核查完毕，无违规"})
+    await client.post(
+        f"/api/v1/admin/trades/{r['id']}/unfreeze",
+        headers=admin_h,
+        json={"reason": "核查完毕，无违规", "case_id": case_id},
+    )
     resp = await client.post(f"/api/v1/conversations/{branch_id}/messages", headers=buyer_h, json={"content": "恢复沟通"})
     assert resp.status_code == 200
 
@@ -220,17 +241,18 @@ async def test_single_claimant_rule(client, setup, db):
     assert resp.status_code == 200
 
 
-async def test_admin_adjust_and_restore(client, setup):
+async def test_admin_adjust_and_restore(client, setup, db):
     """管理员有依据调整状态：恢复清空当前确认；直接完成不伪造确认（BR-08）。"""
     admin_h, seller_h, buyer_h = setup
     product = await create_listed_product(client, admin_h, seller_h, title="管理调整商品")
     r = (await client.post("/api/v1/trades/requests", headers=buyer_h, json={"product_id": product["id"]})).json()
     await client.post(f"/api/v1/trades/{r['id']}/accept", headers=seller_h)
+    case_id = await _claimed_trade_case(client, admin_h, db, r["id"])
     # 直接调整为已完成
     resp = await client.post(
         f"/api/v1/admin/trades/{r['id']}/adjust",
         headers=admin_h,
-        json={"to_status": "completed", "reason": "双方线下已自行交付，按处置依据记录完成"},
+        json={"to_status": "completed", "reason": "双方线下已自行交付，按处置依据记录完成", "case_id": case_id},
     )
     assert resp.status_code == 200
     t = (await client.get(f"/api/v1/trades/{r['id']}", headers=seller_h)).json()

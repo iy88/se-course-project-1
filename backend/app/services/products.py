@@ -4,11 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Category, Product, ProductEditHistory, ProductImage, ProductTag, Trade, User
+from app.models import Category, CategoryAlias, Product, ProductEditHistory, ProductImage, ProductTag, Trade, User
 from app.models.enums import LOCKING_TRADE_STATUSES, ProductStatus, TradeStatus
 from app.services.notifications import notify
 
-EDITABLE_STATUSES = (ProductStatus.LISTED, ProductStatus.DELISTED)
+EDITABLE_STATUSES = (ProductStatus.LISTED, ProductStatus.DELISTED, ProductStatus.PENDING_REVIEW)
 
 
 def product_content_dict(product: Product, image_keys: list[str], tag_names: list[str]) -> dict:
@@ -28,6 +28,13 @@ async def load_product_images(db: AsyncSession, product_id: int) -> list[Product
     return list(result.scalars())
 
 
+async def snapshot_content(db: AsyncSession, product: Product) -> dict:
+    """按当前持久内容生成审核快照（管理员提交结论时刷新为最新内容，D-46）。"""
+    images = await load_product_images(db, product.id)
+    tags = await load_product_tags(db, product.id)
+    return product_content_dict(product, [i.file_key for i in images], [t.name for t in tags])
+
+
 async def load_product_tags(db: AsyncSession, product_id: int) -> list[Category]:
     result = await db.execute(
         select(Category)
@@ -39,7 +46,7 @@ async def load_product_tags(db: AsyncSession, product_id: int) -> list[Category]
 
 
 def is_detail_visible(user: User, product: Product) -> bool:
-    """详情可见性（BR-14/15、4.10）：违规撤销公开优先；已下架仅本人历史访问。"""
+    """公开详情资格（BR-14/15、4.10）：违规撤销公开优先；已下架不向普通第三方开放。"""
     if user.id == product.seller_id:
         return True
     if product.display_restricted:
@@ -47,6 +54,25 @@ def is_detail_visible(user: User, product: Product) -> bool:
     if product.status in (ProductStatus.LISTED.value, ProductStatus.IN_TRANSACTION.value):
         return True
     return False
+
+
+def is_favorite_valid(product: Product) -> bool:
+    """收藏有效资格（BR-16/D-44）：公开可交易或交易中且未撤销公开；不复用历史详情资格。"""
+    return (not product.display_restricted) and product.status in (
+        ProductStatus.LISTED.value,
+        ProductStatus.IN_TRANSACTION.value,
+    )
+
+
+async def has_product_request_history(db: AsyncSession, user_id: int, product_id: int) -> bool:
+    """是否曾对该商品发起请求／交易（D-43：结束后仍可看当前详情及之后变更）。"""
+    return (
+        await db.scalar(
+            select(Trade.id)
+            .where(Trade.product_id == product_id, Trade.buyer_id == user_id)
+            .limit(1)
+        )
+    ) is not None
 
 
 async def record_edit_history(
@@ -97,6 +123,36 @@ async def notify_open_request_buyers(db: AsyncSession, product: Product, title: 
         )
 
 
+async def resolve_category_names(db: AsyncSession, names: list[str]) -> list[int] | None:
+    """D-45：按当前主名/活跃别名严格解析分类名称。
+
+    任一名称未知、为空或指向已移除别名时返回 None（调用方应返回无匹配），
+    不得忽略未知项后放宽过滤。主名优先于同名历史别名。
+    """
+    resolved: list[int] = []
+    for raw in names:
+        name = (raw or "").strip()
+        if not name:
+            return None
+        category = await db.scalar(
+            select(Category).where(Category.name == name, Category.deleted_at.is_(None))
+        )
+        if category is None:
+            alias = await db.scalar(
+                select(CategoryAlias).where(
+                    CategoryAlias.name == name, CategoryAlias.removed_at.is_(None)
+                )
+            )
+            if alias is None:
+                return None
+            category = await db.get(Category, alias.category_id)
+            if category is None or category.deleted_at is not None:
+                return None
+        if category.id not in resolved:
+            resolved.append(category.id)
+    return resolved
+
+
 async def search_products(
     db: AsyncSession,
     *,
@@ -116,7 +172,22 @@ async def search_products(
         conditions.append(Product.seller_id == seller_id)
     if keyword:
         like = f"%{keyword}%"
-        conditions.append((Product.title.like(like)) | (Product.description.like(like)))
+        # 自由关键词同时匹配商品文本、所关联分类的当前主名及活跃别名。
+        # 用 IN 子查询而非联表，避免多标签/多别名命中导致商品与总数重复。
+        keyword_tag_ids = (
+            select(ProductTag.product_id)
+            .join(Category, Category.id == ProductTag.category_id)
+            .outerjoin(
+                CategoryAlias,
+                and_(CategoryAlias.category_id == Category.id, CategoryAlias.removed_at.is_(None)),
+            )
+            .where((Category.name.like(like)) | (CategoryAlias.name.like(like)))
+        )
+        conditions.append(
+            (Product.title.like(like))
+            | (Product.description.like(like))
+            | (Product.id.in_(keyword_tag_ids))
+        )
     if price_min_cents is not None:
         conditions.append(Product.price_cents >= price_min_cents)
     if price_max_cents is not None:

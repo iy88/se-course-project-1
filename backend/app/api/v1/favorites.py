@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.models import Favorite, Product, User
 from app.models.enums import ProductStatus
-from app.services.products import is_detail_visible
+from app.services.products import is_favorite_valid
 from app.storage.base import get_storage
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
@@ -24,10 +24,9 @@ async def my_favorites(user: CurrentUser, db: DbSession) -> list[dict]:
     out: list[dict] = []
     for favorite in favorites:
         product = await db.get(Product, favorite.product_id)
-        visible = product is not None and (
-            product.seller_id == user.id or is_detail_visible(user, product)
-        )
-        if visible and product is not None:
+        # D-44：只按当前公开资格判定；不复用买方历史详情资格，失效不硬删除收藏关系
+        valid = product is not None and is_favorite_valid(product)
+        if valid and product is not None:
             seller = await db.get(User, product.seller_id)
             out.append(
                 {

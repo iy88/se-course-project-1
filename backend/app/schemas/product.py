@@ -28,6 +28,15 @@ class ProductUpdateIn(BaseModel):
     price_cents: int | None = Field(default=None, ge=0, le=100_000_000)
     image_keys: list[str] | None = None
     category_ids: list[int] | None = None  # 仅允许在已有标签间调整；新标签须重新走审核
+    # 待审核期间撤回随商品提交的新标签申请（BR-10、D-46）
+    withdraw_tag_application_ids: list[int] | None = None
+
+
+class PendingTagApplicationOut(BaseModel):
+    """卖方本人待审核期间可撤回的新标签申请（D-46/R11）。"""
+
+    id: int
+    requested_name: str
 
 
 class ProductOut(BaseModel):
@@ -46,9 +55,13 @@ class ProductOut(BaseModel):
     image_urls: list[str] = []
     tag_ids: list[int] = []
     tag_names: list[str] = []
+    # 仅卖方本人可见的当前有效待审标签申请；其他查看者恒为空
+    pending_tag_applications: list[PendingTagApplicationOut] = []
     created_at: datetime
     updated_at: datetime
     pending_request_count: int = 0  # 卖方视角：待接受请求数
+    can_withdraw_review: bool = False  # 卖方视角：待审核且未被认领，可撤回本次审核
+    can_resubmit: bool = False  # 卖方视角：审核拒绝或认领前撤回后的已下架商品可重提
 
 
 class ProductCardOut(BaseModel):

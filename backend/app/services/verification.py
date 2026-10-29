@@ -1,4 +1,4 @@
-"""邮箱验证码：忘记密码、更换邮箱（新旧邮箱各一码）。
+"""邮箱验证码：注册前验证、忘记密码、更换邮箱（新旧邮箱各一码）。
 
 验证码存 KV（Redis 优先，进程内兜底），TTL 10 分钟；同一用途 60 秒内限发一次。
 开发环境可经配置将验证码随接口返回（仅联调用，见 bits/开发阶段技术决策.md）。
@@ -14,17 +14,22 @@ from app.kv.base import get_kv
 CODE_TTL_SECONDS = 600
 SEND_INTERVAL_SECONDS = 60
 
+PURPOSE_REGISTER = "register"  # D-47：注册前验证当前邮箱控制权
 PURPOSE_RESET = "reset_password"
 PURPOSE_EMAIL_OLD = "change_email_old"
 PURPOSE_EMAIL_NEW = "change_email_new"
 
 
+def _normalized_email(email: str) -> str:
+    return email.strip().lower()
+
+
 def _key(purpose: str, email: str) -> str:
-    return f"vcode:{purpose}:{email.lower()}"
+    return f"vcode:{purpose}:{_normalized_email(email)}"
 
 
 def _interval_key(purpose: str, email: str) -> str:
-    return f"vcode-interval:{purpose}:{email.lower()}"
+    return f"vcode-interval:{purpose}:{_normalized_email(email)}"
 
 
 async def send_code(purpose: str, email: str) -> str:

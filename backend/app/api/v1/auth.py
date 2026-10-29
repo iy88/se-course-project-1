@@ -1,9 +1,8 @@
 """FR-01 账户生命周期：注册、登录、退出、忘记密码、改密、换邮箱、改名。"""
 
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession
@@ -24,41 +23,72 @@ from app.schemas.auth import (
     TokenOut,
     UserOut,
 )
-from app.services import verification
-from app.services.verification import PURPOSE_EMAIL_NEW, PURPOSE_EMAIL_OLD, PURPOSE_RESET
+from app.services import permissions, verification
+from app.services.verification import (
+    PURPOSE_EMAIL_NEW,
+    PURPOSE_EMAIL_OLD,
+    PURPOSE_REGISTER,
+    PURPOSE_RESET,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _token_out(user: User) -> TokenOut:
-    return TokenOut(access_token=create_access_token(user.id, user.role), user=UserOut.model_validate(user))
+def _normalized_email(email: str) -> str:
+    """注册、登录、验证码及绑定邮箱使用同一标准化口径。"""
+    return email.strip().lower()
+
+
+async def _user_out(db: AsyncSession, user: User) -> UserOut:
+    frozen = await permissions.has_active_frozen_trade(db, user.id)
+    return UserOut.model_validate(user).model_copy(update={"has_frozen_trade": frozen})
+
+
+async def _token_out(db: AsyncSession, user: User) -> TokenOut:
+    return TokenOut(access_token=create_access_token(user.id, user.role), user=await _user_out(db, user))
+
+
+@router.post("/register/send-code", response_model=CodeOut)
+async def register_send_code(body: SendCodeIn, db: DbSession) -> CodeOut:
+    """D-47：创建账户前验证当前注册邮箱由本人控制；沿用开发环境返回验证码。"""
+    email = _normalized_email(body.email)
+    code = await verification.send_code(PURPOSE_REGISTER, email)
+    return CodeOut(detail="验证码已发送，请验证当前注册邮箱后完成注册", dev_code=code or None)
 
 
 @router.post("/register", response_model=TokenOut)
 async def register(body: RegisterIn, db: DbSession) -> TokenOut:
-    """BR-20：邮箱+显示名称+密码注册；邮箱全平台唯一（BR-21）。"""
-    exists = await db.scalar(select(User).where(User.email == body.email.lower()))
+    """BR-20/D-47：注册邮箱验证通过且邮箱唯一、资料有效后才创建账户。"""
+    email = _normalized_email(body.email)
+    exists = await db.scalar(select(User).where(User.email == email))
     if exists:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该邮箱已被使用")
+    # 用途、邮箱绑定且一次性使用；验证失败不创建账户
+    await verification.verify_code(PURPOSE_REGISTER, email, body.code)
     user = User(
-        email=body.email.lower(),
-        display_name=body.display_name.strip(),
+        email=email,
+        display_name=body.display_name,
         password_hash=hash_password(body.password),
         role=UserRole.USER.value,
     )
     db.add(user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 并发注册同一邮箱时由唯一约束兜底，返回业务拒绝而不是 500
+        await db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "该邮箱已被使用") from None
     await db.refresh(user)
-    return _token_out(user)
+    return await _token_out(db, user)
 
 
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginIn, db: DbSession) -> TokenOut:
     """BR-32：封禁不等于不能登录读取本人记录，登录不校验封禁状态。"""
-    user = await db.scalar(select(User).where(User.email == body.email.lower()))
+    user = await db.scalar(select(User).where(User.email == _normalized_email(body.email)))
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "邮箱或密码错误")
-    return _token_out(user)
+    return await _token_out(db, user)
 
 
 @router.post("/logout")
@@ -69,26 +99,28 @@ async def logout() -> dict:
 
 @router.post("/forgot-password/send-code", response_model=CodeOut)
 async def forgot_password_send_code(body: SendCodeIn, db: DbSession) -> CodeOut:
-    user = await db.scalar(select(User).where(User.email == body.email.lower()))
+    email = _normalized_email(body.email)
+    user = await db.scalar(select(User).where(User.email == email))
     if not user:
         # 不泄露邮箱是否注册；开发环境直接返回生成的验证码便于联调
-        code = await verification.send_code(PURPOSE_RESET, body.email)
+        code = await verification.send_code(PURPOSE_RESET, email)
         return CodeOut(detail="如果该邮箱已注册，验证码已发送", dev_code=code or None)
-    code = await verification.send_code(PURPOSE_RESET, body.email)
+    code = await verification.send_code(PURPOSE_RESET, email)
     return CodeOut(detail="验证码已发送至绑定邮箱", dev_code=code or None)
 
 
 @router.post("/forgot-password/reset", response_model=TokenOut)
 async def forgot_password_reset(body: ResetPasswordIn, db: DbSession) -> TokenOut:
     """BR-20：通过绑定邮箱验证后自助设置新密码。"""
-    user = await db.scalar(select(User).where(User.email == body.email.lower()))
+    email = _normalized_email(body.email)
+    user = await db.scalar(select(User).where(User.email == email))
     if not user:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "验证码错误或已过期")
-    await verification.verify_code(PURPOSE_RESET, body.email, body.code)
+    await verification.verify_code(PURPOSE_RESET, email, body.code)
     user.password_hash = hash_password(body.new_password)
     await db.commit()
     await db.refresh(user)
-    return _token_out(user)
+    return await _token_out(db, user)
 
 
 @router.post("/change-password")
@@ -107,10 +139,11 @@ async def email_change_send_code(body: SendEmailChangeCodeIn, user: CurrentUser,
     if body.target == "new":
         if not body.new_email:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "请填写新邮箱")
-        occupied = await db.scalar(select(User).where(User.email == body.new_email.lower()))
+        new_email = _normalized_email(body.new_email)
+        occupied = await db.scalar(select(User).where(User.email == new_email))
         if occupied:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "新邮箱已被其他账户使用")
-        code = await verification.send_code(PURPOSE_EMAIL_NEW, body.new_email)
+        code = await verification.send_code(PURPOSE_EMAIL_NEW, new_email)
         return CodeOut(detail="验证码已发送至新邮箱", dev_code=code or None)
     code = await verification.send_code(PURPOSE_EMAIL_OLD, user.email)
     return CodeOut(detail="验证码已发送至当前绑定邮箱", dev_code=code or None)
@@ -118,29 +151,34 @@ async def email_change_send_code(body: SendEmailChangeCodeIn, user: CurrentUser,
 
 @router.post("/email/change", response_model=UserOut)
 async def email_change(body: ChangeEmailIn, user: CurrentUser, db: DbSession) -> UserOut:
-    if body.new_email.lower() == user.email:
+    new_email = _normalized_email(body.new_email)
+    if new_email == user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "新邮箱与当前邮箱相同")
-    occupied = await db.scalar(select(User).where(User.email == body.new_email.lower()))
+    occupied = await db.scalar(select(User).where(User.email == new_email))
     if occupied:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "新邮箱已被其他账户使用")
     await verification.verify_code(PURPOSE_EMAIL_OLD, user.email, body.old_code)
-    await verification.verify_code(PURPOSE_EMAIL_NEW, body.new_email, body.new_code)
+    await verification.verify_code(PURPOSE_EMAIL_NEW, new_email, body.new_code)
     # 用户 ID 保持不变，既有业务记录继续归属原用户 ID（4.19）
-    user.email = body.new_email.lower()
-    await db.commit()
+    user.email = new_email
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "新邮箱已被其他账户使用") from None
     await db.refresh(user)
-    return UserOut.model_validate(user)
+    return await _user_out(db, user)
 
 
 @router.patch("/profile", response_model=UserOut)
 async def update_profile(body: ProfileUpdateIn, user: CurrentUser, db: AsyncSession = Depends(get_db)) -> UserOut:
     """4.19：显示名称可自行修改，历史记录保留用户 ID 归属。"""
-    user.display_name = body.display_name.strip()
+    user.display_name = body.display_name
     await db.commit()
     await db.refresh(user)
-    return UserOut.model_validate(user)
+    return await _user_out(db, user)
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: CurrentUser) -> UserOut:
-    return UserOut.model_validate(user)
+async def me(user: CurrentUser, db: DbSession) -> UserOut:
+    return await _user_out(db, user)

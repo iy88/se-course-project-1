@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.api.deps import CurrentAdmin, CurrentUser, DbSession
 from app.models import DisposalCase, Product, Trade, User
@@ -74,17 +74,52 @@ async def list_cases(
     return [_case_item(c) for c in result.scalars()]
 
 
+async def _claim_pending_case(db, case_id: int, admin_id: int, claimed_at) -> bool:
+    """以数据库条件更新竞争待处理事项；仅当行仍为 pending 且未认领时成功。
+
+    条件与赋值在同一条 UPDATE 中执行，由数据库判定唯一胜者，不依赖先前读取。
+    synchronize_session="evaluate" 同步会话内可能存在的旧对象，避免其后续 flush 覆盖。
+    """
+    result = await db.execute(
+        update(DisposalCase)
+        .where(
+            DisposalCase.id == case_id,
+            DisposalCase.status == CaseStatus.PENDING.value,
+            DisposalCase.claimed_by_id.is_(None),
+        )
+        .values(
+            status=CaseStatus.PROCESSING.value,
+            claimed_by_id=admin_id,
+            claimed_at=claimed_at,
+        )
+        .execution_options(synchronize_session="evaluate")
+    )
+    return result.rowcount == 1
+
+
 @router.post("/{case_id}/claim", response_model=ClaimOut)
 async def claim_case(case_id: int, admin: CurrentAdmin, db: DbSession) -> ClaimOut:
     """共享池主动认领：同一事项同时仅一名管理员（BR-34）。"""
-    case = await _case_or_404(db, case_id)
-    if case.status != CaseStatus.PENDING.value:
+    admin_id = admin.id
+    won = await _claim_pending_case(db, case_id, admin_id, case_service.now_utc())
+    if not won:
+        # 失败不保留任何写入；先结束事务再区分不存在与被抢先/已处置。
+        await db.rollback()
+        exists = await db.scalar(select(DisposalCase.id).where(DisposalCase.id == case_id))
+        if exists is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已被认领或已处置")
-    case.status = CaseStatus.PROCESSING.value
-    case.claimed_by_id = admin.id
-    case.claimed_at = case_service.now_utc()
+    # 成功以数据库中的真实 owner 为准，而不是请求参数或内存对象。
+    row = (
+        await db.execute(
+            select(DisposalCase.claimed_by_id, DisposalCase.status).where(DisposalCase.id == case_id)
+        )
+    ).first()
+    if row is None or row.claimed_by_id != admin_id or row.status != CaseStatus.PROCESSING.value:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "该事项已被认领或已处置")
     await db.commit()
-    return ClaimOut(id=case.id, detail="认领成功")
+    return ClaimOut(id=case_id, detail="认领成功")
 
 
 @router.get("/{case_id}")
@@ -114,6 +149,9 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
             "description": product.description,
             "price_cents": product.price_cents,
             "status": product.status,
+            "display_restricted": product.display_restricted,
+            "display_restricted_reason": product.display_restricted_reason,
+            "display_restricted_case_id": product.display_restricted_case_id,
             "image_keys": [i.file_key for i in product.images],
             "tag_names": [t.name for t in product.tags],
         } if product else None

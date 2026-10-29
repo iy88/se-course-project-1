@@ -11,10 +11,10 @@ async def test_register_login_and_duplicate_email(client):
     data = await register(client, "a@test.com", "用户A")
     assert data["user"]["email"] == "a@test.com"
     assert data["access_token"]
-    # 重复邮箱被拒绝（BR-21）
+    # 重复邮箱被拒绝（BR-21）；直接注册路径也须带验证码字段，不创建第二个账户
     resp = await client.post(
         "/api/v1/auth/register",
-        json={"email": "a@test.com", "display_name": "B", "password": "secret123"},
+        json={"email": "a@test.com", "display_name": "B", "password": "secret123", "code": "123456"},
     )
     assert resp.status_code == 400
 

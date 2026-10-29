@@ -49,13 +49,6 @@ class Settings(BaseSettings):
     # 开发便利：验证码直接随接口返回（仅 environment=dev 且显式开启时）
     dev_expose_verification_code: bool = True
 
-    cors_origins: list[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ]
-
 
 @lru_cache
 def get_settings() -> Settings:

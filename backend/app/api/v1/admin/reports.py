@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import CurrentAdmin, DbSession
-from app.models import Comment, DisposalCase, Product, Report, Trade, TradeReview, User
+from app.models import Comment, DisposalCase, Message, Product, Report, Trade, TradeReview, User
 from app.models.enums import CaseStatus, CaseType, MessageKind, ReportStatus
 from app.services import cases as case_service
 from app.services import moderation
