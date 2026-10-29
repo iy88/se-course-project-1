@@ -22,7 +22,7 @@ CONTENT_TYPES = {
 
 
 @router.post("/upload")
-async def upload(file: UploadFile, namespace: str = "product", user: CurrentUser = None) -> dict:
+async def upload(file: UploadFile, user: CurrentUser, namespace: str = "product") -> dict:
     ensure_can_write(user)
     if namespace not in ALLOWED_NAMESPACES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "非法的文件命名空间")

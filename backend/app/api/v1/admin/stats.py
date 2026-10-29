@@ -6,14 +6,17 @@ from fastapi import APIRouter, Query
 from sqlalchemy import func, select
 
 from app.api.deps import CurrentAdmin, DbSession
-from app.models import AccountRestriction, DisposalCase, Notification, Product, Report, Trade, User
+from app.models import (
+    DisposalCase,
+    Product,
+    Trade,
+    User,
+)
 from app.models.enums import (
     AccountStatus,
     CaseStatus,
     CaseType,
     ProductStatus,
-    ReportStatus,
-    RestrictionStatus,
     TradeStatus,
 )
 

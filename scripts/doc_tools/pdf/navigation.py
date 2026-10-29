@@ -1,14 +1,16 @@
 from __future__ import annotations
+
 import hashlib
 import json
-from pathlib import Path
 import posixpath
 import re
 import shutil
 import subprocess
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from .types import ANCHOR_ID, PDF_FILE_ACTION, PDF_URI_ACTION, ExportError
+
 
 def raw_path(value: str) -> str:
     return unquote(value)
@@ -30,14 +32,16 @@ def _plain_text(value) -> str:
         return ""
     kind = value.get("t")
     content = value.get("c")
-    if kind in {"Str", "Code"}:
-        return content[0] if kind == "Code" else content
+    if kind == "Str":
+        return content if isinstance(content, str) else ""
+    if kind == "Code":
+        return content[0] if isinstance(content, list) and content and isinstance(content[0], str) else ""
     if kind == "Math":
-        return content[1]
+        return content[1] if isinstance(content, list) and len(content) > 1 and isinstance(content[1], str) else ""
     if kind in {"Space", "SoftBreak", "LineBreak"}:
         return " "
     if kind in {"Link", "Image"}:
-        return _plain_text(content[1])
+        return _plain_text(content[1]) if isinstance(content, list) and len(content) > 1 else ""
     if kind == "Note":
         return ""
     if kind in {"RawInline", "RawBlock"}:
@@ -126,7 +130,7 @@ def pdf_file_targets(pdf: Path, qpdf: str | None = None,
         return None
     result = subprocess.run(
         [executable, "--qdf", "--object-streams=disable", str(pdf), "-"],
-        capture_output=True, timeout=timeout,
+        capture_output=True, timeout=timeout, check=False,
     )
     if result.returncode:
         raise ExportError(
@@ -146,7 +150,7 @@ def pdf_file_targets(pdf: Path, qpdf: str | None = None,
 def pdf_navigation(pdf: Path, qpdf: str) -> dict:
     """Inspect resolved name trees and link actions using qpdf's structured JSON."""
     result = subprocess.run([qpdf, "--json", str(pdf)], capture_output=True,
-                            timeout=120)
+                            timeout=120, check=False)
     if result.returncode:
         raise ExportError(f"{pdf}: qpdf failed: {result.stderr.decode(errors='replace')[-1000:]}")
     data = json.loads(result.stdout)
@@ -211,11 +215,18 @@ def pdf_navigation(pdf: Path, qpdf: str) -> dict:
     links = []
     for page in data.get("pages", []):
         page_object = resolve(page["object"])
-        for ref in resolve(page_object.get("/Annots", [])):
+        if not isinstance(page_object, dict):
+            continue
+        annotations = resolve(page_object.get("/Annots", []))
+        if not isinstance(annotations, list):
+            continue
+        for ref in annotations:
             annot = resolve(ref)
             if not isinstance(annot, dict) or annot.get("/Subtype") != "/Link":
                 continue
             action = resolve(annot.get("/A", {}))
+            if not isinstance(action, dict):
+                action = {}
             if "/Dest" in annot:
                 links.append({"kind": "/GoTo", "dest": string(annot["/Dest"]),
                               "valid": valid(annot["/Dest"]), "resolved": destination(annot["/Dest"])})
@@ -248,7 +259,7 @@ def pdf_replacement_glyphs(pdf: Path, pdftotext: str | None = None,
         return None
     result = subprocess.run(
         [executable, "-enc", "UTF-8", "-q", str(pdf), "-"],
-        capture_output=True, timeout=timeout,
+        capture_output=True, timeout=timeout, check=False,
     )
     if result.returncode:
         raise ExportError(

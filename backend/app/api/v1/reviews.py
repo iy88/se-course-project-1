@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.models import Trade, TradeReview, User
@@ -60,7 +60,7 @@ def _review_out(review: TradeReview, other_name: str, trade_status: str) -> dict
 
 
 @reviews_router.get("")
-async def my_reviews(user: CurrentUser, db: DbSession, type: str = Query(pattern="^(published|received)$", default="published")) -> list[dict]:  # noqa: A002
+async def my_reviews(user: CurrentUser, db: DbSession, type: str = Query(pattern="^(published|received)$", default="published")) -> list[dict]:
     """我的评价：按发表/收到查看，均关联交易（FR-12）。"""
     if type == "published":
         query = select(TradeReview).where(TradeReview.reviewer_id == user.id)

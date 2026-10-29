@@ -27,9 +27,7 @@ from app.models.enums import (
     RestrictionType,
     TradeStatus,
 )
-from app.services import moderation
-from app.services import trade_ops
-from app.services import trade_wait
+from app.services import moderation, trade_ops, trade_wait
 from app.services import trades as trade_service
 from app.services.notifications import notify
 
@@ -262,7 +260,10 @@ async def get_trade(
     if not trade:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
     await _resolve_trade_case(db, trade, admin.id, case_id)
-    return await admin_trade_view(db, trade_id)
+    view = await admin_trade_view(db, trade_id)
+    if view is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
+    return view
 
 
 @router.post("/{trade_id}/freeze")

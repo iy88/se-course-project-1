@@ -7,7 +7,16 @@ from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import or_, select
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
-from app.models import Comment, DisposalCase, Message, Product, Report, ReportSupplement, TradeReview, User
+from app.models import (
+    Comment,
+    DisposalCase,
+    Message,
+    Product,
+    Report,
+    ReportSupplement,
+    TradeReview,
+    User,
+)
 from app.models.enums import CaseType, ReportStatus, ReportTargetType
 from app.services import cases as case_service
 

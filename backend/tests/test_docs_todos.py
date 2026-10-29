@@ -3,10 +3,10 @@
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select
-
 from app.models import DisposalCase, User
 from app.models.enums import CaseStatus, CaseType
+from sqlalchemy import select
+
 from tests.conftest import (
     admin_headers,
     create_listed_product,

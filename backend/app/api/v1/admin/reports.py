@@ -5,8 +5,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import CurrentAdmin, DbSession
-from app.models import Comment, DisposalCase, Message, Product, Report, Trade, TradeReview, User
-from app.models.enums import CaseStatus, CaseType, MessageKind, ReportStatus
+from app.models import (
+    Comment,
+    DisposalCase,
+    Message,
+    Product,
+    Report,
+    Trade,
+    TradeReview,
+    User,
+)
+from app.models.enums import CaseStatus, CaseType, ReportStatus
 from app.services import cases as case_service
 from app.services import moderation
 from app.services.cases import ensure_claimant
@@ -239,13 +248,12 @@ async def decide_report(case_id: int, body: ReportDecisionIn, admin: CurrentAdmi
         else:
             removal_note = "内容处置已记录"
 
-    if actions.restrict_display:
-        if report.target_type == "product":
-            product = await db.get(Product, report.target_id)
-            if product:
-                await moderation.restrict_product_display(db, product, f"违规处置：{body.reason}", case.id)
-                affected_users.add(product.seller_id)
-                removal_note = (removal_note + "；" if removal_note else "") + "涉事商品已停止公开访问"
+    if actions.restrict_display and report.target_type == "product":
+        product = await db.get(Product, report.target_id)
+        if product:
+            await moderation.restrict_product_display(db, product, f"违规处置：{body.reason}", case.id)
+            affected_users.add(product.seller_id)
+            removal_note = (removal_note + "；" if removal_note else "") + "涉事商品已停止公开访问"
 
     if actions.freeze_trade:
         for trade in related_trades:

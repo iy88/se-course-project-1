@@ -13,7 +13,8 @@ class RedisKV(KeyValueStore):
         await self._redis.set(key, value, ex=ttl_seconds)
 
     async def get(self, key: str) -> str | None:
-        return await self._redis.get(key)
+        value = await self._redis.get(key)
+        return value.decode("utf-8") if isinstance(value, bytes) else value
 
     async def delete(self, key: str) -> None:
         await self._redis.delete(key)

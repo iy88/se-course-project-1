@@ -4,7 +4,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Category, CategoryAlias, Product, ProductEditHistory, ProductImage, ProductTag, Trade, User
+from app.models import (
+    Category,
+    CategoryAlias,
+    Product,
+    ProductEditHistory,
+    ProductImage,
+    ProductTag,
+    Trade,
+    User,
+)
 from app.models.enums import LOCKING_TRADE_STATUSES, ProductStatus, TradeStatus
 from app.services.notifications import notify
 
@@ -51,9 +60,7 @@ def is_detail_visible(user: User, product: Product) -> bool:
         return True
     if product.display_restricted:
         return False
-    if product.status in (ProductStatus.LISTED.value, ProductStatus.IN_TRANSACTION.value):
-        return True
-    return False
+    return product.status in (ProductStatus.LISTED.value, ProductStatus.IN_TRANSACTION.value)
 
 
 def is_favorite_valid(product: Product) -> bool:

@@ -1,12 +1,11 @@
 """测试夹具：独立 SQLite 测试库、内存 KV、临时本地存储、ASGI 客户端。"""
 
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.security import hash_password
 from app.db.session import Base, get_db
 from app.models import User
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 TEST_IMAGE_PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
@@ -39,7 +38,6 @@ async def db(tmp_path):
 
 @pytest_asyncio.fixture
 async def client(tmp_path, db):
-    test_engine = None
     # 复用 db 夹具的数据库文件：通过其 bind 创建请求会话工厂
     bind = db.bind
     SessionMaker = async_sessionmaker(bind, expire_on_commit=False, class_=AsyncSession)

@@ -6,9 +6,6 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from app.models import (
     AccountRestriction,
     CompletionConfirmation,
@@ -23,10 +20,12 @@ from app.models import (
     User,
 )
 from app.services.trade_timeout import scan_once
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from tests.conftest import (
     admin_headers,
     create_listed_product,
-    login,
     make_admin,
     user_headers,
 )
@@ -270,7 +269,7 @@ async def test_r3_frozen_user_cannot_accept_reject_withdraw_or_progress_other_tr
     admin_h, seller_h, buyer_h = setup["admin"], setup["seller"], setup["buyer"]
     seller2_h = setup["seller2"]
 
-    frozen_product, frozen_trade_id = await _accept_trade(
+    _, frozen_trade_id = await _accept_trade(
         client, admin_h, seller_h, buyer_h, title="R3全局冻结源"
     )
     frozen_case = await _claimed_case(client, admin_h, db, trade_id=frozen_trade_id)
@@ -423,7 +422,7 @@ async def test_r5_admin_trade_views_and_mutations_require_relevant_claimed_case(
     product_id = trade.product_id
 
     relevant_case = await _claimed_case(client, admin_h, db, trade_id=trade_id)
-    other_trade_product, other_trade_id = await _accept_trade(
+    _, other_trade_id = await _accept_trade(
         client, admin_h, seller_h, buyer_h, title="R5无关事项交易"
     )
     unrelated_case = await _claimed_case(client, admin_h, db, trade_id=other_trade_id)
@@ -1060,7 +1059,7 @@ async def test_r5_case_bound_to_other_trade_same_product_cannot_access(client, d
 
 async def test_r13_accept_race_maps_unique_conflict_to_409_and_rolls_back(client, db, setup, monkeypatch):
     """R13/D-48：预检后并发锁单提交，唯一索引裁决须 409 且不残留通知/关闭/转移。"""
-    admin_h, seller_h, buyer_h, other_h = (
+    admin_h, seller_h, buyer_h, _ = (
         setup["admin"],
         setup["seller"],
         setup["buyer"],

@@ -179,14 +179,22 @@ def same_sc_links(ac_summary: dict, data: dict) -> dict[str, list[str]]:
 def _metric_lines(label: str, summary: dict, missing_label: str = "未出现该编号关联记录") -> list[str]:
     return [
         f"- 预期 {label}：**{summary['total']}** 条",
-        f"- 检查项编号直接登记：**{summary['direct_count']}** 条"
-        "（只从 `check_id` 提取编号，不代表语义已验证）",
-        f"- 有非 SKIP 记录（已执行）：**{summary['executed_count']}** 条"
-        "（只有 PASS/FAIL 计执行，FAIL 计执行但不计通过）",
-        f"- 存在 PASS 记录（可与 FAIL 并存，不能称为通过）：**{summary['pass_any_count']}** 条；"
-        f"有 FAIL：**{summary['fail_count']}** 条",
-        f"- 有 PASS 且无 FAIL（仅检查项结果，不是完整验收条件语义通过）："
-        f"**{summary['pass_no_fail_count']}** 条",
+        (
+            f"- 检查项编号直接登记：**{summary['direct_count']}** 条"
+            "（只从 `check_id` 提取编号，不代表语义已验证）"
+        ),
+        (
+            f"- 有非 SKIP 记录（已执行）：**{summary['executed_count']}** 条"
+            "（只有 PASS/FAIL 计执行，FAIL 计执行但不计通过）"
+        ),
+        (
+            f"- 存在 PASS 记录（可与 FAIL 并存，不能称为通过）：**{summary['pass_any_count']}** 条；"
+            f"有 FAIL：**{summary['fail_count']}** 条"
+        ),
+        (
+            f"- 有 PASS 且无 FAIL（仅检查项结果，不是完整验收条件语义通过）："
+            f"**{summary['pass_no_fail_count']}** 条"
+        ),
         f"- 仅 SKIP、未计执行：**{summary['skip_only_count']}** 条",
         f"- {missing_label}：**{summary['missing_count']}** 条",
     ]

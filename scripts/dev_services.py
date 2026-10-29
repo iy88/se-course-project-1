@@ -1,13 +1,13 @@
 import fcntl
 import json
 import os
-from pathlib import Path
 import shutil
 import signal
 import socket
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 state_path = root / 'var/run/dev-services.json'
@@ -15,7 +15,7 @@ log_path = root / 'var/log/dev-services.log'
 
 def identity(pid):
     result = subprocess.run(['ps', '-p', str(pid), '-o', 'lstart=,stat='],
-                            capture_output=True, text=True)
+                            capture_output=True, text=True, check=False)
     value = result.stdout.strip()
     if result.returncode or not value or value.split()[-1].startswith('Z'):
         return None
@@ -182,7 +182,7 @@ try:
         time.sleep(0.3)
 except KeyboardInterrupt:
     print('\nStopping services...', flush=True)
-except Exception as exc:
+except Exception as exc:  # noqa: BLE001 - CLI 顶层统一转退出码，保留 traceback 以外的干净提示
     print(str(exc), file=sys.stderr)
     sys.exit(1)
 finally:

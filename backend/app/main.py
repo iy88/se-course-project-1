@@ -10,7 +10,6 @@ from app.core.config import get_settings
 from app.db.migrations import upgrade_additive_schema
 from app.db.session import Base, engine
 from app.ws.endpoint import ws_endpoint
-from app.ws.manager import manager
 
 
 @asynccontextmanager
@@ -31,10 +30,8 @@ async def _timeout_scan_loop() -> None:
 
     settings = get_settings()
     while True:
-        try:
+        with contextlib.suppress(Exception):  # pragma: no cover - 扫描异常不中断循环
             await scan_once()
-        except Exception:  # pragma: no cover - 扫描异常不中断循环
-            pass
         await asyncio.sleep(settings.timeout_scan_interval_seconds)
 
 

@@ -7,13 +7,6 @@ from urllib.parse import quote
 
 import jwt as pyjwt
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Session
-from starlette.websockets import WebSocketDisconnect
-
 from app.api.v1.auth import router as auth_router
 from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password
@@ -21,6 +14,12 @@ from app.db.session import Base, get_db
 from app.models import User
 from app.ws.endpoint import ws_endpoint
 from app.ws.manager import manager
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session
+from starlette.websockets import WebSocketDisconnect
 
 
 def _make_token(sub, *, secret: str | None = None, expired: bool = False) -> str:

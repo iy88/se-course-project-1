@@ -1,13 +1,22 @@
 from __future__ import annotations
+
 import os
 import shutil
 import subprocess
 from urllib.parse import unquote, urlsplit
 
-from .types import ExportError, Plan
-from .navigation import _hash_file, pdf_anchor, normalize_pdf_target, pdf_file_targets, pdf_navigation, pdf_replacement_glyphs
+from .navigation import (
+    _hash_file,
+    normalize_pdf_target,
+    pdf_anchor,
+    pdf_file_targets,
+    pdf_navigation,
+    pdf_replacement_glyphs,
+)
+from .types import ExporterBase, ExportError, Plan
 
-class OutputChecks:
+
+class OutputChecks(ExporterBase):
 
     def check(self, plan: Plan) -> tuple[list[str], dict[str, int]]:
         errors: list[str] = []
@@ -75,7 +84,8 @@ class OutputChecks:
                         )
                 else:
                     local_assets += 1
-                if record.destination is None or not record.destination.is_file():
+                destination = record.destination
+                if destination is None or not destination.is_file():
                     errors.append(f"{source}: rewritten target missing: {record.rewritten}")
                 original_fragment = urlsplit(record.original).fragment
                 rewritten_fragment = urlsplit(record.rewritten).fragment
@@ -179,6 +189,7 @@ class OutputChecks:
                             else:
                                 errors.append(f"{pdf}: missing remote destination: {file}")
                     for record in plan.records[source]:
+                        destination = record.destination
                         if record.kind != "Link" or record.omitted or record.is_external:
                             continue
                         if not record.has_path and record.fragment:
@@ -188,8 +199,8 @@ class OutputChecks:
                                        action.get("resolved") == expected
                                        for action in nav["links"]):
                                 errors.append(f"{pdf}: internal link action missing: {record.original}")
-                        elif record.is_markdown:
-                            expected_file = os.path.relpath(record.destination, pdf.parent)
+                        elif record.is_markdown and destination is not None:
+                            expected_file = os.path.relpath(destination, pdf.parent)
                             expected_dest = pdf_anchor(unquote(record.fragment)) if record.fragment else None
                             matches = [action for action in nav["links"]
                                        if action["kind"] == "/GoToR" and action["file"] == expected_file]

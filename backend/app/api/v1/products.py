@@ -1,9 +1,11 @@
 """商品：发布、重提、编辑、上下架、搜索、详情、编辑历史（FR-02/03/09）。"""
 
 from datetime import UTC, datetime
+from typing import Annotated, cast
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
@@ -19,7 +21,13 @@ from app.models import (
     Trade,
     User,
 )
-from app.models.enums import CaseStatus, CaseType, ProductStatus, ReviewResult, TradeStatus
+from app.models.enums import (
+    CaseStatus,
+    CaseType,
+    ProductStatus,
+    ReviewResult,
+    TradeStatus,
+)
 from app.schemas.product import (
     PendingTagApplicationOut,
     ProductCardOut,
@@ -227,13 +235,13 @@ async def publish_product(body: ProductCreateIn, user: CurrentUser, db: DbSessio
 async def search(
     db: DbSession,
     user: CurrentUser,
-    keyword: str | None = Query(default=None, max_length=100),
-    category_ids: list[int] | None = Query(default=None),
-    category_names: list[str] | None = Query(default=None),
-    price_min_cents: int | None = Query(default=None, ge=0),
-    price_max_cents: int | None = Query(default=None, ge=0),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=50),
+    keyword: Annotated[str | None, Query(max_length=100)] = None,
+    category_ids: Annotated[list[int] | None, Query()] = None,
+    category_names: Annotated[list[str] | None, Query()] = None,
+    price_min_cents: Annotated[int | None, Query(ge=0)] = None,
+    price_max_cents: Annotated[int | None, Query(ge=0)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> ProductSearchOut:
     """在售搜索：关键词/多标签（全部匹配）/价格区间组合（BR-15）。
 
@@ -243,7 +251,7 @@ async def search(
         resolved_names = await product_service.resolve_category_names(db, category_names)
         if resolved_names is None:
             return ProductSearchOut(items=[], total=0, message="无匹配商品")
-        merged_ids = list(dict.fromkeys([*(category_ids or []), *resolved_names]))
+        merged_ids = list(dict.fromkeys((category_ids or []) + resolved_names))
         category_ids = merged_ids or None
     items, total = await product_service.search_products(
         db,
@@ -356,7 +364,7 @@ async def _dispose_review_case_atomically(db: AsyncSession, case_id: int, *, now
         )
         .execution_options(synchronize_session="evaluate")
     )
-    return result.rowcount == 1
+    return cast(CursorResult, result).rowcount == 1
 
 
 @router.post("/{product_id}/withdraw-review", response_model=ProductOut)
@@ -447,12 +455,12 @@ async def resubmit(
         product.price_cents = body.price_cents
     if body.image_keys is not None:
         await _validate_image_keys(db, body.image_keys)
-        await db.execute(ProductImage.__table__.delete().where(ProductImage.product_id == product.id))
+        await db.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
         for sort, key in enumerate(body.image_keys):
             db.add(ProductImage(product_id=product.id, file_key=key, sort=sort))
     if body.category_ids is not None:
         current_ids = {t.id for t in await product_service.load_product_tags(db, product.id)}
-        await db.execute(ProductTag.__table__.delete().where(ProductTag.product_id == product.id))
+        await db.execute(delete(ProductTag).where(ProductTag.product_id == product.id))
         for cid in body.category_ids:
             category = await db.get(Category, cid)
             if not category or category.deleted_at is not None:
@@ -510,14 +518,14 @@ async def edit_product(product_id: int, body: ProductUpdateIn, user: CurrentUser
         changed = True
     if body.image_keys is not None and body.image_keys != [i.file_key for i in await product_service.load_product_images(db, product.id)]:
         await _validate_image_keys(db, body.image_keys)
-        await db.execute(ProductImage.__table__.delete().where(ProductImage.product_id == product.id))
+        await db.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
         for sort, key in enumerate(body.image_keys):
             db.add(ProductImage(product_id=product.id, file_key=key, sort=sort))
         changed = True
     if body.category_ids is not None:
         current_ids = {t.id for t in await product_service.load_product_tags(db, product.id)}
         if set(body.category_ids) != current_ids:
-            await db.execute(ProductTag.__table__.delete().where(ProductTag.product_id == product.id))
+            await db.execute(delete(ProductTag).where(ProductTag.product_id == product.id))
             for cid in set(body.category_ids):
                 category = await db.get(Category, cid)
                 if not category or category.deleted_at is not None:
@@ -582,7 +590,7 @@ async def delist(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
             db,
             [trade.buyer_id],
             "request_closed",
-            f"您的购买请求已关闭",
+            "您的购买请求已关闭",
             f"商品「{product.title}」已下架，对应请求已关闭。",
             link_type="trade",
             link_id=trade.id,

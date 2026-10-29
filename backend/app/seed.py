@@ -92,8 +92,7 @@ DEMO_USERS = [
 
 async def seed_demo(db) -> None:
     """演示数据：演示用户与示例商品（管理员审核字段直接置为已通过）。"""
-    from app.models import Product, ProductImage, ProductTag, ReviewRecord
-    from datetime import UTC, datetime
+    from app.models import Product, ProductTag, ReviewRecord
 
     users = {}
     for email, name in DEMO_USERS:

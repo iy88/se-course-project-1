@@ -5,7 +5,6 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.models import Product, User
-from app.services import products as product_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 

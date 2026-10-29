@@ -1,21 +1,30 @@
 from __future__ import annotations
+
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import time
-from typing import Sequence
+from collections.abc import Sequence
+from pathlib import Path
 from urllib.parse import unquote
 
-from .types import ROOT, DEFAULT_OUTPUT, HEADER, ExportError, LinkRecord, Plan, TransformState
-from .navigation import _hash_file
-
-from .fonts import FontSupport
-from .transform import DocumentTransform
 from .cache import IncrementalExport
 from .checks import OutputChecks
+from .fonts import FontSupport
+from .navigation import _hash_file
+from .transform import DocumentTransform
+from .types import (
+    DEFAULT_OUTPUT,
+    HEADER,
+    ROOT,
+    ExportError,
+    LinkRecord,
+    Plan,
+    TransformState,
+)
+
 
 class PdfExporter(FontSupport, DocumentTransform, IncrementalExport, OutputChecks):
 
@@ -119,7 +128,7 @@ class PdfExporter(FontSupport, DocumentTransform, IncrementalExport, OutputCheck
                    timeout: float | None = None) -> subprocess.CompletedProcess:
         try:
             return subprocess.run(
-                command, input=data, capture_output=True,
+                command, input=data, capture_output=True, check=False,
                 timeout=self.timeout if timeout is None else timeout,
             )
         except FileNotFoundError as error:
@@ -178,7 +187,11 @@ class PdfExporter(FontSupport, DocumentTransform, IncrementalExport, OutputCheck
                 transformed = self._insert_header_targets(
                     transformed, state.header_targets
                 )
-                transformed["blocks"] = self._wrap_wide_tables(transformed["blocks"])
+            if not isinstance(transformed, dict):
+                raise ExportError(f"{source}: Pandoc document transformation failed")
+            blocks = transformed.get("blocks")
+            if isinstance(blocks, list):
+                transformed["blocks"] = self._wrap_wide_tables(blocks)
             rewritten[source] = transformed
             records[source] = state.records
             aliases[source] = state.aliases
@@ -287,9 +300,12 @@ class PdfExporter(FontSupport, DocumentTransform, IncrementalExport, OutputCheck
         try:
             if self._font_preamble is None:
                 self.require_fonts()
+            preamble = self._font_preamble
+            if preamble is None:
+                raise ExportError(f"{source}: font preamble unavailable")
             with tempfile.TemporaryDirectory(prefix="project1-fonts-") as font_directory:
                 font_header = Path(font_directory) / "fonts.tex"
-                font_header.write_text(self._font_preamble, encoding="utf-8")
+                font_header.write_text(preamble, encoding="utf-8")
                 result = self.run_pandoc(self.pdf_command(temporary, font_header), data=payload)
             if result.returncode:
                 raise ExportError(

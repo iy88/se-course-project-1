@@ -6,10 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.models import Conversation, ConversationRead, Message, Product, Trade, User
+from app.schemas.conversation import (
+    MessageIn,
+    NormalConversationCreateIn,
+    ReadAdvanceIn,
+)
 from app.services import conversations as conversation_service
 from app.services import im as im_service
 from app.services.im import MAX_MESSAGE_LENGTH, ensure_member, pair_frozen
-from app.schemas.conversation import MessageIn, NormalConversationCreateIn, ReadAdvanceIn
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 

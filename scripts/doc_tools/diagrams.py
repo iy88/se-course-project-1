@@ -1,13 +1,15 @@
 from __future__ import annotations
+
 import hashlib
 import os
-from pathlib import Path
 import shutil
 import struct
 import subprocess
 import zlib
+from pathlib import Path
 
 from .common import PNG_SIGNATURE, atomic_write, generated_markdown
+
 
 def png_chunks(data: bytes):
     if not data.startswith(PNG_SIGNATURE):
@@ -74,7 +76,7 @@ def render(root: Path, dpi: int, check: bool,
         result = subprocess.run(
             [renderer, "-pipe", "-tpng", "-charset", "UTF-8", f"-Sdpi={dpi}"],
             input=source.read_bytes(), cwd=source.parent, env=env,
-            capture_output=True, timeout=240,
+            capture_output=True, timeout=240, check=False,
         )
         if result.returncode:
             raise ValueError(source.name + ": " + result.stderr.decode(errors="replace")[:2000])

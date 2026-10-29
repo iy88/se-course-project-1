@@ -164,7 +164,7 @@ def _current_password(api, email: str, passwords: tuple[str, ...]) -> str:
     raise AssertionError(f"账户 {email} 当前密码不在已知集合内")
 
 
-def run(ctx, api, rec):  # noqa: ANN001
+def run(ctx, api, rec):
     # ------------------------------------------------------------------
     # 未登录访问业务内容被拒绝（BR-22、SC-01-05）
     # ------------------------------------------------------------------

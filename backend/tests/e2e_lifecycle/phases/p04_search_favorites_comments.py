@@ -340,7 +340,7 @@ def _comment(api, token: str, product_id: int, content: str, *, reply_to: int | 
     return api.post(f"/products/{product_id}/comments", token=token, json_body=body, expected=expected)
 
 
-def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
+def run(ctx, api, rec):
     """US-03 检索/详情可见性 + US-04 收藏/评论（真实 HTTP，独立造数）。"""
     stamp = uuid.uuid4().hex[:6]
     with rec.step(

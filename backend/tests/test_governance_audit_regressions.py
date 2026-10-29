@@ -100,7 +100,13 @@ async def _counts(db) -> tuple[int, int]:
 
 async def _side_effect_counts(db) -> dict[str, int]:
     """输入校验失败时不得新增举报、事项、补充、沟通消息或通知。"""
-    from app.models import DisposalCase, DisposalMessage, Notification, Report, ReportSupplement
+    from app.models import (
+        DisposalCase,
+        DisposalMessage,
+        Notification,
+        Report,
+        ReportSupplement,
+    )
 
     return {
         "reports": await db.scalar(select(func.count()).select_from(Report)),

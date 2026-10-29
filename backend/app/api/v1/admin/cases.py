@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import select, update
 
-from app.api.deps import CurrentAdmin, CurrentUser, DbSession
+from app.api.deps import CurrentAdmin, DbSession
 from app.models import DisposalCase, Product, User
-from app.models.enums import CaseStatus, CaseType
+from app.models.enums import CaseStatus
 from app.services import cases as case_service
 from app.services.cases import ensure_claimant
 
@@ -160,6 +160,7 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
         } if product else None
         if product:
             from sqlalchemy import select as _select
+
             from app.models import ProductTagApplication
 
             apps = (await db.execute(_select(ProductTagApplication).where(ProductTagApplication.product_id == product.id))).scalars().all()

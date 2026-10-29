@@ -70,7 +70,6 @@ def main() -> None:
 
     def sc_06_04():
         # 从本人交易中找争议交易
-        trades = c.get("/trades/mine", headers=sun["headers"]).json()
         target = None
         for other in extra:
             for t in c.get("/trades/mine", headers=other["headers"]).json():
@@ -259,7 +258,7 @@ def main() -> None:
         )
         published = next(row for row in public_rows if int(row["id"]) == sample_id)
         assert published["public_result"] == sample["public_result"], "公开结果与管理员确认内容不一致"
-        hidden = sorted(set(int(row["id"]) for row in unconfirmed) & seen_ids)
+        hidden = sorted({int(row["id"]) for row in unconfirmed} & seen_ids)
         assert not hidden, f"管理员确认前的举报出现在公开结果中：{hidden}"
 
         # 参数边界只读验证
@@ -290,7 +289,7 @@ def main() -> None:
         sample = next((p for p in search["items"] if p.get("image_url")), None)
         assert sample, "在售商品缺少图片 URL"
         url = sample["image_url"]
-        full = base + url if url.startswith("/api") else base + url
+        full = base + url
         resp = httpx.get(full, timeout=20)
         assert resp.status_code == 200, f"图片读取失败 {resp.status_code}"
         assert resp.content[:2] == b"\xff\xd8" or resp.content[:8].startswith(b"\x89PNG"), "返回内容不是图片字节"

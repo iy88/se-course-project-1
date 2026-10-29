@@ -1,10 +1,12 @@
 from __future__ import annotations
-from pathlib import Path
+
 import re
+from pathlib import Path
 from urllib.parse import unquote
 
 from .common import INCLUDE, META, atomic_write, generated_markdown
 from .markdown import expand_chapter, relocate, shift_headings, validate_links
+
 
 def specification(root: Path, check: bool = False) -> None:
     directory = root / "docs/requirements"
@@ -25,12 +27,17 @@ def specification(root: Path, check: bool = False) -> None:
             continue
         target = (baseline.parent / unquote(match[2].split("#", 1)[0])).resolve()
         if target.is_file():
-            version = re.search(r"^Version: ([\d.]+)$", target.read_text(), re.M)
+            version = re.search(r"^Version: ([\d.]+)$", target.read_text(), re.MULTILINE)
             if version:
                 rows[index] = match[1] + version[1] + match[4] + "\n"
     expanded[baseline] = "".join(rows)
     anchors = {path: f"chapter-{index:02}" for index, path in enumerate(paths, 1)}
-    titles = [re.search(r"^# (.+)$", expanded[p], re.M)[1] for p in paths]
+    titles = []
+    for path in paths:
+        title_match = re.search(r"^# (.+)$", expanded[path], re.MULTILINE)
+        if title_match is None:
+            raise ValueError(f"Missing chapter title: {path.name}")
+        titles.append(title_match[1])
     body = "# 校园二手交易与物品流转平台需求规格说明书\n\n"
     body += "本说明书由第1—8章整合生成，纳入材料及源文件版本见第8章。\n\n## 目录\n\n"
     body += "\n".join(f"- [{title}](#chapter-{index:02})" for index, title in enumerate(titles, 1))
@@ -44,7 +51,7 @@ def specification(root: Path, check: bool = False) -> None:
     overrides = {**expanded, output: report}
     errors = []
     for path, text in overrides.items():
-        if re.search(r"^#{7,} ", text, re.M):
+        if re.search(r"^#{7,} ", text, re.MULTILINE):
             errors.append(f"{path.name}: heading deeper than H6")
         errors.extend(validate_links(path, text, overrides))
     if errors:

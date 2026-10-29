@@ -6,7 +6,12 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import DisposalCase, DisposalMessage, Trade
-from app.models.enums import CaseStatus, CaseType, DisposalMessageKind, DisposalMessageRole
+from app.models.enums import (
+    CaseStatus,
+    CaseType,
+    DisposalMessageKind,
+    DisposalMessageRole,
+)
 
 # 异常交易/交易争议直接关联交易时，买卖双方均为该事项的沟通参与方（BR-26/33）。
 TRADE_PARTICIPANT_CASE_TYPES = (

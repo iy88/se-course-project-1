@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from pathlib import Path
 
 from .markdown import validate_links
+
 
 def check_repository(root: Path) -> None:
     errors = []

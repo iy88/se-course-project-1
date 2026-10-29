@@ -284,7 +284,7 @@ def _simple_matrix(index: dict[str, int]) -> list[tuple]:
     ]
 
 
-def run(ctx, api, rec):  # noqa: ANN001
+def run(ctx, api, rec):
     _ensure_accounts(api, ctx)
     index = _category_index(api, ctx)
 
@@ -420,7 +420,7 @@ def run(ctx, api, rec):  # noqa: ANN001
         )
         _register_product(ctx, "p_review_rejected", product, "liu", "pending_review")
         rejected_reason = "退回补充：请补充接口类型与成色照片后重新提交"
-        api_resp, case_id = _reject(api, ctx, product["id"], rejected_reason)
+        _api_resp, case_id = _reject(api, ctx, product["id"], rejected_reason)
         _remember_case(ctx, "p_review_rejected", product["id"], case_id)
         detail = _assert_detail(api, ctx, product["id"], "liu")
         rec.must_eq(detail.get("status"), "rejected", "审核不通过后商品状态")

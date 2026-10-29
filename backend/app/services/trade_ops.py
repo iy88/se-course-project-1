@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CompletionConfirmation, Product, Trade, TradeTransition, User
-from app.models.enums import ENDED_TRADE_STATUSES, ProductStatus, TradeStatus
+from app.models.enums import ProductStatus, TradeStatus
 from app.services import conversations as conversation_service
 from app.services import products as product_service
 from app.services.notifications import notify
@@ -20,7 +20,7 @@ def now_utc() -> datetime:
 async def record_transition(
     db: AsyncSession,
     trade: Trade,
-    from_status: str,
+    from_status: str | None,
     to_status: str,
     *,
     trigger: str,

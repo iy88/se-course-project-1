@@ -23,7 +23,6 @@ from datetime import datetime
 from pathlib import Path
 
 import httpx
-
 from e2e_client import Api
 from e2e_recorder import Recorder
 from e2e_report import build_report

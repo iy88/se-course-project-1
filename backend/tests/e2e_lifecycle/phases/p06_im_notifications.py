@@ -12,20 +12,17 @@ import json
 from phases.p04_search_favorites_comments import (
     admin_claim_case,
     admin_list_cases,
-    conversation_item,
     detail_text,
     ensure_admin,
     ensure_category,
     find_review_case,
     list_notifications,
-    merge_trade_detail,
     new_user,
     notifications_matching,
     product_detail,
     publish_listed_product,
     register_product,
     request_trade,
-    trade_detail,
 )
 from phases.p05_trades_core import (
     accept_trade,
@@ -198,7 +195,7 @@ def recv_json(ws, *, timeout: float = 8.0) -> dict:
 # ---------------------------------------------------------------------------
 # 阶段主体
 # ---------------------------------------------------------------------------
-def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
+def run(ctx, api, rec):
     """US-04 两类 IM + US-11 通知/待办 + 真实 WebSocket。"""
     with rec.step(
         "P06-SETUP",
@@ -318,7 +315,6 @@ def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
     seller_id = ctx.account("p06_seller")["id"]
     buyer_id = ctx.account("p06_buyer")["id"]
     third_id = ctx.account("p06_third")["id"]
-    other_id = ctx.account("p06_other")["id"]
 
     # ================================================================ 普通私聊（US-04-AC-04）
     with rec.step(
@@ -464,14 +460,14 @@ def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
         item = conversation(api, seller, branch2)
         rec.must_eq(item.get("archived"), True, "拒绝后交易分支归档")
         rec.must(len(item.get("messages") or []) >= 1, "归档分支历史可读")
-        normal_before = len((conversation(api, seller, normal_id).get("messages") or []))
+        normal_before = len(conversation(api, seller, normal_id).get("messages") or [])
         branch_before = len(item.get("messages") or [])
         resp = send_text(api, buyer, branch2, "归档后继续发送", expected=409)
         rec.must("归档" in detail_text(resp), f"归档分支发送应 409，实际 {detail_text(resp)}")
         migrated = api.post(f"/conversations/{branch2}/to-normal", token=buyer, expected=200).json()
         rec.must_eq(migrated.get("id"), normal_id, "转入普通私聊应复用既有普通会话")
-        normal_after = len((conversation(api, seller, normal_id).get("messages") or []))
-        branch_after = len((conversation(api, seller, branch2).get("messages") or []))
+        normal_after = len(conversation(api, seller, normal_id).get("messages") or [])
+        branch_after = len(conversation(api, seller, branch2).get("messages") or [])
         rec.must_eq(normal_after, normal_before, "转入普通私聊不迁移旧交易消息")
         rec.must_eq(branch_after, branch_before, "转入普通私聊不移动分支历史消息")
 
@@ -771,8 +767,8 @@ def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
         for token, conv_id, label in blocked:
             resp = send_text(api, token, conv_id, f"冻结期间尝试发送：{label}", expected=403)
             rec.must("冻结" in detail_text(resp), f"{label} 冻结期间应 403 禁发，实际 {detail_text(resp)}")
-        rec.must(len((conversation(api, seller, normal_id).get("messages") or [])) >= 1, "冻结期间普通私聊历史可读")
-        rec.must(len((conversation(api, seller, branch_a).get("messages") or [])) >= 1, "冻结期间交易分支历史可读")
+        rec.must(len(conversation(api, seller, normal_id).get("messages") or []) >= 1, "冻结期间普通私聊历史可读")
+        rec.must(len(conversation(api, seller, branch_a).get("messages") or []) >= 1, "冻结期间交易分支历史可读")
         rec.must_eq(conversation(api, seller, branch_b).get("archived"), False, "冻结不归档乙分支")
 
     with rec.step(
@@ -786,8 +782,8 @@ def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
         qs = ctx.items["conversation:p06_normal_q_s"]["id"]
         send_text(api, seller, ps, "与第三方的私聊不受本笔冻结影响")
         send_text(api, buyer, qs, "买方与第三方私聊同样不受影响")
-        rec.must(len((conversation(api, third, ps).get("messages") or [])) >= 1, "P↔S 消息应送达")
-        rec.must(len((conversation(api, third, qs).get("messages") or [])) >= 1, "Q↔S 消息应送达")
+        rec.must(len(conversation(api, third, ps).get("messages") or []) >= 1, "P↔S 消息应送达")
+        rec.must(len(conversation(api, third, qs).get("messages") or []) >= 1, "Q↔S 消息应送达")
 
     with rec.step(
         "US-04-AC-07c",
@@ -808,8 +804,8 @@ def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
             rec.must(len(notes) >= 1, f"{name}应收到 trade_unfrozen 通知")
         send_text(api, seller, normal_id, "解冻后普通私聊恢复")
         send_text(api, buyer, branch_b, "解冻后交易分支恢复")
-        rec.must(len((conversation(api, buyer, normal_id).get("messages") or [])) >= 1, "解冻后普通私聊可发送")
-        rec.must(len((conversation(api, seller, branch_b).get("messages") or [])) >= 1, "解冻后交易分支可发送")
+        rec.must(len(conversation(api, buyer, normal_id).get("messages") or []) >= 1, "解冻后普通私聊可发送")
+        rec.must(len(conversation(api, seller, branch_b).get("messages") or []) >= 1, "解冻后交易分支可发送")
 
     with rec.step(
         "US-05-AC-08k",

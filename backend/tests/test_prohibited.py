@@ -1,10 +1,10 @@
 """禁发范围接口回归：ORM 响应序列化、权限、封禁读取资格及排序（BR-13/22/32）。"""
 
 import pytest
-from sqlalchemy import select
-
 from app.models import User
 from app.models.enums import AccountStatus
+from sqlalchemy import select
+
 from tests.conftest import admin_headers, login, make_admin, user_headers
 
 pytestmark = pytest.mark.asyncio

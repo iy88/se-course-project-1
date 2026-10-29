@@ -275,7 +275,7 @@ def _need(*values) -> None:
 # ---------------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------------
-def run(ctx, api, rec):  # noqa: ANN001
+def run(ctx, api, rec):
     _admin_account(api, ctx)
 
     main, main_key = _actor(api, ctx, "chen", "chen@campus.edu", "陈同学")
@@ -612,7 +612,7 @@ def run(ctx, api, rec):  # noqa: ANN001
         chat_after = api.get("/conversations/unread-summary", token=main_token, expected=200).json()["unread"]
         rec.must_eq(chat_after, chat_before, "通知已读不应改变聊天未读数")
         refreshed = _notifications(api, main_token)["items"]
-        marked = [item for item in refreshed if item["id"] == target["id"]][0]
+        marked = next(item for item in refreshed if item["id"] == target["id"])
         rec.must_eq(marked.get("is_read"), True, "目标通知标记已读")
         rec.must(_find_todo(_todos(api, main_token), "request_pending", t_v) is not None, "通知已读后待办仍应存在")
 
@@ -1338,7 +1338,7 @@ def run(ctx, api, rec):  # noqa: ANN001
         cases = api.get("/me/cases", token=main_token, expected=200).json()
         case_ids = {row["id"] for row in cases}
         rec.must(report_case_id in case_ids, f"我的事项缺少举报事项 #{report_case_id}")
-        report_case = [row for row in cases if row["id"] == report_case_id][0]
+        report_case = next(row for row in cases if row["id"] == report_case_id)
         rec.must_eq(report_case.get("status"), "disposed", "我的举报事项状态")
         rec.must_eq(report_case.get("case_type"), "report", "我的举报事项类型")
         rec.must(report_case.get("conclusion"), "已处置事项应展示结论")

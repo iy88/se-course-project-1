@@ -150,7 +150,7 @@ def _need(*values) -> None:
 # ---------------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------------
-def run(ctx, api, rec):  # noqa: ANN001
+def run(ctx, api, rec):
     admin = _admin_account(api, ctx)
 
     seller = ensure_account(api, ctx, "c2rel_seller", "c2rel.seller@campus.edu", "任同学", PASSWORD)
@@ -250,8 +250,8 @@ def run(ctx, api, rec):  # noqa: ANN001
             f"并发接受不应出现 5xx：{results}",
         )
         # 记录赢家/输家交易 id 供后续核对
-        winner = [item for item in results.values() if item["status"] == 200][0]
-        loser = [item for item in results.values() if item["status"] == 409][0]
+        winner = next(item for item in results.values() if item["status"] == 200)
+        loser = next(item for item in results.values() if item["status"] == 409)
         t_win = winner["trade_id"]
         t_lose = loser["trade_id"]
         ctx.update_trade("p10_t_concurrent_a", "in_progress" if t_win == t_a else "closed")

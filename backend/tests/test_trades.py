@@ -3,8 +3,8 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from app.models import Trade
+
 from tests.conftest import create_listed_product, make_admin, user_headers
 
 pytestmark = pytest.mark.asyncio

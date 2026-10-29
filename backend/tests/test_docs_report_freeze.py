@@ -1,10 +1,15 @@
 """举报处置冻结回归：交易分支消息举报按关联交易冻结，普通私聊不推断交易（BR-26/33）。"""
 
 import pytest
+from app.models import DisposalCase, Notification, Product, Report, Trade
 from sqlalchemy import select
 
-from app.models import DisposalCase, Notification, Product, Report, Trade
-from tests.conftest import admin_headers, create_listed_product, make_admin, user_headers
+from tests.conftest import (
+    admin_headers,
+    create_listed_product,
+    make_admin,
+    user_headers,
+)
 
 pytestmark = pytest.mark.asyncio
 

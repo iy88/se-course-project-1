@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.models import Favorite, Product, User

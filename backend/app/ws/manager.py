@@ -4,6 +4,7 @@ import asyncio
 from collections import defaultdict
 
 from fastapi import WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 
 class ConnectionManager:
@@ -26,7 +27,7 @@ class ConnectionManager:
         for ws in list(self._connections.get(user_id, ())):
             try:
                 await ws.send_json(payload)
-            except Exception:  # pragma: no cover
+            except (WebSocketDisconnect, RuntimeError, OSError):  # pragma: no cover
                 self.disconnect(user_id, ws)
 
     async def push_to_users(self, user_ids: list[int], payload: dict) -> None:

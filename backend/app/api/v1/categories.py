@@ -2,14 +2,18 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentAdmin, CurrentUser, DbSession, ensure_can_write
-from app.db.session import get_db
+from app.api.deps import CurrentAdmin, CurrentUser, DbSession
 from app.models import Category, CategoryAlias
-from app.schemas.category import CategoryAliasIn, CategoryCreateIn, CategoryOut, CategoryUpdateIn
+from app.schemas.category import (
+    CategoryAliasIn,
+    CategoryCreateIn,
+    CategoryOut,
+    CategoryUpdateIn,
+)
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -146,13 +150,12 @@ async def remove_alias_by_name(
 @router.delete("/{category_id}/aliases/{alias_id}", response_model=CategoryOut)
 async def remove_alias(category_id: int, alias_id: int, admin: CurrentAdmin, db: DbSession) -> CategoryOut:
     """移除别名不改变归属及历史（4.16）。"""
-    await get_active_category_or_404(db, category_id)
+    category = await get_active_category_or_404(db, category_id)
     alias = await db.get(CategoryAlias, alias_id)
     if not alias or alias.category_id != category_id or alias.removed_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "别名不存在")
     alias.removed_at = datetime.now(UTC)
     await db.commit()
-    category = await db.get(Category, category_id)
     aliases = (
         await db.execute(
             select(CategoryAlias).where(CategoryAlias.category_id == category_id, CategoryAlias.removed_at.is_(None))

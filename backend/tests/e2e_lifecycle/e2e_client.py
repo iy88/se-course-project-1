@@ -22,7 +22,7 @@ class CheckFailed(AssertionError):
         if response is not None:
             try:
                 self.body = response.text
-            except Exception:  # pragma: no cover - 极端编码问题
+            except (UnicodeError, LookupError):  # pragma: no cover - 极端编码问题
                 self.body = "<response body not decodable>"
             message = (
                 f"{message} | 实际 HTTP {response.status_code} "

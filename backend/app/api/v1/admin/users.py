@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 
 from app.api.deps import CurrentAdmin, DbSession
-from app.models import AccountRestriction, DisposalCase, User
-from app.models.enums import AccountStatus, CaseStatus, CaseType
+from app.models import AccountRestriction, User
+from app.models.enums import AccountStatus, CaseType
 from app.services import cases as case_service
 from app.services import moderation
 

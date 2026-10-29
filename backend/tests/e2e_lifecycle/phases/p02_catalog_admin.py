@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 from e2e_support import (
-    DEFAULT_PASSWORD,
     admin_claim_case,
     admin_list_cases,
     login_account,
@@ -97,7 +96,7 @@ def _approve_review(api, ctx, rec, product_id: int) -> dict:
     return detail
 
 
-def run(ctx, api, rec):  # noqa: ANN001
+def run(ctx, api, rec):
     _ensure_seller(api, ctx)
 
     # ------------------------------------------------------------------

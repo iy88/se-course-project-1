@@ -1,9 +1,11 @@
 """Unified CLI for document generation, diagrams, and PDF delivery."""
 from __future__ import annotations
+
 import argparse
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
+
 from doc_tools import checks, diagrams, report
 from doc_tools.pdf import commands as pdf
 

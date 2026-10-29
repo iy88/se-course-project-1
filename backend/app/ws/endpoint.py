@@ -3,6 +3,8 @@
 import re
 
 from fastapi import WebSocket
+from sqlalchemy.exc import SQLAlchemyError
+from starlette.websockets import WebSocketDisconnect, WebSocketDisconnected
 
 from app.api.deps import DbSession
 from app.core.security import decode_access_token
@@ -19,11 +21,11 @@ async def _reject(websocket: WebSocket, code: int) -> None:
     """先完成握手再以业务关闭码拒绝，避免客户端只能看到 403/1006 而无法停止重试。"""
     try:
         await websocket.accept()
-    except Exception:  # pragma: no cover - 客户端可能已断开
+    except (WebSocketDisconnect, WebSocketDisconnected, OSError):  # pragma: no cover - 客户端可能已断开
         return
     try:
         await websocket.close(code=code)
-    except Exception:  # pragma: no cover - 关闭阶段同样可能已断开
+    except (WebSocketDisconnect, WebSocketDisconnected, OSError):  # pragma: no cover - 关闭阶段同样可能已断开
         pass
 
 
@@ -58,7 +60,7 @@ async def ws_endpoint(websocket: WebSocket, db: DbSession) -> None:
         if user is not None:
             # 只保留纯 int；关闭会话后不再读取可能已过期的 ORM 实例。
             authenticated_user_id = int(user.id)
-    except Exception:
+    except (SQLAlchemyError, OSError):
         db_failed = True
     finally:
         # 身份校验结束立即归还连接池：WS 长连接不能占用 SQL 连接，
@@ -80,7 +82,8 @@ async def ws_endpoint(websocket: WebSocket, db: DbSession) -> None:
             msg = await websocket.receive_json()
             if isinstance(msg, dict) and msg.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
-    except Exception:
+    except (WebSocketDisconnect, WebSocketDisconnected, OSError, ValueError):
+        # 客户端断开、连接状态失效或帧无法解析时结束该连接；不影响其他在线连接。
         pass
     finally:
         manager.disconnect(authenticated_user_id, websocket)

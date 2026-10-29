@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 import os
-from pathlib import Path
 import re
 import unicodedata
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from .common import INCLUDE, META, LINK
+from .common import INCLUDE, LINK, META
+
 
 def map_prose(text: str, transform) -> str:
     """Leave fenced examples and inline code unchanged."""
@@ -73,11 +75,12 @@ def expand_chapter(path: Path) -> str:
             raise ValueError(f"Nested includes are not supported: {source}")
         # Child-document navigation and repeated draft labels are not report content.
         body = re.sub(r"(^# [^\n]+\n)\s*状态：[^\n]+\n*", r"\1\n", body, count=1)
-        body = re.split(r"^## (?:关联材料|关联入口|验收与对应用户故事)\s*$", body, flags=re.M)[0].strip()
-        if not re.match(r"^# [^\n]+", body):
+        body = re.split(r"^## (?:关联材料|关联入口|验收与对应用户故事)\s*$", body, flags=re.MULTILINE)[0].strip()
+        title_match = re.match(r"^# ([^\n]+)", body)
+        if title_match is None:
             raise ValueError(f"Missing document title: {source}")
         if view == "acceptance":
-            title = re.search(r"^# (.+)$", body, re.M)[1]
+            title = title_match[1]
             rows = []
             for line in body.splitlines():
                 if not re.match(r"^\| SC-\d+-\d+ \|", line):
@@ -103,10 +106,10 @@ def expand_chapter(path: Path) -> str:
 
 def heading_ids(text: str) -> set[str]:
     clean = map_prose(text, lambda part: part)
-    clean = re.sub(r"```.*?```|~~~.*?~~~", "", clean, flags=re.S)
+    clean = re.sub(r"```.*?```|~~~.*?~~~", "", clean, flags=re.DOTALL)
     ids = set(re.findall(r'<a\s+(?:id|name)="([^"]+)"', clean))
     seen = {}
-    for title in re.findall(r"^#{1,6}\s+(.+?)\s*#*$", clean, re.M):
+    for title in re.findall(r"^#{1,6}\s+(.+?)\s*#*$", clean, re.MULTILINE):
         title = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", title)
         title = re.sub(r"<[^>]+>", "", title).lower()
         slug = "".join(c for c in title if unicodedata.category(c)[0] in "LN" or c in "_- ")

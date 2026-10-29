@@ -3,11 +3,11 @@
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import func, select
-
 from app.kv.base import get_kv
 from app.models import DisposalCase, Product, User
 from app.models.enums import CaseStatus, CaseType
+from sqlalchemy import func, select
+
 from tests.conftest import (
     admin_headers,
     approve_product,
@@ -132,7 +132,7 @@ async def test_register_requires_purpose_and_email_bound_single_use_code(client,
     # 过期等价：验证码不存在时不创建账户
     resp = await client.post("/api/v1/auth/register/send-code", json={"email": "expired@test.com"})
     expired_code = resp.json()["dev_code"]
-    await get_kv().delete(f"vcode:register:expired@test.com")
+    await get_kv().delete("vcode:register:expired@test.com")
     resp = await client.post(
         "/api/v1/auth/register",
         json={"email": "expired@test.com", "display_name": "用户", "password": "secret123", "code": expired_code},
@@ -304,7 +304,7 @@ async def test_withdraw_review_only_before_claim_and_resubmit_paths(client, setu
 
 
 async def test_pending_tag_application_can_be_withdrawn(client, setup, db):
-    admin_h, seller_h, _ = setup
+    _, seller_h, _ = setup
     resp = await client.post(
         "/api/v1/products",
         headers=seller_h,

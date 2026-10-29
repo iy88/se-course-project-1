@@ -364,7 +364,7 @@ def _refresh_report_states(api, ctx) -> None:
 # ---------------------------------------------------------------------------
 # 阶段主流程
 # ---------------------------------------------------------------------------
-def run(ctx, api, rec):  # noqa: ANN001
+def run(ctx, api, rec):
     _ensure_accounts(api, ctx)
     admin = ctx.account("admin")
     assert admin is not None
@@ -477,11 +477,9 @@ def run(ctx, api, rec):  # noqa: ANN001
         expected="下架成功；/me/reviews 双方仍返回本笔评价（随后按卖家资格恢复上架保持样本）",
     ):
         product = api.get(f"/products/{p_completed_id}", token=ctx.token("liu"), expected=200).json()
-        delisted = False
         if product["status"] == "listed":
             resp = api.post(f"/products/{p_completed_id}/delist", token=ctx.token("liu"), expected=200)
             rec.must_eq(resp.json()["status"], "delisted", "下架后商品状态")
-            delisted = True
         chen_pub = api.get("/me/reviews", token=ctx.token("chen"), expected=200).json()
         liu_recv = api.get("/me/reviews", token=ctx.token("liu"),
                            params={"type": "received"}, expected=200).json()

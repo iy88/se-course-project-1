@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
@@ -166,7 +166,7 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
                 status.HTTP_400_BAD_REQUEST,
                 "商品通过时须至少关联一个获认可标签（请处理标签申请或保留已有标签）",
             )
-        await db.execute(ProductTag.__table__.delete().where(ProductTag.product_id == product.id))
+        await db.execute(delete(ProductTag).where(ProductTag.product_id == product.id))
         for cid in approved_tag_ids:
             db.add(ProductTag(product_id=product.id, category_id=cid))
         product.status = ProductStatus.LISTED.value
@@ -321,7 +321,7 @@ async def correct_category(product_id: int, body: CategoryCorrectionIn, admin: C
         categories.append(category)
     before = await product_service.load_product_tags(db, product.id)
     before_names = [t.name for t in before]
-    await db.execute(ProductTag.__table__.delete().where(ProductTag.product_id == product.id))
+    await db.execute(delete(ProductTag).where(ProductTag.product_id == product.id))
     for category in categories:
         db.add(ProductTag(product_id=product.id, category_id=category.id))
     after_names = [c.name for c in categories]

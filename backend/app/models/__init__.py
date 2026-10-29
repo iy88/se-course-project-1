@@ -1,7 +1,13 @@
 """模型汇总：导入全部模型以便 create_all 建表。"""
 
 from app.models.category import Category, CategoryAlias
-from app.models.governance import DisposalCase, DisposalMessage, Notification, Report, ReportSupplement
+from app.models.governance import (
+    DisposalCase,
+    DisposalMessage,
+    Notification,
+    Report,
+    ReportSupplement,
+)
 from app.models.im import Conversation, ConversationRead, Message
 from app.models.product import (
     Comment,
@@ -14,7 +20,13 @@ from app.models.product import (
     ProhibitedItem,
     ReviewRecord,
 )
-from app.models.trade import CompletionConfirmation, Trade, TradeAgreement, TradeReview, TradeTransition
+from app.models.trade import (
+    CompletionConfirmation,
+    Trade,
+    TradeAgreement,
+    TradeReview,
+    TradeTransition,
+)
 from app.models.user import AccountRestriction, User
 
 __all__ = [

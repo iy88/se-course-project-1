@@ -184,7 +184,7 @@ def branch_of(api, ctx, trade_key: str) -> dict:
 # ---------------------------------------------------------------------------
 # 阶段主体
 # ---------------------------------------------------------------------------
-def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
+def run(ctx, api, rec):
     """US-05 / US-06：请求、锁单、约定、确认、取消、争议、恢复与管理调整。"""
     with rec.step(
         "P05-SETUP",
@@ -232,7 +232,6 @@ def run(ctx, api, rec):  # noqa: ANN001 - 框架约定签名
     seller_tok = ctx.token("p05_seller")
     b1 = ctx.token("p05_buyer1")
     b2 = ctx.token("p05_buyer2")
-    b3 = ctx.token("p05_buyer3")
     outsider = ctx.token("p05_outsider")
 
     # ================================================================ US-05-AC-01 请求

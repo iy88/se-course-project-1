@@ -3,14 +3,13 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import inspect, select, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.db.migrations import upgrade_additive_schema
 from app.db.session import Base
 from app.models import CompletionConfirmation, Trade
 from app.services import moderation
 from app.services.trade_timeout import scan_once
+from sqlalchemy import inspect, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 pytestmark = pytest.mark.asyncio
 

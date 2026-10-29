@@ -1,13 +1,12 @@
 """FR-01 账户生命周期：注册、登录、退出、忘记密码、改密、换邮箱、改名。"""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.security import create_access_token, hash_password, verify_password
-from app.db.session import get_db
 from app.models import User
 from app.models.enums import UserRole
 from app.schemas.auth import (
@@ -171,7 +170,7 @@ async def email_change(body: ChangeEmailIn, user: CurrentUser, db: DbSession) ->
 
 
 @router.patch("/profile", response_model=UserOut)
-async def update_profile(body: ProfileUpdateIn, user: CurrentUser, db: AsyncSession = Depends(get_db)) -> UserOut:
+async def update_profile(body: ProfileUpdateIn, user: CurrentUser, db: DbSession) -> UserOut:
     """4.19：显示名称可自行修改，历史记录保留用户 ID 归属。"""
     user.display_name = body.display_name
     await db.commit()

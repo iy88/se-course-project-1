@@ -203,7 +203,7 @@ async def test_report_flow_with_inquiry_and_public_result(client, setup):
 
 async def test_single_claimant_rule(client, setup, db):
     """同一事项同时仅一名认领人（BR-34）。"""
-    admin_h, seller_h, buyer_h = setup
+    admin_h, seller_h, _buyer_h = setup
     from tests.conftest import publish_product
 
     product = await publish_product(client, seller_h, title="认领唯一商品")  # 新待审事项
@@ -267,7 +267,7 @@ async def test_admin_adjust_and_restore(client, setup, db):
 async def test_stats_endpoint(client, setup):
     """统计口径（BR-31）。"""
     admin_h, seller_h, buyer_h = setup
-    product = await create_listed_product(client, admin_h, seller_h, title="统计商品")
+    await create_listed_product(client, admin_h, seller_h, title="统计商品")
     resp = await client.get("/api/v1/admin/stats", headers=admin_h)
     assert resp.status_code == 200
     data = resp.json()

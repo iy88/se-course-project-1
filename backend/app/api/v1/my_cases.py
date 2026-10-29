@@ -8,7 +8,12 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession
 from app.models import DisposalCase, Trade
-from app.models.enums import CaseStatus, CaseType, DisposalMessageKind, DisposalMessageRole
+from app.models.enums import (
+    CaseStatus,
+    CaseType,
+    DisposalMessageKind,
+    DisposalMessageRole,
+)
 from app.services import cases as case_service
 
 router = APIRouter(prefix="/me/cases", tags=["my-cases"])

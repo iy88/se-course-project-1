@@ -214,20 +214,22 @@ def _ensure_single_confirm_trade(api, ctx, trade_key: str, buyer: str, seller: s
     if existing and existing.get("id"):
         data = _trade_or_none(api, ctx, int(existing["id"]), buyer)
         if data is not None and data.get("status") == "in_progress":
-            if not (data.get("my_confirmed") or data.get("other_party_confirmed")):
-                if not data.get("frozen"):
-                    if data.get("agreement_stage") == "awaiting_agreement":
-                        pending = data.get("pending_agreement")
-                        if pending:
-                            confirmer = seller if pending["proposer_id"] == ctx.accounts[buyer]["id"] else buyer
-                            api.post(
-                                f"/trades/{data['id']}/agreements/{pending['id']}/confirm",
-                                token=ctx.token(confirmer), expected=200,
-                            )
-                        else:
-                            _agree(api, ctx, data["id"], buyer, seller)
-                    _confirm(api, ctx, data["id"], buyer)
-                    data = _trade(api, ctx, data["id"], buyer)
+            if (
+                not (data.get("my_confirmed") or data.get("other_party_confirmed"))
+                and not data.get("frozen")
+            ):
+                if data.get("agreement_stage") == "awaiting_agreement":
+                    pending = data.get("pending_agreement")
+                    if pending:
+                        confirmer = seller if pending["proposer_id"] == ctx.accounts[buyer]["id"] else buyer
+                        api.post(
+                            f"/trades/{data['id']}/agreements/{pending['id']}/confirm",
+                            token=ctx.token(confirmer), expected=200,
+                        )
+                    else:
+                        _agree(api, ctx, data["id"], buyer, seller)
+                _confirm(api, ctx, data["id"], buyer)
+                data = _trade(api, ctx, data["id"], buyer)
             if data.get("confirm_wait_started_at") is not None:
                 ctx.remember_trade(trade_key, {"id": data["id"]}, buyer, seller, state="in_progress")
                 return int(data["id"]), int(data["product_id"])
@@ -398,7 +400,7 @@ def _refresh_report_states(api, ctx) -> None:
 # ---------------------------------------------------------------------------
 # 阶段主流程
 # ---------------------------------------------------------------------------
-def run(ctx, api, rec):  # noqa: ANN001
+def run(ctx, api, rec):
     _ensure_accounts(api, ctx)
     category_id = _active_category(api, ctx)
     db_path = str(ctx.db_path) if ctx.db_path else ""
@@ -741,7 +743,7 @@ def run(ctx, api, rec):  # noqa: ANN001
         rec.must(before_row is not None, "读取冻结交易计时字段")
         started_before, paused_before, remaining_before = before_row
         # 【证据边界】仅前移 confirm_wait_started_at，保留暂停字段
-        _, shifted = _shift_started_only(db_path, tid_freeze, 8 * 86400)
+        _, _shifted = _shift_started_only(db_path, tid_freeze, 8 * 86400)
         after_row = db_query_one(
             db_path,
             "SELECT confirm_wait_started_at, confirm_wait_paused_at, confirm_wait_remaining_seconds "

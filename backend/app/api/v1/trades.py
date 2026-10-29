@@ -19,11 +19,11 @@ from app.models import (
 )
 from app.models.enums import (
     AgreementStatus,
+    CaseType,
     DisposalMessageKind,
     DisposalMessageRole,
     ProductStatus,
     TradeStatus,
-    CaseType,
 )
 from app.schemas.trade import (
     AgreementProposeIn,
@@ -35,8 +35,7 @@ from app.schemas.trade import (
 )
 from app.services import cases as case_service
 from app.services import conversations as conversation_service
-from app.services import trade_ops
-from app.services import trade_wait
+from app.services import trade_ops, trade_wait
 from app.services import trades as trade_service
 from app.services.notifications import notify
 from app.services.permissions import has_active_frozen_trade
@@ -100,6 +99,8 @@ async def _trade_out(db: AsyncSession, trade: Trade, user: User) -> dict:
     my_role = "buyer" if trade.buyer_id == user.id else "seller"
     buyer = await db.get(User, trade.buyer_id)
     seller = await db.get(User, trade.seller_id)
+    if buyer is None or seller is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "交易参与者不存在")
     effective = _effective_agreement(trade, list(agreements))
     pending_agreement = next((a for a in agreements if a.status == AgreementStatus.PROPOSED.value), None)
     my_current_confirm = any(c.confirmer_id == user.id and c.is_current for c in confirms)
@@ -320,6 +321,8 @@ async def accept_request(trade_id: int, user: CurrentUser, db: DbSession) -> dic
     await _ensure_trade_actors_eligible(db, trade)
     await trade_service.ensure_no_locking_conflict(db, trade, TradeStatus.IN_PROGRESS.value)
     product = await db.get(Product, trade.product_id)
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     product_id = product.id
     try:
         from_status = trade.status
@@ -343,6 +346,9 @@ async def accept_request(trade_id: int, user: CurrentUser, db: DbSession) -> dic
                 link_id=other.id,
             )
         conversation = await db.scalar(select(Conversation).where(Conversation.trade_id == trade.id, Conversation.type == "trade"))
+        if conversation is None:
+            # 请求创建时必定生成交易分支（BR-01/18）；缺失属于数据完整性异常。
+            raise RuntimeError("交易分支缺失，无法完成接受请求")
         await conversation_service.send_system_message(db, conversation.id, "卖方已接受该购买请求，交易进入进行中。")
         await notify(
             db,
@@ -399,6 +405,9 @@ async def withdraw_request(trade_id: int, user: CurrentUser, db: DbSession) -> d
     if trade.status != TradeStatus.PENDING_ACCEPTANCE.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "卖方已处理该请求，无法撤回")
     await _ensure_trade_actors_eligible(db, trade)
+    product = await db.get(Product, trade.product_id)
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     from_status = trade.status
     trade.status = TradeStatus.WITHDRAWN.value
     trade.close_reason = "买方撤回"
@@ -409,7 +418,7 @@ async def withdraw_request(trade_id: int, user: CurrentUser, db: DbSession) -> d
         [trade.seller_id],
         "request_withdrawn",
         "购买请求已撤回",
-        f"{user.display_name} 已撤回对商品「{(await db.get(Product, trade.product_id)).title}」的购买请求。",
+        f"{user.display_name} 已撤回对商品「{product.title}」的购买请求。",
         link_type="trade",
         link_id=trade.id,
     )

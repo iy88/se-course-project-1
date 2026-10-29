@@ -1,6 +1,7 @@
 """C-02 商品、C-04 审核记录、C-05 收藏、C-06 商品评论、C-16 禁发范围。"""
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
@@ -18,6 +19,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 from app.models.enums import ProductStatus, ReviewResult
+
+if TYPE_CHECKING:
+    from app.models.category import Category
 
 
 class Product(Base):

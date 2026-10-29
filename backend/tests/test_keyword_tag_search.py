@@ -1,8 +1,8 @@
 """自由关键词搜索：商品文本 OR 关联标签主名/活跃别名（FR-02/BR-15）。"""
 
 import pytest
-
 from app.models import Product
+
 from tests.conftest import (
     admin_headers,
     approve_product,
@@ -152,7 +152,7 @@ async def test_keyword_listed_only_pagination_and_total_without_duplicates(clien
     # 主名和多个活跃别名均命中同一关键词，不得使商品或 total 重复。
     for alias in ("生活用品A", "生活用品B"):
         resp = await client.post(
-            f"/api/v1/categories/3/aliases", headers=admin_h, json={"name": alias}
+            "/api/v1/categories/3/aliases", headers=admin_h, json={"name": alias}
         )
         assert resp.status_code == 200, resp.text
 

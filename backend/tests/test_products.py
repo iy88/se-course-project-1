@@ -16,7 +16,7 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
 async def setup(client, db):
-    admin = await make_admin(db)
+    await make_admin(db)
     admin_h = await admin_headers(client)
     seller_h = await user_headers(client, "seller@test.com", "卖方")
     buyer_h = await user_headers(client, "buyer@test.com", "买方")
@@ -37,7 +37,7 @@ async def test_publish_requires_review_before_public(client, setup):
 
 
 async def test_reject_shows_reason_and_resubmit(client, setup):
-    admin_h, seller_h, buyer_h = setup
+    admin_h, seller_h, _buyer_h = setup
     product = await publish_product(client, seller_h, title="会被拒绝的商品")
     resp = await client.get("/api/v1/admin/cases?status=pending", headers=admin_h)
     case = next(c for c in resp.json() if c["product_id"] == product["id"])
@@ -104,7 +104,7 @@ async def test_price_range_and_empty_hint(client, setup):
 
 
 async def test_edit_keeps_request_and_history(client, setup):
-    admin_h, seller_h, buyer_h = setup
+    admin_h, seller_h, _buyer_h = setup
     product = await create_listed_product(client, admin_h, seller_h, title="微调商品")
     # 微调不二审不关闭请求（TR-04）
     resp = await client.patch(f"/api/v1/products/{product['id']}", headers=seller_h, json={"price_cents": 1200})

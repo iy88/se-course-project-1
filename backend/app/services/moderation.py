@@ -16,10 +16,13 @@ from app.models.enums import (
     TradeStatus,
 )
 from app.services import cases as case_service
-from app.services import conversations as conversation_service
 from app.services import trades as trade_service
 from app.services.notifications import notify
-from app.services.trade_wait import as_utc, pause_wait_for_freeze, resume_wait_after_unfreeze
+from app.services.trade_wait import (
+    as_utc,
+    pause_wait_for_freeze,
+    resume_wait_after_unfreeze,
+)
 
 
 def now_utc() -> datetime:

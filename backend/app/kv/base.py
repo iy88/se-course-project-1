@@ -3,6 +3,7 @@
 配置 REDIS_URL 时使用 Redis 实现；否则进程内字典兜底（TTL 靠惰性清理）。
 """
 
+import contextlib
 import time
 from abc import ABC, abstractmethod
 
@@ -59,12 +60,10 @@ def get_kv() -> KeyValueStore:
 
         settings = get_settings()
         if settings.redis_url:
-            try:
+            with contextlib.suppress(Exception):  # pragma: no cover - Redis 不可用时兜底
                 from app.kv.redis_kv import RedisKV
 
                 _kv = RedisKV(settings.redis_url)
                 return _kv
-            except Exception:  # pragma: no cover - Redis 不可用时兜底
-                pass
         _kv = MemoryKV()
     return _kv

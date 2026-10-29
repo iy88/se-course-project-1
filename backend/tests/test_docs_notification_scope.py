@@ -4,11 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import func, select
-
 from app.models import Notification, User
 from app.models.enums import AccountStatus
 from app.services import notifications as notification_service
+from sqlalchemy import func, select
+
 from tests.conftest import admin_headers, make_admin, user_headers
 
 pytestmark = pytest.mark.asyncio

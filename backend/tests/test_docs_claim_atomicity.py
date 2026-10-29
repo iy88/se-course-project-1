@@ -7,12 +7,8 @@ pending 状态制造交错，再由数据库条件 UPDATE 决定唯一胜者。�
 
 import asyncio
 
-import pytest
-from fastapi import HTTPException
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 import app.storage.base as storage_base
+import pytest
 from app.api.v1 import products as products_api
 from app.api.v1.admin import cases as admin_cases
 from app.db.session import Base
@@ -26,6 +22,9 @@ from app.models import (
 )
 from app.models.enums import CaseStatus, CaseType, ProductStatus, ReviewResult
 from app.storage.base import LocalStorage
+from fastapi import HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 pytestmark = pytest.mark.asyncio
 

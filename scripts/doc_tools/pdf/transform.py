@@ -1,12 +1,24 @@
 from __future__ import annotations
+
 import os
 from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 
-from .types import URI_SAFE, ANCHOR_ID, HTML_ANCHOR_OPEN, HTML_ANCHOR_CLOSE, HTML_ANCHOR_ATTR, ExportError, LinkRecord, TransformState
-from .navigation import raw_path, _plain_text, github_slug, pdf_anchor
+from .navigation import _plain_text, github_slug, pdf_anchor, raw_path
+from .types import (
+    ANCHOR_ID,
+    HTML_ANCHOR_ATTR,
+    HTML_ANCHOR_CLOSE,
+    HTML_ANCHOR_OPEN,
+    URI_SAFE,
+    ExporterBase,
+    ExportError,
+    LinkRecord,
+    TransformState,
+)
 
-class DocumentTransform:
+
+class DocumentTransform(ExporterBase):
 
     def _anchor_ids(self, content: str) -> list[str]:
         match = HTML_ANCHOR_OPEN.fullmatch(content)
@@ -20,7 +32,7 @@ class DocumentTransform:
         return ids
 
 
-    def _anchor_paragraph(self, node: dict) -> tuple[str, list[str]] | None:
+    def _anchor_paragraph(self, node: dict) -> tuple[str, list[str], list[str]] | None:
         """Replace a paragraph made only of raw <a id=...> tags with LaTeX."""
         inlines = node.get("c")
         if not isinstance(inlines, list) or not inlines:
@@ -259,7 +271,7 @@ class DocumentTransform:
                     {"t": "RawInline", "c": ["latex", r"\hyperlink{" + anchor + "}{"]},
                     *label, {"t": "RawInline", "c": ["latex", "}"]},
                 ]]}
-            if kind == "Link" and record.is_markdown:
+            if kind == "Link" and record.is_markdown and record.destination is not None:
                 # Explicit UTF-16BE file specifications avoid both URI
                 # escaping and PDFDocEncoding ambiguity in short CJK names.
                 relative_file = Path(os.path.relpath(

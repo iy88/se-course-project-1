@@ -3,8 +3,6 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
-
 from app.models import (
     CompletionConfirmation,
     Conversation,
@@ -17,7 +15,14 @@ from app.models import (
     User,
 )
 from app.services.trade_timeout import scan_once
-from tests.conftest import admin_headers, create_listed_product, login, make_admin, user_headers
+from sqlalchemy import select
+
+from tests.conftest import (
+    admin_headers,
+    create_listed_product,
+    make_admin,
+    user_headers,
+)
 
 pytestmark = pytest.mark.asyncio
 

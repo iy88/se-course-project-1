@@ -7,7 +7,6 @@ harness 运行时不依赖 Pillow，只上传这些文件。用法：
 
 from __future__ import annotations
 
-import math
 import random
 from pathlib import Path
 
@@ -54,7 +53,7 @@ def vignette(img: Image.Image, strength: int = 70) -> Image.Image:
 
 def label(img: Image.Image, text: str, sub: str | None = None, pos=None, color=(255, 255, 255)):
     d = ImageDraw.Draw(img)
-    w, h = img.size
+    _, h = img.size
     x, y = pos or (48, h - 150)
     d.text((x, y), text, font=font(44), fill=color, stroke_width=2, stroke_fill=(20, 30, 25))
     if sub:
