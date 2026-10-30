@@ -17,6 +17,7 @@ import os
 import re
 import stat
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -56,6 +57,7 @@ class OssConfig:
     access_key_secret: str = field(repr=False)
     timeout_seconds: float = 15.0
     max_retries: int = 2
+    download_expire_seconds: int = 3600
     key_prefix: str = ""
     operation_journal: Path | None = None
 
@@ -127,6 +129,7 @@ class OssConfig:
             max_retries=retries,
             key_prefix=getattr(settings, "storage_key_prefix", ""),
             operation_journal=getattr(settings, "storage_operation_journal", None),
+            download_expire_seconds=getattr(settings, "file_url_expire_seconds", 3600),
         )
 
 
@@ -160,6 +163,12 @@ class _V2Bucket:
     def delete_object(self, key: str) -> Any:
         import alibabacloud_oss_v2 as oss
         return self.client.delete_object(oss.DeleteObjectRequest(bucket=self.name, key=key))
+
+    def presign_get(self, key: str, expires_seconds: int) -> Any:
+        import alibabacloud_oss_v2 as oss
+        request = oss.GetObjectRequest(bucket=self.name, key=key,
+            response_cache_control=f'private, max-age={min(300, max(0, expires_seconds - 30))}')
+        return self.client.presign(request, expires=timedelta(seconds=expires_seconds))
 
     def presign(self, key: str, content_type: str, size_bytes: int, expires_seconds: int, sha256: str) -> Any:
         import alibabacloud_oss_v2 as oss
@@ -245,6 +254,7 @@ class OssStorage(StorageBackend):
         self.config = config
         self._bucket_factory = bucket_factory or _create_bucket
         self._buckets: dict[str, Any] = {}
+        self._download_urls: OrderedDict[str, tuple[str, float]] = OrderedDict()
 
     def _bucket_for_role(self, role: str) -> Any:
         bucket_name = (
@@ -324,6 +334,24 @@ class OssStorage(StorageBackend):
             raise StorageConfigError("SDK 未返回上传签名到期时间")
         return {"method": result.method, "url": result.url, "headers": headers,
                 "expires_at": result.expiration.isoformat()}
+
+    def public_url(self, key: str) -> str:
+        """私有桶临时 GET 直链；在有效期内复用 URL，避免资料刷新触发图片重载。"""
+        now = time.monotonic()
+        cached = self._download_urls.get(key)
+        if cached and cached[1] > now:
+            self._download_urls.move_to_end(key)
+            return cached[0]
+        bucket = self._bucket_for_key(key)
+        ttl = self.config.download_expire_seconds
+        result = self._run('presign_get', lambda: bucket.presign_get(self.config.key_prefix + key, ttl))
+        if not result.url or result.expiration is None:
+            raise StorageConfigError('SDK 未返回有效的读取签名')
+        self._download_urls[key] = (result.url, now + max(0, ttl - min(60, ttl / 2)))
+        self._download_urls.move_to_end(key)
+        while len(self._download_urls) > 2048:
+            self._download_urls.popitem(last=False)
+        return result.url
 
     def stat(self, key: str) -> dict[str, Any]:
         bucket = self._bucket_for_key(key)

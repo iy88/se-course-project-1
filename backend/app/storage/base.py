@@ -162,7 +162,7 @@ class StorageBackend(ABC):
     def public_url(self, key: str) -> str:
         """后端 HMAC 签名访问 URL，通过 /api/v1/files/{key} 读取。
 
-        不返回 OSS 直链、bucket 名称或 AK；业务读取始终经过应用鉴权入口。
+        local 使用此入口；OSS 后端覆盖为临时签名 GET 直链。
         """
         return f"/api/v1/files/{key}?{sign_file_key(key)}"
 
