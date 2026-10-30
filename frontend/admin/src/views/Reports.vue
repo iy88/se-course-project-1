@@ -6,12 +6,6 @@
         <h1>举报核查</h1>
         <p class="sub">查看举报对象、原因与公开结果；处置动作在已认领的事项详情内执行。</p>
       </div>
-      <div class="page-head-actions">
-        <el-button :loading="loading" @click="load">
-          <el-icon><AppIcon name="refresh" /></el-icon>
-          刷新列表
-        </el-button>
-      </div>
     </header>
 
     <el-card class="filter-card">
@@ -26,7 +20,12 @@
             <el-radio-button value="handled">已处置</el-radio-button>
           </el-radio-group>
         </div>
-        <span class="result-count">共 {{ reports.length }} 条</span>
+        <div class="toolbar-actions">
+          <span class="result-count">共 {{ reports.length }} 条</span>
+          <el-button :loading="loading" @click="load">
+            <el-icon><AppIcon name="refresh" /></el-icon><span>刷新</span>
+          </el-button>
+        </div>
       </div>
     </el-card>
 
@@ -80,7 +79,6 @@
             <div class="state-block">
               <span class="state-icon"><AppIcon name="reports" :size="24" /></span>
               <p class="state-title">当前筛选下暂无举报记录</p>
-              <el-button size="small" @click="load">刷新列表</el-button>
             </div>
           </template>
         </el-table>

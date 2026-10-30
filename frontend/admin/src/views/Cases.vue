@@ -8,12 +8,6 @@
           认领本人负责的事项后，方可查看非公开内容并执行处置；未认领事项仅显示概要。
         </p>
       </div>
-      <div class="page-head-actions">
-        <el-button :loading="loading" @click="load">
-          <el-icon><AppIcon name="refresh" /></el-icon>
-          刷新列表
-        </el-button>
-      </div>
     </header>
 
     <el-card class="filter-card">
@@ -34,6 +28,7 @@
             class="filter-select"
             @change="load"
           >
+            <el-option label="头像审核" value="avatar_review" />
             <el-option label="商品审核" value="product_review" />
             <el-option label="举报事项" value="report" />
             <el-option label="交易争议" value="trade_dispute" />
@@ -41,7 +36,12 @@
             <el-option label="账户封禁" value="account_ban" />
           </el-select>
         </div>
-        <span class="result-count">共 {{ cases.length }} 条</span>
+        <div class="toolbar-actions">
+          <span class="result-count">共 {{ cases.length }} 条</span>
+          <el-button :loading="loading" @click="load">
+            <el-icon><AppIcon name="refresh" /></el-icon><span>刷新</span>
+          </el-button>
+        </div>
       </div>
     </el-card>
 
@@ -96,7 +96,6 @@
             <div class="state-block">
               <span class="state-icon"><AppIcon name="cases" :size="24" /></span>
               <p class="state-title">当前筛选下暂无事项</p>
-              <el-button size="small" @click="load">刷新列表</el-button>
             </div>
           </template>
         </el-table>
@@ -151,6 +150,7 @@ async function claim(row) {
 const canOpen = (row) => row.status !== 'pending' && !!adminId.value && row.claimed_by_id === adminId.value
 
 const typeLabels = {
+  avatar_review: '头像审核',
   product_review: '商品审核',
   report: '举报事项',
   trade_dispute: '交易争议',

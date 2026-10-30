@@ -6,12 +6,6 @@
         <h1>账户管理</h1>
         <p class="sub">按状态与关键词检索账户，封禁或解除封禁；管理员账户不在此处处置。</p>
       </div>
-      <div class="page-head-actions">
-        <el-button :loading="loading" @click="load">
-          <el-icon><AppIcon name="refresh" /></el-icon>
-          刷新列表
-        </el-button>
-      </div>
     </header>
 
     <el-card class="filter-card">
@@ -37,7 +31,12 @@
             查询
           </el-button>
         </div>
-        <span class="result-count">共 {{ users.length }} 个账户</span>
+        <div class="toolbar-actions">
+          <span class="result-count">共 {{ users.length }} 个账户</span>
+          <el-button :loading="loading" @click="load">
+            <el-icon><AppIcon name="refresh" /></el-icon><span>刷新</span>
+          </el-button>
+        </div>
       </div>
     </el-card>
 
@@ -102,7 +101,6 @@
             <div class="state-block">
               <span class="state-icon"><AppIcon name="users" :size="24" /></span>
               <p class="state-title">当前筛选下暂无账户</p>
-              <el-button size="small" @click="load">刷新列表</el-button>
             </div>
           </template>
         </el-table>

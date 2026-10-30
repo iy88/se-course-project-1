@@ -6,12 +6,6 @@
         <h1>交易处置</h1>
         <p class="sub">须关联本人认领事项；冻结、解冻和状态调整基于该事项执行，并记录依据、通知双方。</p>
       </div>
-      <div class="page-head-actions">
-        <el-button :loading="casesLoading" @click="loadCases">
-          <el-icon><AppIcon name="refresh" /></el-icon>
-          刷新事项
-        </el-button>
-      </div>
     </header>
 
     <el-card class="filter-card">

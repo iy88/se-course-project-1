@@ -70,7 +70,7 @@
             <el-input v-model="form.group_name" placeholder="按类别归组展示" />
           </el-form-item>
           <el-form-item label="细目" class="span-2">
-            <el-input v-model="form.content" type="textarea" :rows="3" placeholder="具体禁发内容说明" />
+            <el-input v-model="form.content" type="textarea" placeholder="具体禁发内容说明"  :autosize="{ minRows: 3, maxRows: 8 }"/>
           </el-form-item>
           <el-form-item label="排序">
             <el-input-number v-model="form.sort" :min="0" :controls="false" class="sort-input" />

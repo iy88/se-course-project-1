@@ -6,12 +6,6 @@
         <h1>数据统计</h1>
         <p class="sub">按查询时点查看用户、待处理事项与商品/交易状态分布；可指定范围统计完成交易。</p>
       </div>
-      <div class="page-head-actions">
-        <el-button :loading="loading" @click="load">
-          <el-icon><AppIcon name="refresh" /></el-icon>
-          刷新
-        </el-button>
-      </div>
     </header>
 
     <el-card class="filter-card">

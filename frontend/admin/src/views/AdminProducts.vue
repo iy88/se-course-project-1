@@ -140,9 +140,8 @@
             <el-input
               v-model="correctForm.reason"
               type="textarea"
-              :rows="2"
               placeholder="纠正原因（必填，将通知卖方）"
-            />
+             :autosize="{ minRows: 3, maxRows: 8 }"/>
           </el-form-item>
           <el-form-item class="span-2">
             <el-button type="primary" :loading="submitting" @click="submitCorrection">

@@ -22,18 +22,17 @@
             返回
           </button>
           <p class="eyebrow">事项处理 · #{{ detail.id }}</p>
-          <h1>{{ detail.title }}</h1>
+          <div class="detail-title-row">
+            <h1>{{ detail.title }}</h1>
+            <el-button :loading="loading" title="刷新当前内容" aria-label="刷新当前内容" @click="load()">
+              <el-icon><AppIcon name="refresh" /></el-icon><span>刷新</span>
+            </el-button>
+          </div>
           <div class="meta-row">
             <el-tag :type="statusTagType(detail.status)" effect="light">{{ statusLabel(detail.status) }}</el-tag>
             <el-tag type="info" effect="plain">{{ typeLabel(detail.case_type) }}</el-tag>
             <span>认领人 {{ detail.claimed_by_id ? `#${detail.claimed_by_id}` : '未认领' }}</span>
           </div>
-        </div>
-        <div class="page-head-actions">
-          <el-button :loading="loading" @click="load()">
-            <el-icon><AppIcon name="refresh" /></el-icon>
-            刷新当前内容
-          </el-button>
         </div>
       </header>
 
@@ -129,9 +128,8 @@
                 <el-input
                   v-model="restoreReason"
                   type="textarea"
-                  :rows="2"
                   placeholder="解除依据（必填，留据并通知卖方）"
-                />
+                 :autosize="{ minRows: 3, maxRows: 8 }"/>
                 <el-button
                   type="warning"
                   :loading="restoreLoading"
@@ -148,7 +146,6 @@
             </div>
 
             <div class="card-actions">
-              <el-button size="small" @click="load()">刷新当前内容</el-button>
               <span class="hint">提交审核结论前会重新读取服务端内容；审核依据提交结论时的最新保存内容，页面停留过久请刷新。</span>
             </div>
           </el-card>
@@ -285,12 +282,11 @@
                     v-if="tagDecisions[app.id] === 'reject'"
                     v-model="tagReasons[app.id]"
                     type="textarea"
-                    :rows="2"
                     :maxlength="500"
                     show-word-limit
                     placeholder="说明拒绝该标签申请的原因"
                     aria-label="标签申请拒绝原因"
-                  />
+                   :autosize="{ minRows: 3, maxRows: 8 }"/>
                   <el-select
                     v-if="tagDecisions[app.id] === 'map_alias'"
                     v-model="aliasTargets[app.id]"
@@ -307,7 +303,7 @@
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item v-if="reviewForm.result === 'rejected'" label="拒绝原因（不通过须记录理由）">
-                  <el-input v-model="reviewForm.reason" type="textarea" :rows="2" />
+                  <el-input v-model="reviewForm.reason" type="textarea"  :autosize="{ minRows: 3, maxRows: 8 }"/>
                 </el-form-item>
                 <el-button
                   type="primary"
@@ -332,15 +328,14 @@
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item label="结论理由">
-                  <el-input v-model="reportForm.reason" type="textarea" :rows="2" />
+                  <el-input v-model="reportForm.reason" type="textarea"  :autosize="{ minRows: 3, maxRows: 8 }"/>
                 </el-form-item>
                 <el-form-item label="匿名公开结果说明">
                   <el-input
                     v-model="reportForm.public_summary"
                     type="textarea"
-                    :rows="2"
                     placeholder="将向所有登录用户匿名展示"
-                  />
+                   :autosize="{ minRows: 3, maxRows: 8 }"/>
                 </el-form-item>
                 <template v-if="reportForm.outcome === 'handled'">
                   <el-form-item label="处置动作">
@@ -379,19 +374,25 @@
             </div>
 
             <template v-if="canAct">
-              <el-divider content-position="left">发起问询（需被举报/涉事用户说明时）</el-divider>
-              <el-input v-model="inquiryText" type="textarea" :rows="2" placeholder="说明需要回应的范围" />
+              <div class="case-composer">
+              <h3>发起问询</h3>
+              <p>向涉事用户说明需要回应的内容与范围</p>
+              <el-input v-model="inquiryText" type="textarea" placeholder="说明需要回应的范围"  :autosize="{ minRows: 3, maxRows: 8 }"/>
               <el-button class="message-submit" @click="sendInquiry">
                 <el-icon><AppIcon name="send" /></el-icon>
                 发送问询
               </el-button>
 
-              <el-divider content-position="left">事项回复</el-divider>
-              <el-input v-model="replyText" type="textarea" :rows="2" placeholder="在沟通单回复说明/结论" />
+              </div>
+              <div class="case-composer">
+              <h3>事项回复</h3>
+              <p>记录处理说明，与用户沟通后续安排</p>
+              <el-input v-model="replyText" type="textarea" placeholder="在沟通单回复说明/结论"  :autosize="{ minRows: 3, maxRows: 8 }"/>
               <el-button class="message-submit" @click="sendReply">
                 <el-icon><AppIcon name="send" /></el-icon>
                 发送回复
               </el-button>
+              </div>
             </template>
           </el-card>
         </aside>
@@ -694,6 +695,15 @@ async function submitAvatarDecision(approved) {
 </script>
 
 <style scoped>
+.head-main { width: 100%; min-width: 0; }
+.detail-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.detail-title-row h1 { min-width: 0; overflow-wrap: anywhere; }
+.detail-title-row .el-button { flex-shrink: 0; }
+
+.case-composer { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); }
+.case-composer h3 { font-size: 14px; margin-bottom: 5px; }
+.case-composer p { margin: 0 0 12px; font-size: 12px; line-height: 1.6; color: var(--ink-faint); }
+
 .head-main {
   min-width: 0;
 }
