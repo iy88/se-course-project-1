@@ -11,7 +11,10 @@ export default defineConfig({
   cacheDir: '.vite',
   plugins: [
     vue(),
-    Components({ resolvers: [VantResolver()] }),
+    // 全量样式已由 main.js 的 vant/lib/index.css 统一引入；关闭按需样式副作用，
+    // 避免路由懒加载时晚注入的 vant/es/*.css 打乱层叠顺序（如 .van-popup--center
+    // 覆盖函数式对话框 .van-dialog 的宽度）。
+    Components({ resolvers: [VantResolver({ importStyle: false })] }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],

@@ -1,9 +1,8 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+// 全量样式覆盖模板组件及函数式 API（showConfirmDialog、showToast 等）。
+// 按需样式已在 vite.config.js 关闭，避免懒加载样式晚于本文件注入后覆盖。
 import 'vant/lib/index.css'
-// 函数式对话框（showConfirmDialog 等）不经过模板自动导入，
-// 独立加载其样式，避免全量样式未就绪时退化成无宽度布局。
-import 'vant/es/dialog/index.css'
 import App from './App.vue'
 import router from './router'
 import { useSession } from './stores/session'
