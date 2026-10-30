@@ -127,6 +127,7 @@ class ApiClient:
             headers={"Accept": "application/json"},
         )
         self.calls: list[CallRecord] = []
+        self.allowed_storage_hosts: set[str] = set()
         self.current_check: str = "setup"
         self.current_role: str = "anonymous"
 
@@ -254,11 +255,12 @@ class ApiClient:
             # 后端返回站内相对签名 URL；补 base origin，仍不记录查询串。
             target = self.origin + (url if url.startswith("/") else "/" + url)
             parsed = urlsplit(target)
-        elif parsed.scheme not in {"http", "https"} or parsed.netloc != origin.netloc:
-            raise CheckFailure("签名 URL 主机与 base_url 不一致")
+        elif parsed.netloc != origin.netloc:
+            if parsed.scheme != 'https' or parsed.netloc not in self.allowed_storage_hosts or parsed.username or parsed.password:
+                raise CheckFailure('签名 URL 主机不在配置的存储白名单')
         safe_path = parsed.path or "/"
         try:
-            response = self.client.get(parsed.path + (("?" + parsed.query) if parsed.query else ""))
+            response = self.client.get(parsed.geturl())
         except httpx.HTTPError as exc:
             raise CheckFailure(f"GET {safe_path} 请求失败（{type(exc).__name__}）") from None
         self.calls.append(

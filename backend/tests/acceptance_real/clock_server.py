@@ -108,7 +108,6 @@ def main(argv: list[str] | None = None) -> int:
     patched = _install_clock(clock_file)
     # 时钟补丁必须先于 app.main 导入；uvicorn 会复用已加载的模块。
     import uvicorn
-
     from app.main import app
 
     print(

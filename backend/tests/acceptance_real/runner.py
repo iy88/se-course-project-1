@@ -709,6 +709,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         try:
             from app.devtools._support import load_dev_config
+
             from tests.acceptance_real.sandbox import Sandbox
 
             sandbox = Sandbox.recover(Path(actual_args[1]), load_dev_config(for_acceptance=True, require_storage=True))
@@ -726,6 +727,7 @@ def main(argv: list[str] | None = None) -> int:
         collector = CodeCoverage()
         signal.signal(signal.SIGTERM, interrupted)
         from app.devtools._support import load_dev_config
+
         from tests.acceptance_real.sandbox import Sandbox
 
         sandbox = Sandbox(load_dev_config(for_acceptance=True, require_storage=True))

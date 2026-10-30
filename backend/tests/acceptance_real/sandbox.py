@@ -15,12 +15,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotenv import dotenv_values, set_key
-from sqlalchemy import text
-from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import NullPool
-
 from app.core.config import load_migration_settings, validate_migration_context
 from app.devtools._support import (
     BACKEND_ROOT,
@@ -31,6 +25,11 @@ from app.devtools._support import (
     make_async_engine,
     write_private_json,
 )
+from dotenv import dotenv_values, set_key
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 _PATTERN = re.compile(r"^acceptance_[0-9a-f]{32}$")
 
@@ -311,7 +310,7 @@ class Sandbox:
                 if not isinstance(storage, OssStorage):
                     raise GuardError("存储后端不是 OSS")
                 count = storage.cleanup_from_journal()
-                self.evidence["oss_verification"] = "all journaled puts absent by HEAD; prefix listing unavailable"
+                self.evidence["oss_verification"] = "all journaled puts absent by HEAD; prefix listing not performed"
                 return count
             attempt("oss_removed", clean_oss)
         if self.active:

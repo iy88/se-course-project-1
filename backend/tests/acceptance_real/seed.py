@@ -30,11 +30,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from sqlmodel import col, or_, select
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.devtools._support import (
     DevConfig,
     GuardError,
@@ -47,6 +42,10 @@ from app.devtools._support import (
     probe_database,
     write_private_json,
 )
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlmodel import col, or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = BACKEND_ROOT.parent

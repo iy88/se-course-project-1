@@ -1,4 +1,4 @@
-"""真实资源验收场景：所有业务动作通过 HTTP，数据库仅用于初始化 seed 与只读核验。
+"""真实资源验收场景：所有业务动作通过 HTTP，数据库用于初始化 seed、只读核验及扫描服务的隔离并发验证。
 
 本模块不修改业务代码；7 天场景通过测试服务进程的受控时钟推进，不写数据库时间字段。
 """
@@ -15,13 +15,12 @@ import subprocess
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-
 from app.devtools._support import (
     DevConfig,
     StorageProbe,
@@ -30,6 +29,7 @@ from app.devtools._support import (
     readonly_mapping,
     readonly_rows,
 )
+
 from tests.acceptance_real.core import (
     BACKEND_ROOT,
     REPO_ROOT,
@@ -126,6 +126,9 @@ class AcceptanceRun:
         self.only = {value.strip().lower() for value in (only or []) if value.strip()}
         self.route_index = RouteIndex({})
         self.api = ApiClient(base_url, self.route_index)
+        if config.settings.storage_backend == 'oss':
+            endpoint = urlsplit(config.settings.oss_endpoint).netloc
+            self.api.allowed_storage_hosts = {f'{bucket}.{endpoint}' for bucket in (config.settings.oss_media_bucket, config.settings.oss_evidence_bucket)}
         self.rec = Recorder(self.api)
         self.users: dict[str, dict[str, Any]] = {}
         self.categories: dict[str, Any] = {}
@@ -550,6 +553,7 @@ class AcceptanceRun:
         import threading
 
         lock = threading.Lock()
+        start_barrier = threading.Barrier(len(jobs))
         origin = self.api.origin
         results: list[dict[str, Any]] = []
 
@@ -564,6 +568,7 @@ class AcceptanceRun:
                 trust_env=False,
                 headers={"Accept": "application/json", "Authorization": f"Bearer {token}"},
             ) as client:
+                start_barrier.wait(timeout=10)
                 response = client.request(method, path, json=dict(body))
             duration = round((time.monotonic() - started) * 1000, 1)
             from tests.acceptance_real.core import CallRecord
@@ -1267,6 +1272,122 @@ class AcceptanceRun:
     # ------------------------------------------------------------------
     # 文件、商品、检索、收藏、评论
     # ------------------------------------------------------------------
+    def _review_race_regression(self) -> None:
+        for index in range(3):
+            key = f'P_REVIEW_RACE_{index}'
+            product = self._publish(key, 'seller', f'并发审核-{index}-{self.run_id}', category_ids=[self.categories['main']['id']])
+            case = self._pending_case(product['id'])
+            self._claim(case['id'])
+            path = f"/api/v1/admin/products/cases/{case['id']}/review"
+            results = self._concurrent([
+                ('POST', path, 'admin', {'result': 'approved'}),
+                ('POST', path, 'admin', {'result': 'rejected', 'reason': '并发拒绝'}),
+            ])
+            self.rec.must_eq(sorted(item['status'] for item in results), [200, 409], '审核重复提交仅一个成功')
+            count = self._db_one("select count(*) as n from app.audit_events where event_type='admin.product_review' and target_id=:id", {'id': str(product['id'])})
+            # 最终商品状态与唯一审核结论一致。
+            record = self._db_one('select result from app.review_records where case_id=:id', {'id': case['id']})
+            detail = self._product_detail(key, 'seller')
+            self.rec.must_eq(detail['status'], 'listed' if record['result'] == 'approved' else 'rejected', '并发审核最终状态一致')
+            self.rec.must_eq(int(count['n']), 1, '仅一次审核成功审计')
+
+            edit_key = f'P_EDIT_REVIEW_RACE_{index}'
+            product = self._publish(edit_key, 'seller', f'并发编辑审核-{index}-{self.run_id}', category_ids=[self.categories['main']['id']])
+            case = self._pending_case(product['id'])
+            self._claim(case['id'])
+            results = self._concurrent([
+                ('PATCH', f"/api/v1/products/{product['id']}", 'seller', {'description': '并发编辑新内容'}),
+                ('POST', f"/api/v1/admin/products/cases/{case['id']}/review", 'admin', {'result': 'rejected', 'reason': '并发快照检查'}),
+            ])
+            self.rec.must(results[0]['status'] in (200, 409) and results[1]['status'] == 200, '审核与编辑按串行顺序执行')
+            snapshot = self._db_one('select content_json from app.review_records where case_id=:id', {'id': case['id']})['content_json']
+            if isinstance(snapshot, str):
+                snapshot = json.loads(snapshot)
+            if results[0]['status'] == 200:
+                self.rec.must_eq(snapshot['description'], '并发编辑新内容', '编辑先提交则审核使用最新内容')
+            case = self._dict(self._call('GET', f"/api/v1/admin/cases/{case['id']}", user='admin'))
+            self.rec.must_eq(case['status'], 'disposed', '审核事项归档')
+
+        # 同一事项的通用处置重复请求只能写入一次结论。
+        key = 'P_CASE_DISPOSE_RACE'
+        product = self._publish(key, 'seller', f'重复处置-{self.run_id}', category_ids=[self.categories['main']['id']])
+        case = self._pending_case(product['id'])
+        self._claim(case['id'])
+        results = self._concurrent([
+            ('POST', f"/api/v1/admin/cases/{case['id']}/dispose", 'admin', {'conclusion': '结论一'}),
+            ('POST', f"/api/v1/admin/cases/{case['id']}/dispose", 'admin', {'conclusion': '结论二'}),
+        ])
+        self.rec.must_eq(sorted(item['status'] for item in results), [200, 409], '通用处置重复提交仅一次成功')
+        product = self._publish('P_REPORT_RACE', 'seller', f'重复举报处置-{self.run_id}', category_ids=[self.categories['main']['id']])
+        self._approve('P_REPORT_RACE')
+        report_case = self._relevant_case_for_product(product['id'], claimant='admin')
+        results = self._concurrent([
+            ('POST', f'/api/v1/admin/reports/cases/{report_case}/decision', 'admin', {'outcome': 'unfounded', 'reason': '并发核查一', 'public_summary': '依据不足'}),
+            ('POST', f'/api/v1/admin/reports/cases/{report_case}/decision', 'admin', {'outcome': 'unfounded', 'reason': '并发核查二', 'public_summary': '依据不足'}),
+        ])
+        self.rec.must_eq(sorted(item['status'] for item in results), [200, 409], '举报重复处置仅一次成功')
+        self.concurrency.append({'kind': 'review_edit_dispose', 'rounds': 3, 'status': 'PASS'})
+
+    def _timeout_race_regression(self) -> None:
+        from unittest.mock import patch
+
+        from app.devtools._support import make_async_engine
+        from app.services import trade_timeout
+        from sqlmodel.ext.asyncio.session import AsyncSession
+
+        for action in ('confirm', 'freeze'):
+            product_key, trade_key = f'P_SCAN_{action}', f'T_SCAN_{action}'
+            self._publish(product_key, 'seller', f'扫描并发-{action}-{self.run_id}', category_ids=[self.categories['main']['id']])
+            self._approve(product_key)
+            self._request_trade(trade_key, 'buyer', product_key)
+            self._accept(trade_key)
+            agreement = self._propose(trade_key, 'buyer', AGREEMENT_A)
+            self._agree(trade_key, agreement, 'seller')
+            self._confirm(trade_key, 'buyer')
+            tid = self.trades[trade_key]['id']
+            case_id = self._relevant_case_for_product(self.products[product_key]['id'], claimant='admin') if action == 'freeze' else None
+
+            async def exercise(tid=tid, action=action, trade_key=trade_key, case_id=case_id):
+                engine = make_async_engine(self.config.database_url, schema=self.config.database_schema)
+                ready, release = asyncio.Event(), asyncio.Event()
+                real_lock = trade_timeout.lock_product_then_trade
+                future = datetime.now(UTC) + timedelta(days=8)
+                class FutureDateTime(datetime):
+                    @classmethod
+                    def now(cls, tz=None):
+                        return future if tz else future.replace(tzinfo=None)
+                async def delayed_lock(db, trade_id, product_id):
+                    ready.set()
+                    await release.wait()
+                    return await real_lock(db, trade_id, product_id)
+                try:
+                    async with AsyncSession(engine) as db:
+                        with patch.object(trade_timeout, 'datetime', FutureDateTime), patch.object(trade_timeout, 'get_settings', return_value=self.config.settings), patch.object(trade_timeout, 'lock_product_then_trade', delayed_lock):
+                            scan = asyncio.create_task(trade_timeout.scan_once(db, trade_ids=(tid,)))
+                            try:
+                                await asyncio.wait_for(ready.wait(), 10)
+                                if action == 'confirm':
+                                    await asyncio.to_thread(self._confirm, trade_key, 'seller')
+                                else:
+                                    await asyncio.to_thread(self._call, 'POST', f'/api/v1/admin/trades/{tid}/freeze', user='admin', expected=200, json_body={'reason': '扫描并发冻结', 'case_id': case_id})
+                            finally:
+                                release.set()
+                                await asyncio.wait_for(scan, 15)
+                            self.rec.must_eq(scan.result(), 0, '扫描等待后重检，跳过已完成或被冻结交易')
+                finally:
+                    await engine.dispose()
+            asyncio.run(exercise())
+            row = self._db_one("select count(*) as n from app.trade_transitions where trade_id=:id and trigger='confirm_timeout'", {'id': tid})
+            self.rec.must_eq(int(row['n']), 0, '过期扫描快照没有产生异常转移')
+            detail = self._trade_detail(trade_key, 'buyer')
+            self.rec.must_eq(detail['status'], 'completed' if action == 'confirm' else 'in_progress', '人工操作结果保持')
+            if action == 'freeze':
+                self.rec.must_eq(detail['frozen'], True, '扫描未覆盖人工冻结')
+                self._call('POST', f'/api/v1/admin/trades/{tid}/unfreeze', user='admin', expected=200, json_body={'reason': '并发测试完成', 'case_id': case_id})
+                # 完成该测试交易，避免影响后续受控时钟场景。
+                self._confirm(trade_key, 'seller')
+        self.concurrency.append({'kind': 'timeout_vs_confirmation_and_freeze', 'status': 'PASS'})
+
     def files_and_products(self) -> None:
         with self.rec.step(
             "FILE-01",
@@ -1275,18 +1396,63 @@ class AcceptanceRun:
             sc=["SC-02-01", "SC-07-04"],
             note="桶落点另由只读 SQL 核验",
         ):
+            from io import BytesIO
+
+            from PIL import Image
+            avatar_bytes = BytesIO()
+            Image.new('RGB', (256, 256), '#408060').save(avatar_bytes, format='JPEG')
+            avatar_content = avatar_bytes.getvalue()
+            avatar_lease = self._lease('seller', 'avatar.jpg', avatar_content, 'avatar')
+            self._put_lease(avatar_lease, avatar_content)
+            self._call('POST', f"/api/v1/files/upload-leases/{avatar_lease['lease_id']}/complete", user='seller')
+            avatar_key = avatar_lease['key']
+            atomic_avatar = self._dict(self._call('GET', '/api/v1/auth/me', user='seller'))
+            self.rec.must_eq(atomic_avatar['avatar_review_status'], 'pending', '上传确认同事务提交头像审核')
+            self._call('POST', '/api/v1/auth/avatar', user='buyer', expected=400, json_body={'key': avatar_key})
+            avatar_case = self._dict(self._call('POST', '/api/v1/auth/avatar', user='seller', json_body={'key': avatar_key}))
+            pending = self._dict(self._call('GET', '/api/v1/auth/me', user='seller'))
+            self.rec.must_eq(pending['avatar_review_status'], 'pending', '头像待审核')
+            self.rec.must(not pending['avatar_url'], '待审核头像未公开')
+            queue = self._list(self._call('GET', '/api/v1/admin/cases', user='admin', params={'case_type': 'avatar_review'}))
+            self.rec.must(any(item['id'] == avatar_case['case_id'] for item in queue), '管理员可见头像申请')
+            avatar_case_id = avatar_case['case_id']
+            decision_path = f"/api/v1/admin/cases/{avatar_case_id}/avatar-decision"
+            self._call('POST', decision_path, user='admin', expected=403, json_body={'key': avatar_key, 'approved': True})
+            self._claim(avatar_case_id, 'admin')
+            self._call('GET', f'/api/v1/admin/cases/{avatar_case_id}', user='admin')
+            self._call('POST', decision_path, user='buyer', expected=403, json_body={'key': avatar_key, 'approved': True})
+            self._call('POST', decision_path, user='admin', json_body={'key': avatar_key, 'approved': False, 'reason': '请更换图片'})
+            avatar_case = self._dict(self._call('POST', '/api/v1/auth/avatar', user='seller', json_body={'key': avatar_key}))
+            avatar_case_id = avatar_case['case_id']
+            decision_path = f'/api/v1/admin/cases/{avatar_case_id}/avatar-decision'
+            self._claim(avatar_case_id, 'admin')
+            self._call('POST', decision_path, user='admin', json_body={'key': avatar_key, 'approved': True})
+            approved = self._dict(self._call('GET', '/api/v1/auth/me', user='seller'))
+            self.rec.must_eq(approved['avatar_review_status'], 'approved', '头像审核通过')
+            self.rec.must(bool(approved['avatar_url']), '审核通过后返回头像链接')
+            refreshed = self._dict(self._call('GET', '/api/v1/auth/me', user='seller'))
+            if self.config.settings.storage_backend == 'oss':
+                self.rec.must_eq(refreshed['avatar_url'], approved['avatar_url'], '元数据刷新复用头像签名URL')
+                self.rec.must(urlsplit(approved['avatar_url']).netloc in self.api.allowed_storage_hosts, '头像返回OSS直链')
+            self.api.signed_get(approved['avatar_url'])
+            self._call('POST', decision_path, user='admin', expected=409, json_body={'key': avatar_key, 'approved': True})
             product_file = self._upload("seller", "product_bike.jpg", "product")
             self.files["product_probe"] = product_file
             self.rec.must(str(product_file["key"]).startswith("product/"), "商品图 key 前缀 product/")
             signed = self.api.signed_get(str(product_file["url"]))
             self.rec.must(signed.content[:3] == b"\xff\xd8\xff", "签名 URL 读回 JPEG")
-            tampered = str(product_file["url"]).replace("sig=", "sig=deadbeef", 1)
-            # 不能假设 sig 后无其他参数；直接替换最后一段。
-            tampered = re.sub(r"sig=[^&]+", "sig=deadbeef", str(product_file["url"]))
-            path = urlsplit(tampered).path + "?" + urlsplit(tampered).query
-            self.api.current_role = "anonymous"
-            bad = self.api.get(path, expected=403)
-            self.rec.must_eq(bad.status_code, 403, "篡改签名拒绝")
+            from urllib.parse import parse_qsl, urlencode
+            parsed_url = urlsplit(str(product_file['url']))
+            signature_name = 'x-oss-signature' if parsed_url.netloc else 'sig'
+            query = [(key, '0' * 64 if key.lower() == signature_name else value) for key, value in parse_qsl(parsed_url.query)]
+            tampered = parsed_url._replace(query=urlencode(query)).geturl()
+            self.api.signed_get(tampered, expected=403)
+            # 本地文件兼容读取入口继续验证；OSS 业务 URL 则直接读取对应私有桶。
+            import hmac
+            expiry = int(time.time()) + 300
+            logical_key = product_file['key']
+            sig = hmac.new(self.config.settings.file_url_secret.encode(), f'{logical_key}:{expiry}'.encode(), hashlib.sha256).hexdigest()
+            self.api.signed_get(f'/api/v1/files/{logical_key}?exp={expiry}&sig={sig}')
             valid = _asset_bytes("product_bike.jpg")
             base = {"namespace":"product","filename":"x.jpg","content_type":"image/jpeg","size_bytes":len(valid),"sha256":hashlib.sha256(valid).hexdigest()}
             for body, expected, note in [
@@ -1399,6 +1565,7 @@ class AcceptanceRun:
             )
             self.rec.must_eq(resubmitted.get("status"), "pending_review", "撤回后重提待审核")
             self.products["P_PENDING"].update(resubmitted)
+            self._review_race_regression()
             # 并发认领：admin 与 admin2 同时 claim 同一事项。
             case = self._pending_case(int(product["id"]))
             self.cases["P_PENDING_review"] = case
@@ -3080,6 +3247,7 @@ class AcceptanceRun:
         ):
             if self.server is None:
                 raise CheckFailure("7 天超时验收需要 --start-server 受控时钟服务")
+            self._timeout_race_regression()
             self._publish("P_TIMEOUT", "seller", f"超时转异常商品-{self.run_id}", price=6700, category_ids=[self.categories["main"]["id"]])
             self._approve("P_TIMEOUT")
             self._request_trade("T_TIMEOUT", "buyer", "P_TIMEOUT")
@@ -4010,32 +4178,48 @@ class AcceptanceRun:
                 self._call("POST", f"/api/v1/conversations/{trade_conversation}/to-normal", user="buyer", expected=200)
             )
             self.rec.must(int(migrated["id"]) == int(normal["id"]), "转普通私聊复用同一双人会话")
-            # WS：卖方在线，买方发送消息，卖方收到 push；ping/pong。
+            # 双方同时在线：HTTP 提交正文，WS 分别接收对方的真实消息推送。
             import websockets
 
-            async def _ws_exchange() -> dict[str, Any]:
-                ws_url = self.base_url.replace("http", "ws", 1) + f"/ws?token={self._token('seller')}"
-                async with websockets.connect(ws_url, proxy=None, open_timeout=10, close_timeout=5) as websocket:
-                    await websocket.send(json.dumps({"type": "ping"}))
-                    pong = json.loads(await asyncio.wait_for(websocket.recv(), timeout=10))
-                    async with httpx.AsyncClient(base_url=self.api.origin, timeout=10, trust_env=False) as client:
-                        response = await client.post(
-                            f"/api/v1/conversations/{normal['id']}/messages",
-                            headers={"Authorization": f"Bearer {self._token('buyer')}"},
-                            json={"content": f"WS 推送消息-{self.run_id}"},
-                        )
-                    if response.status_code != 200:
-                        return {"pong": pong, "send_status": response.status_code, "message": None}
-                    payload = json.loads(await asyncio.wait_for(websocket.recv(), timeout=10))
-                    return {"pong": pong, "send_status": response.status_code, "message": payload}
+            async def _ws_exchange() -> list[dict[str, Any]]:
+                ws_base = self.base_url.replace('http', 'ws', 1) + '/ws?token='
+                async with (
+                    websockets.connect(ws_base + self._token('buyer'), proxy=None, open_timeout=10, close_timeout=5) as buyer_ws,
+                    websockets.connect(ws_base + self._token('seller'), proxy=None, open_timeout=10, close_timeout=5) as seller_ws,
+                    httpx.AsyncClient(base_url=self.api.origin, timeout=10, trust_env=False) as client,
+                ):
+                    for role, websocket in [('buyer', buyer_ws), ('seller', seller_ws)]:
+                        await websocket.send(json.dumps({'type': 'ping'}))
+                        pong = json.loads(await asyncio.wait_for(websocket.recv(), timeout=10))
+                        self.rec.must_eq(pong.get('type'), 'pong', f'{role} WS ping/pong')
+                    exchanges = []
+                    for index in range(3):
+                        for sender, receiver, websocket in [('buyer', 'seller', seller_ws), ('seller', 'buyer', buyer_ws)]:
+                            content = f'WS 双向消息-{sender}-{index}-{self.run_id}'
+                            response = await client.post(
+                                f"/api/v1/conversations/{normal['id']}/messages",
+                                headers={'Authorization': f'Bearer {self._token(sender)}'},
+                                json={'content': content},
+                            )
+                            self.rec.must_eq(response.status_code, 200, f'{sender} HTTP 发送成功')
+                            message_id = response.json()['id']
+                            async def receive_message(websocket=websocket):
+                                while True:
+                                    payload = json.loads(await websocket.recv())
+                                    if payload.get('type') == 'message':
+                                        return payload
+                            payload = await asyncio.wait_for(receive_message(), timeout=10)
+                            self.rec.must_eq(payload.get('conversation_id'), int(normal['id']), f'{receiver} 收到正确会话')
+                            self.rec.must_eq(payload.get('message_id'), message_id, f'{receiver} 收到对应消息 ID')
+                            self.rec.must_eq(payload.get('sender_id'), self._uid(sender), f'{receiver} 收到正确发送者')
+                            self.rec.must_eq(payload.get('content'), content, f'{receiver} 收到完整正文')
+                            exchanges.append({'sender': sender, 'receiver': receiver, 'message_id': message_id})
+                    return exchanges
 
-            ws_result = asyncio.run(_ws_exchange())
-            self.rec.must_eq(ws_result["pong"].get("type"), "pong", "WS ping/pong")
-            self.rec.must_eq(ws_result["send_status"], 200, "WS 期间 HTTP 发送成功")
-            self.rec.must_eq((ws_result["message"] or {}).get("type"), "message", "WS 收到消息推送")
-            self.rec.must_eq(int((ws_result["message"] or {}).get("conversation_id") or 0), int(normal["id"]), "WS 推送同一会话")
+            exchanges = asyncio.run(_ws_exchange())
+            self.rec.must_eq(len({item['message_id'] for item in exchanges}), 6, '三轮双向消息 ID 各不相同')
             self.ws_ok = True
-            self.rec.data["ws"] = {"pong": True, "message_push": True}
+            self.rec.data['ws'] = {'buyer_pong': True, 'seller_pong': True, 'rounds': 3, 'exchanges': exchanges}
 
         with self.rec.step(
             "IM-02",
@@ -4889,11 +5073,10 @@ class AcceptanceRun:
             for key in business_keys:
                 self.rec.must(probe.exists(key), f"业务对象在 OSS 真实存在 {key[:24]}…")
             # 只读 dry-run：已引用对象不得成为清理候选；证据对象即使 staged 也受保护。
-            from sqlmodel.ext.asyncio.session import AsyncSession
-
             from app.devtools._support import make_async_engine
             from app.services.stored_objects import cleanup_unreferenced_staged
             from app.storage.base import build_storage
+            from sqlmodel.ext.asyncio.session import AsyncSession
 
             settings = self.config.settings
             storage = build_storage(settings)
