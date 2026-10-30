@@ -14,6 +14,7 @@ export default defineConfig({
     'import.meta.env.VITE_API_TIMEOUT_MS': JSON.stringify(frontendSettings.timeoutMs),
   },
   server: {
+    host: '0.0.0.0',
     port: 5174,
     proxy: {
       '/api': frontendSettings.proxyTarget,
