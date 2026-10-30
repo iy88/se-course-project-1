@@ -4,7 +4,7 @@
 
     <div v-if="profile" class="view">
       <section class="surface user-hero">
-        <span class="avatar-text user-hero__avatar">{{ initialOf(profile.display_name) }}</span>
+        <span class="avatar-text user-hero__avatar"><img v-if="profile.avatar_url" :src="profile.avatar_url" alt="用户头像" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" /><span v-else>{{ initialOf(profile.display_name) }}</span></span>
         <div class="user-hero__main">
           <h1>{{ profile.display_name }}</h1>
           <p>在售 {{ profile.products.length }} 件闲置</p>

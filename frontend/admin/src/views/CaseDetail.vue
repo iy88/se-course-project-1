@@ -261,7 +261,15 @@
               </div>
             </template>
 
-            <template v-if="detail.case_type === 'product_review' && canAct">
+            <template v-if="detail.case_type === 'avatar_review'">
+              <el-image v-if="detail.avatar?.url" :src="detail.avatar.url" :preview-src-list="[detail.avatar.url]" preview-teleported style="width:160px;height:160px;border-radius:16px" fit="cover" />
+              <el-form v-if="canAct" label-position="top">
+                <el-form-item label="审核原因"><el-input v-model="avatarReason" type="textarea" maxlength="500" placeholder="拒绝时填写原因"  :autosize="{ minRows: 3, maxRows: 8 }"/></el-form-item>
+                <el-button type="primary" :disabled="avatarBusy" @click="submitAvatarDecision(true)">通过</el-button>
+                <el-button type="danger" :disabled="avatarBusy" @click="submitAvatarDecision(false)">拒绝</el-button>
+              </el-form>
+            </template>
+            <template v-else-if="detail.case_type === 'product_review' && canAct">
               <el-form label-position="top">
                 <el-form-item
                   v-for="app in pendingCaseTagApplications"
@@ -425,6 +433,7 @@ const restoreReason = ref('')
 const restoreLoading = ref(false)
 
 const typeLabels = {
+  avatar_review: '头像审核',
   product_review: '商品审核',
   report: '举报事项',
   trade_dispute: '交易争议',
@@ -671,6 +680,17 @@ watch(() => route.params.id, () => {
   detail.value = null
   load()
 })
+const avatarReason = ref('')
+const avatarBusy = ref(false)
+async function submitAvatarDecision(approved) {
+  if (!approved && !avatarReason.value.trim()) return ElMessage.warning('请填写拒绝原因')
+  avatarBusy.value = true
+  try {
+    await http.post(`/admin/cases/${detail.value.id}/avatar-decision`, { key: detail.value.avatar.key, approved, reason: avatarReason.value })
+    ElMessage.success('头像审核完成')
+    await load()
+  } catch {} finally { avatarBusy.value = false }
+}
 </script>
 
 <style scoped>

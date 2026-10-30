@@ -3,7 +3,11 @@ import { computed, ref } from 'vue'
 import http from '../api/http'
 
 export const useSession = defineStore('session', () => {
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
+  let cached = null
+  try { cached = JSON.parse(localStorage.getItem('user') || 'null') } catch { localStorage.removeItem('user') }
+  // 临时图片链接由本轮身份刷新提供，避免先请求旧链接再替换为新签名。
+  if (cached) { cached.avatar_url = null; cached.avatar_pending_url = null }
+  const user = ref(cached)
   const unreadNotifications = ref(0)
   const unreadMessages = ref(0)
 

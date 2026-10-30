@@ -44,7 +44,7 @@
         </nav>
 
         <div class="account">
-          <span class="avatar" aria-hidden="true">{{ initial }}</span>
+          <span class="avatar" aria-hidden="true"><img v-if="session.user?.avatar_url" :src="session.user.avatar_url" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" /><span v-else>{{ initial }}</span></span>
           <span class="account-meta">
             <strong>{{ adminName }}</strong>
             <small>平台管理员</small>

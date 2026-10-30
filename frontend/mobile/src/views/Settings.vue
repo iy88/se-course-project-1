@@ -1,12 +1,39 @@
 <template>
   <div class="settings-page">
     <AppNavBar title="账户设置" />
+    <AvatarCropper :file="avatarFile" :busy="avatarUploading" @cancel="avatarFile = null" @confirm="uploadAvatar" />
 
     <div class="view">
       <section class="surface form-section">
         <header class="form-section__head">
           <h2>基础信息</h2>
         </header>
+        <div class="avatar-editor">
+          <div class="avatar-editor__preview">
+            <img v-if="session.user?.avatar_pending_url || session.user?.avatar_url" :src="session.user.avatar_pending_url || session.user.avatar_url" alt="头像预览" />
+            <span v-else>{{ (session.user?.display_name || '我').slice(0, 1) }}</span>
+          </div>
+          <div class="avatar-editor__info">
+            <div class="avatar-editor__title">个人头像
+              <van-tag v-if="session.user?.avatar_review_status === 'pending'" round type="warning" plain>待审核</van-tag>
+              <van-tag v-else-if="session.user?.avatar_review_status === 'rejected'" round type="danger" plain>未通过</van-tag>
+            </div>
+            <p>{{ session.user?.avatar_review_status === 'pending' ? '审核通过后更新头像' : session.user?.avatar_review_status === 'rejected' ? session.user.avatar_review_reason : '选一张图片，裁切成你的专属头像' }}</p>
+          </div>
+          <van-uploader
+            class="avatar-editor__upload"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            :preview-image="false"
+            :max-size="10 * 1024 * 1024"
+            :disabled="avatarUploading || session.user?.avatar_review_status === 'pending'"
+            :after-read="submitAvatar"
+            @oversize="showToast('图片不能超过 10 MiB')"
+          >
+            <van-button class="avatar-editor__button" size="small" round type="primary" plain :loading="avatarUploading" :disabled="session.user?.avatar_review_status === 'pending'">
+              {{ session.user?.avatar_review_status === 'pending' ? '审核中' : '更换头像' }}
+            </van-button>
+          </van-uploader>
+        </div>
         <van-cell title="用户 ID" :value="String(session.user?.id)" />
         <van-cell title="邮箱" :value="session.user?.email" />
         <div class="form-fields">
@@ -113,6 +140,8 @@ import { showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import http from '../api/http'
+import { uploadImage } from '../api/uploads'
+import AvatarCropper from '../components/AvatarCropper.vue'
 import {
   createEmailChangeState,
   requestEmailChange,
@@ -122,6 +151,28 @@ import {
 import { useSession } from '../stores/session'
 
 const session = useSession()
+const avatarUploading = ref(false)
+const avatarFile = ref(null)
+function submitAvatar(item) {
+  const file = item.file
+  if (!file) return
+  if (file.size > 10 * 1024 * 1024) return showToast('图片不能超过 10 MiB')
+  avatarFile.value = file
+}
+async function uploadAvatar(file) {
+  avatarUploading.value = true
+  try {
+    const key = await uploadImage(file, 'avatar')
+    await http.post('/auth/avatar', { key })
+    await session.refreshUser()
+    avatarFile.value = null
+    showToast('头像已提交审核')
+  } catch (error) {
+    showToast(error.message || '头像提交失败')
+  } finally {
+    avatarUploading.value = false
+  }
+}
 const displayName = ref(session.user?.display_name || '')
 const pwd = reactive({ current: '', next: '' })
 const emailState = createEmailChangeState(() => session.user?.email)
@@ -205,6 +256,44 @@ async function changeEmail() {
 </script>
 
 <style scoped>
+.avatar-editor {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 20px;
+  margin: 0 16px;
+  border-bottom: 1px solid var(--van-cell-border-color, #edf1ee);
+}
+.avatar-editor__preview {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #eaf3ee;
+  color: #36765b;
+  font-size: 26px;
+  font-weight: 600;
+}
+.avatar-editor__preview img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-editor__info { flex: 1; min-width: 0; }
+.avatar-editor__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 16px; font-weight: 600; }
+.avatar-editor__info p { margin: 7px 0 0; font-size: 12px; line-height: 1.6; color: #7b8982; overflow-wrap: anywhere; }
+.avatar-editor__upload { flex-shrink: 0; }
+.avatar-editor__button { padding: 0 16px; }
+@media (max-width: 480px) {
+  .avatar-editor { gap: 12px; margin: 0 12px; padding: 20px 4px; }
+  .avatar-editor__preview { width: 52px; height: 52px; border-radius: 16px; }
+  .avatar-editor__title { font-size: 15px; }
+  .avatar-editor__button { padding: 0 12px; }
+}
+@media (max-width: 359px) {
+  .avatar-editor { flex-wrap: wrap; }
+  .avatar-editor__upload { margin-left: 64px; }
+}
+
 .settings-page {
   padding-bottom: calc(20px + var(--safe-bottom));
 }

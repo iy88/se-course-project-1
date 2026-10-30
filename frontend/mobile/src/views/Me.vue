@@ -4,7 +4,7 @@
 
     <div class="view">
       <section class="surface profile">
-        <div class="avatar-text profile__avatar">{{ initial }}</div>
+        <div class="avatar-text profile__avatar"><img v-if="session.user?.avatar_url" :src="session.user.avatar_url" alt="我的头像" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" /><span v-else>{{ initial }}</span></div>
         <div class="profile__main">
           <div class="profile__name-row">
             <h1>{{ session.user?.display_name || '未登录用户' }}</h1>
