@@ -1,8 +1,3 @@
-<!--
-Version: 0.1.0
-Version-Datetime: 2026-10-30T22:36:10+08:00
--->
-
 # 开发与人工测试指南
 
 以下命令从项目根目录执行。应用默认读取 `backend/.env.dev`；通过 `APP_ENV_FILE` 选择环境文件。准备好 PostgreSQL、Redis、OSS 配置并启动 PostgreSQL、Redis 后，按需执行以下命令。
