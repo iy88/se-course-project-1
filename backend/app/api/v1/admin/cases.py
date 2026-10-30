@@ -302,7 +302,9 @@ async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db
 @router.post("/{case_id}/dispose")
 async def dispose_case(case_id: int, body: DisposeIn, admin: CurrentAdmin, db: DbSession) -> dict:
     """形成处置结论并留依据（BR-26）；具体处置动作由各专项接口执行。"""
-    case = await _case_or_404(db, case_id)
+    case = await case_service.lock_case_for_update(db, case_id)
+    if case is None:
+        raise HTTPException(404, '事项不存在')
     await ensure_claimant(case, admin.id)
     if case.status == CaseStatus.DISPOSED.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置")

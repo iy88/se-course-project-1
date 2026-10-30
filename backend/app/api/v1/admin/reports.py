@@ -84,7 +84,7 @@ async def target_snapshot(db, report: Report) -> dict | None:
 
 
 async def _report_case(db, case_id: int, admin) -> tuple[DisposalCase, Report]:
-    case = await db.get(DisposalCase, case_id)
+    case = await case_service.lock_case_for_update(db, case_id)
     if not case:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
     await ensure_claimant(case, admin.id)

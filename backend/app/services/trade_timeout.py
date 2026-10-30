@@ -16,11 +16,12 @@ from app.services import audit as audit_service
 from app.services.cases import create_case
 from app.services.notifications import notify
 from app.services.trade_wait import as_utc, clear_wait_state
+from app.services.trades import lock_product_then_trade
 
 SYSTEM = "system"
 
 
-async def scan_once(db: AsyncSession | None = None) -> int:
+async def scan_once(db: AsyncSession | None = None, *, trade_ids: tuple[int, ...] | None = None) -> int:
     """扫描全部超时交易并转异常；返回处理笔数。供后台循环与测试使用。"""
     own_db = db is None
     if own_db:
@@ -29,26 +30,33 @@ async def scan_once(db: AsyncSession | None = None) -> int:
         days = get_settings().trade_confirm_timeout_days
         threshold = timedelta(days=days)
         now = datetime.now(UTC)
-        result = await db.exec(
-            select(Trade).where(
-                col(Trade.status) == TradeStatus.IN_PROGRESS.value,
-                col(Trade.confirm_wait_started_at).is_not(None),
-                col(Trade.confirm_wait_paused_at).is_(None),
-                col(Trade.frozen).is_(False),
-                col(Trade.confirmations).any(col(CompletionConfirmation.is_current).is_(True)),
-            )
-        )
-        trades = []
-        for trade in result:
-            started = as_utc(trade.confirm_wait_started_at)
-            if started is None:
-                continue
-            if now - started >= threshold:
-                trades.append(trade)
-        for trade in trades:
-            await _to_abnormal(db, trade)
+        # 只收集候选 ID；逐笔按商品→交易加锁后重新检查，避免使用扫描快照。
+        statement = select(Trade.product_id, Trade.id).where(
+            col(Trade.status) == TradeStatus.IN_PROGRESS.value,
+            col(Trade.confirm_wait_started_at).is_not(None),
+        ).order_by(col(Trade.product_id), col(Trade.id))
+        if trade_ids is not None:
+            statement = statement.where(col(Trade.id).in_(trade_ids))
+        result = await db.exec(statement)
+        candidates = list(result)
         await db.commit()
-        return len(trades)
+        processed = 0
+        for product_id, trade_id in candidates:
+            trade = await lock_product_then_trade(db, trade_id, product_id)
+            if trade is not None:
+                started = as_utc(trade.confirm_wait_started_at)
+                confirmed = (await db.exec(select(CompletionConfirmation.confirmer_id).where(
+                    col(CompletionConfirmation.trade_id) == trade_id,
+                    col(CompletionConfirmation.is_current).is_(True),
+                ))).all()
+                if (trade.status == TradeStatus.IN_PROGRESS.value and not trade.frozen
+                        and trade.confirm_wait_paused_at is None and started is not None
+                        and now - started >= threshold and len(set(confirmed)) == 1):
+                    await _to_abnormal(db, trade)
+                    processed += 1
+            # 每笔释放锁；多个扫描器和人工写入沿用相同顺序。
+            await db.commit()
+        return processed
     finally:
         if own_db:
             await db.close()

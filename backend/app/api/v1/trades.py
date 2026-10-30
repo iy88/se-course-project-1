@@ -46,10 +46,14 @@ router = APIRouter(prefix="/trades", tags=["trades"])
 CLOSED_BY_LOCK = trade_service.CLOSED_BY_LOCK
 
 
-async def _party_trade(db: AsyncSession, trade_id: int, user_id: int) -> Trade:
+async def _party_trade(db: AsyncSession, trade_id: int, user_id: int, *, lock: bool = True) -> Trade:
     trade = await db.get(Trade, trade_id)
     if not trade or user_id not in (trade.buyer_id, trade.seller_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
+    if lock:
+        trade = await trade_service.lock_product_then_trade(db, trade_id, trade.product_id)
+        if not trade or user_id not in (trade.buyer_id, trade.seller_id):
+            raise HTTPException(404, '交易不存在')
     return trade
 
 
@@ -288,14 +292,14 @@ async def my_trades(user: CurrentUser, db: DbSession, role: str = Query(default=
 
 @router.get("/{trade_id}")
 async def trade_detail(trade_id: int, user: CurrentUser, db: DbSession) -> dict:
-    trade = await _party_trade(db, trade_id, user.id)
+    trade = await _party_trade(db, trade_id, user.id, lock=False)
     return await _trade_out(db, trade, user)
 
 
 @router.get("/{trade_id}/transitions")
 async def trade_transitions(trade_id: int, user: CurrentUser, db: DbSession) -> list[dict]:
     """状态转移历史：前后状态、主体、时间、触发与原因（BR-08、6.5）。"""
-    trade = await _party_trade(db, trade_id, user.id)
+    trade = await _party_trade(db, trade_id, user.id, lock=False)
     from app.models import TradeTransition
 
     result = await db.exec(

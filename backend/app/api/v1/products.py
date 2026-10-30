@@ -404,7 +404,7 @@ async def _dispose_review_case_atomically(db: AsyncSession, case_id: int, *, now
 async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> ProductOut:
     """D-46/TR-20：卖方在审核认领前撤回，商品置为已下架，旧审核事项失效但保留历史。"""
     ensure_can_write(user)
-    product = await db.get(Product, product_id)
+    product = await trade_service.lock_product_for_update(db, product_id)
     if not product or product.seller_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     if product.status != ProductStatus.PENDING_REVIEW.value:
@@ -470,7 +470,7 @@ async def resubmit(
 ) -> ProductOut:
     """TR-03/TR-21：审核拒绝或认领前撤回后的已下架商品可修改后重提，形成独立审核记录。"""
     ensure_can_write(user)
-    product = await db.get(Product, product_id)
+    product = await trade_service.lock_product_for_update(db, product_id)
     if not product or product.seller_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     latest_review = (await db.exec(
@@ -548,7 +548,7 @@ async def resubmit(
 async def edit_product(product_id: int, body: ProductUpdateIn, user: CurrentUser, db: DbSession) -> ProductOut:
     """信息微调（BR-11/TR-04）：不二审、不暂停展示、不关闭请求；交易中禁改关键内容。"""
     ensure_can_write(user)
-    product = await db.get(Product, product_id)
+    product = await trade_service.lock_product_for_update(db, product_id)
     if not product or product.seller_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     if product.display_restricted:
@@ -646,7 +646,7 @@ async def delist(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
     ensure_can_write(user)
     if await permissions.has_active_frozen_trade(db, user.id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "存在有效交易冻结，暂不能主动下架商品")
-    product = await db.get(Product, product_id)
+    product = await trade_service.lock_product_for_update(db, product_id)
     if not product or product.seller_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     if product.status != ProductStatus.LISTED.value:
@@ -686,7 +686,7 @@ async def relist(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
     ensure_can_write(user)
     if await permissions.has_active_frozen_trade(db, user.id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "存在有效交易冻结，暂不能上架或重新上架商品")
-    product = await db.get(Product, product_id)
+    product = await trade_service.lock_product_for_update(db, product_id)
     if not product or product.seller_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     if product.status != ProductStatus.DELISTED.value:

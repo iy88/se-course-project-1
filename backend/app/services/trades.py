@@ -3,7 +3,7 @@ from typing import NoReturn
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlmodel import col, select
+from sqlmodel import col, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import Product, Trade
@@ -70,8 +70,10 @@ async def lock_product_for_update(db: AsyncSession, product_id: int) -> Product 
     """在交易写入前按统一顺序锁定商品行。
 
     PostgreSQL 使用 ``FOR UPDATE`` 串行化同商品交易；SQLite 方言忽略该子句，
-    离线兼容路径的行为由现有单写事务与唯一索引保证。
+    兼容路径先执行无值变化的 UPDATE 获取写锁，再重读状态；唯一索引继续兜底。
     """
+    if db.get_bind().dialect.name == 'sqlite':
+        await db.exec(update(Product).where(col(Product.id) == product_id).values(id=product_id))
     result = await db.exec(
         select(Product)
         .where(col(Product.id) == product_id)

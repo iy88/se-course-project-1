@@ -133,3 +133,19 @@ async def dispose_case(
     case.disposed_at = now_utc()
     await db.flush()
     return case
+
+
+async def lock_case_for_update(db: AsyncSession, case_id: int) -> DisposalCase | None:
+    """写入前按商品→事项顺序加锁，并刷新锁等待前读到的状态。"""
+    from sqlmodel import col, select, update
+
+    from app.services.trades import lock_product_for_update
+    existing = await db.get(DisposalCase, case_id)
+    if existing is None:
+        return None
+    if existing.product_id is not None:
+        await lock_product_for_update(db, existing.product_id)
+    if db.get_bind().dialect.name == 'sqlite':
+        await db.exec(update(DisposalCase).where(col(DisposalCase.id) == case_id).values(id=case_id))
+    return (await db.exec(select(DisposalCase).where(col(DisposalCase.id) == case_id)
+        .with_for_update().execution_options(populate_existing=True))).one_or_none()

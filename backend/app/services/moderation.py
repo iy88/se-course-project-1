@@ -33,6 +33,10 @@ async def freeze_trade(db: AsyncSession, trade: Trade, reason: str, case_id: int
 
     重复冻结直接返回，不重置冻结开始、暂停开始或剩余时间。
     """
+    locked = await trade_service.lock_product_then_trade(db, trade.id, trade.product_id)
+    if locked is None:
+        raise HTTPException(404, '交易不存在')
+    trade = locked
     if trade.status in (TradeStatus.COMPLETED.value, TradeStatus.TERMINATED.value) or trade.frozen:
         return
     now = now_utc()
@@ -82,6 +86,10 @@ async def _participant_ban_active(db: AsyncSession, trade: Trade) -> bool:
 
 async def unfreeze_trade(db: AsyncSession, trade: Trade, reason: str, admin_id: int) -> None:
     """有依据解除冻结：其他有效限制保留（BR-33）；仅符合条件的有效确认续算剩余（D-51）。"""
+    locked = await trade_service.lock_product_then_trade(db, trade.id, trade.product_id)
+    if locked is None:
+        raise HTTPException(404, '交易不存在')
+    trade = locked
     if not trade.frozen:
         return
     # D-51/BR-33：封禁等有效限制未解除前不得手工解冻，更不能让计时在禁令期间恢复累计。

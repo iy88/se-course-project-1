@@ -270,6 +270,8 @@ async def get_trade(
 @router.post("/{trade_id}/freeze")
 async def freeze(trade_id: int, body: FreezeIn, admin: CurrentAdmin, db: DbSession) -> dict:
     trade = await db.get(Trade, trade_id)
+    if trade is not None:
+        trade = await trade_service.lock_product_then_trade(db, trade_id, trade.product_id)
     if not trade:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
     case = await _resolve_trade_case(db, trade, admin.id, body.case_id)
@@ -292,6 +294,8 @@ async def freeze(trade_id: int, body: FreezeIn, admin: CurrentAdmin, db: DbSessi
 async def unfreeze(trade_id: int, body: UnfreezeIn, admin: CurrentAdmin, db: DbSession) -> dict:
     """非结束状态的解冻须管理员有依据处理（BR-33）；符合条件时续算剩余等待（D-51）。"""
     trade = await db.get(Trade, trade_id)
+    if trade is not None:
+        trade = await trade_service.lock_product_then_trade(db, trade_id, trade.product_id)
     if not trade:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
     if trade.status in (TradeStatus.COMPLETED.value, TradeStatus.TERMINATED.value):

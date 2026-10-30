@@ -68,7 +68,7 @@ def _clean_reason(value: str | None) -> str | None:
 @router.post("/cases/{case_id}/review")
 async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdmin, db: DbSession) -> dict:
     """审核当次内容（TR-01/02）：通过联动展示与标签批准；不通过记录原因并通知。"""
-    case = await db.get(DisposalCase, case_id)
+    case = await case_service.lock_case_for_update(db, case_id)
     if not case:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
     if case.status == CaseStatus.DISPOSED.value:
