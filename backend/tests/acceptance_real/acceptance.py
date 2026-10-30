@@ -224,6 +224,17 @@ class AcceptanceRun:
             raise CheckFailure("只读核验 SQL 未返回预期行")
         return row
 
+    def _assert_media_url(self, url: str | None, label: str) -> None:
+        """媒体链接必须是可读入口：OSS 为私有桶签名直链，local 为后端签名路径。"""
+        self.rec.must(bool(url), f"{label}链接存在")
+        if not url:
+            return
+        if self.config.settings.storage_backend == "oss":
+            self.rec.must(urlsplit(url).netloc in self.api.allowed_storage_hosts, f"{label}为OSS直链")
+        else:
+            self.rec.must(url.startswith("/api/v1/files/"), f"{label}为后端签名入口")
+        self.api.signed_get(url)
+
     # ------------------------------------------------------------------
     # 账号
     # ------------------------------------------------------------------
@@ -1307,6 +1318,10 @@ class AcceptanceRun:
                 self.rec.must_eq(snapshot['description'], '并发编辑新内容', '编辑先提交则审核使用最新内容')
             case = self._dict(self._call('GET', f"/api/v1/admin/cases/{case['id']}", user='admin'))
             self.rec.must_eq(case['status'], 'disposed', '审核事项归档')
+            product_image_urls = (case.get('product') or {}).get('image_urls') or []
+            self.rec.must(bool(product_image_urls), '审核事项返回商品图片直链')
+            if product_image_urls:
+                self._assert_media_url(product_image_urls[0], '审核事项商品图')
 
         # 同一事项的通用处置重复请求只能写入一次结论。
         key = 'P_CASE_DISPOSE_RACE'
@@ -3570,6 +3585,13 @@ class AcceptanceRun:
             self.rec.must_eq(case_detail.get("case_type"), "report", "事项类型 report")
             self.rec.must_eq(int(case_detail.get("report", {}).get("id") or 0), report_id, "事项关联举报")
             self.rec.must_eq(len(case_detail.get("report", {}).get("evidence_keys") or []), 1, "证据 key 在认领事项可见")
+            evidence_urls = case_detail.get("report", {}).get("evidence_urls") or []
+            self.rec.must_eq(len(evidence_urls), 1, "证据直链在认领事项可见")
+            self._assert_media_url(evidence_urls[0], "举报证据")
+            target_image_urls = (case_detail.get("report_target") or {}).get("image_urls") or []
+            self.rec.must(bool(target_image_urls), "举报对象商品图直链")
+            if target_image_urls:
+                self._assert_media_url(target_image_urls[0], "举报对象商品图")
             self._call(
                 "POST",
                 f"/api/v1/admin/cases/{case_id}/inquiry",
