@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.32
-Version-Datetime: 2026-10-30T20:25:57+08:00
+Version: 0.1.33
+Version-Datetime: 2026-10-30T22:36:10+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -31,9 +31,17 @@ ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQL
 | 移动用户端 | `frontend/mobile/` | `http://localhost:5173`；移动布局及PWA |
 | 桌面管理端 | `frontend/admin/` | `http://localhost:5174`；审核、共享处理池及管理处置 |
 | 数据库 | 所选环境文件配置 | SQLite 或 PostgreSQL，结构使用显式迁移 |
-| 图片存储 | 所选环境文件配置 | local 或 OSS；上传图片经后端签名 URL 访问 |
+| 图片存储 | 所选环境文件配置 | local 或 OSS；local 经后端 HMAC 签名入口读取，OSS 使用私有桶短期签名 GET 直链 |
 
 `var/`、`.env.dev`、`.env.prod`、虚拟环境、`node_modules/`及构建目录均由 Git 忽略。保留已有数据库和图片目录即可保留业务数据，不需要为升级删除数据库；生产配置不得提交。
+
+### 人工测试环境重置
+
+在 `backend/` 目录运行 `.venv/bin/python -m app.devtools.reset` 预览目标；实际执行使用 `.venv/bin/python -m app.devtools.reset --execute --confirm <数据库名>`。执行前先停止后端和所有测试进程，并确认不需要保留本轮人工测试数据。
+
+此命令仅接受 `.env.dev` 的 dev/test PostgreSQL、Redis 和 OSS 配置。删除应用 schema 内的全部表（含管理员、业务数据与审计），保留 schema 及其默认授权，再执行正式迁移；Redis 只删除 `REDIS_KEY_PREFIX` 下的键；OSS 删除媒体桶和证据桶中 `STORAGE_KEY_PREFIX` 下的当前对象，不删除桶，也不清除版本历史或未完成的分片上传。两个前缀必须非空，资源须与生产隔离。先前存放在其他前缀的对象不会被清理。
+
+重置后运行 `.venv/bin/python -m app.manage seed` 重新初始化管理员及指定分类，并清除浏览器原有登录状态后重新登录。跨服务操作没有整体事务；失败时查看完整异常，修复原因后重跑。命令不会自动恢复备份。
 
 ### 后端配置
 
