@@ -111,6 +111,22 @@
               </el-descriptions-item>
             </el-descriptions>
 
+            <div v-if="detail.product.image_urls?.length" class="media-block">
+              <span class="inline-label">商品图片（{{ detail.product.image_urls.length }}）</span>
+              <div class="media-grid">
+                <el-image
+                  v-for="(url, index) in detail.product.image_urls"
+                  :key="url"
+                  :src="url"
+                  :preview-src-list="detail.product.image_urls"
+                  :initial-index="index"
+                  preview-teleported
+                  fit="cover"
+                  class="media-grid__item"
+                />
+              </div>
+            </div>
+
             <div v-if="detail.tag_applications?.length" class="tag-applications">
               <span class="inline-label">标签申请：</span>
               <el-tag v-for="app in detail.tag_applications" :key="app.id" type="info" effect="plain">
@@ -163,7 +179,72 @@
               <el-descriptions-item label="原因">{{ detail.report.reason }}</el-descriptions-item>
               <el-descriptions-item label="补充说明" :span="2">{{ detail.report.detail || '—' }}</el-descriptions-item>
             </el-descriptions>
-            <pre v-if="detail.report_target" class="snapshot">{{ JSON.stringify(detail.report_target, null, 2) }}</pre>
+
+            <div v-if="detail.report.evidence_urls?.length" class="media-block">
+              <span class="inline-label">举报证据（{{ detail.report.evidence_urls.length }}）</span>
+              <div class="media-grid">
+                <el-image
+                  v-for="(url, index) in detail.report.evidence_urls"
+                  :key="url"
+                  :src="url"
+                  :preview-src-list="detail.report.evidence_urls"
+                  :initial-index="index"
+                  preview-teleported
+                  fit="cover"
+                  class="media-grid__item"
+                />
+              </div>
+            </div>
+
+            <div v-if="detail.report_target" class="target-snapshot">
+              <h4 class="target-snapshot__title">被举报内容</h4>
+              <p v-if="detail.report_target.missing" class="hint">举报对象已不存在或当前不可见。</p>
+              <template v-else-if="detail.report_target.type === 'product'">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="标题">{{ detail.report_target.title }}</el-descriptions-item>
+                  <el-descriptions-item label="状态"><span class="mono">{{ detail.report_target.status }}</span></el-descriptions-item>
+                  <el-descriptions-item label="标价">￥{{ (detail.report_target.price_cents / 100).toFixed(2) }}</el-descriptions-item>
+                  <el-descriptions-item label="卖方">#{{ detail.report_target.seller_id }}</el-descriptions-item>
+                  <el-descriptions-item label="描述" :span="2">{{ detail.report_target.description }}</el-descriptions-item>
+                </el-descriptions>
+                <div v-if="detail.report_target.image_urls?.length" class="media-block">
+                  <div class="media-grid">
+                    <el-image
+                      v-for="(url, index) in detail.report_target.image_urls"
+                      :key="url"
+                      :src="url"
+                      :preview-src-list="detail.report_target.image_urls"
+                      :initial-index="index"
+                      preview-teleported
+                      fit="cover"
+                      class="media-grid__item"
+                    />
+                  </div>
+                </div>
+              </template>
+              <template v-else-if="detail.report_target.type === 'user'">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="账户">#{{ detail.report_target.id }}</el-descriptions-item>
+                  <el-descriptions-item label="名称">{{ detail.report_target.display_name }}</el-descriptions-item>
+                  <el-descriptions-item label="状态">{{ detail.report_target.status }}</el-descriptions-item>
+                </el-descriptions>
+                <div v-if="detail.report_target.avatar_url" class="media-block">
+                  <div class="media-grid">
+                    <el-image
+                      :src="detail.report_target.avatar_url"
+                      :preview-src-list="[detail.report_target.avatar_url]"
+                      preview-teleported
+                      fit="cover"
+                      class="media-grid__item media-grid__item--avatar"
+                    />
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <p class="target-snapshot__content">{{ detail.report_target.content || '—' }}</p>
+                <p v-if="detail.report_target.rating" class="target-snapshot__meta">评分：{{ detail.report_target.rating }} / 5</p>
+              </template>
+            </div>
           </el-card>
 
           <el-card v-if="detail.trade">
@@ -818,18 +899,56 @@ async function submitAvatarDecision(approved) {
   min-width: 220px;
 }
 
-.snapshot {
-  background: #f5f8f5;
+.media-block {
+  margin-top: 14px;
+}
+
+.media-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.media-grid__item {
+  width: 112px;
+  height: 112px;
+  border-radius: 10px;
   border: 1px solid var(--line);
+  background: #f5f8f5;
+  cursor: zoom-in;
+}
+
+.media-grid__item--avatar {
+  border-radius: 50%;
+}
+
+.target-snapshot {
+  margin-top: 16px;
+}
+
+.target-snapshot__title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.target-snapshot__content {
+  margin: 0;
   padding: 12px;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.55;
-  max-height: 220px;
-  overflow: auto;
-  margin: 12px 0 0;
+  background: #f5f8f5;
   color: var(--ink-soft);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.target-snapshot__meta {
+  margin: 8px 0 0;
+  color: var(--ink-faint);
+  font-size: 12.5px;
 }
 
 .trade-history {
