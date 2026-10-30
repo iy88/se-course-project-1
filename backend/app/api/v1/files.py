@@ -7,6 +7,7 @@ only a narrowly scoped PUT URL is returned for upload. SDK calls use a threadpoo
 
 import hashlib
 import hmac
+import logging
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -45,6 +46,8 @@ from app.storage.images import (
     detect_image_type,
     validate_image,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -172,6 +175,7 @@ if get_settings().storage_backend == "local":
 
 @router.post("/upload-leases/{lease_id}/complete")
 async def complete_lease(lease_id: str, user: CurrentUser, db: DbSession) -> dict:
+    started = time.perf_counter()
     ensure_can_write(user)
     lease = (await db.exec(select(UploadLease).where(col(UploadLease.id) == lease_id).with_for_update())).one_or_none()
     if lease is None or lease.owner_id != user.id:
@@ -185,12 +189,13 @@ async def complete_lease(lease_id: str, user: CurrentUser, db: DbSession) -> dic
     if lease.state != "pending" or _expired(lease):
         raise HTTPException(403, "上传租约已失效")
     try:
-        info = await run_in_threadpool(storage.stat, lease.key)
+        read_started = time.perf_counter()
+        data, info = await run_in_threadpool(storage.read_with_metadata, lease.key)
+        read_ms = (time.perf_counter() - read_started) * 1000
         if info["size_bytes"] != lease.size_bytes or info["content_type"] != lease.content_type:
             raise ImageValidationError("文件元数据不一致")
         if get_settings().storage_backend == "oss" and info["metadata"].get("sha256") != lease.sha256:
             raise ImageValidationError("文件元数据不一致")
-        data = await run_in_threadpool(storage.open, lease.key)
         if len(data) != lease.size_bytes or hashlib.sha256(data).hexdigest() != lease.sha256:
             raise ImageValidationError("文件摘要或大小不一致")
         if validate_image(data, lease.filename) != lease.content_type:
@@ -218,7 +223,11 @@ async def complete_lease(lease_id: str, user: CurrentUser, db: DbSession) -> dic
         # 图片确认与待审事项同事务提交，重启或响应丢失时可按租约重试。
         await db.flush()
         await submit_avatar_transaction(AvatarIn(key=lease.key), user, db, commit=False)
+    commit_started = time.perf_counter()
     await db.commit()
+    logger.info("upload_complete namespace=%s storage_ms=%.1f commit_ms=%.1f total_ms=%.1f",
+                lease.namespace, read_ms, (time.perf_counter() - commit_started) * 1000,
+                (time.perf_counter() - started) * 1000)
     return {"key": lease.key, "url": storage.public_url(lease.key)}
 
 

@@ -335,17 +335,23 @@ class OssStorage(StorageBackend):
             _close_result(result)
 
     def open(self, key: str) -> bytes:
+        return self.read_with_metadata(key)[0]
+
+    def read_with_metadata(self, key: str) -> tuple[bytes, dict[str, Any]]:
         bucket = self._bucket_for_key(key)
-        def _get() -> bytes:
+
+        def _get() -> tuple[bytes, dict[str, Any]]:
             result = bucket.get_object(self.config.key_prefix + key)
             body = result.body
             try:
+                info = {"size_bytes": result.content_length, "content_type": result.content_type,
+                        "metadata": dict(result.metadata or {})}
                 data = bytearray()
                 for chunk in body.iter_bytes():
                     data.extend(chunk)
                     if len(data) > 10 * 1024 * 1024:
                         raise StorageUnavailable("文件超过读取大小限制")
-                return bytes(data)
+                return bytes(data), info
             finally:
                 body.close()
         return self._run("get", _get)

@@ -147,6 +147,11 @@ class StorageBackend(ABC):
     def stat(self, key: str) -> dict[str, Any]:
         raise NotImplementedError
 
+    def read_with_metadata(self, key: str) -> tuple[bytes, dict[str, Any]]:
+        """读取用于上传确认的内容与元信息；远端后端可合并请求。"""
+        info = self.stat(key)
+        return self.open(key), info
+
     def sign_upload(self, key: str, *, content_type: str, size_bytes: int,
                     expires_seconds: int, sha256: str) -> dict[str, Any]:
         raise StorageConfigError("当前存储后端不支持 OSS 预签名上传")
