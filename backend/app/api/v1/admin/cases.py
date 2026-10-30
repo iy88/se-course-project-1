@@ -4,11 +4,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import select, update
+from sqlmodel import col, select, update
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import DisposalCase, Product, User
-from app.models.enums import CaseStatus
+from app.models.enums import CaseStatus, CaseType
+from app.services import audit as audit_service
 from app.services import cases as case_service
 from app.services.cases import ensure_claimant
 
@@ -68,13 +69,13 @@ async def list_cases(
     case_status: str = Query(default="pending", alias="status", pattern="^(pending|processing|disposed|all)$"),
     case_type: str | None = Query(default=None),
 ) -> list[dict]:
-    query = select(DisposalCase).order_by(DisposalCase.id.desc())
+    query = select(DisposalCase).order_by(col(DisposalCase.id).desc())
     if case_status != "all":
-        query = query.where(DisposalCase.status == case_status)
+        query = query.where(col(DisposalCase.status) == case_status)
     if case_type:
-        query = query.where(DisposalCase.case_type == case_type)
-    result = await db.execute(query.limit(200))
-    return [_case_item(c) for c in result.scalars()]
+        query = query.where(col(DisposalCase.case_type) == case_type)
+    result = await db.exec(query.limit(200))
+    return [_case_item(c) for c in result]
 
 
 async def _claim_pending_case(db, case_id: int, admin_id: int, claimed_at) -> bool:
@@ -83,12 +84,12 @@ async def _claim_pending_case(db, case_id: int, admin_id: int, claimed_at) -> bo
     条件与赋值在同一条 UPDATE 中执行，由数据库判定唯一胜者，不依赖先前读取。
     synchronize_session="evaluate" 同步会话内可能存在的旧对象，避免其后续 flush 覆盖。
     """
-    result = await db.execute(
+    result = await db.exec(
         update(DisposalCase)
         .where(
-            DisposalCase.id == case_id,
-            DisposalCase.status == CaseStatus.PENDING.value,
-            DisposalCase.claimed_by_id.is_(None),
+            col(DisposalCase.id) == case_id,
+            col(DisposalCase.status) == CaseStatus.PENDING.value,
+            col(DisposalCase.claimed_by_id).is_(None),
         )
         .values(
             status=CaseStatus.PROCESSING.value,
@@ -108,19 +109,26 @@ async def claim_case(case_id: int, admin: CurrentAdmin, db: DbSession) -> ClaimO
     if not won:
         # 失败不保留任何写入；先结束事务再区分不存在与被抢先/已处置。
         await db.rollback()
-        exists = await db.scalar(select(DisposalCase.id).where(DisposalCase.id == case_id))
+        exists = (await db.exec(select(col(DisposalCase.id)).where(col(DisposalCase.id) == case_id))).first()
         if exists is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已被认领或已处置")
     # 成功以数据库中的真实 owner 为准，而不是请求参数或内存对象。
     row = (
-        await db.execute(
-            select(DisposalCase.claimed_by_id, DisposalCase.status).where(DisposalCase.id == case_id)
+        await db.exec(
+            select(col(DisposalCase.claimed_by_id), col(DisposalCase.status)).where(col(DisposalCase.id) == case_id)
         )
     ).first()
-    if row is None or row.claimed_by_id != admin_id or row.status != CaseStatus.PROCESSING.value:
+    if row is None or row[0] != admin_id or row[1] != CaseStatus.PROCESSING.value:
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已被认领或已处置")
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_CASE_CLAIM,
+        target_type="disposal_case",
+        target_id=case_id,
+        after={"status": row[1], "claimed_by_id": admin_id},
+    )
     await db.commit()
     return ClaimOut(id=case_id, detail="认领成功")
 
@@ -159,13 +167,19 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
             "tag_names": [t.name for t in product.tags],
         } if product else None
         if product:
-            from sqlalchemy import select as _select
+            from sqlmodel import select as _select
 
             from app.models import ProductTagApplication
 
-            apps = (await db.execute(_select(ProductTagApplication).where(ProductTagApplication.product_id == product.id))).scalars().all()
+            apps = (await db.exec(_select(ProductTagApplication).where(col(ProductTagApplication.product_id) == product.id))).all()
             data["tag_applications"] = [
-                {"id": a.id, "requested_name": a.requested_name, "status": a.status} for a in apps
+                {
+                    "id": a.id,
+                    "requested_name": a.requested_name,
+                    "status": a.status,
+                    "decision_reason": a.decision_reason,
+                }
+                for a in apps
             ]
     if case.report_id:
         from app.models import Report
@@ -191,6 +205,17 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
         from app.api.v1.admin.trades import admin_trade_view
 
         data["trade"] = await admin_trade_view(db, case.trade_id)
+    # Only expose the already-authorized case's directly readable branch.
+    # No global conversation search or client-entered conversation IDs are needed.
+    data["readable_conversation_id"] = None
+    if case.case_type == CaseType.REPORT.value:
+        target = data.get("report_target")
+        if target and target.get("type") == "message" and not target.get("missing"):
+            data["readable_conversation_id"] = target.get("conversation_id")
+    elif case.case_type in (CaseType.TRADE_DISPUTE.value, CaseType.ABNORMAL_TRADE.value):
+        from app.api.v1.admin.case_conversations import _trade_branch_conversation_id
+
+        data["readable_conversation_id"] = await _trade_branch_conversation_id(db, case)
     if case.subject_user_id:
         subject = await db.get(User, case.subject_user_id)
         data["subject_user"] = {"id": subject.id, "display_name": subject.display_name, "email": subject.email} if subject else None
@@ -227,6 +252,13 @@ async def send_inquiry(case_id: int, body: InquiryIn, admin: CurrentAdmin, db: D
         f"事项「{case.title}」需要您说明：{body.content.strip()[:100]}。请从本通知进入提交说明。",
         link_type="case", link_id=case.id,
     )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_CASE_INQUIRY,
+        target_type="disposal_case",
+        target_id=case.id,
+        after={"status": case.status},
+    )
     await db.commit()
     return {"detail": "问询已发送"}
 
@@ -252,6 +284,13 @@ async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db
             f"事项「{case.title}」有管理员回复，请进入查看。",
             link_type="case", link_id=case.id,
         )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_CASE_MESSAGE,
+        target_type="disposal_case",
+        target_id=case.id,
+        after={"status": case.status},
+    )
     await db.commit()
     return {"detail": "回复已发送"}
 
@@ -265,6 +304,14 @@ async def dispose_case(case_id: int, body: DisposeIn, admin: CurrentAdmin, db: D
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置")
     await case_service.dispose_case(
         db, case, conclusion=body.conclusion.strip(), reason=body.reason, basis=body.basis
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_CASE_DISPOSE,
+        target_type="disposal_case",
+        target_id=case.id,
+        before={"status": CaseStatus.PROCESSING.value},
+        after={"status": case.status},
     )
     await db.commit()
     return {"detail": "事项已处置"}

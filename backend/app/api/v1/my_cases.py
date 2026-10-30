@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, StringConstraints
-from sqlalchemy import select
+from sqlmodel import col, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.models import DisposalCase, Trade
@@ -14,6 +14,7 @@ from app.models.enums import (
     DisposalMessageKind,
     DisposalMessageRole,
 )
+from app.services import audit as audit_service
 from app.services import cases as case_service
 
 router = APIRouter(prefix="/me/cases", tags=["my-cases"])
@@ -32,20 +33,20 @@ async def _entitled_case(db, case_id: int, user_id: int) -> DisposalCase:
 async def my_cases(user: CurrentUser, db: DbSession) -> list[dict]:
     """本人事项入口：含受处置事项，以及本人参与的异常交易/争议事项。"""
     my_trades = (
-        await db.execute(select(Trade.id).where((Trade.buyer_id == user.id) | (Trade.seller_id == user.id)))
-    ).scalars().all()
+        await db.exec(select(col(Trade.id)).where((col(Trade.buyer_id) == user.id) | (col(Trade.seller_id) == user.id)))
+    ).all()
     trade_case_types = [
         CaseType.ABNORMAL_TRADE.value,
         CaseType.TRADE_DISPUTE.value,
     ]
-    result = await db.execute(
+    result = await db.exec(
         select(DisposalCase).where(
-            (DisposalCase.subject_user_id == user.id)
+            (col(DisposalCase.subject_user_id) == user.id)
             | (
-                DisposalCase.case_type.in_(trade_case_types)
-                & DisposalCase.trade_id.in_(my_trades or [0])
+                col(DisposalCase.case_type).in_(trade_case_types)
+                & col(DisposalCase.trade_id).in_(my_trades or [0])
             )
-        ).order_by(DisposalCase.id.desc())
+        ).order_by(col(DisposalCase.id).desc())
     )
     return [
         {
@@ -58,7 +59,7 @@ async def my_cases(user: CurrentUser, db: DbSession) -> list[dict]:
             "created_at": c.created_at.isoformat() if c.created_at else None,
             "disposed_at": c.disposed_at.isoformat() if c.disposed_at else None,
         }
-        for c in result.scalars()
+        for c in result
     ]
 
 
@@ -104,9 +105,16 @@ async def submit_statement(case_id: int, body: StatementIn, user: CurrentUser, d
         if case.status != CaseStatus.PROCESSING.value:
             raise HTTPException(status.HTTP_409_CONFLICT, "该事项尚未进入处理阶段")
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项尚未发起问询")
-    await case_service.add_case_message(
+    message = await case_service.add_case_message(
         db, case, sender_id=user.id, role=DisposalMessageRole.USER,
         kind=DisposalMessageKind.STATEMENT, content=body.content.strip(),
+    )
+    await audit_service.record_event(
+        db,
+        "case.statement_submit",
+        target_type="disposal_case",
+        target_id=case.id,
+        after={"kind": DisposalMessageKind.STATEMENT.value, "msg_id": message.id, "status": case.status},
     )
     await db.commit()
     return {"detail": "说明已提交，管理员将回复处理"}
@@ -119,9 +127,16 @@ async def submit_appeal(case_id: int, body: StatementIn, user: CurrentUser, db: 
     capabilities = await case_service.case_capabilities(db, case, user.id)
     if not capabilities["can_submit_appeal"]:
         raise HTTPException(status.HTTP_409_CONFLICT, "事项尚未形成实际处置，请使用说明入口")
-    await case_service.add_case_message(
+    message = await case_service.add_case_message(
         db, case, sender_id=user.id, role=DisposalMessageRole.USER,
         kind=DisposalMessageKind.APPEAL, content=body.content.strip(),
+    )
+    await audit_service.record_event(
+        db,
+        "case.appeal_submit",
+        target_type="disposal_case",
+        target_id=case.id,
+        after={"kind": DisposalMessageKind.APPEAL.value, "msg_id": message.id, "status": case.status},
     )
     await db.commit()
     return {"detail": "申辩已提交，管理员将回复处理结果"}

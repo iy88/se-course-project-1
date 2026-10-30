@@ -3,11 +3,12 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.models import Notification
 from app.models.enums import UserRole
+from app.services import audit as audit_service
 from app.services import todos as todo_service
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -25,12 +26,12 @@ async def list_notifications(
     if user.role == UserRole.ADMIN.value:
         return {"total": 0, "items": []}
 
-    query = select(Notification).where(Notification.user_id == user.id)
+    query = select(Notification).where(col(Notification.user_id) == user.id)
     if unread_only:
-        query = query.where(Notification.is_read.is_(False))
-    total = await db.scalar(select(func.count()).select_from(query.subquery()))
-    result = await db.execute(
-        query.order_by(Notification.id.desc()).offset((page - 1) * page_size).limit(page_size)
+        query = query.where(col(Notification.is_read).is_(False))
+    total = (await db.exec(select(func.count()).select_from(query.subquery()))).first()
+    result = await db.exec(
+        query.order_by(col(Notification.id).desc()).offset((page - 1) * page_size).limit(page_size)
     )
     return {
         "total": int(total or 0),
@@ -46,7 +47,7 @@ async def list_notifications(
                 "is_read": n.is_read,
                 "created_at": n.created_at.isoformat() if n.created_at else None,
             }
-            for n in result.scalars()
+            for n in result
         ],
     }
 
@@ -62,11 +63,11 @@ async def list_todos(user: CurrentUser, db: DbSession) -> dict:
 async def unread_count(user: CurrentUser, db: DbSession) -> dict:
     if user.role == UserRole.ADMIN.value:
         return {"unread": 0}
-    count = await db.scalar(
+    count = (await db.exec(
         select(func.count()).select_from(Notification).where(
-            Notification.user_id == user.id, Notification.is_read.is_(False)
+            col(Notification.user_id) == user.id, col(Notification.is_read).is_(False)
         )
-    )
+    )).first()
     return {"unread": int(count or 0)}
 
 
@@ -82,5 +83,13 @@ async def mark_read(notification_id: int, user: CurrentUser, db: DbSession) -> d
     if not notification.is_read:
         notification.is_read = True
         notification.read_at = datetime.now(UTC)
+        await audit_service.record_event(
+            db,
+            "notification.read",
+            target_type="notification",
+            target_id=notification.id,
+            before={"is_read": False},
+            after={"is_read": True},
+        )
         await db.commit()
     return {"detail": "已读"}

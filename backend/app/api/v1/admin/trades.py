@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlmodel import col, select
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
@@ -27,6 +27,7 @@ from app.models.enums import (
     RestrictionType,
     TradeStatus,
 )
+from app.services import audit as audit_service
 from app.services import moderation, trade_ops, trade_wait
 from app.services import trades as trade_service
 from app.services.notifications import notify
@@ -47,16 +48,16 @@ async def admin_trade_view(db, trade_id: int) -> dict | None:
     seller = await db.get(User, trade.seller_id)
     product = await db.get(Product, trade.product_id)
     agreements = (
-        await db.execute(select(TradeAgreement).where(TradeAgreement.trade_id == trade.id).order_by(TradeAgreement.id))
-    ).scalars().all()
+        await db.exec(select(TradeAgreement).where(col(TradeAgreement.trade_id) == trade.id).order_by(col(TradeAgreement.id)))
+    ).all()
     confirms = (
-        await db.execute(
-            select(CompletionConfirmation).where(CompletionConfirmation.trade_id == trade.id).order_by(CompletionConfirmation.id)
+        await db.exec(
+            select(CompletionConfirmation).where(col(CompletionConfirmation.trade_id) == trade.id).order_by(col(CompletionConfirmation.id))
         )
-    ).scalars().all()
+    ).all()
     transitions = (
-        await db.execute(select(TradeTransition).where(TradeTransition.trade_id == trade.id).order_by(TradeTransition.id))
-    ).scalars().all()
+        await db.exec(select(TradeTransition).where(col(TradeTransition.trade_id) == trade.id).order_by(col(TradeTransition.id)))
+    ).all()
     return {
         "id": trade.id,
         "status": trade.status,
@@ -151,15 +152,15 @@ async def _case_relevant_to_trade(db, case: DisposalCase, trade: Trade) -> bool:
     # 只认与本事项 id 精确关联、且被封禁者确为本交易一方的 ban 记录；
     # 不按 active 过滤，封禁后已 lifted 的历史仍支撑后续查看/调整。
     if case.case_type == CaseType.REPORT.value:
-        restriction_id = await db.scalar(
-            select(AccountRestriction.id)
+        restriction_id = (await db.exec(
+            select(col(AccountRestriction.id))
             .where(
-                AccountRestriction.case_id == case.id,
-                AccountRestriction.type == RestrictionType.BAN.value,
-                AccountRestriction.user_id.in_((trade.buyer_id, trade.seller_id)),
+                col(AccountRestriction.case_id) == case.id,
+                col(AccountRestriction.type) == RestrictionType.BAN.value,
+                col(AccountRestriction.user_id).in_((trade.buyer_id, trade.seller_id)),
             )
             .limit(1)
-        )
+        )).first()
         if restriction_id is not None:
             return True
     if case.report_id:
@@ -202,12 +203,12 @@ async def _resolve_trade_case(
         if not await _case_relevant_to_trade(db, case, trade):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "关联事项与该交易无关")
         return case
-    result = await db.execute(
+    result = await db.exec(
         select(DisposalCase)
-        .where(DisposalCase.claimed_by_id == admin_id)
-        .order_by(DisposalCase.id.desc())
+        .where(col(DisposalCase.claimed_by_id) == admin_id)
+        .order_by(col(DisposalCase.id).desc())
     )
-    for case in result.scalars():
+    for case in result:
         if await _case_relevant_to_trade(db, case, trade):
             return case
     raise HTTPException(
@@ -272,7 +273,17 @@ async def freeze(trade_id: int, body: FreezeIn, admin: CurrentAdmin, db: DbSessi
     if not trade:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
     case = await _resolve_trade_case(db, trade, admin.id, body.case_id)
+    was_frozen = trade.frozen
     await moderation.freeze_trade(db, trade, body.reason.strip(), case.id, admin.id)
+    if not was_frozen and trade.frozen:
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_ADMIN_TRADE_FREEZE,
+            target_type="trade",
+            target_id=trade.id,
+            before={"frozen": False},
+            after={"frozen": True, "case_id": case.id},
+        )
     await db.commit()
     return {"detail": "交易已冻结"}
 
@@ -286,105 +297,164 @@ async def unfreeze(trade_id: int, body: UnfreezeIn, admin: CurrentAdmin, db: DbS
     if trade.status in (TradeStatus.COMPLETED.value, TradeStatus.TERMINATED.value):
         raise HTTPException(status.HTTP_409_CONFLICT, "已结束交易无冻结标记")
     await _resolve_trade_case(db, trade, admin.id, body.case_id)
+    was_frozen = trade.frozen
     await moderation.unfreeze_trade(db, trade, body.reason.strip(), admin.id)
+    if was_frozen and not trade.frozen:
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_ADMIN_TRADE_UNFREEZE,
+            target_type="trade",
+            target_id=trade.id,
+            before={"frozen": True},
+            after={"frozen": False},
+        )
     await db.commit()
     return {"detail": "冻结已解除"}
 
 
 @router.post("/{trade_id}/adjust")
 async def adjust_status(trade_id: int, body: AdjustIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """BR-08：认领管理员可有依据调整全部状态（包括直接完成），不伪造双方确认。"""
+    """BR-08：认领管理员可有依据调整全部状态（包括直接完成），不伪造双方确认。
+
+    锁序固定为“商品 → 目标交易”：先按事项资格定位/校验交易，再锁商品、锁交易并
+    ``populate_existing`` 刷新状态。这样与 accept、create_request 共用同一把商品锁；
+    恢复锁单时在锁后重新执行 D-48 冲突校验，不能依据加锁前的缓存对象放行。
+    """
     if body.to_status not in ALLOWED_ADJUST_TARGETS:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "非法目标状态")
+    # 先完成管理员相关事项资格校验；此后只使用标量 ID，避免回滚后引用过期对象。
     trade = await db.get(Trade, trade_id)
     if not trade:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
     case = await _resolve_trade_case(db, trade, admin.id, body.case_id)
-    if trade.status == body.to_status:
-        raise HTTPException(status.HTTP_409_CONFLICT, "交易已处于目标状态")
-
-    # D-48：进入任何需锁单状态前先显式检查同商品另一笔锁单；
-    # 此处只读，冲突返回 409 时交易、确认、商品、分支与限制均尚未修改。
-    if body.to_status in LOCKING_TARGETS:
-        await trade_service.ensure_no_locking_conflict(db, trade, body.to_status)
-
-    from_status = trade.status
-    to_status = TradeStatus(body.to_status)
-    reason = body.reason.strip()
+    admin_id = admin.id
     product_id = trade.product_id
-    try:
-        if to_status in (TradeStatus.COMPLETED, TradeStatus.TERMINATED):
-            # 结束联动：解本笔冻结、归档分支、商品默认下架（BR-33/14）
-            await trade_ops.finish_trade(
-                db, trade, to_status=to_status, trigger=f"admin_adjust_{body.to_status}",
-                actor=admin, actor_role="admin", reason=reason, basis_case_id=case.id,
+    case_id = case.id
+
+    # 明确可重试事务错误（40P01/40001）整事务回滚后有限重试；通知、审计、转移
+    # 均在同一事务内，回滚后不会重复。其他数据库错误原样抛出，不盲目映射 409。
+    for attempt in range(2):
+        try:
+            # 统一锁序：商品 → 目标交易。锁商品会等待 accept/request 等同类事务；
+            # 锁交易后刷新状态，避免 identity map 中的旧 status 覆盖已提交状态。
+            product = await trade_service.lock_product_for_update(db, product_id)
+            trade = await trade_service.lock_trade_for_update(db, trade_id)
+            if trade is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
+            if trade.status == body.to_status:
+                raise HTTPException(status.HTTP_409_CONFLICT, "交易已处于目标状态")
+
+            # D-48：锁后再检查同商品另一笔锁单；预检查只用于早期拒绝，不能作为
+            # 恢复依据。冲突时交易、确认、商品、分支与限制均尚未修改。
+            if body.to_status in LOCKING_TARGETS:
+                await trade_service.ensure_no_locking_conflict(db, trade, body.to_status)
+
+            from_status = trade.status
+            to_status = TradeStatus(body.to_status)
+            reason = body.reason.strip()
+            if to_status in (TradeStatus.COMPLETED, TradeStatus.TERMINATED):
+                # 结束联动：解本笔冻结、归档分支、商品默认下架（BR-33/14）
+                await trade_ops.finish_trade(
+                    db, trade, to_status=to_status, trigger=f"admin_adjust_{body.to_status}",
+                    actor=admin, actor_role="admin", reason=reason, basis_case_id=case_id,
+                )
+                await audit_service.record_event(
+                    db,
+                    audit_service.EVENT_ADMIN_TRADE_ADJUST,
+                    target_type="trade",
+                    target_id=trade.id,
+                    reason_code=f"to_{body.to_status}",
+                    before={"status": from_status},
+                    after={"status": trade.status, "case_id": case_id},
+                )
+                await db.commit()
+                return {"detail": f"交易状态已调整为 {body.to_status}，已通知双方并留据"}
+
+            if to_status == TradeStatus.IN_PROGRESS:
+                # 恢复进行中：清当前确认、结束旧计时、保留历史与有效约定；恢复不启动计时（4.15/D-51）
+                await trade_ops.clear_current_confirmations(db, trade.id)
+                trade_wait.clear_wait_state(trade)
+                trade.resolution_confirmed_by_id = None
+                trade.resolution_confirmed_at = None
+            elif to_status in (TradeStatus.DISPUTED, TradeStatus.ABNORMAL):
+                # 进入争议/异常只结束原等待；恢复已完成旧交易时另清当前确认（D-48）
+                if from_status in ENDED_TARGETS:
+                    await trade_ops.clear_current_confirmations(db, trade.id)
+                trade_wait.clear_wait_state(trade)
+            else:
+                # 离开锁单/等待状态：结束旧计时，避免下一阶段继承旧轮暂停
+                trade_wait.clear_wait_state(trade)
+
+            trade.status = to_status.value
+            # 非结束目标不保留结束时间；恢复旧交易时清除原有 finished_at。
+            trade.finished_at = None
+            if to_status in (TradeStatus.IN_PROGRESS, TradeStatus.DISPUTED, TradeStatus.ABNORMAL) and trade.accepted_at is None:
+                trade.accepted_at = trade_ops.now_utc()
+
+            if product is not None:
+                if to_status.value in LOCKING_TARGETS:
+                    # 锁单目标：商品进入交易中，解除此前的下架时间标记。
+                    product.status = ProductStatus.IN_TRANSACTION.value
+                    product.delisted_at = None
+                    # BR-02/DT-01：进入锁单不得绕过“其余待接受请求自动关闭”的既有规则。
+                    others = await trade_service.close_pending_requests_for_product(
+                        db, product.id, trade_service.CLOSED_BY_LOCK, exclude_trade_ids={trade.id}
+                    )
+                    for other in others:
+                        await notify(
+                            db,
+                            [other.buyer_id],
+                            "request_closed",
+                            "您的购买请求已关闭",
+                            f"商品「{product.title}」已被其他用户锁单，您的请求已关闭。",
+                            link_type="trade",
+                            link_id=other.id,
+                        )
+                elif (
+                    to_status in (TradeStatus.PENDING_ACCEPTANCE, TradeStatus.REJECTED, TradeStatus.WITHDRAWN, TradeStatus.CLOSED)
+                    and product.status == ProductStatus.IN_TRANSACTION.value
+                    and from_status in LOCKING_TARGETS
+                ):
+                    # 仅本笔交易原持有锁单、确无其他锁单且公开资格未被撤销时释放展示；
+                    # 不因调整旧已完成交易而擅自打断另一笔锁单或让受限商品变 listed。
+                    other_locking = await trade_service.get_locking_trade(db, product_id)
+                    if other_locking is None and not product.display_restricted:
+                        product.status = ProductStatus.LISTED.value
+                        product.delisted_at = None
+
+            trigger = "admin_restore" if to_status == TradeStatus.IN_PROGRESS else f"admin_adjust_{body.to_status}"
+            await trade_ops.record_transition(
+                db, trade, from_status, to_status.value,
+                trigger=trigger, actor=admin, actor_role="admin", reason=reason, basis_case_id=case_id,
+            )
+            await _notify_adjustment(
+                db, trade, from_status=from_status, to_status=to_status.value, reason=reason, case_id=case_id
+            )
+            await audit_service.record_event(
+                db,
+                audit_service.EVENT_ADMIN_TRADE_ADJUST,
+                target_type="trade",
+                target_id=trade.id,
+                reason_code=f"to_{body.to_status}",
+                before={"status": from_status},
+                after={"status": trade.status, "case_id": case_id},
             )
             await db.commit()
             return {"detail": f"交易状态已调整为 {body.to_status}，已通知双方并留据"}
-
-        if to_status == TradeStatus.IN_PROGRESS:
-            # 恢复进行中：清当前确认、结束旧计时、保留历史与有效约定；恢复不启动计时（4.15/D-51）
-            await trade_ops.clear_current_confirmations(db, trade.id)
-            trade_wait.clear_wait_state(trade)
-            trade.resolution_confirmed_by_id = None
-            trade.resolution_confirmed_at = None
-        elif to_status in (TradeStatus.DISPUTED, TradeStatus.ABNORMAL):
-            # 进入争议/异常只结束原等待；恢复已完成旧交易时另清当前确认（D-48）
-            if from_status in ENDED_TARGETS:
-                await trade_ops.clear_current_confirmations(db, trade.id)
-            trade_wait.clear_wait_state(trade)
-        else:
-            # 离开锁单/等待状态：结束旧计时，避免下一阶段继承旧轮暂停
-            trade_wait.clear_wait_state(trade)
-
-        trade.status = to_status.value
-        # 非结束目标不保留结束时间；恢复旧交易时清除原有 finished_at。
-        trade.finished_at = None
-        if to_status in (TradeStatus.IN_PROGRESS, TradeStatus.DISPUTED, TradeStatus.ABNORMAL) and trade.accepted_at is None:
-            trade.accepted_at = trade_ops.now_utc()
-
-        product = await db.get(Product, product_id)
-        if product:
-            if to_status.value in LOCKING_TARGETS:
-                # 锁单目标：商品进入交易中，解除此前的下架时间标记。
-                product.status = ProductStatus.IN_TRANSACTION.value
-                product.delisted_at = None
-                # BR-02/DT-01：进入锁单不得绕过“其余待接受请求自动关闭”的既有规则。
-                others = await trade_service.close_pending_requests_for_product(
-                    db, product.id, trade_service.CLOSED_BY_LOCK, exclude_trade_ids={trade.id}
-                )
-                for other in others:
-                    await notify(
-                        db,
-                        [other.buyer_id],
-                        "request_closed",
-                        "您的购买请求已关闭",
-                        f"商品「{product.title}」已被其他用户锁单，您的请求已关闭。",
-                        link_type="trade",
-                        link_id=other.id,
-                    )
-            elif (
-                to_status in (TradeStatus.PENDING_ACCEPTANCE, TradeStatus.REJECTED, TradeStatus.WITHDRAWN, TradeStatus.CLOSED)
-                and product.status == ProductStatus.IN_TRANSACTION.value
-                and from_status in LOCKING_TARGETS
-            ):
-                # 仅本笔交易原持有锁单、确无其他锁单且公开资格未被撤销时释放展示；
-                # 不因调整旧已完成交易而擅自打断另一笔锁单或让受限商品变 listed。
-                other_locking = await trade_service.get_locking_trade(db, product_id)
-                if other_locking is None and not product.display_restricted:
-                    product.status = ProductStatus.LISTED.value
-                    product.delisted_at = None
-
-        trigger = "admin_restore" if to_status == TradeStatus.IN_PROGRESS else f"admin_adjust_{body.to_status}"
-        await trade_ops.record_transition(
-            db, trade, from_status, to_status.value,
-            trigger=trigger, actor=admin, actor_role="admin", reason=reason, basis_case_id=case.id,
-        )
-        await _notify_adjustment(
-            db, trade, from_status=from_status, to_status=to_status.value, reason=reason, case_id=case.id
-        )
-        await db.commit()
-    except IntegrityError as exc:
-        # D-48：预检后另一事务抢先锁单时由唯一索引裁决，回滚后映射 409。
-        await trade_service.resolve_lock_integrity_error(db, exc, product_id=product_id)
-    return {"detail": f"交易状态已调整为 {body.to_status}，已通知双方并留据"}
+        except IntegrityError as exc:
+            # D-48：锁后校验仍可能被不遵守商品锁的旧写入抢跑；唯一索引是最终裁决。
+            await trade_service.resolve_lock_integrity_error(db, exc, product_id=product_id)
+        except DBAPIError as exc:
+            await db.rollback()
+            if not trade_service.is_retryable_transaction_error(exc):
+                raise
+            if attempt == 0:
+                # 回滚会 expire 当前 ORM 对象；重试前重新加载，禁止失败后读取
+                # expired admin.id/角色触发 MissingGreenlet。
+                reloaded_admin = await db.get(User, admin_id, populate_existing=True)
+                if reloaded_admin is None:
+                    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "管理员账户不存在")
+                admin = reloaded_admin
+                continue
+            raise HTTPException(status.HTTP_409_CONFLICT, "并发冲突，请重试") from exc
+    raise HTTPException(status.HTTP_409_CONFLICT, "并发冲突，请重试")

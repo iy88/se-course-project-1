@@ -1,7 +1,6 @@
 """IM 业务校验辅助：成员、封禁、双人冻结范围（BR-32/33/18）。"""
-
-from sqlalchemy import and_, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import and_, col, or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import Conversation, Trade, User
 from app.models.enums import LOCKING_TRADE_STATUSES
@@ -16,17 +15,17 @@ async def ensure_member(conversation: Conversation, user_id: int) -> None:
 async def pair_frozen(db: AsyncSession, user_a: int, user_b: int) -> bool:
     """双方之间存在任一有效交易冻结：两人之间普通私聊与全部交易分支禁发（BR-33）。"""
     low, high = sorted((user_a, user_b))
-    result = await db.execute(
-        select(Trade.id).where(
-            Trade.frozen.is_(True),
-            Trade.status.in_([s.value for s in LOCKING_TRADE_STATUSES]),
+    result = await db.exec(
+        select(col(Trade.id)).where(
+            col(Trade.frozen).is_(True),
+            col(Trade.status).in_([s.value for s in LOCKING_TRADE_STATUSES]),
             or_(
-                and_(Trade.buyer_id == low, Trade.seller_id == high),
-                and_(Trade.buyer_id == high, Trade.seller_id == low),
+                and_(col(Trade.buyer_id) == low, col(Trade.seller_id) == high),
+                and_(col(Trade.buyer_id) == high, col(Trade.seller_id) == low),
             ),
         ).limit(1)
     )
-    return result.scalar_one_or_none() is not None
+    return result.one_or_none() is not None
 
 
 async def get_peer_display_name(db: AsyncSession, conversation: Conversation, viewer_id: int) -> str:
@@ -36,16 +35,16 @@ async def get_peer_display_name(db: AsyncSession, conversation: Conversation, vi
 
 
 async def unread_count(db: AsyncSession, conversation_id: int, user_id: int, last_read_id: int) -> int:
-    from sqlalchemy import func, or_
+    from sqlmodel import func, or_
 
     from app.models import Message
 
-    return await db.scalar(
+    return (await db.exec(
         select(func.count())
         .select_from(Message)
         .where(
-            Message.conversation_id == conversation_id,
-            Message.id > last_read_id,
-            or_(Message.sender_id != user_id, Message.sender_id.is_(None)),  # 系统消息计入未读
+            col(Message.conversation_id) == conversation_id,
+            col(Message.id) > last_read_id,
+            or_(col(Message.sender_id) != user_id, col(Message.sender_id).is_(None)),  # 系统消息计入未读
         )
-    ) or 0
+    )).first() or 0

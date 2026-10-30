@@ -1,7 +1,7 @@
 """卖方个人页等公开（限登录）用户信息。"""
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlmodel import col, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.models import Product, User
@@ -15,14 +15,14 @@ async def user_profile(user_id: int, user: CurrentUser, db: DbSession) -> dict:
     target = await db.get(User, user_id)
     if not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
-    result = await db.execute(
+    result = await db.exec(
         select(Product).where(
-            Product.seller_id == user_id,
-            Product.status == "listed",
-            Product.display_restricted.is_(False),
-        ).order_by(Product.created_at.desc())
+            col(Product.seller_id) == user_id,
+            col(Product.status) == "listed",
+            col(Product.display_restricted).is_(False),
+        ).order_by(col(Product.created_at).desc())
     )
-    products = list(result.scalars())
+    products = list(result)
     from app.storage.base import get_storage
 
     storage = get_storage()

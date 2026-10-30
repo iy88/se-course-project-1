@@ -1,7 +1,6 @@
 """站内通知服务（4.17）：创建通知并经 WS 推送未读提醒。"""
-
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import Notification, User
 from app.models.enums import UserRole
@@ -29,10 +28,10 @@ async def notify(
 
     existing_ids = set(
         (
-            await db.scalars(
-                select(User.id).where(
-                    User.id.in_(candidates),
-                    User.role != UserRole.ADMIN.value,
+            await db.exec(
+                select(col(User.id)).where(
+                    col(User.id).in_(candidates),
+                    col(User.role) != UserRole.ADMIN.value,
                 )
             )
         ).all()

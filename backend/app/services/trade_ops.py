@@ -1,9 +1,8 @@
 """交易状态机核心操作：转移留痕、结束联动（商品下架/分支归档/本笔解冻）、通知。"""
-
 from datetime import UTC, datetime
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import CompletionConfirmation, Product, Trade, TradeTransition, User
 from app.models.enums import ProductStatus, TradeStatus
@@ -60,13 +59,13 @@ async def product_snapshot(db: AsyncSession, product: Product) -> dict:
 
 async def clear_current_confirmations(db: AsyncSession, trade_id: int) -> int:
     """清空当前完成确认标记，保留历史记录（D-49、BR-07、BR-08）。"""
-    result = await db.execute(
+    result = await db.exec(
         select(CompletionConfirmation).where(
-            CompletionConfirmation.trade_id == trade_id,
-            CompletionConfirmation.is_current.is_(True),
+            col(CompletionConfirmation.trade_id) == trade_id,
+            col(CompletionConfirmation.is_current).is_(True),
         )
     )
-    rows = list(result.scalars())
+    rows = list(result)
     for row in rows:
         row.is_current = False
     return len(rows)

@@ -1,9 +1,8 @@
 """IM 会话辅助（C-07/C-08）：普通私聊复用、交易分支、系统消息、归档。"""
-
 from datetime import UTC, datetime
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import Conversation, Message
 from app.models.enums import ConversationType, MessageKind
@@ -13,14 +12,14 @@ from app.ws.manager import manager
 async def get_or_create_normal_conversation(db: AsyncSession, user_a: int, user_b: int) -> Conversation:
     """同一对用户复用普通私聊（BR-18）。"""
     low, high = sorted((user_a, user_b))
-    result = await db.execute(
+    result = await db.exec(
         select(Conversation).where(
-            Conversation.type == ConversationType.NORMAL.value,
-            Conversation.user_low_id == low,
-            Conversation.user_high_id == high,
+            col(Conversation.type) == ConversationType.NORMAL.value,
+            col(Conversation.user_low_id) == low,
+            col(Conversation.user_high_id) == high,
         )
     )
-    conversation = result.scalar_one_or_none()
+    conversation = result.one_or_none()
     if conversation is None:
         conversation = Conversation(type=ConversationType.NORMAL.value, user_low_id=low, user_high_id=high)
         db.add(conversation)
@@ -72,10 +71,10 @@ async def send_text_message(
 
 async def archive_trade_branch(db: AsyncSession, trade_id: int) -> None:
     """请求/交易结束默认归档分支，历史保留（BR-18）。"""
-    result = await db.execute(
-        select(Conversation).where(Conversation.type == ConversationType.TRADE.value, Conversation.trade_id == trade_id)
+    result = await db.exec(
+        select(Conversation).where(col(Conversation.type) == ConversationType.TRADE.value, col(Conversation.trade_id) == trade_id)
     )
-    for conversation in result.scalars():
+    for conversation in result:
         if not conversation.archived:
             conversation.archived = True
             conversation.archived_at = datetime.now(UTC)

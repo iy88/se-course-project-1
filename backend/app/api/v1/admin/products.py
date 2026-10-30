@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlmodel import col, delete, select
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
@@ -25,6 +25,7 @@ from app.models.enums import (
     RestrictionStatus,
     ReviewResult,
 )
+from app.services import audit as audit_service
 from app.services import cases as case_service
 from app.services import products as product_service
 from app.services.cases import ensure_claimant
@@ -37,11 +38,14 @@ class TagDecisionIn(BaseModel):
     application_id: int
     decision: str = Field(pattern="^(approve_new|map_alias|reject)$")
     category_id: int | None = None  # map_alias 时指向已有分类
+    # 拒绝时必须说明原因；商品通过同时拒绝标签时逐申请可见。
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class ReviewDecisionIn(BaseModel):
     result: str = Field(pattern="^(approved|rejected)$")
-    reason: str | None = Field(default=None, max_length=500)  # 不通过原因（含退回补充）
+    # 商品级原因：不通过时必填；通过时可作为逐申请标签拒绝原因的 fallback。
+    reason: str | None = Field(default=None, max_length=500)
     tag_decisions: list[TagDecisionIn] = []
 
 
@@ -53,6 +57,12 @@ class CategoryCorrectionIn(BaseModel):
 class RestoreDisplayIn(BaseModel):
     case_id: int
     reason: str = Field(min_length=1, max_length=500)
+
+
+def _clean_reason(value: str | None) -> str | None:
+    """去除首尾空白；全空白视为未提供，不写入或用于通过校验。"""
+    cleaned = (value or "").strip()
+    return cleaned or None
 
 
 @router.post("/cases/{case_id}/review")
@@ -68,23 +78,20 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
     if case.case_type != CaseType.PRODUCT_REVIEW.value:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该事项不是商品审核事项")
     product = await db.get(Product, case.product_id)
-    review = await db.scalar(
-        select(ReviewRecord).where(ReviewRecord.case_id == case.id).order_by(ReviewRecord.id.desc()).limit(1)
-    )
+    review = (await db.exec(
+        select(ReviewRecord).where(col(ReviewRecord.case_id) == case.id).order_by(col(ReviewRecord.id).desc()).limit(1)
+    )).first()
     if not product or not review:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "审核事项数据不完整")
     if product.status != ProductStatus.PENDING_REVIEW.value or review.result != ReviewResult.PENDING.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "商品当前不在待审核状态")
-    # D-46：认领前后卖方均可修改，审核结论以提交结论时的最新内容为准并刷新快照
-    review.content_json = await product_service.snapshot_content(db, product)
-
     apps = (
-        await db.execute(
+        await db.exec(
             select(ProductTagApplication).where(
-                ProductTagApplication.product_id == product.id, ProductTagApplication.status == "pending"
+                col(ProductTagApplication.product_id) == product.id, col(ProductTagApplication.status) == "pending"
             )
         )
-    ).scalars().all()
+    ).all()
     apps_by_id = {app.id: app for app in apps}
     decision_ids = [d.application_id for d in body.tag_decisions]
     # R8/R11：决定只能指向本次待审核商品当前有效的 pending 申请；
@@ -98,6 +105,32 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
                 f"标签申请不属于本次待审核内容或已失效（申请 {decision.application_id}）",
             )
     decisions = {d.application_id: d for d in body.tag_decisions}
+    product_reason = _clean_reason(body.reason)
+
+    # 在任何审核/标签写入之前完成原因校验：拒绝标签必须说明原因，
+    # 可复用管理员显式提交的商品级原因作为 fallback；不自动生成固定理由。
+    if body.result == "approved":
+        undecided = [app.id for app in apps if app.id not in decisions]
+        if undecided:
+            ids = "、".join(str(app_id) for app_id in undecided)
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"商品通过时须对每条待审标签申请作出决定并说明拒绝原因（申请 {ids}）",
+            )
+        for app in apps:
+            decision = decisions[app.id]
+            if decision.decision == "reject" and not (_clean_reason(decision.reason) or product_reason):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"拒绝标签申请须说明原因（申请 {app.id}）",
+                )
+    elif not product_reason:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "不通过时须记录拒绝原因")
+
+    # D-46：认领前后卖方均可修改，审核结论以提交结论时的最新内容为准并刷新快照。
+    # 校验通过后才写入，避免无效原因留下部分审核/标签变更。
+    review.content_json = await product_service.snapshot_content(db, product)
+    now = case_service.now_utc()
 
     if body.result == "approved":
         # 标签随商品通过生效（4.16）
@@ -106,21 +139,23 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
             decision = decisions.get(app.id)
             if decision is None or decision.decision == "reject":
                 app.status = "rejected"
-                app.decided_at = case_service.now_utc()
+                app.decision_reason = _clean_reason(decision.reason) if decision else None
+                app.decision_reason = app.decision_reason or product_reason
+                app.decided_at = now
                 continue
             if decision.decision == "approve_new":
-                exists = await db.scalar(
-                    select(Category).where(Category.name == app.requested_name, Category.deleted_at.is_(None))
-                )
+                exists = (await db.exec(
+                    select(Category).where(col(Category.name) == app.requested_name, col(Category.deleted_at).is_(None))
+                )).first()
                 if exists:
                     category = exists
                 else:
                     # 新主名不得与现有活跃别名冲突；此类名称应走别名映射。
-                    alias_conflict = await db.scalar(
+                    alias_conflict = (await db.exec(
                         select(CategoryAlias).where(
-                            CategoryAlias.name == app.requested_name, CategoryAlias.removed_at.is_(None)
+                            col(CategoryAlias.name) == app.requested_name, col(CategoryAlias.removed_at).is_(None)
                         )
-                    )
+                    )).first()
                     if alias_conflict:
                         raise HTTPException(
                             status.HTTP_400_BAD_REQUEST,
@@ -131,6 +166,7 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
                     await db.flush()
                 app.status = "approved_new"
                 app.resolved_category_id = category.id
+                app.decision_reason = None
                 approved_tag_ids.add(category.id)
             else:  # map_alias：同义名称作为已有分类别名，商品关联原分类
                 target = await db.get(Category, decision.category_id)
@@ -139,18 +175,18 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
                 if target.status != "active":
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, f"别名映射目标分类已停用（申请 {app.id}）")
                 # 别名不得与其他分类主名或活跃别名冲突（4.16）。
-                principal_conflict = await db.scalar(
+                principal_conflict = (await db.exec(
                     select(Category).where(
-                        Category.name == app.requested_name,
-                        Category.deleted_at.is_(None),
-                        Category.id != target.id,
+                        col(Category.name) == app.requested_name,
+                        col(Category.deleted_at).is_(None),
+                        col(Category.id) != target.id,
                     )
-                )
-                alias_exists = await db.scalar(
+                )).first()
+                alias_exists = (await db.exec(
                     select(CategoryAlias).where(
-                        CategoryAlias.name == app.requested_name, CategoryAlias.removed_at.is_(None)
+                        col(CategoryAlias.name) == app.requested_name, col(CategoryAlias.removed_at).is_(None)
                     )
-                )
+                )).first()
                 if principal_conflict or (alias_exists and alias_exists.category_id != target.id):
                     raise HTTPException(
                         status.HTTP_400_BAD_REQUEST, f"标签名称已被其他分类使用（申请 {app.id}）"
@@ -159,23 +195,24 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
                     db.add(CategoryAlias(category_id=target.id, name=app.requested_name, created_by_id=admin.id))
                 app.status = "approved_alias"
                 app.resolved_category_id = target.id
+                app.decision_reason = None
                 approved_tag_ids.add(target.id)
-            app.decided_at = case_service.now_utc()
+            app.decided_at = now
         if not approved_tag_ids:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 "商品通过时须至少关联一个获认可标签（请处理标签申请或保留已有标签）",
             )
-        await db.execute(delete(ProductTag).where(ProductTag.product_id == product.id))
+        await db.exec(delete(ProductTag).where(col(ProductTag.product_id) == product.id))
         for cid in approved_tag_ids:
             db.add(ProductTag(product_id=product.id, category_id=cid))
         product.status = ProductStatus.LISTED.value
-        product.listed_at = case_service.now_utc()
+        product.listed_at = now
         product.reject_reason = None
         review.reviewer_id = admin.id
         review.result = ReviewResult.APPROVED.value
         review.reason = None
-        review.reviewed_at = case_service.now_utc()
+        review.reviewed_at = now
         await case_service.dispose_case(db, case, conclusion="审核通过", basis="依据当前禁发范围审核通过")
         await notify(
             db, [product.seller_id], "review_result", "商品审核通过",
@@ -184,18 +221,19 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
         )
         message = "审核通过，商品已公开"
     else:
-        reason = (body.reason or "").strip()
-        if not reason:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "不通过时须记录拒绝原因")
+        reason = product_reason
         for app in apps:
+            decision = decisions.get(app.id)
             app.status = "rejected"
-            app.decided_at = case_service.now_utc()
+            # 逐申请优先使用显式原因；未单独填写时复用管理员显式提交的商品级原因。
+            app.decision_reason = (_clean_reason(decision.reason) if decision else None) or reason
+            app.decided_at = now
         product.status = ProductStatus.REJECTED.value
         product.reject_reason = reason
         review.reviewer_id = admin.id
         review.result = ReviewResult.REJECTED.value
         review.reason = reason
-        review.reviewed_at = case_service.now_utc()
+        review.reviewed_at = now
         await case_service.dispose_case(db, case, conclusion="审核未通过", reason=reason, basis="依据当前禁发范围审核未通过")
         await notify(
             db, [product.seller_id], "review_result", "商品审核未通过",
@@ -204,6 +242,19 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
         )
         message = "审核未通过，已通知发布者"
 
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_PRODUCT_REVIEW,
+        target_type="product",
+        target_id=product.id,
+        after={
+            "status": product.status,
+            "review_result": review.result,
+            "case_id": case.id,
+            # 只记录逐申请结果，不把管理员业务说明正文写入审计。
+            "tag_applications": [{"application_id": app.id, "status": app.status} for app in apps],
+        },
+    )
     await db.commit()
     return {"detail": message}
 
@@ -243,13 +294,13 @@ async def restore_product_display(
     seller = await db.get(User, product.seller_id)
     if not seller:
         raise HTTPException(status.HTTP_409_CONFLICT, "商品发布者不存在")
-    active_ban = await db.scalar(
-        select(AccountRestriction.id).where(
-            AccountRestriction.user_id == seller.id,
-            AccountRestriction.type == "ban",
-            AccountRestriction.status == RestrictionStatus.ACTIVE.value,
+    active_ban = (await db.exec(
+        select(col(AccountRestriction.id)).where(
+            col(AccountRestriction.user_id) == seller.id,
+            col(AccountRestriction.type) == "ban",
+            col(AccountRestriction.status) == RestrictionStatus.ACTIVE.value,
         )
-    )
+    )).first()
     if seller.status == AccountStatus.BANNED.value or active_ban is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "发布者仍处于封禁状态，不能单独解除展示限制")
 
@@ -303,6 +354,14 @@ async def restore_product_display(
         "关注的商品公开访问限制已解除",
         f"您关注的商品「{product.title}」公开访问限制已解除，可按商品当前状态查看。",
     )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_PRODUCT_RESTORE_DISPLAY,
+        target_type="product",
+        target_id=product.id,
+        before={"display_restricted": True},
+        after={"display_restricted": False, "status": product.status, "case_id": case.id},
+    )
     await db.commit()
     return {"detail": "展示限制已解除；生命周期与交易限制保持不变"}
 
@@ -321,7 +380,7 @@ async def correct_category(product_id: int, body: CategoryCorrectionIn, admin: C
         categories.append(category)
     before = await product_service.load_product_tags(db, product.id)
     before_names = [t.name for t in before]
-    await db.execute(delete(ProductTag).where(ProductTag.product_id == product.id))
+    await db.exec(delete(ProductTag).where(col(ProductTag.product_id) == product.id))
     for category in categories:
         db.add(ProductTag(product_id=product.id, category_id=category.id))
     after_names = [c.name for c in categories]
@@ -338,6 +397,14 @@ async def correct_category(product_id: int, body: CategoryCorrectionIn, admin: C
         db, [product.seller_id], "product_edited", "商品分类已被平台纠正",
         f"商品「{product.title}」分类被管理员纠正为：{'、'.join(after_names)}。原因：{body.reason.strip()}",
         link_type="product", link_id=product.id,
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_PRODUCT_CATEGORY_CORRECT,
+        target_type="product",
+        target_id=product.id,
+        before={"tags": before_names},
+        after={"tags": after_names},
     )
     await db.commit()
     return {"detail": "分类纠正完成并通知卖方"}

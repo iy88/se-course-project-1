@@ -3,8 +3,8 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.deps import CurrentAdmin, CurrentUser, DbSession
 from app.models import Category, CategoryAlias
@@ -14,6 +14,7 @@ from app.schemas.category import (
     CategoryOut,
     CategoryUpdateIn,
 )
+from app.services import audit as audit_service
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -28,14 +29,14 @@ async def get_active_category_or_404(db: AsyncSession, category_id: int) -> Cate
 @router.get("", response_model=list[CategoryOut])
 async def list_categories(db: DbSession, user: CurrentUser) -> list[CategoryOut]:
     """登录用户可查看可选标签（含别名），供筛选与发布使用。"""
-    result = await db.execute(
+    result = await db.exec(
         select(Category)
-        .where(Category.deleted_at.is_(None))
-        .order_by(Category.id)
+        .where(col(Category.deleted_at).is_(None))
+        .order_by(col(Category.id))
     )
-    categories = list(result.scalars())
-    aliases_result = await db.execute(select(CategoryAlias).where(CategoryAlias.removed_at.is_(None)))
-    aliases = list(aliases_result.scalars())
+    categories = list(result)
+    aliases_result = await db.exec(select(CategoryAlias).where(col(CategoryAlias.removed_at).is_(None)))
+    aliases = list(aliases_result)
     alias_map: dict[int, list[str]] = {}
     for alias in aliases:
         alias_map.setdefault(alias.category_id, []).append(alias.name)
@@ -56,13 +57,21 @@ async def create_category(body: CategoryCreateIn, admin: CurrentAdmin, db: DbSes
     name = body.name.strip()
     if not name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签名称不能为空")
-    exists = await db.scalar(
-        select(Category).where(Category.name == name, Category.deleted_at.is_(None))
-    )
-    if exists or await db.scalar(select(CategoryAlias).where(CategoryAlias.name == name, CategoryAlias.removed_at.is_(None))):
+    exists = (await db.exec(
+        select(Category).where(col(Category.name) == name, col(Category.deleted_at).is_(None))
+    )).first()
+    if exists or (await db.exec(select(CategoryAlias).where(col(CategoryAlias.name) == name, col(CategoryAlias.removed_at).is_(None)))).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "同名标签或别名已存在")
     category = Category(name=name, created_by_id=admin.id)
     db.add(category)
+    await db.flush()
+    await audit_service.record_event(
+        db,
+        "admin.category_create",
+        target_type="category",
+        target_id=category.id,
+        after={"created": True, "status": category.status},
+    )
     await db.commit()
     await db.refresh(category)
     return CategoryOut(id=category.id, name=category.name, status=category.status, aliases=[])
@@ -72,14 +81,16 @@ async def create_category(body: CategoryCreateIn, admin: CurrentAdmin, db: DbSes
 async def update_category(category_id: int, body: CategoryUpdateIn, admin: CurrentAdmin, db: DbSession) -> CategoryOut:
     """改主名：旧名保留为别名，当前展示新名（4.16）；可停用/启用。"""
     category = await get_active_category_or_404(db, category_id)
+    old_status = category.status
+    changed_fields: list[str] = []
     if body.name is not None and body.name.strip() and body.name.strip() != category.name:
         new_name = body.name.strip()
-        conflict = await db.scalar(
-            select(Category).where(Category.name == new_name, Category.deleted_at.is_(None), Category.id != category.id)
-        )
-        alias_conflict = await db.scalar(
-            select(CategoryAlias).where(CategoryAlias.name == new_name, CategoryAlias.removed_at.is_(None))
-        )
+        conflict = (await db.exec(
+            select(Category).where(col(Category.name) == new_name, col(Category.deleted_at).is_(None), col(Category.id) != category.id)
+        )).first()
+        alias_conflict = (await db.exec(
+            select(CategoryAlias).where(col(CategoryAlias.name) == new_name, col(CategoryAlias.removed_at).is_(None))
+        )).first()
         if conflict or alias_conflict:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标名称已被使用")
         # 旧主名转为别名
@@ -88,17 +99,29 @@ async def update_category(category_id: int, body: CategoryUpdateIn, admin: Curre
         )
         db.add(old_alias)
         category.name = new_name
+        changed_fields.append("name")
     if body.status is not None:
         if body.status not in {"active", "disabled"}:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "非法状态")
-        category.status = body.status
+        if category.status != body.status:
+            category.status = body.status
+            changed_fields.append("status")
+    if changed_fields:
+        await audit_service.record_event(
+            db,
+            "admin.category_update",
+            target_type="category",
+            target_id=category.id,
+            before={"status": old_status},
+            after={"status": category.status, "changed_fields": changed_fields},
+        )
     await db.commit()
     await db.refresh(category)
     aliases = (
-        await db.execute(
-            select(CategoryAlias).where(CategoryAlias.category_id == category.id, CategoryAlias.removed_at.is_(None))
+        await db.exec(
+            select(CategoryAlias).where(col(CategoryAlias.category_id) == category.id, col(CategoryAlias.removed_at).is_(None))
         )
-    ).scalars().all()
+    ).all()
     return CategoryOut(id=category.id, name=category.name, status=category.status, aliases=[a.name for a in aliases])
 
 
@@ -109,21 +132,30 @@ async def add_alias(category_id: int, body: CategoryAliasIn, admin: CurrentAdmin
     if not name or name == category.name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "别名不能为空且不能与主名相同")
     # 别名不得与其他分类当前主名冲突（4.16）；同名同义只能指向一个分类。
-    principal_conflict = await db.scalar(
-        select(Category).where(Category.name == name, Category.deleted_at.is_(None))
-    )
+    principal_conflict = (await db.exec(
+        select(Category).where(col(Category.name) == name, col(Category.deleted_at).is_(None))
+    )).first()
     if principal_conflict:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "别名与其他分类主名冲突")
-    exists = await db.scalar(select(CategoryAlias).where(CategoryAlias.name == name, CategoryAlias.removed_at.is_(None)))
+    exists = (await db.exec(select(CategoryAlias).where(col(CategoryAlias.name) == name, col(CategoryAlias.removed_at).is_(None)))).first()
     if exists:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "别名已存在")
-    db.add(CategoryAlias(category_id=category.id, name=name, created_by_id=admin.id))
+    alias = CategoryAlias(category_id=category.id, name=name, created_by_id=admin.id)
+    db.add(alias)
+    await db.flush()
+    await audit_service.record_event(
+        db,
+        "admin.category_alias_add",
+        target_type="category_alias",
+        target_id=alias.id,
+        after={"category_id": category.id},
+    )
     await db.commit()
     aliases = (
-        await db.execute(
-            select(CategoryAlias).where(CategoryAlias.category_id == category.id, CategoryAlias.removed_at.is_(None))
+        await db.exec(
+            select(CategoryAlias).where(col(CategoryAlias.category_id) == category.id, col(CategoryAlias.removed_at).is_(None))
         )
-    ).scalars().all()
+    ).all()
     return CategoryOut(id=category.id, name=category.name, status=category.status, aliases=[a.name for a in aliases])
 
 
@@ -133,16 +165,23 @@ async def remove_alias_by_name(
 ) -> dict:
     """按名称移除别名（管理端列表仅展示名称）。"""
     await get_active_category_or_404(db, category_id)
-    alias = await db.scalar(
+    alias = (await db.exec(
         select(CategoryAlias).where(
-            CategoryAlias.category_id == category_id,
-            CategoryAlias.name == name.strip(),
-            CategoryAlias.removed_at.is_(None),
+            col(CategoryAlias.category_id) == category_id,
+            col(CategoryAlias.name) == name.strip(),
+            col(CategoryAlias.removed_at).is_(None),
         )
-    )
+    )).first()
     if not alias:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "别名不存在")
     alias.removed_at = datetime.now(UTC)
+    await audit_service.record_event(
+        db,
+        "admin.category_alias_remove",
+        target_type="category_alias",
+        target_id=alias.id,
+        after={"category_id": category_id, "removed": True},
+    )
     await db.commit()
     return {"detail": "别名已移除"}
 
@@ -155,26 +194,42 @@ async def remove_alias(category_id: int, alias_id: int, admin: CurrentAdmin, db:
     if not alias or alias.category_id != category_id or alias.removed_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "别名不存在")
     alias.removed_at = datetime.now(UTC)
+    await audit_service.record_event(
+        db,
+        "admin.category_alias_remove",
+        target_type="category_alias",
+        target_id=alias.id,
+        after={"category_id": category_id, "removed": True},
+    )
     await db.commit()
     aliases = (
-        await db.execute(
-            select(CategoryAlias).where(CategoryAlias.category_id == category_id, CategoryAlias.removed_at.is_(None))
+        await db.exec(
+            select(CategoryAlias).where(col(CategoryAlias.category_id) == category_id, col(CategoryAlias.removed_at).is_(None))
         )
-    ).scalars().all()
+    ).all()
     return CategoryOut(id=category.id, name=category.name, status=category.status, aliases=[a.name for a in aliases])
 
 
 @router.delete("/{category_id}")
 async def delete_category(category_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
     """逻辑删除：仅从未关联商品的标签可删（4.16），关联检查在服务层执行。"""
-    from sqlalchemy import func
+    from sqlmodel import func
 
     from app.models import ProductTag
 
     category = await get_active_category_or_404(db, category_id)
-    used = await db.scalar(select(func.count()).select_from(ProductTag).where(ProductTag.category_id == category_id))
+    used = (await db.exec(select(func.count()).select_from(ProductTag).where(col(ProductTag.category_id) == category_id))).first()
     if used:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该标签已关联商品，仅可停用")
+    old_status = category.status
     category.deleted_at = datetime.now(UTC)
+    await audit_service.record_event(
+        db,
+        "admin.category_delete",
+        target_type="category",
+        target_id=category.id,
+        before={"status": old_status, "deleted": False},
+        after={"status": category.status, "deleted": True},
+    )
     await db.commit()
     return {"detail": "已删除"}

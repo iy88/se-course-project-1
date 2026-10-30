@@ -1,16 +1,18 @@
 """IM 会话与消息（C-07/C-08，BR-18）：普通私聊与交易分支在同一双人入口下组织。"""
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.models import Conversation, ConversationRead, Message, Product, Trade, User
+from app.models.enums import ConversationType
 from app.schemas.conversation import (
     MessageIn,
     NormalConversationCreateIn,
     ReadAdvanceIn,
 )
+from app.services import audit as audit_service
 from app.services import conversations as conversation_service
 from app.services import im as im_service
 from app.services.im import MAX_MESSAGE_LENGTH, ensure_member, pair_frozen
@@ -30,20 +32,34 @@ async def _get_member_conversation(db: AsyncSession, conversation_id: int, user_
 
 
 async def _get_last_read_id(db: AsyncSession, conversation_id: int, user_id: int) -> int:
-    row = await db.scalar(
+    row = (await db.exec(
         select(ConversationRead).where(
-            ConversationRead.conversation_id == conversation_id, ConversationRead.user_id == user_id
+            col(ConversationRead.conversation_id) == conversation_id, col(ConversationRead.user_id) == user_id
         )
-    )
+    )).first()
     return row.last_read_message_id if row else 0
+
+
+async def _existing_normal_conversation_id(
+    db: AsyncSession, user_a: int, user_b: int
+) -> int | None:
+    """普通私聊按双人排序后的稳定键复用；用于区分新建与幂等复用（BR-18）。"""
+    low, high = sorted((user_a, user_b))
+    return (await db.exec(
+        select(col(Conversation.id)).where(
+            col(Conversation.type) == ConversationType.NORMAL.value,
+            col(Conversation.user_low_id) == low,
+            col(Conversation.user_high_id) == high,
+        )
+    )).first()
 
 
 async def _conversation_item(db: AsyncSession, conversation: Conversation, user_id: int) -> dict:
     last_read_id = await _get_last_read_id(db, conversation.id, user_id)
     unread = await im_service.unread_count(db, conversation.id, user_id, last_read_id)
-    last_message = await db.scalar(
-        select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(1)
-    )
+    last_message = (await db.exec(
+        select(Message).where(col(Message.conversation_id) == conversation.id).order_by(col(Message.id).desc()).limit(1)
+    )).first()
     peer_name = await im_service.get_peer_display_name(db, conversation, user_id)
     peer_id = conversation.user_high_id if user_id == conversation.user_low_id else conversation.user_low_id
     item = {
@@ -83,12 +99,12 @@ async def _conversation_item(db: AsyncSession, conversation: Conversation, user_
 @router.get("")
 async def list_conversations(user: CurrentUser, db: DbSession) -> list[dict]:
     """同一双人入口下展示普通私聊与交易分支（FR-04）。"""
-    result = await db.execute(
+    result = await db.exec(
         select(Conversation)
-        .where((Conversation.user_low_id == user.id) | (Conversation.user_high_id == user.id))
-        .order_by(Conversation.id.desc())
+        .where((col(Conversation.user_low_id) == user.id) | (col(Conversation.user_high_id) == user.id))
+        .order_by(col(Conversation.id).desc())
     )
-    conversations = list(result.scalars())
+    conversations = list(result)
     return [await _conversation_item(db, c, user.id) for c in conversations]
 
 
@@ -101,20 +117,29 @@ async def create_normal(body: NormalConversationCreateIn, user: CurrentUser, db:
     peer = await db.get(User, body.peer_user_id)
     if not peer:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "对方用户不存在")
+    existing_id = await _existing_normal_conversation_id(db, user.id, body.peer_user_id)
     conversation = await conversation_service.get_or_create_normal_conversation(db, user.id, body.peer_user_id)
+    if existing_id is None:
+        await audit_service.record_event(
+            db,
+            "im.conversation_create",
+            target_type="conversation",
+            target_id=conversation.id,
+            after={"type": ConversationType.NORMAL.value, "peer_user_id": body.peer_user_id},
+        )
     await db.commit()
     return {"id": conversation.id, "detail": "会话已就绪"}
 
 
 @router.get("/unread-summary")
 async def unread_summary(user: CurrentUser, db: DbSession) -> dict:
-    result = await db.execute(
-        select(Conversation.id).where(
-            (Conversation.user_low_id == user.id) | (Conversation.user_high_id == user.id)
+    result = await db.exec(
+        select(col(Conversation.id)).where(
+            (col(Conversation.user_low_id) == user.id) | (col(Conversation.user_high_id) == user.id)
         )
     )
     total = 0
-    for (conversation_id,) in result.all():
+    for conversation_id in result.all():
         last_read_id = await _get_last_read_id(db, conversation_id, user.id)
         total += await im_service.unread_count(db, conversation_id, user.id, last_read_id)
     return {"unread": total}
@@ -130,11 +155,11 @@ async def conversation_detail(
 ) -> dict:
     """会话消息（倒序分页）。查看历史不改变已读；已读由 /read 显式推进（BR-18）。"""
     conversation = await _get_member_conversation(db, conversation_id, user.id)
-    query = select(Message).where(Message.conversation_id == conversation.id)
+    query = select(Message).where(col(Message.conversation_id) == conversation.id)
     if before_id is not None:
-        query = query.where(Message.id < before_id)
-    result = await db.execute(query.order_by(Message.id.desc()).limit(limit))
-    messages = list(result.scalars())
+        query = query.where(col(Message.id) < before_id)
+    result = await db.exec(query.order_by(col(Message.id).desc()).limit(limit))
+    messages = list(result)
     messages.reverse()
     item = await _conversation_item(db, conversation, user.id)
     item["messages"] = [
@@ -167,6 +192,13 @@ async def send_message(conversation_id: int, body: MessageIn, user: CurrentUser,
     if await pair_frozen(db, conversation.user_low_id, conversation.user_high_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "当前双方交易沟通受限（冻结期间禁发），可查看历史或通过管理沟通处理")
     message = await conversation_service.send_text_message(db, conversation, user.id, content)
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_IM_MESSAGE_SEND,
+        target_type="conversation",
+        target_id=conversation.id,
+        after={"msg_id": message.id, "kind": message.kind},
+    )
     await db.commit()
     return {"id": message.id, "detail": "已发送"}
 
@@ -175,20 +207,34 @@ async def send_message(conversation_id: int, body: MessageIn, user: CurrentUser,
 async def advance_read(conversation_id: int, body: ReadAdvanceIn, user: CurrentUser, db: DbSession) -> dict:
     """仅将已展示消息标为已读（BR-18）：推进本人该会话已读指针。"""
     conversation = await _get_member_conversation(db, conversation_id, user.id)
-    max_id = await db.scalar(
-        select(Message.id).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(1)
-    )
+    max_id = (await db.exec(
+        select(col(Message.id)).where(col(Message.conversation_id) == conversation.id).order_by(col(Message.id).desc()).limit(1)
+    )).first()
     target = min(body.last_displayed_message_id, int(max_id or 0))
-    row = await db.scalar(
+    row = (await db.exec(
         select(ConversationRead).where(
-            ConversationRead.conversation_id == conversation.id, ConversationRead.user_id == user.id
+            col(ConversationRead.conversation_id) == conversation.id, col(ConversationRead.user_id) == user.id
         )
-    )
+    )).first()
+    previous_read_id = row.last_read_message_id if row is not None else 0
     if row is None:
         row = ConversationRead(conversation_id=conversation.id, user_id=user.id, last_read_message_id=target)
         db.add(row)
+        changed = True
     elif target > row.last_read_message_id:
         row.last_read_message_id = target
+        changed = True
+    else:
+        changed = False
+    if changed:
+        await audit_service.record_event(
+            db,
+            "im.read_advance",
+            target_type="conversation",
+            target_id=conversation.id,
+            before={"last_read_id": previous_read_id},
+            after={"last_read_id": row.last_read_message_id},
+        )
     await db.commit()
     return {"last_read_message_id": row.last_read_message_id}
 
@@ -198,6 +244,15 @@ async def migrate_to_normal(conversation_id: int, user: CurrentUser, db: DbSessi
     """归档分支引导转入普通私聊：不迁移消息、不自动发送（BR-18）。"""
     conversation = await _get_member_conversation(db, conversation_id, user.id)
     peer_id = conversation.user_high_id if user.id == conversation.user_low_id else conversation.user_low_id
+    existing_id = await _existing_normal_conversation_id(db, user.id, peer_id)
     normal = await conversation_service.get_or_create_normal_conversation(db, user.id, peer_id)
+    if existing_id is None:
+        await audit_service.record_event(
+            db,
+            "im.conversation_to_normal",
+            target_type="conversation",
+            target_id=normal.id,
+            after={"type": ConversationType.NORMAL.value, "source_conversation_id": conversation.id},
+        )
     await db.commit()
     return {"id": normal.id, "detail": "已转入普通私聊（历史消息不迁移）"}

@@ -57,7 +57,6 @@ class SendCodeIn(BaseModel):
 
 class CodeOut(BaseModel):
     detail: str
-    dev_code: str | None = None  # 仅开发环境返回，便于联调
 
 
 class ResetPasswordIn(BaseModel):

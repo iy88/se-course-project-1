@@ -1,10 +1,9 @@
 """管理处置动作：封禁/解除及联动（DT-03、BR-32/33、TR-09/10）。"""
-
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import AccountRestriction, CompletionConfirmation, Product, Trade, User
 from app.models.enums import (
@@ -62,22 +61,22 @@ async def freeze_trade(db: AsyncSession, trade: Trade, reason: str, case_id: int
 async def _participant_ban_active(db: AsyncSession, trade: Trade) -> bool:
     """交易任一方仍有生效账户封禁（BR-33：其他有效限制继续生效）。"""
     user_ids = (trade.buyer_id, trade.seller_id)
-    restriction = await db.scalar(
-        select(AccountRestriction.id)
+    restriction = (await db.exec(
+        select(col(AccountRestriction.id))
         .where(
-            AccountRestriction.user_id.in_(user_ids),
-            AccountRestriction.type == "ban",
-            AccountRestriction.status == RestrictionStatus.ACTIVE.value,
+            col(AccountRestriction.user_id).in_(user_ids),
+            col(AccountRestriction.type) == "ban",
+            col(AccountRestriction.status) == RestrictionStatus.ACTIVE.value,
         )
         .limit(1)
-    )
+    )).first()
     if restriction is not None:
         return True
-    banned = await db.scalar(
-        select(User.id)
-        .where(User.id.in_(user_ids), User.status == AccountStatus.BANNED.value)
+    banned = (await db.exec(
+        select(col(User.id))
+        .where(col(User.id).in_(user_ids), col(User.status) == AccountStatus.BANNED.value)
         .limit(1)
-    )
+    )).first()
     return banned is not None
 
 
@@ -99,12 +98,12 @@ async def unfreeze_trade(db: AsyncSession, trade: Trade, reason: str, admin_id: 
         if frozen_base is not None:
             pause_wait_for_freeze(trade, frozen_base)
     trade.frozen = False
-    has_current_confirmation = await db.scalar(
-        select(CompletionConfirmation.id).where(
-            CompletionConfirmation.trade_id == trade.id,
-            CompletionConfirmation.is_current.is_(True),
+    has_current_confirmation = (await db.exec(
+        select(col(CompletionConfirmation.id)).where(
+            col(CompletionConfirmation.trade_id) == trade.id,
+            col(CompletionConfirmation.is_current).is_(True),
         )
-    )
+    )).first()
     eligible = trade.status == TradeStatus.IN_PROGRESS.value and has_current_confirmation is not None
     had_pause = trade.confirm_wait_paused_at is not None or trade.confirm_wait_remaining_seconds is not None
     remaining = resume_wait_after_unfreeze(trade, eligible=eligible, now=now_utc())
@@ -161,11 +160,11 @@ async def ban_user(
 ) -> AccountRestriction:
     """封禁（BR-32/DT-03）：禁写保读；冻结其进行中交易；其商品停止公开展示。"""
     if user.status == AccountStatus.BANNED.value:
-        existing = await db.scalar(
+        existing = (await db.exec(
             select(AccountRestriction).where(
-                AccountRestriction.user_id == user.id, AccountRestriction.status == RestrictionStatus.ACTIVE.value
+                col(AccountRestriction.user_id) == user.id, col(AccountRestriction.status) == RestrictionStatus.ACTIVE.value
             )
-        )
+        )).first()
         if existing:
             return existing
     restriction = AccountRestriction(
@@ -185,23 +184,23 @@ async def ban_user(
         db, user.id, reason=trade_service.BANNED_PENDING_REASON
     )
     # DT-03：封禁任一交易方 → 冻结整个已接受交易进度（已有单方确认时暂停计时）
-    result = await db.execute(
+    result = await db.exec(
         select(Trade).where(
-            ((Trade.buyer_id == user.id) | (Trade.seller_id == user.id)),
-            Trade.status.in_(trade_service.LOCKING_STATUSES),
+            ((col(Trade.buyer_id) == user.id) | (col(Trade.seller_id) == user.id)),
+            col(Trade.status).in_(trade_service.LOCKING_STATUSES),
         )
     )
-    for trade in result.scalars():
+    for trade in result:
         await freeze_trade(db, trade, f"交易方账户被平台封禁：{reason}", case_id, admin_id)
     # DT-03：封禁账户的商品 → 停止公开展示（待接受请求已在上一步按封禁原因关闭）。
     # 交易中商品同样可能被公开访问，必须一并撤销展示；生命周期与锁单保持不变。
-    products = await db.execute(
+    products = await db.exec(
         select(Product).where(
-            Product.seller_id == user.id,
-            Product.status.in_([ProductStatus.LISTED.value, ProductStatus.IN_TRANSACTION.value]),
+            col(Product.seller_id) == user.id,
+            col(Product.status).in_([ProductStatus.LISTED.value, ProductStatus.IN_TRANSACTION.value]),
         )
     )
-    for product in products.scalars():
+    for product in products:
         await restrict_product_display(db, product, f"发布者账户被平台封禁：{reason}", case_id)
     await db.flush()
     if case_id:
@@ -232,12 +231,12 @@ async def unban_user(
     admin_id: int,
 ) -> int:
     """解除封禁（TR-10）：恢复原权限及因处置停止的展示；原非在售商品不自动变为在售。"""
-    result = await db.execute(
+    result = await db.exec(
         select(AccountRestriction).where(
-            AccountRestriction.user_id == user.id, AccountRestriction.status == RestrictionStatus.ACTIVE.value
+            col(AccountRestriction.user_id) == user.id, col(AccountRestriction.status) == RestrictionStatus.ACTIVE.value
         )
     )
-    restrictions = list(result.scalars())
+    restrictions = list(result)
     if not restrictions:
         return 0
     now = now_utc()
@@ -249,24 +248,24 @@ async def unban_user(
     user.status = AccountStatus.NORMAL.value
     lifted_case_ids = {r.case_id for r in restrictions if r.case_id}
     # 仅恢复因本次解除的封禁而停止展示的商品（只解除限制标记，不改生命周期状态）
-    products = await db.execute(
+    products = await db.exec(
         select(Product).where(
-            Product.seller_id == user.id,
-            Product.display_restricted.is_(True),
-            Product.display_restricted_case_id.in_(lifted_case_ids or {0}),
+            col(Product.seller_id) == user.id,
+            col(Product.display_restricted).is_(True),
+            col(Product.display_restricted_case_id).in_(lifted_case_ids or {0}),
         )
     )
-    for product in products.scalars():
+    for product in products:
         product.display_restricted = False
     # 解除因该账户封禁而冻结的交易
-    trades = await db.execute(
+    trades = await db.exec(
         select(Trade).where(
-            ((Trade.buyer_id == user.id) | (Trade.seller_id == user.id)),
-            Trade.frozen.is_(True),
-            Trade.frozen_case_id.in_(lifted_case_ids or {0}),
+            ((col(Trade.buyer_id) == user.id) | (col(Trade.seller_id) == user.id)),
+            col(Trade.frozen).is_(True),
+            col(Trade.frozen_case_id).in_(lifted_case_ids or {0}),
         )
     )
-    for trade in trades.scalars():
+    for trade in trades:
         try:
             await unfreeze_trade(db, trade, f"账户封禁解除：{lift_reason}", admin_id)
         except HTTPException:

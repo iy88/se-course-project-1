@@ -12,6 +12,10 @@ ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
         "confirm_wait_paused_at": "DATETIME",
         "confirm_wait_remaining_seconds": "INTEGER",
     },
+    # 任务 K：旧本地 SQLite 库只追加标签审核原因列，不重建、不丢历史申请。
+    "product_tag_applications": {
+        "decision_reason": "VARCHAR(500)",
+    },
 }
 
 

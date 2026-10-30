@@ -1,7 +1,6 @@
 """跨域业务限制辅助：交易冻结的用户级影响（BR-33、D-50）。"""
-
-from sqlalchemy import or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import Trade
 from app.models.enums import TradeStatus
@@ -21,16 +20,16 @@ async def has_active_frozen_trade(db: AsyncSession, user_id: int) -> bool:
     D-50：仅交易冻结且账户未封禁时，也禁止发布新商品、主动下架、上架及重新上架；
     无关商品合规编辑不因此禁止。封禁的禁写限制由 ensure_can_write 优先执行。
     """
-    result = await db.execute(
-        select(Trade.id)
+    result = await db.exec(
+        select(col(Trade.id))
         .where(
-            Trade.frozen.is_(True),
-            Trade.status.in_(ACTIVE_TRADE_STATUSES),
-            or_(Trade.buyer_id == user_id, Trade.seller_id == user_id),
+            col(Trade.frozen).is_(True),
+            col(Trade.status).in_(ACTIVE_TRADE_STATUSES),
+            or_(col(Trade.buyer_id) == user_id, col(Trade.seller_id) == user_id),
         )
         .limit(1)
     )
-    return result.scalar_one_or_none() is not None
+    return result.one_or_none() is not None
 
 
 async def frozen_trade_party_ids(db: AsyncSession) -> set[int]:
@@ -39,10 +38,10 @@ async def frozen_trade_party_ids(db: AsyncSession) -> set[int]:
     BR-33 的“暂停双方上架及交易操作”是用户级限制：被冻结用户在其他交易中
     也不能推进交易。待办派生用此集合判断 self/other 是否受限。
     """
-    result = await db.execute(
-        select(Trade.buyer_id, Trade.seller_id).where(
-            Trade.frozen.is_(True),
-            Trade.status.in_(ACTIVE_TRADE_STATUSES),
+    result = await db.exec(
+        select(col(Trade.buyer_id), col(Trade.seller_id)).where(
+            col(Trade.frozen).is_(True),
+            col(Trade.status).in_(ACTIVE_TRADE_STATUSES),
         )
     )
     frozen: set[int] = set()

@@ -1,5 +1,6 @@
 """模型汇总：导入全部模型以便 create_all 建表。"""
 
+from app.models.audit import AuditEvent
 from app.models.category import Category, CategoryAlias
 from app.models.governance import (
     DisposalCase,
@@ -20,6 +21,7 @@ from app.models.product import (
     ProhibitedItem,
     ReviewRecord,
 )
+from app.models.stored_object import StoredObject
 from app.models.trade import (
     CompletionConfirmation,
     Trade,
@@ -31,6 +33,7 @@ from app.models.user import AccountRestriction, User
 
 __all__ = [
     "AccountRestriction",
+    "AuditEvent",
     "Category",
     "CategoryAlias",
     "Comment",
@@ -51,9 +54,13 @@ __all__ = [
     "Report",
     "ReportSupplement",
     "ReviewRecord",
+    "StoredObject",
     "Trade",
     "TradeAgreement",
     "TradeReview",
     "TradeTransition",
+    "UploadLease",
     "User",
 ]
+
+from app.models.upload_lease import UploadLease

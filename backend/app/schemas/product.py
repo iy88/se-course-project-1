@@ -39,6 +39,19 @@ class PendingTagApplicationOut(BaseModel):
     requested_name: str
 
 
+class DecidedTagApplicationOut(BaseModel):
+    """卖方本人已处理的标签申请结果（含拒绝原因；历史记录原因可空）。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    requested_name: str
+    status: str
+    resolved_category_id: int | None = None
+    decision_reason: str | None = None
+    decided_at: datetime | None = None
+
+
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,6 +70,8 @@ class ProductOut(BaseModel):
     tag_names: list[str] = []
     # 仅卖方本人可见的当前有效待审标签申请；其他查看者恒为空
     pending_tag_applications: list[PendingTagApplicationOut] = []
+    # 仅卖方本人可见的已处理标签申请及原因；历史记录原因可为空
+    decided_tag_applications: list[DecidedTagApplicationOut] = []
     created_at: datetime
     updated_at: datetime
     pending_request_count: int = 0  # 卖方视角：待接受请求数

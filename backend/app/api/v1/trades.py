@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.models import (
@@ -33,6 +33,7 @@ from app.schemas.trade import (
     RejectIn,
     RequestCreateIn,
 )
+from app.services import audit as audit_service
 from app.services import cases as case_service
 from app.services import conversations as conversation_service
 from app.services import trade_ops, trade_wait
@@ -85,17 +86,17 @@ def _effective_agreement(trade: Trade, agreements: list[TradeAgreement]) -> Trad
 
 async def _trade_out(db: AsyncSession, trade: Trade, user: User) -> dict:
     agreements = (
-        await db.execute(select(TradeAgreement).where(TradeAgreement.trade_id == trade.id).order_by(TradeAgreement.id))
-    ).scalars().all()
+        await db.exec(select(TradeAgreement).where(col(TradeAgreement.trade_id) == trade.id).order_by(col(TradeAgreement.id)))
+    ).all()
     confirms = (
-        await db.execute(
-            select(CompletionConfirmation).where(CompletionConfirmation.trade_id == trade.id).order_by(CompletionConfirmation.id)
+        await db.exec(
+            select(CompletionConfirmation).where(col(CompletionConfirmation.trade_id) == trade.id).order_by(col(CompletionConfirmation.id))
         )
-    ).scalars().all()
+    ).all()
     product = await db.get(Product, trade.product_id)
-    conversation = await db.scalar(
-        select(Conversation).where(Conversation.trade_id == trade.id, Conversation.type == "trade")
-    )
+    conversation = (await db.exec(
+        select(Conversation).where(col(Conversation.trade_id) == trade.id, col(Conversation.type) == "trade")
+    )).first()
     my_role = "buyer" if trade.buyer_id == user.id else "seller"
     buyer = await db.get(User, trade.buyer_id)
     seller = await db.get(User, trade.seller_id)
@@ -107,9 +108,9 @@ async def _trade_out(db: AsyncSession, trade: Trade, user: User) -> dict:
     other_party_confirmed = any(
         c.confirmer_id != user.id and c.is_current for c in confirms
     )
-    already_reviewed = await db.scalar(
-        select(TradeReview.id).where(TradeReview.trade_id == trade.id, TradeReview.reviewer_id == user.id)
-    )
+    already_reviewed = (await db.exec(
+        select(col(TradeReview.id)).where(col(TradeReview.trade_id) == trade.id, col(TradeReview.reviewer_id) == user.id)
+    )).first()
     return {
         "id": trade.id,
         "status": trade.status,
@@ -204,9 +205,15 @@ async def _trade_out(db: AsyncSession, trade: Trade, user: User) -> dict:
 
 @router.post("/requests")
 async def create_request(body: RequestCreateIn, user: CurrentUser, db: DbSession) -> dict:
-    """发起购买请求（BR-01/02）：不锁单；创建独立交易分支并通知卖方。"""
+    """发起购买请求（BR-01/02）：不锁单；创建独立交易分支并通知卖方。
+
+    请求虽不产生锁单，但必须先按商品行锁串行化，再读取商品可请求性、买卖双方
+    资格与重复 pending。否则请求可在“看到 listed”后等待，等卖方 accept 已把商品
+    置为 in_transaction 再插入 pending，破坏“已锁单商品不可再请求”的一致性。
+    """
     ensure_can_write(user)
-    product = await db.get(Product, body.product_id)
+    # 与 accept/admin adjust 相同的第一把锁：商品。锁后读取到的状态才是当前状态。
+    product = await trade_service.lock_product_for_update(db, body.product_id)
     if not product or product.status != ProductStatus.LISTED.value or product.display_restricted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在或当前不可请求")
     if product.seller_id == user.id:
@@ -214,58 +221,68 @@ async def create_request(body: RequestCreateIn, user: CurrentUser, db: DbSession
     # R3/BR-33：买方的全局交易资格与卖方的全局交易资格都须有效。
     await _ensure_user_can_trade(db, user.id)
     await _ensure_user_can_trade(db, product.seller_id)
-    existing = await db.scalar(
-        select(Trade).where(
-            Trade.product_id == product.id,
-            Trade.buyer_id == user.id,
-            Trade.status == TradeStatus.PENDING_ACCEPTANCE.value,
-        )
-    )
+    existing = await trade_service.find_pending_request(db, product.id, user.id)
     if existing:
         # 重复提交返回已有结果（6.5 重试一致）
         return {"id": existing.id, "detail": "您对该商品已有待接受的购买请求", "existing": True}
-    trade = Trade(
-        product_id=product.id,
-        buyer_id=user.id,
-        seller_id=product.seller_id,
-        status=TradeStatus.PENDING_ACCEPTANCE.value,
-        request_note=(body.note or "").strip() or None,
-    )
-    db.add(trade)
-    await db.flush()
-    branch = await conversation_service.create_trade_branch(db, trade.id, trade.buyer_id, trade.seller_id)
-    await conversation_service.send_system_message(
-        db,
-        branch.id,
-        f"买方发起了对商品「{product.title}」的购买请求，请卖方在交易分支或通知中心处理。",
-    )
-    await trade_ops.record_transition(db, trade, None, TradeStatus.PENDING_ACCEPTANCE.value, trigger="request_created", actor=user, actor_role="buyer")
-    await notify(
-        db,
-        [trade.seller_id],
-        "request_created",
-        "收到新的购买请求",
-        f"商品「{product.title}」收到来自 {user.display_name} 的购买请求，可进入交易分支沟通。",
-        link_type="conversation",
-        link_id=branch.id,
-        payload={"trade_id": trade.id, "product_id": product.id},
-    )
-    await db.commit()
+    product_id = product.id
+    buyer_id = user.id
+    try:
+        trade = Trade(
+            product_id=product_id,
+            buyer_id=buyer_id,
+            seller_id=product.seller_id,
+            status=TradeStatus.PENDING_ACCEPTANCE.value,
+            request_note=(body.note or "").strip() or None,
+        )
+        db.add(trade)
+        await db.flush()
+        branch = await conversation_service.create_trade_branch(db, trade.id, trade.buyer_id, trade.seller_id)
+        await conversation_service.send_system_message(
+            db,
+            branch.id,
+            f"买方发起了对商品「{product.title}」的购买请求，请卖方在交易分支或通知中心处理。",
+        )
+        await trade_ops.record_transition(db, trade, None, TradeStatus.PENDING_ACCEPTANCE.value, trigger="request_created", actor=user, actor_role="buyer")
+        await notify(
+            db,
+            [trade.seller_id],
+            "request_created",
+            "收到新的购买请求",
+            f"商品「{product.title}」收到来自 {user.display_name} 的购买请求，可进入交易分支沟通。",
+            link_type="conversation",
+            link_id=branch.id,
+            payload={"trade_id": trade.id, "product_id": product_id},
+        )
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_TRADE_REQUEST_CREATE,
+            target_type="trade",
+            target_id=trade.id,
+            after={"status": trade.status, "product_id": product_id},
+        )
+        await db.commit()
+    except IntegrityError as exc:
+        # 预检查后并发插入仍由条件唯一索引裁决：整笔回滚后返回已有请求。
+        existing_trade = await trade_service.resolve_duplicate_pending_request(
+            db, exc, product_id=product_id, buyer_id=buyer_id
+        )
+        return {"id": existing_trade.id, "detail": "您对该商品已有待接受的购买请求", "existing": True}
     return {"id": trade.id, "detail": "购买请求已发送，等待卖方接受"}
 
 
 @router.get("/mine")
 async def my_trades(user: CurrentUser, db: DbSession, role: str = Query(default="all", pattern="^(all|buyer|seller)$")) -> list[dict]:
     """我的交易：覆盖买卖双方身份全部请求和交易（FR-12）。"""
-    query = select(Trade).order_by(Trade.id.desc())
+    query = select(Trade).order_by(col(Trade.id).desc())
     if role == "buyer":
-        query = query.where(Trade.buyer_id == user.id)
+        query = query.where(col(Trade.buyer_id) == user.id)
     elif role == "seller":
-        query = query.where(Trade.seller_id == user.id)
+        query = query.where(col(Trade.seller_id) == user.id)
     else:
-        query = query.where((Trade.buyer_id == user.id) | (Trade.seller_id == user.id))
-    result = await db.execute(query)
-    trades = list(result.scalars())
+        query = query.where((col(Trade.buyer_id) == user.id) | (col(Trade.seller_id) == user.id))
+    result = await db.exec(query)
+    trades = list(result)
     return [await _trade_out(db, t, user) for t in trades]
 
 
@@ -281,16 +298,16 @@ async def trade_transitions(trade_id: int, user: CurrentUser, db: DbSession) -> 
     trade = await _party_trade(db, trade_id, user.id)
     from app.models import TradeTransition
 
-    result = await db.execute(
-        select(TradeTransition).where(TradeTransition.trade_id == trade.id).order_by(TradeTransition.id)
+    result = await db.exec(
+        select(TradeTransition).where(col(TradeTransition.trade_id) == trade.id).order_by(col(TradeTransition.id))
     )
-    actor_ids = {t.actor_id for t in result.scalars() if t.actor_id}
+    actor_ids = {t.actor_id for t in result if t.actor_id}
     names: dict[int, str] = {}
     if actor_ids:
-        rows = await db.execute(select(User.id, User.display_name).where(User.id.in_(actor_ids)))
+        rows = await db.exec(select(col(User.id), col(User.display_name)).where(col(User.id).in_(actor_ids)))
         names = {uid: n for uid, n in rows.all()}
-    result = await db.execute(
-        select(TradeTransition).where(TradeTransition.trade_id == trade.id).order_by(TradeTransition.id)
+    result = await db.exec(
+        select(TradeTransition).where(col(TradeTransition.trade_id) == trade.id).order_by(col(TradeTransition.id))
     )
     return [
         {
@@ -305,66 +322,109 @@ async def trade_transitions(trade_id: int, user: CurrentUser, db: DbSession) -> 
             "basis_case_id": t.basis_case_id,
             "created_at": t.created_at.isoformat() if t.created_at else None,
         }
-        for t in result.scalars()
+        for t in result
     ]
 
 
 @router.post("/{trade_id}/accept")
 async def accept_request(trade_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """卖方接受（TR-11/DT-01）：锁单、商品交易中、关闭其余待接受请求。"""
+    """卖方接受（TR-11/DT-01）：锁单、商品交易中、关闭其余待接受请求。
+
+    并发约束：任何交易/状态/通知/审计写入之前，必须先按商品行锁串行化，
+    再重新读取目标交易并校验状态与现有锁单。不能先改各自的 trade 再关闭
+    对方的 pending，否则两笔接受会形成 trade→product 的交叉锁序并死锁。
+    """
     ensure_can_write(user)
     trade = await _party_trade(db, trade_id, user.id)
     if trade.seller_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "仅卖方可接受请求")
-    if trade.status != TradeStatus.PENDING_ACCEPTANCE.value:
-        raise HTTPException(status.HTTP_409_CONFLICT, "该请求当前不可接受")
-    await _ensure_trade_actors_eligible(db, trade)
-    await trade_service.ensure_no_locking_conflict(db, trade, TradeStatus.IN_PROGRESS.value)
-    product = await db.get(Product, trade.product_id)
-    if product is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
-    product_id = product.id
-    try:
-        from_status = trade.status
-        trade.status = TradeStatus.IN_PROGRESS.value
-        trade.accepted_at = datetime.now(UTC)
-        trade.product_snapshot_json = await trade_ops.product_snapshot(db, product)
-        product.status = ProductStatus.IN_TRANSACTION.value
-        await trade_ops.record_transition(db, trade, from_status, TradeStatus.IN_PROGRESS.value, trigger="request_accepted", actor=user, actor_role="seller")
-        # 关闭其余待接受请求并通知（DT-01）
-        others = await trade_service.close_pending_requests_for_product(
-            db, product.id, CLOSED_BY_LOCK, exclude_trade_ids={trade.id}
-        )
-        for other in others:
+    product_id = trade.product_id
+    user_id = user.id
+    # 死锁/序列化失败时整事务回滚后重试一次；事务内通知、审计、转移随回滚消失。
+    for attempt in range(2):
+        try:
+            # 1. 统一锁序第一步：先锁商品行，再重新读取交易。并发接受在此排队。
+            product = await trade_service.lock_product_for_update(db, product_id)
+            if product is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
+            # 2. 锁后重新校验目标交易，不能沿用加锁前的过期状态。
+            trade = (await db.exec(
+                select(Trade)
+                .where(col(Trade.id) == trade_id)
+                .execution_options(populate_existing=True)
+            )).first()
+            if trade is None or user_id not in (trade.buyer_id, trade.seller_id):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
+            if trade.seller_id != user_id:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "仅卖方可接受请求")
+            if trade.status != TradeStatus.PENDING_ACCEPTANCE.value:
+                raise HTTPException(status.HTTP_409_CONFLICT, "该请求当前不可接受")
+            await _ensure_trade_actors_eligible(db, trade)
+            await trade_service.ensure_no_locking_conflict(db, trade, TradeStatus.IN_PROGRESS.value)
+            # 3. 通过锁后校验才开始写入；后续关闭其他 pending 时已独占商品锁。
+            from_status = trade.status
+            trade.status = TradeStatus.IN_PROGRESS.value
+            trade.accepted_at = datetime.now(UTC)
+            trade.product_snapshot_json = await trade_ops.product_snapshot(db, product)
+            product.status = ProductStatus.IN_TRANSACTION.value
+            await trade_ops.record_transition(db, trade, from_status, TradeStatus.IN_PROGRESS.value, trigger="request_accepted", actor=user, actor_role="seller")
+            # 关闭其余待接受请求并通知（DT-01）
+            others = await trade_service.close_pending_requests_for_product(
+                db, product.id, CLOSED_BY_LOCK, exclude_trade_ids={trade.id}
+            )
+            for other in others:
+                await notify(
+                    db,
+                    [other.buyer_id],
+                    "request_closed",
+                    "您的购买请求已关闭",
+                    f"商品「{product.title}」已被其他用户锁单，您的请求已关闭。",
+                    link_type="trade",
+                    link_id=other.id,
+                )
+            conversation = (await db.exec(select(Conversation).where(col(Conversation.trade_id) == trade.id, col(Conversation.type) == "trade"))).first()
+            if conversation is None:
+                # 请求创建时必定生成交易分支（BR-01/18）；缺失属于数据完整性异常。
+                raise RuntimeError("交易分支缺失，无法完成接受请求")
+            await conversation_service.send_system_message(db, conversation.id, "卖方已接受该购买请求，交易进入进行中。")
             await notify(
                 db,
-                [other.buyer_id],
-                "request_closed",
-                "您的购买请求已关闭",
-                f"商品「{product.title}」已被其他用户锁单，您的请求已关闭。",
-                link_type="trade",
-                link_id=other.id,
+                [trade.buyer_id],
+                "request_accepted",
+                "您的购买请求已被接受",
+                f"商品「{product.title}」的请求已被卖方接受，请进入交易分支沟通并确认交易约定。",
+                link_type="conversation",
+                link_id=conversation.id,
+                payload={"trade_id": trade.id},
             )
-        conversation = await db.scalar(select(Conversation).where(Conversation.trade_id == trade.id, Conversation.type == "trade"))
-        if conversation is None:
-            # 请求创建时必定生成交易分支（BR-01/18）；缺失属于数据完整性异常。
-            raise RuntimeError("交易分支缺失，无法完成接受请求")
-        await conversation_service.send_system_message(db, conversation.id, "卖方已接受该购买请求，交易进入进行中。")
-        await notify(
-            db,
-            [trade.buyer_id],
-            "request_accepted",
-            "您的购买请求已被接受",
-            f"商品「{product.title}」的请求已被卖方接受，请进入交易分支沟通并确认交易约定。",
-            link_type="conversation",
-            link_id=conversation.id,
-            payload={"trade_id": trade.id},
-        )
-        await db.commit()
-    except IntegrityError as exc:
-        # D-48：预检后并发接受由唯一索引裁决；409 前回滚全部写入，不残留通知/关闭。
-        await trade_service.resolve_lock_integrity_error(db, exc, product_id=product_id)
-    return {"detail": "已接受，交易进行中"}
+            await audit_service.record_event(
+                db,
+                audit_service.EVENT_TRADE_ACCEPT,
+                target_type="trade",
+                target_id=trade.id,
+                before={"status": from_status},
+                after={"status": trade.status, "product_id": product.id},
+            )
+            await db.commit()
+            return {"detail": "已接受，交易进行中"}
+        except IntegrityError as exc:
+            # D-48：预检后并发接受由唯一索引裁决；409 前回滚全部写入，不残留通知/关闭。
+            # 锁序修复后正常并发应在锁后状态校验直接 409，此处是最后防线。
+            await trade_service.resolve_lock_integrity_error(db, exc, product_id=product_id)
+        except DBAPIError as exc:
+            await db.rollback()
+            if not trade_service.is_retryable_transaction_error(exc):
+                raise
+            if attempt == 0:
+                # 仅对明确 SQLSTATE 40P01/40001 整事务重试；新事务会重新加锁并校验状态。
+                reloaded_user = await db.get(User, user_id)
+                if reloaded_user is None:
+                    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "账户不存在")
+                user = reloaded_user
+                continue
+            # 明确的事务级并发冲突，整事务已回滚；不把其他数据库错误泛化为 409。
+            raise HTTPException(status.HTTP_409_CONFLICT, "并发冲突，请重试") from exc
+    raise HTTPException(status.HTTP_409_CONFLICT, "并发冲突，请重试")
 
 
 @router.post("/{trade_id}/reject")
@@ -390,6 +450,14 @@ async def reject_request(trade_id: int, body: RejectIn, user: CurrentUser, db: D
         f"商品请求被卖方拒绝：{trade.close_reason}",
         link_type="trade",
         link_id=trade.id,
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_REJECT,
+        target_type="trade",
+        target_id=trade.id,
+        before={"status": from_status},
+        after={"status": trade.status},
     )
     await db.commit()
     return {"detail": "已拒绝"}
@@ -422,6 +490,14 @@ async def withdraw_request(trade_id: int, user: CurrentUser, db: DbSession) -> d
         link_type="trade",
         link_id=trade.id,
     )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_WITHDRAW,
+        target_type="trade",
+        target_id=trade.id,
+        before={"status": from_status},
+        after={"status": trade.status},
+    )
     await db.commit()
     return {"detail": "已撤回"}
 
@@ -438,17 +514,17 @@ async def propose_agreement(trade_id: int, body: AgreementProposeIn, user: Curre
         raise HTTPException(status.HTTP_409_CONFLICT, "当前交易状态不能提出约定")
     await _ensure_not_frozen(trade)
     await _ensure_trade_actors_eligible(db, trade)
-    pending = await db.scalar(
-        select(TradeAgreement).where(TradeAgreement.trade_id == trade.id, TradeAgreement.status == AgreementStatus.PROPOSED.value)
-    )
+    pending = (await db.exec(
+        select(TradeAgreement).where(col(TradeAgreement.trade_id) == trade.id, col(TradeAgreement.status) == AgreementStatus.PROPOSED.value)
+    )).first()
     if pending:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "已有待确认的约定提案，须先由对方同意或拒绝",
         )
-    count = await db.scalar(
-        select(TradeAgreement).where(TradeAgreement.trade_id == trade.id).order_by(TradeAgreement.id.desc()).limit(1)
-    )
+    count = (await db.exec(
+        select(TradeAgreement).where(col(TradeAgreement.trade_id) == trade.id).order_by(col(TradeAgreement.id).desc()).limit(1)
+    )).first()
     round_no = (count.round_no + 1) if count else 1
     agreement = TradeAgreement(
         trade_id=trade.id,
@@ -474,6 +550,13 @@ async def propose_agreement(trade_id: int, body: AgreementProposeIn, user: Curre
         link_type="trade",
         link_id=trade.id,
     )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_AGREEMENT_PROPOSE,
+        target_type="trade_agreement",
+        target_id=agreement.id,
+        after={"trade_id": trade.id, "round_no": round_no, "status": agreement.status},
+    )
     await db.commit()
     return {"id": agreement.id, "detail": "提案已发送，等待对方确认"}
 
@@ -488,6 +571,7 @@ async def _decide_agreement(db: AsyncSession, trade: Trade, agreement_id: int, u
         raise HTTPException(status.HTTP_409_CONFLICT, "该提案已被处理")
     await _ensure_not_frozen(trade)
     await _ensure_trade_actors_eligible(db, trade)
+    agreement_status_before = agreement.status
     agreement.decided_at = datetime.now(UTC)
     other = trade.seller_id if user.id == trade.buyer_id else trade.buyer_id
     if decision == "confirm":
@@ -496,12 +580,12 @@ async def _decide_agreement(db: AsyncSession, trade: Trade, agreement_id: int, u
         await trade_ops.clear_current_confirmations(db, trade.id)
         trade_wait.clear_wait_state(trade)
         # 变更生效：原有效安排标记为已替换，历史保留（4.15）
-        result = await db.execute(
+        result = await db.exec(
             select(TradeAgreement).where(
-                TradeAgreement.trade_id == trade.id, TradeAgreement.status == AgreementStatus.CONFIRMED.value
+                col(TradeAgreement.trade_id) == trade.id, col(TradeAgreement.status) == AgreementStatus.CONFIRMED.value
             )
         )
-        for row in result.scalars():
+        for row in result:
             row.status = AgreementStatus.SUPERSEDED.value
         agreement.status = AgreementStatus.CONFIRMED.value
         trade.current_agreement_id = agreement.id
@@ -518,6 +602,18 @@ async def _decide_agreement(db: AsyncSession, trade: Trade, agreement_id: int, u
             link_type="trade", link_id=trade.id,
         )
         detail = "已拒绝该提案"
+    await audit_service.record_event(
+        db,
+        (
+            audit_service.EVENT_AGREEMENT_CONFIRM
+            if decision == "confirm"
+            else audit_service.EVENT_AGREEMENT_REJECT
+        ),
+        target_type="trade_agreement",
+        target_id=agreement.id,
+        before={"status": agreement_status_before},
+        after={"status": agreement.status, "trade_id": trade.id},
+    )
     await db.commit()
     return {"detail": detail}
 
@@ -550,17 +646,26 @@ async def submit_confirmation(trade_id: int, body: ConfirmationIn, user: Current
     trade = await _party_trade(db, trade_id, user.id)
     if trade.status != TradeStatus.IN_PROGRESS.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "仅进行中交易可提交完成确认")
+    product_id = trade.product_id
+    user_id = user.id
+    # 完成确认可能触发 finish_trade（trade 结束后下架商品）；先按“商品 → 交易”
+    # 统一锁序，不能持 trade 行等待商品，避免与 accept/admin adjust 交叉死锁。
+    trade = await trade_service.lock_product_then_trade(db, trade_id, product_id)
+    if trade is None or user_id not in (trade.buyer_id, trade.seller_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
+    if trade.status != TradeStatus.IN_PROGRESS.value:
+        raise HTTPException(status.HTTP_409_CONFLICT, "仅进行中交易可提交完成确认")
     await _ensure_not_frozen(trade)
     await _ensure_trade_actors_eligible(db, trade)
     if not trade.current_agreement_id:
         raise HTTPException(status.HTTP_409_CONFLICT, "须先确认交易约定，才能提交完成确认")
-    existing = await db.scalar(
+    existing = (await db.exec(
         select(CompletionConfirmation).where(
-            CompletionConfirmation.trade_id == trade.id,
-            CompletionConfirmation.confirmer_id == user.id,
-            CompletionConfirmation.is_current.is_(True),
+            col(CompletionConfirmation.trade_id) == trade.id,
+            col(CompletionConfirmation.confirmer_id) == user.id,
+            col(CompletionConfirmation.is_current).is_(True),
         )
-    )
+    )).first()
     if existing:
         return {"detail": "您已提交完成确认，等待对方确认", "existing": True}
     confirmation = CompletionConfirmation(trade_id=trade.id, confirmer_id=user.id, note=(body.note or "").strip() or None)
@@ -570,14 +675,23 @@ async def submit_confirmation(trade_id: int, body: ConfirmationIn, user: Current
     trade.confirm_wait_paused_at = None
     trade.confirm_wait_remaining_seconds = None
     other = trade.seller_id if user.id == trade.buyer_id else trade.buyer_id
-    both = await db.execute(
+    both = await db.exec(
         select(CompletionConfirmation).where(
-            CompletionConfirmation.trade_id == trade.id, CompletionConfirmation.is_current.is_(True)
+            col(CompletionConfirmation.trade_id) == trade.id, col(CompletionConfirmation.is_current).is_(True)
         )
     )
-    confirmers = {c.confirmer_id for c in both.scalars()}
+    confirmers = {c.confirmer_id for c in both}
     if {trade.buyer_id, trade.seller_id} <= confirmers:
         await trade_ops.finish_trade(db, trade, to_status=TradeStatus.COMPLETED, trigger="both_confirmed", actor=user, actor_role=("buyer" if user.id == trade.buyer_id else "seller"), title="")
+        await db.flush()
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_TRADE_COMPLETION_CONFIRM,
+            target_type="trade",
+            target_id=trade.id,
+            before={"status": TradeStatus.IN_PROGRESS.value},
+            after={"status": trade.status, "confirmation_id": confirmation.id},
+        )
         await db.commit()
         return {"detail": "双方均确认完成，交易已完成"}
     await notify(
@@ -588,6 +702,15 @@ async def submit_confirmation(trade_id: int, body: ConfirmationIn, user: Current
         "对方已确认交付与支付完成，请核实后提交本人确认；7 天未回应将转异常处理。",
         link_type="trade",
         link_id=trade.id,
+    )
+    await db.flush()
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_COMPLETION_CONFIRM,
+        target_type="trade",
+        target_id=trade.id,
+        before={"status": TradeStatus.IN_PROGRESS.value},
+        after={"status": trade.status, "confirmation_id": confirmation.id},
     )
     await db.commit()
     return {"detail": "已记录本人确认，等待对方确认"}
@@ -603,20 +726,47 @@ async def propose_cancel(trade_id: int, body: CancelIn, user: CurrentUser, db: D
     trade = await _party_trade(db, trade_id, user.id)
     if trade.status not in (TradeStatus.IN_PROGRESS.value, TradeStatus.DISPUTED.value):
         raise HTTPException(status.HTTP_409_CONFLICT, "当前交易状态不能取消")
+    product_id = trade.product_id
+    user_id = user.id
+    # 取消可能直接结束交易并下架商品；先商品后交易，避免 trade→product 反向等待。
+    trade = await trade_service.lock_product_then_trade(db, trade_id, product_id)
+    if trade is None or user_id not in (trade.buyer_id, trade.seller_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
+    if trade.status not in (TradeStatus.IN_PROGRESS.value, TradeStatus.DISPUTED.value):
+        raise HTTPException(status.HTTP_409_CONFLICT, "当前交易状态不能取消")
     await _ensure_not_frozen(trade)
     await _ensure_trade_actors_eligible(db, trade)
     other = trade.seller_id if user.id == trade.buyer_id else trade.buyer_id
     reason = (body.reason or "").strip() or None
     is_buyer = user.id == trade.buyer_id
     has_effective_agreement = trade.current_agreement_id is not None
+    before_status = trade.status
     if not has_effective_agreement and is_buyer and trade.status == TradeStatus.IN_PROGRESS.value:
         # 首次约定前买方可直接取消（BR-06）
         await trade_ops.finish_trade(db, trade, to_status=TradeStatus.TERMINATED, trigger="buyer_cancel", actor=user, actor_role="buyer", reason=reason)
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_TRADE_CANCEL_CONFIRM,
+            target_type="trade",
+            target_id=trade.id,
+            reason_code="buyer_direct_cancel",
+            before={"status": before_status},
+            after={"status": trade.status},
+        )
         await db.commit()
         return {"detail": "交易已终止"}
     if trade.cancel_requested_by_id and trade.cancel_requested_by_id != user.id:
         # 对方已申请，本次操作视为同意取消
         await trade_ops.finish_trade(db, trade, to_status=TradeStatus.TERMINATED, trigger="cancel_agreed", actor=user, actor_role=("buyer" if is_buyer else "seller"), reason=reason)
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_TRADE_CANCEL_CONFIRM,
+            target_type="trade",
+            target_id=trade.id,
+            reason_code="cancel_agreed",
+            before={"status": before_status},
+            after={"status": trade.status},
+        )
         await db.commit()
         return {"detail": "双方同意，交易已终止"}
     if trade.cancel_requested_by_id == user.id:
@@ -626,6 +776,14 @@ async def propose_cancel(trade_id: int, body: CancelIn, user: CurrentUser, db: D
     await notify(
         db, [other], "cancel_requested", "收到交易取消申请", "对方发起取消申请，请进入交易查看并确认。",
         link_type="trade", link_id=trade.id,
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_CANCEL_REQUEST,
+        target_type="trade",
+        target_id=trade.id,
+        before={"status": before_status},
+        after={"status": trade.status, "cancel_requested": True},
     )
     await db.commit()
     return {"detail": "取消申请已发送，等待对方同意"}
@@ -638,13 +796,30 @@ async def confirm_cancel(trade_id: int, body: CancelIn, user: CurrentUser, db: D
     trade = await _party_trade(db, trade_id, user.id)
     if trade.status not in (TradeStatus.IN_PROGRESS.value, TradeStatus.DISPUTED.value):
         raise HTTPException(status.HTTP_409_CONFLICT, "当前交易状态不能取消")
+    product_id = trade.product_id
+    user_id = user.id
+    # 确认取消会结束交易并下架商品；与完成确认、accept、admin adjust 统一锁序。
+    trade = await trade_service.lock_product_then_trade(db, trade_id, product_id)
+    if trade is None or user_id not in (trade.buyer_id, trade.seller_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
+    if trade.status not in (TradeStatus.IN_PROGRESS.value, TradeStatus.DISPUTED.value):
+        raise HTTPException(status.HTTP_409_CONFLICT, "当前交易状态不能取消")
     await _ensure_not_frozen(trade)
     await _ensure_trade_actors_eligible(db, trade)
     if not trade.cancel_requested_by_id:
         raise HTTPException(status.HTTP_409_CONFLICT, "当前没有待确认的取消申请")
     if trade.cancel_requested_by_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能确认本人发起的取消申请")
+    before_status = trade.status
     await trade_ops.finish_trade(db, trade, to_status=TradeStatus.TERMINATED, trigger="cancel_agreed", actor=user, actor_role=("buyer" if user.id == trade.buyer_id else "seller"), reason=(body.reason or "").strip() or None)
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_CANCEL_CONFIRM,
+        target_type="trade",
+        target_id=trade.id,
+        before={"status": before_status},
+        after={"status": trade.status},
+    )
     await db.commit()
     return {"detail": "双方同意，交易已终止"}
 
@@ -659,6 +834,13 @@ async def withdraw_cancel(trade_id: int, user: CurrentUser, db: DbSession) -> di
     await _ensure_trade_actors_eligible(db, trade)
     trade.cancel_requested_by_id = None
     trade.cancel_requested_at = None
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_CANCEL_WITHDRAW,
+        target_type="trade",
+        target_id=trade.id,
+        after={"cancel_requested": False},
+    )
     await db.commit()
     return {"detail": "已撤回取消申请"}
 
@@ -697,6 +879,14 @@ async def create_dispute(trade_id: int, body: DisputeIn, user: CurrentUser, db: 
         db, [other], "trade_dispute", "交易进入争议状态", "对方对交易发起争议，交易保持锁单；可通过管理沟通或双方确认解决。",
         link_type="trade", link_id=trade.id,
     )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_DISPUTE_CREATE,
+        target_type="trade",
+        target_id=trade.id,
+        before={"status": from_status},
+        after={"status": trade.status, "case_id": case.id},
+    )
     await db.commit()
     return {"detail": "已进入争议状态", "case_id": case.id}
 
@@ -731,6 +921,14 @@ async def resolve_dispute(trade_id: int, body: CancelIn, user: CurrentUser, db: 
     if trade.resolution_confirmed_by_id and trade.resolution_confirmed_by_id != user.id:
         await trade_service.ensure_no_locking_conflict(db, trade, TradeStatus.IN_PROGRESS.value)
         await _restore_from_dispute(db, trade, user, "buyer" if user.id == trade.buyer_id else "seller", (body.reason or "").strip() or "双方确认解决")
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_TRADE_DISPUTE_RESOLVE,
+            target_type="trade",
+            target_id=trade.id,
+            before={"status": TradeStatus.DISPUTED.value},
+            after={"status": trade.status},
+        )
         await db.commit()
         return {"detail": "双方确认解决，交易恢复进行中"}
     if trade.resolution_confirmed_by_id == user.id:
@@ -741,6 +939,13 @@ async def resolve_dispute(trade_id: int, body: CancelIn, user: CurrentUser, db: 
     await notify(
         db, [other], "dispute_resolved", "对方已确认争议解决", "对方确认争议已解决，等待您确认后交易恢复进行中。",
         link_type="trade", link_id=trade.id,
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_DISPUTE_RESOLVE,
+        target_type="trade",
+        target_id=trade.id,
+        after={"status": trade.status, "resolution_confirmed": True},
     )
     await db.commit()
     return {"detail": "已记录本人确认，等待对方确认"}

@@ -4,21 +4,22 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.core.config import get_settings
 from app.kv.base import get_kv
 from app.models import Comment, Product, User
 from app.models.enums import ProductStatus
+from app.services import audit as audit_service
 from app.services.products import is_detail_visible
 
 router = APIRouter(prefix="/products/{product_id}/comments", tags=["comments"])
 
 
 class CommentIn(BaseModel):
-    content: str = Field(min_length=1, max_length=2000)
+    content: str = Field(min_length=1)
     reply_to_comment_id: int | None = None
 
 
@@ -40,14 +41,14 @@ async def list_comments(product_id: int, user: CurrentUser, db: DbSession) -> li
     product = await db.get(Product, product_id)
     if not product or not is_detail_visible(user, product):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在或不可见")
-    result = await db.execute(
-        select(Comment).where(Comment.product_id == product_id).order_by(Comment.id)
+    result = await db.exec(
+        select(Comment).where(col(Comment.product_id) == product_id).order_by(col(Comment.id))
     )
-    comments = list(result.scalars())
+    comments = list(result)
     author_ids = {c.author_id for c in comments} | {c.reply_to_user_id for c in comments if c.reply_to_user_id}
     authors: dict[int, str] = {}
     if author_ids:
-        rows = await db.execute(select(User.id, User.display_name).where(User.id.in_(author_ids)))
+        rows = await db.exec(select(col(User.id), col(User.display_name)).where(col(User.id).in_(author_ids)))
         authors = {uid: name for uid, name in rows.all()}
     return [
         {
@@ -72,8 +73,6 @@ async def add_comment(product_id: int, body: CommentIn, user: CurrentUser, db: D
     content = body.content.strip()
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "评论内容不能为空")
-    if len(content) > settings.comment_max_length:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"评论最长 {settings.comment_max_length} 字")
     product = await _check_product_commentable(db, product_id)
     kv = get_kv()
     rate_key = f"comment-rate:{user.id}"
@@ -99,6 +98,14 @@ async def add_comment(product_id: int, body: CommentIn, user: CurrentUser, db: D
         reply_to_user_id=reply_to_comment.author_id if reply_to_comment else None,
     )
     db.add(comment)
+    await db.flush()
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_COMMENT_CREATE,
+        target_type="comment",
+        target_id=comment.id,
+        after={"product_id": product_id, "reply_to_comment_id": comment.reply_to_comment_id},
+    )
     await db.commit()
     return {"id": comment.id, "detail": "已发表"}
 
@@ -115,5 +122,12 @@ async def delete_comment(product_id: int, comment_id: int, user: CurrentUser, db
     if comment.deleted_at is None:
         comment.deleted_at = datetime.now(UTC)
         comment.deleted_by_id = user.id
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_COMMENT_DELETE,
+            target_type="comment",
+            target_id=comment.id,
+            after={"deleted": True, "product_id": product_id},
+        )
         await db.commit()
     return {"detail": "已删除"}

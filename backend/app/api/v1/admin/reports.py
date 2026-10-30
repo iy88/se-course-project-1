@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlmodel import col, select
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
@@ -16,6 +16,7 @@ from app.models import (
     User,
 )
 from app.models.enums import CaseStatus, CaseType, ReportStatus
+from app.services import audit as audit_service
 from app.services import cases as case_service
 from app.services import moderation
 from app.services.cases import ensure_claimant
@@ -127,12 +128,12 @@ async def _resolve_related_trades(db, report: Report, case: DisposalCase) -> lis
     if report.target_type == "product":
         product = await db.get(Product, report.target_id)
         if product:
-            locking = await db.scalar(
+            locking = (await db.exec(
                 select(Trade).where(
-                    Trade.product_id == product.id,
-                    Trade.status.in_(["in_progress", "disputed", "abnormal"]),
+                    col(Trade.product_id) == product.id,
+                    col(Trade.status).in_(["in_progress", "disputed", "abnormal"]),
                 )
-            )
+            )).first()
             if locking:
                 trades.append(locking)
     if report.target_type == "message":
@@ -161,13 +162,13 @@ async def list_reports(
     db: DbSession,
     report_status: str = Query(default="all", alias="status", pattern="^(pending|processing|unfounded|handled|all)$"),
 ) -> list[dict]:
-    query = select(Report).order_by(Report.id.desc()).limit(200)
+    query = select(Report).order_by(col(Report.id).desc()).limit(200)
     if report_status != "all":
-        query = query.where(Report.status == report_status)
-    result = await db.execute(query)
+        query = query.where(col(Report.status) == report_status)
+    result = await db.exec(query)
     items = []
-    for report in result.scalars():
-        case = await db.scalar(select(DisposalCase).where(DisposalCase.report_id == report.id).order_by(DisposalCase.id.desc()).limit(1))
+    for report in result:
+        case = (await db.exec(select(DisposalCase).where(col(DisposalCase.report_id) == report.id).order_by(col(DisposalCase.id).desc()).limit(1))).first()
         items.append(
             {
                 "id": report.id,
@@ -211,6 +212,14 @@ async def decide_report(case_id: int, body: ReportDecisionIn, admin: CurrentAdmi
             db, [report.reporter_id], "report_result", "您的举报已处理",
             f"处理结论：{report.public_result}。结果已匿名公开；不披露他人私人信息。",
             link_type="report", link_id=report.id,
+        )
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_ADMIN_REPORT_DECISION,
+            target_type="report",
+            target_id=report.id,
+            reason_code="unfounded",
+            after={"status": report.status, "case_id": case.id},
         )
         await db.commit()
         return {"detail": "已记录不予处理并通知举报人"}
@@ -290,6 +299,21 @@ async def decide_report(case_id: int, body: ReportDecisionIn, admin: CurrentAdmi
         db, [report.reporter_id], "report_result", "您的举报已处理",
         f"处理结论：{report.public_result}。结果已匿名公开。",
         link_type="report", link_id=report.id,
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_REPORT_DECISION,
+        target_type="report",
+        target_id=report.id,
+        reason_code="handled",
+        after={
+            "status": report.status,
+            "case_id": case.id,
+            "removed": actions.remove_content,
+            "restricted": actions.restrict_display,
+            "froze": actions.freeze_trade,
+            "banned": actions.ban_user,
+        },
     )
     await db.commit()
     return {"detail": f"已认定违规并处置：{removal_note or '记录在案'}"}

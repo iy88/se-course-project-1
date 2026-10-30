@@ -3,16 +3,16 @@
 D-51：冻结中的交易绝不按自然墙钟累计；解冻后由 trade_wait 续算剩余时间。
 SQLite 可能返回 naive datetime，统一按 UTC 解释后再比较。
 """
-
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
 from app.models import CompletionConfirmation, Trade, TradeTransition
 from app.models.enums import CaseType, TradeStatus
+from app.services import audit as audit_service
 from app.services.cases import create_case
 from app.services.notifications import notify
 from app.services.trade_wait import as_utc, clear_wait_state
@@ -29,17 +29,17 @@ async def scan_once(db: AsyncSession | None = None) -> int:
         days = get_settings().trade_confirm_timeout_days
         threshold = timedelta(days=days)
         now = datetime.now(UTC)
-        result = await db.execute(
+        result = await db.exec(
             select(Trade).where(
-                Trade.status == TradeStatus.IN_PROGRESS.value,
-                Trade.confirm_wait_started_at.is_not(None),
-                Trade.confirm_wait_paused_at.is_(None),
-                Trade.frozen.is_(False),
-                Trade.confirmations.any(CompletionConfirmation.is_current.is_(True)),
+                col(Trade.status) == TradeStatus.IN_PROGRESS.value,
+                col(Trade.confirm_wait_started_at).is_not(None),
+                col(Trade.confirm_wait_paused_at).is_(None),
+                col(Trade.frozen).is_(False),
+                col(Trade.confirmations).any(col(CompletionConfirmation.is_current).is_(True)),
             )
         )
         trades = []
-        for trade in result.scalars():
+        for trade in result:
             started = as_utc(trade.confirm_wait_started_at)
             if started is None:
                 continue
@@ -87,4 +87,16 @@ async def _to_abnormal(db: AsyncSession, trade: Trade) -> None:
         "单方确认后7天未回应，交易已冻结并转交管理员处理，您可从通知进入管理沟通。",
         link_type="trade",
         link_id=trade.id,
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_SYSTEM_TRADE_TIMEOUT,
+        target_type="trade",
+        target_id=trade.id,
+        actor_id=None,
+        actor_role="system",
+        request_id=None,
+        reason_code="confirm_timeout",
+        before={"status": TradeStatus.IN_PROGRESS.value},
+        after={"status": trade.status, "frozen": True},
     )

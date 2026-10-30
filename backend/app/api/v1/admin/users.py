@@ -2,11 +2,12 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlmodel import col, or_, select
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import AccountRestriction, User
 from app.models.enums import AccountStatus, CaseType
+from app.services import audit as audit_service
 from app.services import cases as case_service
 from app.services import moderation
 
@@ -28,20 +29,20 @@ async def list_users(
     user_status: str = Query(default="all", alias="status", pattern="^(normal|banned|all)$"),
     keyword: str | None = Query(default=None, max_length=100),
 ) -> list[dict]:
-    query = select(User).order_by(User.id.desc()).limit(200)
+    query = select(User).order_by(col(User.id).desc()).limit(200)
     if user_status != "all":
-        query = query.where(User.status == user_status)
+        query = query.where(col(User.status) == user_status)
     if keyword:
         like = f"%{keyword}%"
-        query = query.where(or_(User.email.like(like), User.display_name.like(like)))
-    result = await db.execute(query)
+        query = query.where(or_(col(User.email).like(like), col(User.display_name).like(like)))
+    result = await db.exec(query)
     items = []
-    for user in result.scalars():
-        active_restriction = await db.scalar(
+    for user in result:
+        active_restriction = (await db.exec(
             select(AccountRestriction).where(
-                AccountRestriction.user_id == user.id, AccountRestriction.status == "active"
+                col(AccountRestriction.user_id) == user.id, col(AccountRestriction.status) == "active"
             )
-        )
+        )).first()
         items.append(
             {
                 "id": user.id,
@@ -83,6 +84,14 @@ async def ban_user(user_id: int, body: BanIn, admin: CurrentAdmin, db: DbSession
     await case_service.dispose_case(
         db, case, conclusion="账户封禁", reason=body.reason.strip(), basis="管理员直接处置"
     )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_ACCOUNT_BAN,
+        target_type="user",
+        target_id=user.id,
+        before={"status": AccountStatus.NORMAL.value},
+        after={"status": user.status, "case_id": case.id},
+    )
     await db.commit()
     return {"detail": "账户已封禁，已通知本人并开通处置沟通", "case_id": case.id}
 
@@ -98,14 +107,22 @@ async def unban_user(user_id: int, body: UnbanIn, admin: CurrentAdmin, db: DbSes
     count = await moderation.unban_user(
         db, user, lift_reason=body.lift_reason.strip(), case_id=None, admin_id=admin.id
     )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_ADMIN_ACCOUNT_UNBAN,
+        target_type="user",
+        target_id=user.id,
+        before={"status": AccountStatus.BANNED.value},
+        after={"status": user.status, "lifted_restrictions": count},
+    )
     await db.commit()
     return {"detail": f"已解除 {count} 条封禁限制，原权限与展示资格已恢复"}
 
 
 @router.get("/{user_id}/restrictions")
 async def restriction_history(user_id: int, admin: CurrentAdmin, db: DbSession) -> list[dict]:
-    result = await db.execute(
-        select(AccountRestriction).where(AccountRestriction.user_id == user_id).order_by(AccountRestriction.id)
+    result = await db.exec(
+        select(AccountRestriction).where(col(AccountRestriction.user_id) == user_id).order_by(col(AccountRestriction.id))
     )
     return [
         {
@@ -119,5 +136,5 @@ async def restriction_history(user_id: int, admin: CurrentAdmin, db: DbSession) 
             "lifted_at": r.lifted_at.isoformat() if r.lifted_at else None,
             "lift_reason": r.lift_reason,
         }
-        for r in result.scalars()
+        for r in result
     ]

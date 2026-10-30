@@ -3,9 +3,8 @@
 不新增任务类型、业务记录或权限；通知已读状态不参与待办判定。
 管理员待办来自共享处理池，个人待办恒为空。
 """
-
-from sqlalchemy import or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, or_, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import (
     CompletionConfirmation,
@@ -65,14 +64,14 @@ async def build_todos(db: AsyncSession, user: User) -> list[dict]:
     if not banned:
         frozen_users = await frozen_trade_party_ids(db)
         trades = list(
-            (
-                await db.execute(
+
+                await db.exec(
                     select(Trade).where(
-                        or_(Trade.buyer_id == user.id, Trade.seller_id == user.id),
-                        Trade.status.in_(TRADE_TODO_STATUSES),
+                        or_(col(Trade.buyer_id) == user.id, col(Trade.seller_id) == user.id),
+                        col(Trade.status).in_(TRADE_TODO_STATUSES),
                     )
                 )
-            ).scalars()
+
         )
         trade_ids = [trade.id for trade in trades]
 
@@ -81,31 +80,31 @@ async def build_todos(db: AsyncSession, user: User) -> list[dict]:
         confirmers: dict[int, set[int]] = {}
         if trade_ids:
             for agreement in (
-                await db.execute(
+                await db.exec(
                     select(TradeAgreement).where(
-                        TradeAgreement.trade_id.in_(trade_ids),
-                        TradeAgreement.status == AgreementStatus.PROPOSED.value,
+                        col(TradeAgreement.trade_id).in_(trade_ids),
+                        col(TradeAgreement.status) == AgreementStatus.PROPOSED.value,
                     )
                 )
-            ).scalars():
+            ):
                 pending_agreements[agreement.trade_id] = agreement
             for agreement_id in (
-                await db.execute(
-                    select(TradeAgreement.id).where(
-                        TradeAgreement.trade_id.in_(trade_ids),
-                        TradeAgreement.status == AgreementStatus.CONFIRMED.value,
+                await db.exec(
+                    select(col(TradeAgreement.id)).where(
+                        col(TradeAgreement.trade_id).in_(trade_ids),
+                        col(TradeAgreement.status) == AgreementStatus.CONFIRMED.value,
                     )
                 )
-            ).scalars():
+            ):
                 effective_agreement_ids.add(agreement_id)
             for confirmation in (
-                await db.execute(
+                await db.exec(
                     select(CompletionConfirmation).where(
-                        CompletionConfirmation.trade_id.in_(trade_ids),
-                        CompletionConfirmation.is_current.is_(True),
+                        col(CompletionConfirmation.trade_id).in_(trade_ids),
+                        col(CompletionConfirmation.is_current).is_(True),
                     )
                 )
-            ).scalars():
+            ):
                 confirmers.setdefault(confirmation.trade_id, set()).add(confirmation.confirmer_id)
 
         for trade in trades:
@@ -186,14 +185,14 @@ async def build_todos(db: AsyncSession, user: User) -> list[dict]:
 
     # 管理沟通：本人作为被询问人的当前未回答问询；封禁/冻结时仍保留
     cases = list(
-        (
-            await db.execute(
+
+            await db.exec(
                 select(DisposalCase).where(
-                    DisposalCase.subject_user_id == user.id,
-                    DisposalCase.status != CaseStatus.DISPOSED.value,
+                    col(DisposalCase.subject_user_id) == user.id,
+                    col(DisposalCase.status) != CaseStatus.DISPOSED.value,
                 )
             )
-        ).scalars()
+
     )
     for case in cases:
         last_inquiry: DisposalMessage | None = None
