@@ -71,11 +71,22 @@ def inspect_status():
     return 0 if state['phase'] == 'running' and all(
         alive(r) for r in state['services'].values()) else 1
 
-if len(sys.argv) != 2 or sys.argv[1] not in ('start', 'stop', 'status', '_run'):
-    print('Usage: ./scripts/dev.sh {start|stop|status}\n'
+if len(sys.argv) != 2 or sys.argv[1] not in ('start', 'stop', 'restart', 'status', '_run'):
+    print('Usage: ./scripts/dev.sh {start|stop|restart|status}\n'
           'start runs in the background; use stop to stop all managed services.')
     sys.exit(0 if sys.argv[1:] in ([], ['--help']) else 2)
 action = sys.argv[1]
+if action == 'restart':
+    # 默认沿用正在托管的环境；显式 APP_ENV_FILE 可切换目标。
+    previous_env = load_state().get('env_file')
+    if 'APP_ENV_FILE' not in os.environ and previous_env:
+        os.environ['APP_ENV_FILE'] = previous_env
+    selected_env_path()  # 在停止前验证环境选择参数。
+    script = str(Path(__file__).resolve())
+    result = subprocess.run([sys.executable, script, 'stop'], check=False)
+    if result.returncode:
+        sys.exit(result.returncode)
+    os.execv(sys.executable, [sys.executable, script, 'start'])
 if action == 'start':
     if alive(load_state().get('supervisor')):
         sys.exit('A managed start is already active. Use status or stop.')

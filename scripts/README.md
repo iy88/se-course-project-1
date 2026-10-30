@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.3
-Version-Datetime: 2026-10-30T14:32:28+08:00
+Version: 0.2.4
+Version-Datetime: 2026-10-31T00:18:53+08:00
 -->
 
 # 文档构建
@@ -97,6 +97,6 @@ python3 scripts/cli.py pdf --force --only docs/requirements/01-项目概述.md
 
 ## 开发应用服务
 
-开发分支的统一入口为 `./scripts/dev.sh start|stop|status`，从仓库根目录执行；也可用该脚本绝对路径从其他目录执行。start 后台启动后端8000、管理端5174、移动端5173，默认读取已有 backend/.env.dev，也可通过 APP_ENV_FILE 显式选择其他 dotenv 文件；托管进程不继承 shell 配置覆盖。不复制配置、不启动PG/Redis、不执行迁移或seed。status仅检查进程，停止状态返回1；stop只停止本入口托管服务。日志 var/log/dev-services.log，状态 var/run/dev-services.json。
+开发分支的统一入口为 `./scripts/dev.sh start|stop|restart|status`，从仓库根目录执行；也可用该脚本绝对路径从其他目录执行。start 后台启动后端8000、管理端5174、移动端5173，默认读取已有 backend/.env.dev，也可通过 APP_ENV_FILE 显式选择其他 dotenv 文件；托管进程不继承 shell 配置覆盖。不复制配置、不启动PG/Redis、不执行迁移或seed。restart先停止再启动三端，默认沿用托管环境文件，后端代码通过重启加载；status仅检查进程，停止状态返回1；stop只停止本入口托管服务。日志 var/log/dev-services.log，状态 var/run/dev-services.json。
 
 首次/升级结构先显式迁移；前端锁文件变化先停止服务并分别npm ci。详细配置、初始化和浏览器测试见[环境配置](../docs/development/环境配置.md)与[浏览器清单](../docs/development/浏览器交互验收清单.md)，不要同时使用一键和手动方案。

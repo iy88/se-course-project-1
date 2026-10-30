@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.33
-Version-Datetime: 2026-10-30T22:36:10+08:00
+Version: 0.1.34
+Version-Datetime: 2026-10-31T00:18:53+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -98,6 +98,8 @@ AUDIT_TRUSTED_PROXIES=none
 
 ```bash
 ./scripts/dev.sh start
+# 修改后端代码后重启三端
+./scripts/dev.sh restart
 ./scripts/dev.sh status
 # 测试结束
 ./scripts/dev.sh stop
