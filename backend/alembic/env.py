@@ -7,9 +7,6 @@ from __future__ import annotations
 
 import asyncio
 
-from sqlalchemy import pool, text
-from sqlalchemy.ext.asyncio import create_async_engine
-
 import app.models  # noqa: F401 - 注册全部模型到 metadata
 from alembic import context
 from app.core.config import (
@@ -17,6 +14,8 @@ from app.core.config import (
     validate_migration_context,
 )
 from app.db.session import Base
+from sqlalchemy import pool, text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 config = context.config
 

@@ -1,6 +1,5 @@
 """direct upload leases"""
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = 'c8a1e2f3d4b5'
