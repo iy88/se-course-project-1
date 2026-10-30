@@ -113,6 +113,16 @@
               >
                 删除
               </van-button>
+              <van-button
+                v-if="c.author_id !== session.user.id && !c.deleted && !session.banned"
+                size="mini"
+                plain
+                type="warning"
+                class="comment__report"
+                @click="reportComment(c)"
+              >
+                举报
+              </van-button>
             </div>
           </article>
         </div>
@@ -168,70 +178,24 @@
       </div>
     </div>
 
-    <van-popup
+    <ReportDialog
       v-model:show="reportOpen"
-      position="bottom"
-      round
-      class="app-bottom-popup"
-      :close-on-click-overlay="!reportBusy"
-      @closed="resetReport"
-    >
-      <div class="popup-panel report-form">
-        <h3>举报商品</h3>
-        <p class="report-form__hint">填写举报原因；补充说明与截图证据可选，证据仅管理员可见。</p>
-        <van-field
-          v-model="reportForm.reason"
-          label="原因"
-          type="textarea"
-          rows="2"
-          maxlength="500"
-          show-word-limit
-          required
-          placeholder="请填写举报原因（必填）"
-          :disabled="reportBusy"
-        />
-        <van-field
-          v-model="reportForm.detail"
-          label="补充说明"
-          type="textarea"
-          rows="3"
-          maxlength="2000"
-          show-word-limit
-          placeholder="补充说明（可选，最多 2000 字）"
-          :disabled="reportBusy"
-        />
-        <div class="report-form__evidence">
-          <span class="report-form__label">截图证据（可选，最多 3 张）</span>
-          <van-uploader
-            v-model="reportFiles"
-            :max-count="3"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            :max-size="10 * 1024 * 1024"
-            :disabled="reportBusy"
-            @oversize="showToast('图片不能超过 10 MiB')"
-          />
-        </div>
-        <p v-if="reportError" class="report-form__error">{{ reportError }}</p>
-        <div class="report-form__actions">
-          <van-button block :disabled="reportBusy" @click="reportOpen = false">取消</van-button>
-          <van-button block type="primary" :loading="reportBusy" :disabled="reportBusy" @click="submitReport">
-            提交举报
-          </van-button>
-        </div>
-      </div>
-    </van-popup>
+      :target-type="reportTarget.type"
+      :target-id="reportTarget.id"
+      :title="reportTarget.title"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showConfirmDialog, showDialog, showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
+import ReportDialog from '../components/ReportDialog.vue'
 import http from '../api/http'
-import { uploadImage } from '../api/uploads'
 import { fen2yuan, fmtTime, productStatusLabels } from '../api/labels'
 import { useSession } from '../stores/session'
 
@@ -398,56 +362,19 @@ async function removeComment(c) {
 }
 
 const reportOpen = ref(false)
-const reportBusy = ref(false)
-const reportFiles = ref([])
-const reportError = ref('')
-const reportForm = reactive({ reason: '', detail: '' })
+const reportTarget = ref({ type: 'product', id: null, title: '举报' })
 
-function reportProduct() {
-  resetReport()
+function openReport(type, id, title) {
+  reportTarget.value = { type, id, title }
   reportOpen.value = true
 }
 
-function resetReport() {
-  reportForm.reason = ''
-  reportForm.detail = ''
-  reportFiles.value = []
-  reportError.value = ''
+function reportProduct() {
+  openReport('product', Number(route.params.id), '举报商品')
 }
 
-async function submitReport() {
-  if (reportBusy.value) return
-  const reason = reportForm.reason.trim()
-  if (!reason) {
-    reportError.value = '请填写举报原因。'
-    return
-  }
-  if (reason.length > 500) {
-    reportError.value = '举报原因最多 500 字。'
-    return
-  }
-  reportBusy.value = true
-  reportError.value = ''
-  try {
-    // 只在提交时上传；取消不上传，未成功引用的暂存对象由回收工具按租约到期清理。
-    const evidenceKeys = []
-    for (const item of reportFiles.value) {
-      if (item?.file) evidenceKeys.push(await uploadImage(item.file, 'report'))
-    }
-    const data = await http.post('/reports', {
-      target_type: 'product',
-      target_id: Number(route.params.id),
-      reason,
-      detail: reportForm.detail.trim() || null,
-      evidence_keys: evidenceKeys,
-    })
-    reportOpen.value = false
-    showToast(data.detail || '举报已提交')
-  } catch (err) {
-    reportError.value = err?.response?.data?.detail || '举报提交失败，请稍后重试。'
-  } finally {
-    reportBusy.value = false
-  }
+function reportComment(comment) {
+  openReport('comment', comment.id, '举报评论')
 }
 
 onMounted(load)
@@ -758,35 +685,8 @@ watch(() => route.params.id, load)
   }
 }
 
-.report-form__hint {
-  margin: 0 0 8px;
-  color: var(--ink-faint);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.report-form__evidence {
-  padding: 10px 0 4px;
-}
-
-.report-form__label {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--ink-soft);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.report-form__error {
-  margin: 6px 0 0;
-  color: var(--danger, #b3261e);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.report-form__actions {
-  display: flex;
-  gap: 10px;
-  padding: 4px 0 0;
+.comment__report {
+  margin-top: 4px;
+  margin-left: 8px;
 }
 </style>

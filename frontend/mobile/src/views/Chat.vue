@@ -6,6 +6,13 @@
       </template>
     </AppNavBar>
 
+    <ReportDialog
+      v-model:show="reportOpen"
+      :target-type="reportTarget.type"
+      :target-id="reportTarget.id"
+      :title="reportTarget.title"
+    />
+
     <div v-if="loadError" class="chat-error">
       <div class="error-banner">
         <AppIcon name="alert" :size="18" />
@@ -40,6 +47,14 @@
               class="bubble-time"
               :datetime="m.created_at"
             >{{ messageTime(m.created_at) }}</time>
+            <button
+              v-if="!m.mine && m.kind !== 'system'"
+              type="button"
+              class="bubble-report"
+              @click="reportMessage(m)"
+            >
+              举报
+            </button>
           </div>
         </div>
 
@@ -86,6 +101,7 @@ import { showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
+import ReportDialog from '../components/ReportDialog.vue'
 import http from '../api/http'
 import { fmtTime } from '../api/labels'
 import { connectWS, closeWS } from '../api/ws'
@@ -101,6 +117,13 @@ const sending = ref(false)
 const messagesEl = ref(null)
 const loadError = ref('')
 const loading = ref(true)
+const reportOpen = ref(false)
+const reportTarget = ref({ type: 'message', id: null, title: '举报' })
+
+function reportMessage(message) {
+  reportTarget.value = { type: 'message', id: message.id, title: '举报消息' }
+  reportOpen.value = true
+}
 let readTimer = null
 
 const title = ref('会话')
@@ -274,5 +297,20 @@ onUnmounted(() => {
 
 .chat-archived {
   padding-bottom: calc(12px + var(--safe-bottom));
+}
+
+.bubble-report {
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.bubble-report:hover {
+  color: var(--brand);
 }
 </style>

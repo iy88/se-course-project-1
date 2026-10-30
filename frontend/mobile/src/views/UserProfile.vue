@@ -2,6 +2,13 @@
   <div class="user-page">
     <AppNavBar title="个人主页" />
 
+    <ReportDialog
+      v-model:show="reportOpen"
+      target-type="user"
+      :target-id="reportTarget.id"
+      :title="reportTarget.title"
+    />
+
     <div v-if="profile" class="view">
       <section class="surface user-hero">
         <span class="avatar-text user-hero__avatar"><img v-if="profile.avatar_url" :src="profile.avatar_url" alt="用户头像" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" /><span v-else>{{ initialOf(profile.display_name) }}</span></span>
@@ -41,6 +48,7 @@
 
       <div v-if="!profile.is_self" class="chat-cta">
         <van-button type="primary" block @click="startChat">发起私聊</van-button>
+        <van-button plain type="warning" block class="chat-cta__report" @click="reportUser">举报用户</van-button>
       </div>
     </div>
 
@@ -61,6 +69,7 @@ import { showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
+import ReportDialog from '../components/ReportDialog.vue'
 import http from '../api/http'
 import { fen2yuan } from '../api/labels'
 
@@ -68,6 +77,13 @@ const route = useRoute()
 const router = useRouter()
 const profile = ref(null)
 const error = ref('')
+const reportOpen = ref(false)
+const reportTarget = ref({ type: 'user', id: null, title: '举报' })
+
+function reportUser() {
+  reportTarget.value = { type: 'user', id: Number(route.params.id), title: '举报用户' }
+  reportOpen.value = true
+}
 
 function initialOf(name) {
   return name ? Array.from(name)[0] : '用'
@@ -208,5 +224,9 @@ onMounted(load)
 
 .chat-cta :deep(.van-button) {
   height: 44px;
+}
+
+.chat-cta__report {
+  margin-top: 8px;
 }
 </style>

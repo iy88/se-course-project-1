@@ -2,6 +2,13 @@
   <div class="reviews-page">
     <AppNavBar title="我的评价" />
 
+    <ReportDialog
+      v-model:show="reportOpen"
+      target-type="review"
+      :target-id="reportTarget.id"
+      :title="reportTarget.title"
+    />
+
     <van-tabs v-model:active="type" @change="load">
       <van-tab title="我发表的" name="published" />
       <van-tab title="我收到的" name="received" />
@@ -26,6 +33,10 @@
           </div>
 
           <p class="review-card__content">{{ r.content || '（未填写文字）' }}</p>
+
+          <div v-if="type === 'received' && !r.deleted" class="review-card__actions">
+            <van-button size="mini" plain type="warning" @click="reportReview(r)">举报</van-button>
+          </div>
 
           <div class="review-card__meta">
             <span>交易 #{{ r.trade_id }}</span>
@@ -55,6 +66,7 @@ import { onMounted, ref } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
+import ReportDialog from '../components/ReportDialog.vue'
 import http from '../api/http'
 import { fmtTime } from '../api/labels'
 
@@ -62,6 +74,13 @@ const reviews = ref([])
 const type = ref('published')
 const loaded = ref(false)
 const error = ref('')
+const reportOpen = ref(false)
+const reportTarget = ref({ type: 'review', id: null, title: '举报' })
+
+function reportReview(review) {
+  reportTarget.value = { type: 'review', id: review.id, title: '举报评价' }
+  reportOpen.value = true
+}
 
 function initialOf(name) {
   return name ? Array.from(name)[0] : '评'
@@ -155,5 +174,9 @@ onMounted(load)
 .review-card__deleted {
   margin-left: 4px;
   font-size: 10.5px;
+}
+
+.review-card__actions {
+  margin-top: 8px;
 }
 </style>
