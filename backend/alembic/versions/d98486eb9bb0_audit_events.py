@@ -42,9 +42,12 @@ def upgrade() -> None:
     op.create_index('ix_audit_events_event_type', 'audit_events', ['event_type'], unique=False)
     op.create_index('ix_audit_events_request_id', 'audit_events', ['request_id'], unique=False)
     op.create_index('ix_audit_events_target', 'audit_events', ['target_type', 'target_id'], unique=False)
-    if op.get_context().dialect.name == "postgresql":
-        role = op.get_context().config.attributes.get("migration_app_role")
-        schema = op.get_context().config.attributes["migration_schema"]
+    context = op.get_context()
+    if context.dialect.name == "postgresql":
+        config = context.config
+        assert config is not None
+        role = config.attributes.get("migration_app_role")
+        schema = config.attributes["migration_schema"]
         if not role:
             raise RuntimeError("migration app role is required to grant audit privileges")
         # 审计只追加：app 仅 SELECT/INSERT，禁止 UPDATE/DELETE/TRUNCATE。

@@ -86,9 +86,12 @@ def upgrade() -> None:
         ["ref_type", "ref_id"],
         unique=False,
     )
-    if op.get_context().dialect.name == "postgresql":
-        role = op.get_context().config.attributes.get("migration_app_role")
-        schema = op.get_context().config.attributes["migration_schema"]
+    context = op.get_context()
+    if context.dialect.name == "postgresql":
+        config = context.config
+        assert config is not None
+        role = config.attributes.get("migration_app_role")
+        schema = config.attributes["migration_schema"]
         if not role:
             raise RuntimeError("migration app role is required to grant registry privileges")
         # app 只能登记/提交/标记回收，不能删除登记或清空表。
