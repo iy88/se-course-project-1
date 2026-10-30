@@ -31,6 +31,8 @@ const routes = [
   { path: '/me/settings', component: () => import('../views/Settings.vue') },
 ]
 
+routes.push({ path: '/:pathMatch(.*)*', redirect: '/' })
+
 const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach((to) => {

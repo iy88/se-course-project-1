@@ -21,6 +21,8 @@ const routes = [
   },
 ]
 
+routes.push({ path: '/:pathMatch(.*)*', redirect: '/' })
+
 const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach((to) => {
