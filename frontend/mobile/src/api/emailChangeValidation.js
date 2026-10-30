@@ -80,16 +80,11 @@ export function createNewEmailSendGuard() {
 }
 
 /**
- * Holds the editable change-email fields plus display-only dev codes.
- * A new-email edit invalidates in-flight results and clears codes tied to the old target.
+ * Holds editable change-email fields and guards in-flight sends against target changes.
  */
 export function createEmailChangeState(getCurrentEmail = () => '') {
   const form = reactive({ new_email: '', old_code: '', new_code: '' })
   const errors = reactive({ new_email: '', old_code: '', new_code: '' })
-  const devCodes = reactive({
-    old: { code: '', recipient: '' },
-    new: { code: '', recipient: '' },
-  })
   const guard = createNewEmailSendGuard()
 
   watch(
@@ -99,8 +94,6 @@ export function createEmailChangeState(getCurrentEmail = () => '') {
       form.new_code = ''
       errors.new_email = ''
       errors.new_code = ''
-      devCodes.new.code = ''
-      devCodes.new.recipient = ''
     },
     { flush: 'sync' },
   )
@@ -137,18 +130,12 @@ export function createEmailChangeState(getCurrentEmail = () => '') {
     return guard.isCurrent(request, form.new_email)
   }
 
-  function acceptNewCodeSend(request, data) {
-    if (!isCurrentNewCodeSend(request)) return false
-    devCodes.new.code = String(data?.dev_code || '')
-    devCodes.new.recipient = normalizeEmail(form.new_email)
-    return true
+  function acceptNewCodeSend(request) {
+    return isCurrentNewCodeSend(request)
   }
 
-  function acceptOldCodeSend(recipient, data) {
-    if (normalizeEmail(recipient) !== normalizeEmail(getCurrentEmail())) return false
-    devCodes.old.code = String(data?.dev_code || '')
-    devCodes.old.recipient = normalizeEmail(recipient)
-    return true
+  function acceptOldCodeSend(recipient) {
+    return normalizeEmail(recipient) === normalizeEmail(getCurrentEmail())
   }
 
   function reset() {
@@ -159,16 +146,11 @@ export function createEmailChangeState(getCurrentEmail = () => '') {
     errors.new_email = ''
     errors.old_code = ''
     errors.new_code = ''
-    devCodes.old.code = ''
-    devCodes.old.recipient = ''
-    devCodes.new.code = ''
-    devCodes.new.recipient = ''
   }
 
   return {
     form,
     errors,
-    devCodes,
     reset,
     validateNewEmailField,
     validateCodeField,

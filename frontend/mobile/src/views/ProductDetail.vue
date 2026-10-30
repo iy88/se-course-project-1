@@ -60,6 +60,15 @@
             <p>{{ product.reject_reason }}</p>
           </div>
 
+          <div v-if="isMine && product.decided_tag_applications?.length" class="reject-box">
+            <span class="reject-box__label">标签申请处理结果</span>
+            <p v-for="application in product.decided_tag_applications" :key="application.id">
+              {{ application.requested_name }}：{{ application.status === 'rejected' ? '已拒绝' : '已批准' }}
+              <template v-if="application.decision_reason">（{{ application.decision_reason }}）</template>
+              <template v-else-if="application.status === 'rejected'">（历史记录未提供原因）</template>
+            </p>
+          </div>
+
           <button type="button" class="seller-row" @click="router.push(`/users/${product.seller_id}`)">
             <span class="avatar-text seller-row__avatar">{{ sellerInitial }}</span>
             <span class="seller-row__main">

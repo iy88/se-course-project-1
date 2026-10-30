@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import Components from 'unplugin-vue-components/vite'
 import { VantResolver } from '@vant/auto-import-resolver'
 import { VitePWA } from 'vite-plugin-pwa'
+import { frontendSettings } from '../config.mjs'
 
 // 移动端用户侧 PWA：可安装、离线壳缓存；业务数据始终走网络
 export default defineConfig({
@@ -44,11 +45,17 @@ export default defineConfig({
       },
     }),
   ],
+  envDir: false,
+  envPrefix: [],
+  define: {
+    'import.meta.env.VITE_API_BASE_URL': JSON.stringify(frontendSettings.apiBaseUrl),
+    'import.meta.env.VITE_API_TIMEOUT_MS': JSON.stringify(frontendSettings.timeoutMs),
+  },
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
-      '/ws': { target: 'ws://127.0.0.1:8000', ws: true },
+      '/api': frontendSettings.proxyTarget,
+      '/ws': { target: frontendSettings.proxyTarget.replace(/^http/, 'ws'), ws: true },
     },
   },
 })

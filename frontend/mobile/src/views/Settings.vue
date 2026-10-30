@@ -102,17 +102,6 @@
             确认更换
           </van-button>
         </div>
-        <div v-if="devCodes.old.code || devCodes.new.code" class="alert alert--info settings-dev">
-          <AppIcon name="info" :size="16" />
-          <div class="settings-dev__codes">
-            <span v-if="devCodes.old.code">
-              开发环境当前邮箱验证码（{{ devCodes.old.recipient }}）：<b>{{ devCodes.old.code }}</b>
-            </span>
-            <span v-if="devCodes.new.code">
-              开发环境新邮箱验证码（{{ devCodes.new.recipient }}）：<b>{{ devCodes.new.code }}</b>
-            </span>
-          </div>
-        </div>
       </section>
     </div>
   </div>
@@ -136,7 +125,7 @@ const session = useSession()
 const displayName = ref(session.user?.display_name || '')
 const pwd = reactive({ current: '', next: '' })
 const emailState = createEmailChangeState(() => session.user?.email)
-const { form: emailChange, errors: emailErrors, devCodes } = emailState
+const { form: emailChange, errors: emailErrors } = emailState
 const sending = ref('')
 const changingEmail = ref(false)
 const post = (url, payload) => http.post(url, payload)
@@ -162,9 +151,9 @@ async function sendCode(target) {
   try {
     if (target === 'old') {
       const recipient = session.user?.email
-      const data = await requestOldEmailCode(post)
-      if (!emailState.acceptOldCodeSend(recipient, data)) return
-      showToast(data.dev_code ? '开发验证码已生成，请查看下方' : '验证码请求已受理')
+      await requestOldEmailCode(post)
+      if (!emailState.acceptOldCodeSend(recipient)) return
+      showToast('验证码已发送，请查收当前邮箱')
       return
     }
 
@@ -179,8 +168,8 @@ async function sendCode(target) {
       showToast(result.error)
       return
     }
-    if (!emailState.acceptNewCodeSend(request, result.data)) return
-    showToast(result.data.dev_code ? '开发验证码已生成，请查看下方' : '验证码请求已受理')
+    if (!emailState.acceptNewCodeSend(request)) return
+    showToast('验证码已发送，请查收新邮箱')
   } catch {
     // 共享 http 拦截器已统一提示请求失败
   } finally {
@@ -283,18 +272,6 @@ async function changeEmail() {
   gap: 8px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
-}
-
-.settings-dev {
-  margin: 0 12px 12px;
-}
-
-.settings-dev__codes {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-  overflow-wrap: anywhere;
 }
 
 @media (max-width: 359px) {

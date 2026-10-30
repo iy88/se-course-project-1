@@ -1,7 +1,10 @@
 import axios from 'axios'
 import { showToast } from 'vant'
 
-const http = axios.create({ baseURL: '/api/v1', timeout: 15000 })
+const http = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL,
+  timeout: import.meta.env.VITE_API_TIMEOUT_MS,
+})
 
 http.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')

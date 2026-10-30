@@ -85,6 +85,7 @@ const navItems = [
   { path: '/users', label: '账户管理', icon: 'users' },
   { path: '/categories', label: '分类标签', icon: 'categories' },
   { path: '/prohibited', label: '禁发范围', icon: 'prohibited' },
+  { path: '/audit', label: '审计查询', icon: 'shield' },
   { path: '/stats', label: '数据统计', icon: 'stats' },
 ]
 

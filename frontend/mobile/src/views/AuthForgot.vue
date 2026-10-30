@@ -41,11 +41,6 @@
           </van-field>
         </div>
 
-        <div v-if="step === 1 && devCode" class="alert alert--info auth-dev">
-          <AppIcon name="info" :size="16" />
-          <span>开发环境验证码：<b>{{ devCode }}</b></span>
-        </div>
-
         <div v-if="step === 1" class="auth-actions">
           <van-button block type="primary" :loading="loading" @click="reset">重置密码</van-button>
         </div>
@@ -73,17 +68,15 @@ const step = ref(0)
 const email = ref('')
 const code = ref('')
 const newPassword = ref('')
-const devCode = ref('')
 const loading = ref(false)
 
 async function send() {
   if (!email.value) return showToast('请输入邮箱')
   loading.value = true
   try {
-    const data = await http.post('/auth/forgot-password/send-code', { email: email.value })
-    devCode.value = data.dev_code || ''
+    await http.post('/auth/forgot-password/send-code', { email: email.value })
     step.value = 1
-    showToast(data.dev_code ? '开发验证码已生成，请查看下方' : '验证码请求已受理')
+    showToast('验证码已发送，请查收邮箱')
   } finally {
     loading.value = false
   }
@@ -203,10 +196,6 @@ async function reset() {
 
 .auth-actions :deep(.van-button) {
   height: 44px;
-}
-
-.auth-dev {
-  margin-top: 14px;
 }
 
 .auth-note {

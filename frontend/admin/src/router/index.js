@@ -15,6 +15,7 @@ const routes = [
       { path: 'users', component: () => import('../views/AdminUsers.vue'), meta: { title: '账户管理' } },
       { path: 'categories', component: () => import('../views/Categories.vue'), meta: { title: '分类标签' } },
       { path: 'prohibited', component: () => import('../views/Prohibited.vue'), meta: { title: '禁发范围' } },
+      { path: 'audit', component: () => import('../views/Audit.vue'), meta: { title: '审计查询' } },
       { path: 'stats', component: () => import('../views/Stats.vue'), meta: { title: '数据统计' } },
     ],
   },

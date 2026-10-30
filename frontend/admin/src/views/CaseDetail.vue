@@ -116,6 +116,7 @@
               <span class="inline-label">标签申请：</span>
               <el-tag v-for="app in detail.tag_applications" :key="app.id" type="info" effect="plain">
                 {{ app.requested_name }}（{{ app.status }}）
+                <span v-if="app.decision_reason">：{{ app.decision_reason }}</span>
               </el-tag>
             </div>
 
@@ -272,6 +273,16 @@
                     <el-radio value="map_alias">映射为已有分类别名</el-radio>
                     <el-radio value="reject">拒绝</el-radio>
                   </el-radio-group>
+                  <el-input
+                    v-if="tagDecisions[app.id] === 'reject'"
+                    v-model="tagReasons[app.id]"
+                    type="textarea"
+                    :rows="2"
+                    :maxlength="500"
+                    show-word-limit
+                    placeholder="说明拒绝该标签申请的原因"
+                    aria-label="标签申请拒绝原因"
+                  />
                   <el-select
                     v-if="tagDecisions[app.id] === 'map_alias'"
                     v-model="aliasTargets[app.id]"
@@ -341,6 +352,13 @@
               </el-form>
             </template>
 
+            <CaseConversation
+              v-if="detail.readable_conversation_id"
+              :key="`${detail.id}-${detail.readable_conversation_id}`"
+              :case-id="detail.id"
+              :conversation-id="detail.readable_conversation_id"
+            />
+
             <el-divider content-position="left">沟通单</el-divider>
             <div class="message-list">
               <div v-for="m in detail.messages" :key="m.id" class="message-item" :class="m.role">
@@ -375,13 +393,14 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api/http'
 import { fmtTime as fmt } from '../api/time'
 import { ensureAdminUser } from '../api/session'
 import AppIcon from '../components/AppIcon.vue'
+import CaseConversation from '../components/CaseConversation.vue'
 
 const route = useRoute()
 const detail = ref(null)
@@ -391,6 +410,7 @@ const loadError = ref('')
 const actionError = ref('')
 const categories = ref([])
 const tagDecisions = reactive({})
+const tagReasons = reactive({})
 const aliasTargets = reactive({})
 const reviewForm = reactive({ result: 'approved', reason: '' })
 const reportForm = reactive({
@@ -475,18 +495,26 @@ const serverDetail = (err) => {
   return '请求失败'
 }
 
+let loadVersion = 0
 async function load(keepActionError = false) {
+  const version = ++loadVersion
+  const caseId = route.params.id
   loading.value = true
   loadError.value = ''
+  detail.value = null
   if (!keepActionError) actionError.value = ''
   try {
-    detail.value = await http.get(`/admin/cases/${route.params.id}`)
+    const data = await http.get(`/admin/cases/${caseId}`)
+    if (version !== loadVersion) return
+    detail.value = data
   } catch (err) {
+    if (version !== loadVersion) return
     loadError.value = `事项详情加载失败：${serverDetail(err)}。仅该事项认领管理员可查看非公开内容；请先在共享池认领。`
     return
   } finally {
-    loading.value = false
+    if (version === loadVersion) loading.value = false
   }
+  if (version !== loadVersion || !detail.value) return
   if (detail.value.case_type === 'product_review') {
     categories.value = await http.get('/categories').catch(() => [])
   }
@@ -504,11 +532,20 @@ async function submitReview() {
     actionError.value = `商品当前状态为 ${detail.value.product?.status || '未知'}，不再可审核；未提交旧结论。`
     return
   }
+  if (reviewForm.result === 'approved' && pendingCaseTagApplications.value.some((app) => !tagDecisions[app.id])) {
+    return ElMessage.warning('请先处理每个待审核的标签申请')
+  }
+  if (reviewForm.result === 'approved' && pendingCaseTagApplications.value.some(
+    (app) => tagDecisions[app.id] === 'reject' && !String(tagReasons[app.id] || '').trim(),
+  )) {
+    return ElMessage.warning('拒绝标签申请时须说明原因')
+  }
   const tag_decisions = pendingCaseTagApplications.value
     .filter((app) => tagDecisions[app.id])
     .map((app) => ({
       application_id: app.id,
       decision: tagDecisions[app.id],
+      reason: tagDecisions[app.id] === 'reject' ? String(tagReasons[app.id] || '').trim() || null : null,
       category_id: tagDecisions[app.id] === 'map_alias' ? aliasTargets[app.id] : null,
     }))
   try {
@@ -625,6 +662,7 @@ const fmtDuration = (seconds) => {
   return `${minutes} 分`
 }
 
+onBeforeUnmount(() => ++loadVersion)
 onMounted(async () => {
   adminId.value = (await ensureAdminUser())?.id || null
   await load()

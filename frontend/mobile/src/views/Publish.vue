@@ -145,6 +145,7 @@ import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
+import { uploadImage } from '../api/uploads'
 import { pendingTagApplications as readPendingTagApplications, resolveResubmitMode, withdrawalSelection } from '../api/productEdit'
 import { useSession } from '../stores/session'
 
@@ -211,15 +212,17 @@ async function uploadAll() {
     }
     file.status = 'uploading'
     file.message = '上传中'
-    const fd = new FormData()
-    fd.append('file', file.file)
-    const data = await http.post('/files/upload?namespace=product', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-    file.key = data.key
-    file.status = 'done'
-    file.message = ''
-    keys.push(data.key)
+    try {
+      const key = await uploadImage(file.file, 'product')
+      file.key = key
+      file.status = 'done'
+      file.message = ''
+      keys.push(key)
+    } catch (error) {
+      file.status = 'failed'
+      file.message = '上传失败，请重试'
+      throw error
+    }
   }
   return keys
 }

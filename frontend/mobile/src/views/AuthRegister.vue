@@ -86,11 +86,6 @@
           </div>
         </van-form>
 
-        <div v-if="devCode" class="alert alert--info auth-dev">
-          <AppIcon name="info" :size="16" />
-          <span>开发环境验证码：<b>{{ devCode }}</b></span>
-        </div>
-
         <p class="auth-note">
           验证码只对发送时的邮箱和注册用途有效；更换注册邮箱后需重新获取。验证失败不会创建账户。
         </p>
@@ -115,17 +110,15 @@ const session = useSession()
 const form = reactive({ email: '', code: '', display_name: '', password: '', password2: '' })
 const loading = ref(false)
 const sending = ref(false)
-const devCode = ref('')
 const codeSentTo = ref('')
 
 const emailValid = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
 
-// 目标邮箱变化后旧验证码不再可用，清空已输入值和开发验证码展示。
+// 目标邮箱变化后旧验证码不再可用，清空已输入值和发送状态。
 watch(
   () => form.email,
   () => {
     form.code = ''
-    devCode.value = ''
     codeSentTo.value = ''
   },
 )
@@ -134,10 +127,9 @@ async function sendCode() {
   if (!emailValid()) return showToast('请先填写正确的邮箱')
   sending.value = true
   try {
-    const data = await http.post('/auth/register/send-code', { email: form.email })
-    devCode.value = data.dev_code || ''
+    await http.post('/auth/register/send-code', { email: form.email })
     codeSentTo.value = form.email
-    showToast(data.dev_code ? '开发验证码已生成，请查看下方' : '验证码请求已受理')
+    showToast('验证码已发送，请查收邮箱')
   } finally {
     sending.value = false
   }
@@ -247,10 +239,6 @@ async function submit() {
 
 .auth-actions :deep(.van-button) {
   height: 44px;
-}
-
-.auth-dev {
-  margin-top: 14px;
 }
 
 .auth-note {
