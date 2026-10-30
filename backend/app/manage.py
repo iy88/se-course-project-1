@@ -18,6 +18,7 @@ import getpass
 import logging
 import re
 import sys
+import traceback
 from argparse import Namespace
 
 from app.core.config import (
@@ -77,9 +78,8 @@ def run_migrate(revision: str) -> int:
     migration = load_migration_settings()
     validate_migration_context(migration)
     # 延迟导入，普通服务/测试不会加载 Alembic 或迁移配置。
-    from alembic.config import Config
-
     from alembic import command
+    from alembic.config import Config
 
     if not logging.getLogger().handlers:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -133,8 +133,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except SystemExit:
         raise
-    except Exception as exc:  # noqa: BLE001 - CLI 顶层不输出可能含凭据的完整异常
-        print(f"{args.command} failed: {type(exc).__name__}", file=sys.stderr)
+    except Exception:  # noqa: BLE001 - CLI 输出完整异常以便定位管理命令故障
+        traceback.print_exc()
         return 1
     return 2
 
