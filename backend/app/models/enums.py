@@ -93,6 +93,7 @@ class ReportStatus(StrEnum):
 
 
 class CaseType(StrEnum):
+    AVATAR_REVIEW = "avatar_review"
     PRODUCT_REVIEW = "product_review"  # 商品审核事项
     REPORT = "report"  # 举报事项
     TRADE_DISPUTE = "trade_dispute"  # 交易争议

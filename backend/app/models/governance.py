@@ -80,6 +80,8 @@ class DisposalCase(Base, table=True):
     ))
     subject_user_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True, index=True))  # 受审核/被举报/受处置用户
 
+    avatar_key: str | None = Field(default=None, sa_column=Column(String(512), nullable=True))
+
     title: str = Field(sa_column=Column(String(200), nullable=False))  # 展示用摘要
     conclusion: str | None = Field(default=None, sa_column=Column(String(200), nullable=True))  # 处置结论
     conclusion_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))

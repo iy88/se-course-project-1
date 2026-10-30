@@ -29,6 +29,7 @@ async def user_profile(user_id: int, user: CurrentUser, db: DbSession) -> dict:
     return {
         "id": target.id,
         "display_name": target.display_name,
+        "avatar_url": storage.public_url(target.avatar_key) if target.avatar_key else None,
         "is_self": target.id == user.id,
         "products": [
             {

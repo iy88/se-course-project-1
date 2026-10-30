@@ -202,7 +202,11 @@ async def referenced_keys(db: AsyncSession, keys: Iterable[str]) -> set[str]:
     if not unique:
         return set()
 
+    from app.models import DisposalCase, User
     found: set[str] = set()
+    for avatar_column in (User.avatar_key, User.avatar_pending_key, DisposalCase.avatar_key):
+        avatars = await db.exec(select(avatar_column).where(col(avatar_column).in_(unique)))
+        found.update(str(value) for value in avatars if value)
     rows = await db.exec(select(col(ProductImage.file_key)).where(col(ProductImage.file_key).in_(unique)))
     found.update(str(value) for value in rows if value)
 

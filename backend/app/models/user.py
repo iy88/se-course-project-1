@@ -18,6 +18,10 @@ class User(Base, table=True):
     email: str = Field(sa_column=Column(String(254), unique=True, index=True, nullable=False))  # 登录标识，全平台唯一（BR-20/21）
     password_hash: str = Field(sa_column=Column(String(128), nullable=False))
     display_name: str = Field(sa_column=Column(String(64), nullable=False))
+    avatar_key: str | None = Field(default=None, sa_column=Column(String(512), nullable=True))
+    avatar_pending_key: str | None = Field(default=None, sa_column=Column(String(512), nullable=True))
+    avatar_review_status: str | None = Field(default=None, sa_column=Column(String(16), nullable=True))
+    avatar_review_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
     role: str = Field(default='user', sa_column=Column(String(16), default="user", nullable=False))  # user / admin
     status: str = Field(default='normal', sa_column=Column(String(16), default="normal", index=True, nullable=False))  # normal / banned
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

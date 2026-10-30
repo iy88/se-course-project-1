@@ -140,6 +140,10 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
     if case.claimed_by_id != admin.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "仅该事项认领管理员可查看详情")
     data = _case_item(case)
+    if case.case_type == CaseType.AVATAR_REVIEW.value:
+        from app.storage.base import get_storage
+        data['avatar'] = {'key': case.avatar_key, 'url': get_storage().public_url(case.avatar_key) if case.avatar_key else None}
+
     data["messages"] = [
         {
             "id": m.id,
@@ -302,6 +306,8 @@ async def dispose_case(case_id: int, body: DisposeIn, admin: CurrentAdmin, db: D
     await ensure_claimant(case, admin.id)
     if case.status == CaseStatus.DISPOSED.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置")
+    if case.case_type == CaseType.AVATAR_REVIEW.value:
+        raise HTTPException(400, '请使用头像审核结论入口处理该事项')
     await case_service.dispose_case(
         db, case, conclusion=body.conclusion.strip(), reason=body.reason, basis=body.basis
     )

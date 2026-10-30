@@ -43,7 +43,9 @@ def _normalized_email(email: str) -> str:
 
 async def _user_out(db: AsyncSession, user: User) -> UserOut:
     frozen = await permissions.has_active_frozen_trade(db, user.id)
-    return UserOut.model_validate(user).model_copy(update={"has_frozen_trade": frozen})
+    from app.storage.base import get_storage
+    storage = get_storage()
+    return UserOut.model_validate(user).model_copy(update={"has_frozen_trade": frozen, "avatar_url": storage.public_url(user.avatar_key) if user.avatar_key else None, "avatar_pending_url": storage.public_url(user.avatar_pending_key) if user.avatar_pending_key else None})
 
 
 async def _token_out(db: AsyncSession, user: User) -> TokenOut:

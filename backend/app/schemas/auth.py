@@ -15,6 +15,10 @@ class UserOut(BaseModel):
     display_name: str
     role: UserRole
     status: AccountStatus
+    avatar_url: str | None = None
+    avatar_pending_url: str | None = None
+    avatar_review_status: str | None = None
+    avatar_review_reason: str | None = None
     has_frozen_trade: bool = False  # 当前是否存在有效交易冻结（D-50，供前端刷新限制）
     created_at: datetime
 

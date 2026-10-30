@@ -10,9 +10,11 @@ import hmac
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import Response
+from PIL import Image
 from pydantic import BaseModel, Field
 from sqlmodel import col, select
 from starlette.concurrency import run_in_threadpool
@@ -193,6 +195,10 @@ async def complete_lease(lease_id: str, user: CurrentUser, db: DbSession) -> dic
             raise ImageValidationError("文件摘要或大小不一致")
         if validate_image(data, lease.filename) != lease.content_type:
             raise ImageValidationError("文件类型不一致")
+        if lease.namespace == 'avatar':
+            with Image.open(BytesIO(data)) as avatar:
+                if avatar.size != (256, 256) or avatar.format != 'JPEG':
+                    raise ImageValidationError('头像须为裁切后的 256×256 JPEG 缩略图')
     except ImageValidationError as exc:
         lease.state = "failed"
         await db.commit()
@@ -207,6 +213,11 @@ async def complete_lease(lease_id: str, user: CurrentUser, db: DbSession) -> dic
     obj.object_metadata={"image_type":lease.content_type,"sha256":lease.sha256,"upload_state":"verified"}
     lease.state = "completed"
     await audit_service.record_event(db, "file.lease_complete", target_type="upload_lease", target_id=lease_id, actor_id=user.id)
+    if lease.namespace == 'avatar':
+        from app.api.v1.avatars import AvatarIn, submit_avatar_transaction
+        # 图片确认与待审事项同事务提交，重启或响应丢失时可按租约重试。
+        await db.flush()
+        await submit_avatar_transaction(AvatarIn(key=lease.key), user, db, commit=False)
     await db.commit()
     return {"key": lease.key, "url": storage.public_url(lease.key)}
 

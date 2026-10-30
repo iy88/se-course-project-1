@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     auth,
+    avatars,
     categories,
     comments,
     conversations,
@@ -22,6 +23,7 @@ from app.api.v1.admin import admin_router
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(avatars.router)
 api_router.include_router(files.router)
 api_router.include_router(categories.router)
 api_router.include_router(prohibited.router)

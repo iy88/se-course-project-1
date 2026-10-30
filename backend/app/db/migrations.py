@@ -8,6 +8,8 @@ from sqlalchemy.engine import Connection
 
 # 仅允许追加、可空、无服务端默认值的列；升级可重复执行。
 ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
+    "disposal_cases": {"avatar_key": "VARCHAR(512)"},
+    "users": {'avatar_key': 'VARCHAR(512)', 'avatar_pending_key': 'VARCHAR(512)', 'avatar_review_status': 'VARCHAR(16)', 'avatar_review_reason': 'VARCHAR(500)'},
     "trades": {
         "confirm_wait_paused_at": "DATETIME",
         "confirm_wait_remaining_seconds": "INTEGER",
@@ -35,4 +37,13 @@ def upgrade_additive_schema(conn: Connection) -> list[str]:
                 continue
             conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {ddl_type}'))
             applied.append(f"{table}.{name}")
+    if {'users', 'disposal_cases'} <= existing_tables:
+        conn.execute(text("""INSERT INTO disposal_cases
+            (case_type, status, subject_user_id, title, avatar_key)
+            SELECT 'avatar_review', 'pending', users.id, '头像审核', users.avatar_pending_key
+            FROM users WHERE users.avatar_review_status='pending'
+            AND users.avatar_pending_key IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM disposal_cases c
+                WHERE c.case_type='avatar_review' AND c.subject_user_id=users.id
+                AND c.status IN ('pending','processing'))"""))
     return applied
