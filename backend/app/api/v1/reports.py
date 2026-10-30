@@ -4,9 +4,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import or_, select
+from sqlmodel import col, or_, select
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
+from app.api.upload_keys import validate_upload_keys
 from app.models import (
     Comment,
     DisposalCase,
@@ -18,7 +19,9 @@ from app.models import (
     User,
 )
 from app.models.enums import CaseType, ReportStatus, ReportTargetType
+from app.services import audit as audit_service
 from app.services import cases as case_service
+from app.services import stored_objects
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -92,37 +95,38 @@ async def create_report(body: ReportCreateIn, user: CurrentUser, db: DbSession) 
     """提交举报：明确对象与原因，证据可选；未结举报在原事项补充（BR-25）。"""
     ensure_can_write(user)
     # 已归档的同一用户+对象举报不可重新提交；先查终态/已关闭记录，兼容历史脏数据多条。
-    closed_report_id = await db.scalar(
-        select(Report.id)
+    closed_report_id = (await db.exec(
+        select(col(Report.id))
         .where(
-            Report.reporter_id == user.id,
-            Report.target_type == body.target_type,
-            Report.target_id == body.target_id,
+            col(Report.reporter_id) == user.id,
+            col(Report.target_type) == body.target_type,
+            col(Report.target_id) == body.target_id,
             or_(
-                Report.status.in_([ReportStatus.HANDLED.value, ReportStatus.UNFOUNDED.value]),
-                Report.closed_at.is_not(None),
+                col(Report.status).in_([ReportStatus.HANDLED.value, ReportStatus.UNFOUNDED.value]),
+                col(Report.closed_at).is_not(None),
             ),
         )
-        .order_by(Report.id.desc())
+        .order_by(col(Report.id).desc())
         .limit(1)
-    )
+    )).first()
     if closed_report_id is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "您对该对象的举报已处理归档，不能重复提交")
     if not await _target_is_reportable(db, body.target_type, body.target_id):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "举报对象不存在或已失效，无法提交举报")
-    open_report = await db.scalar(
+    open_report = (await db.exec(
         select(Report).where(
-            Report.reporter_id == user.id,
-            Report.target_type == body.target_type,
-            Report.target_id == body.target_id,
-            Report.status.in_([ReportStatus.PENDING.value, ReportStatus.PROCESSING.value]),
+            col(Report.reporter_id) == user.id,
+            col(Report.target_type) == body.target_type,
+            col(Report.target_id) == body.target_id,
+            col(Report.status).in_([ReportStatus.PENDING.value, ReportStatus.PROCESSING.value]),
         )
-    )
+    )).first()
     if open_report:
         return {
             "detail": "您对该对象已有未处理完的举报，请在原事项补充说明或证据",
             "existing_report_id": open_report.id,
         }
+    await validate_upload_keys(db, body.evidence_keys, owner_id=user.id, namespace="report")
     report = Report(
         reporter_id=user.id,
         target_type=body.target_type,
@@ -133,6 +137,14 @@ async def create_report(body: ReportCreateIn, user: CurrentUser, db: DbSession) 
     )
     db.add(report)
     await db.flush()
+    try:
+        await stored_objects.mark_committed(
+            db, body.evidence_keys, ref_type="report", ref_id=report.id
+        )
+    except stored_objects.StoredObjectUnavailable:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "证据已被回收，请重新上传"
+        ) from None
     # 解析被举报内容的责任用户，作为事项沟通对象（问询/申辩）
     from app.api.v1.admin.reports import resolve_target_user_sync
 
@@ -144,6 +156,13 @@ async def create_report(body: ReportCreateIn, user: CurrentUser, db: DbSession) 
         title=f"举报事项：{target_label}#{body.target_id}",
         subject_user_id=subject_user.id if subject_user else None,
         report_id=report.id,
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_REPORT_CREATE,
+        target_type="report",
+        target_id=report.id,
+        after={"status": report.status, "target_type": report.target_type, "target_id": report.target_id},
     )
     await db.commit()
     return {"id": report.id, "detail": "举报已提交，进入待处理池"}
@@ -158,10 +177,27 @@ async def add_supplement(report_id: int, body: SupplementIn, user: CurrentUser, 
         raise HTTPException(status.HTTP_404_NOT_FOUND, "举报不存在")
     if report.status not in (ReportStatus.PENDING.value, ReportStatus.PROCESSING.value):
         raise HTTPException(status.HTTP_409_CONFLICT, "该举报事项已处理归档，不再接受补充")
+    await validate_upload_keys(db, body.evidence_keys, owner_id=user.id, namespace="report")
     supplement = ReportSupplement(
         report_id=report.id, author_id=user.id, content=body.content.strip(), evidence_keys=body.evidence_keys
     )
     db.add(supplement)
+    await db.flush()
+    try:
+        await stored_objects.mark_committed(
+            db, body.evidence_keys, ref_type="report_supplement", ref_id=supplement.id
+        )
+    except stored_objects.StoredObjectUnavailable:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "证据已被回收，请重新上传"
+        ) from None
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_REPORT_SUPPLEMENT,
+        target_type="report",
+        target_id=report.id,
+        after={"supplemented": True},
+    )
     await db.commit()
     return {"detail": "补充已提交"}
 
@@ -178,13 +214,13 @@ async def public_reports(
     包括封禁用户的公共只读访问；显式白名单输出，绝不返回举报人、对象 ID、
     事项、私有理由或沟通内容。
     """
-    result = await db.execute(
+    result = await db.exec(
         select(Report)
         .where(
-            Report.result_confirmed.is_(True),
-            Report.status.in_([ReportStatus.HANDLED.value, ReportStatus.UNFOUNDED.value]),
+            col(Report.result_confirmed).is_(True),
+            col(Report.status).in_([ReportStatus.HANDLED.value, ReportStatus.UNFOUNDED.value]),
         )
-        .order_by(Report.closed_at.desc(), Report.id.desc())
+        .order_by(col(Report.closed_at).desc(), col(Report.id).desc())
         .offset(offset)
         .limit(limit)
     )
@@ -196,21 +232,21 @@ async def public_reports(
             public_result=report.public_result,
             closed_at=report.closed_at.isoformat() if report.closed_at else None,
         )
-        for report in result.scalars()
+        for report in result
     ]
 
 
 @router.get("/mine")
 async def my_reports(user: CurrentUser, db: DbSession) -> list[dict]:
-    result = await db.execute(
-        select(Report).where(Report.reporter_id == user.id).order_by(Report.id.desc())
+    result = await db.exec(
+        select(Report).where(col(Report.reporter_id) == user.id).order_by(col(Report.id).desc())
     )
     items = []
-    for report in result.scalars():
+    for report in result:
         data = _report_out(report)
         supplements = (
-            await db.execute(select(ReportSupplement).where(ReportSupplement.report_id == report.id).order_by(ReportSupplement.id))
-        ).scalars().all()
+            await db.exec(select(ReportSupplement).where(col(ReportSupplement.report_id) == report.id).order_by(col(ReportSupplement.id)))
+        ).all()
         data["supplements"] = [
             {"id": s.id, "content": s.content, "created_at": s.created_at.isoformat() if s.created_at else None}
             for s in supplements
@@ -223,33 +259,37 @@ async def my_reports(user: CurrentUser, db: DbSession) -> list[dict]:
 async def reports_about_me(user: CurrentUser, db: DbSession) -> list[dict]:
     """我收到的举报：仅列已实际处置事项，不显示举报人（4.18）。"""
     my_products = (
-        await db.execute(select(Product.id).where(Product.seller_id == user.id))
-    ).scalars().all()
+        await db.exec(select(col(Product.id)).where(col(Product.seller_id) == user.id))
+    ).all()
     my_comments = (
-        await db.execute(select(Comment.id).where(Comment.author_id == user.id))
-    ).scalars().all()
+        await db.exec(select(col(Comment.id)).where(col(Comment.author_id) == user.id))
+    ).all()
     my_reviews = (
-        await db.execute(select(TradeReview.id).where(TradeReview.reviewer_id == user.id))
-    ).scalars().all()
-    result = await db.execute(
+        await db.exec(select(col(TradeReview.id)).where(col(TradeReview.reviewer_id) == user.id))
+    ).all()
+    result = await db.exec(
         select(Report).where(
-            Report.status == ReportStatus.HANDLED.value,
+            col(Report.status) == ReportStatus.HANDLED.value,
             (
-                (Report.target_type == "user") & (Report.target_id == user.id)
+                (col(Report.target_type) == "user") & (col(Report.target_id) == user.id)
             ) | (
-                (Report.target_type == "product") & (Report.target_id.in_(my_products or [0]))
+                (col(Report.target_type) == "product") & (col(Report.target_id).in_(my_products or [0]))
             ) | (
-                (Report.target_type == "comment") & (Report.target_id.in_(my_comments or [0]))
+                (col(Report.target_type) == "comment") & (col(Report.target_id).in_(my_comments or [0]))
             ) | (
-                (Report.target_type == "review") & (Report.target_id.in_(my_reviews or [0]))
+                (col(Report.target_type) == "review") & (col(Report.target_id).in_(my_reviews or [0]))
+            ) | (
+                (col(Report.target_type) == "message") & (
+                    col(Report.target_id).in_(select(col(Message.id)).where(col(Message.sender_id) == user.id))
+                )
             ),
-        ).order_by(Report.id.desc())
+        ).order_by(col(Report.id).desc())
     )
     items = []
-    for report in result.scalars():
-        case = await db.scalar(
-            select(DisposalCase).where(DisposalCase.report_id == report.id).order_by(DisposalCase.id.desc()).limit(1)
-        )
+    for report in result:
+        case = (await db.exec(
+            select(DisposalCase).where(col(DisposalCase.report_id) == report.id).order_by(col(DisposalCase.id).desc()).limit(1)
+        )).first()
         items.append(
             {
                 "id": report.id,

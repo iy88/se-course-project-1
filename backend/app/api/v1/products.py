@@ -4,11 +4,13 @@ from datetime import UTC, datetime
 from typing import Annotated, cast
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import col, delete, func, select, update
+from sqlmodel.ext.asyncio.session import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
+from app.api.upload_keys import validate_upload_keys
 from app.models import (
     Category,
     CategoryAlias,
@@ -29,6 +31,7 @@ from app.models.enums import (
     TradeStatus,
 )
 from app.schemas.product import (
+    DecidedTagApplicationOut,
     PendingTagApplicationOut,
     ProductCardOut,
     ProductCreateIn,
@@ -38,12 +41,13 @@ from app.schemas.product import (
     ProductUpdateIn,
     ReviewRecordOut,
 )
+from app.services import audit as audit_service
 from app.services import cases as case_service
-from app.services import permissions
+from app.services import permissions, stored_objects
 from app.services import products as product_service
 from app.services import trades as trade_service
 from app.services.notifications import notify
-from app.storage.base import get_storage
+from app.storage.base import StorageError, StorageInvalidKey, get_storage
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -58,33 +62,36 @@ async def _out(db: AsyncSession, product: Product, user: User, include_pending_c
     tags = await product_service.load_product_tags(db, product.id)
     pending = 0
     if include_pending_count and user.id == product.seller_id:
-        pending = await db.scalar(
+        pending = (await db.exec(
             select(func.count())
             .select_from(Trade)
-            .where(Trade.product_id == product.id, Trade.status == TradeStatus.PENDING_ACCEPTANCE.value)
-        ) or 0
+            .where(col(Trade.product_id) == product.id, col(Trade.status) == TradeStatus.PENDING_ACCEPTANCE.value)
+        )).first() or 0
     can_withdraw_review = False
     can_resubmit = False
     pending_tag_applications: list[PendingTagApplicationOut] = []
+    decided_tag_applications: list[DecidedTagApplicationOut] = []
     if user.id == product.seller_id:
-        # 仅本人可见当前仍有效的待审标签申请，供前端枚举撤回 ID（R11）；其他查看者恒为空。
-        pending_apps = (
-            await db.execute(
+        # 仅本人可见标签申请：pending 供前端枚举撤回 ID（R11），已处理项返回结果与原因。
+        applications = (
+            await db.exec(
                 select(ProductTagApplication)
-                .where(
-                    ProductTagApplication.product_id == product.id,
-                    ProductTagApplication.status == "pending",
-                )
-                .order_by(ProductTagApplication.id)
+                .where(col(ProductTagApplication.product_id) == product.id)
+                .order_by(col(ProductTagApplication.id))
             )
-        ).scalars().all()
+        ).all()
         pending_tag_applications = [
-            PendingTagApplicationOut(id=a.id, requested_name=a.requested_name) for a in pending_apps
+            PendingTagApplicationOut(id=a.id, requested_name=a.requested_name)
+            for a in applications
+            if a.status == "pending"
+        ]
+        decided_tag_applications = [
+            DecidedTagApplicationOut.model_validate(a) for a in applications if a.status != "pending"
         ]
     if user.id == product.seller_id and not product.display_restricted:
-        latest_review = await db.scalar(
-            select(ReviewRecord).where(ReviewRecord.product_id == product.id).order_by(ReviewRecord.id.desc()).limit(1)
-        )
+        latest_review = (await db.exec(
+            select(ReviewRecord).where(col(ReviewRecord.product_id) == product.id).order_by(col(ReviewRecord.id).desc()).limit(1)
+        )).first()
         if product.status == ProductStatus.PENDING_REVIEW.value:
             # 认领前可撤回；认领后旧审核只能由认领管理员处理
             can_withdraw_review = bool(latest_review and latest_review.result == ReviewResult.PENDING.value)
@@ -115,6 +122,7 @@ async def _out(db: AsyncSession, product: Product, user: User, include_pending_c
         tag_ids=[t.id for t in tags],
         tag_names=[t.name for t in tags],
         pending_tag_applications=pending_tag_applications,
+        decided_tag_applications=decided_tag_applications,
         created_at=product.created_at,
         updated_at=product.updated_at,
         pending_request_count=int(pending),
@@ -139,10 +147,20 @@ def _card(product: Product, seller_name: str, image_key: str | None) -> ProductC
     )
 
 
-async def _validate_image_keys(db: AsyncSession, image_keys: list[str]) -> None:
-    storage = get_storage()
+async def _validate_image_keys(db: AsyncSession, image_keys: list[str], owner_id: int) -> None:
+    await validate_upload_keys(db, image_keys, owner_id=owner_id, namespace="product")
+    try:
+        storage = get_storage()
+    except StorageError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "文件存储暂不可用") from exc
     for key in image_keys:
-        if not storage.exists(key):
+        try:
+            exists = await run_in_threadpool(storage.exists, key)
+        except StorageInvalidKey as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"图片不存在或已失效：{key}") from exc
+        except StorageError as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "文件存储暂不可用") from exc
+        if not exists:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"图片不存在或已失效：{key}")
 
 
@@ -170,10 +188,10 @@ async def _resolve_tags_for_submit(
             name = tag_in.new_name.strip()
             if not name:
                 continue
-            exists = await db.scalar(select(Category).where(Category.name == name, Category.deleted_at.is_(None)))
-            alias = await db.scalar(
-                select(CategoryAlias).where(CategoryAlias.name == name, CategoryAlias.removed_at.is_(None))
-            )
+            exists = (await db.exec(select(Category).where(col(Category.name) == name, col(Category.deleted_at).is_(None)))).first()
+            alias = (await db.exec(
+                select(CategoryAlias).where(col(CategoryAlias.name) == name, col(CategoryAlias.removed_at).is_(None))
+            )).first()
             if exists:
                 _ensure_selectable_category(exists)
                 if exists.id not in category_ids:
@@ -200,7 +218,7 @@ async def publish_product(body: ProductCreateIn, user: CurrentUser, db: DbSessio
     ensure_can_write(user)
     if await permissions.has_active_frozen_trade(db, user.id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "存在有效交易冻结，暂不能发布商品")
-    await _validate_image_keys(db, body.image_keys)
+    await _validate_image_keys(db, body.image_keys, user.id)
     product = Product(
         seller_id=user.id,
         title=body.title.strip(),
@@ -216,6 +234,14 @@ async def publish_product(body: ProductCreateIn, user: CurrentUser, db: DbSessio
     db.add_all(applications)
     for sort, key in enumerate(body.image_keys):
         db.add(ProductImage(product_id=product.id, file_key=key, sort=sort))
+    try:
+        await stored_objects.mark_committed(
+            db, body.image_keys, ref_type="product", ref_id=product.id
+        )
+    except stored_objects.StoredObjectUnavailable:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "图片已被回收，请重新上传"
+        ) from None
     # 当次审核内容快照 + 审核事项进入共享池
     content = await _snapshot_content(db, product)
     case = await case_service.create_case(
@@ -226,6 +252,13 @@ async def publish_product(body: ProductCreateIn, user: CurrentUser, db: DbSessio
         product_id=product.id,
     )
     db.add(ReviewRecord(product_id=product.id, content_json=content, case_id=case.id))
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_PRODUCT_PUBLISH,
+        target_type="product",
+        target_id=product.id,
+        after={"status": product.status, "price_cents": product.price_cents, "case_id": case.id},
+    )
     await db.commit()
     await db.refresh(product)
     return await _out(db, product, user, include_pending_count=True)
@@ -265,7 +298,7 @@ async def search(
     seller_ids = {p.seller_id for p in items}
     names: dict[int, str] = {}
     if seller_ids:
-        rows = await db.execute(select(User.id, User.display_name).where(User.id.in_(seller_ids)))
+        rows = await db.exec(select(col(User.id), col(User.display_name)).where(col(User.id).in_(seller_ids)))
         names = {uid: name for uid, name in rows.all()}
     cards = [_card(p, names.get(p.seller_id, ""), p.images[0].file_key if p.images else None) for p in items]
     return ProductSearchOut(
@@ -278,10 +311,10 @@ async def search(
 @router.get("/mine", response_model=list[ProductOut])
 async def my_products(user: CurrentUser, db: DbSession) -> list[ProductOut]:
     """我的商品：覆盖全部状态及审核原因、待接受请求数（FR-12、4.18）。"""
-    result = await db.execute(
-        select(Product).where(Product.seller_id == user.id).order_by(Product.created_at.desc())
+    result = await db.exec(
+        select(Product).where(col(Product.seller_id) == user.id).order_by(col(Product.created_at).desc())
     )
-    products = list(result.scalars())
+    products = list(result)
     return [await _out(db, p, user, include_pending_count=True) for p in products]
 
 
@@ -307,19 +340,19 @@ async def edit_history(product_id: int, user: CurrentUser, db: DbSession) -> lis
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     from app.models import ProductEditHistory
 
-    result = await db.execute(
+    result = await db.exec(
         select(ProductEditHistory)
-        .where(ProductEditHistory.product_id == product_id)
-        .order_by(ProductEditHistory.id)
+        .where(col(ProductEditHistory.product_id) == product_id)
+        .order_by(col(ProductEditHistory.id))
     )
-    histories = list(result.scalars())
+    histories = list(result)
     if product.seller_id != user.id and user.role != "admin":
-        first_trade = await db.scalar(
+        first_trade = (await db.exec(
             select(Trade)
-            .where(Trade.product_id == product_id, Trade.buyer_id == user.id)
-            .order_by(Trade.created_at, Trade.id)
+            .where(col(Trade.product_id) == product_id, col(Trade.buyer_id) == user.id)
+            .order_by(col(Trade.created_at), col(Trade.id))
             .limit(1)
-        )
+        )).first()
         if first_trade is None or first_trade.created_at is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "仅本人请求对应内容及之后变更有访问权")
         # 请求结束后仍可查看该商品后续变更，但不开放请求前历史（D-43）
@@ -336,10 +369,10 @@ async def review_records(product_id: int, user: CurrentUser, db: DbSession) -> l
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     if product.seller_id != user.id and user.role != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "仅发布者可查看审核记录")
-    result = await db.execute(
-        select(ReviewRecord).where(ReviewRecord.product_id == product_id).order_by(ReviewRecord.id)
+    result = await db.exec(
+        select(ReviewRecord).where(col(ReviewRecord.product_id) == product_id).order_by(col(ReviewRecord.id))
     )
-    return [ReviewRecordOut.model_validate(r) for r in result.scalars()]
+    return [ReviewRecordOut.model_validate(r) for r in result]
 
 
 async def _dispose_review_case_atomically(db: AsyncSession, case_id: int, *, now: datetime) -> bool:
@@ -348,12 +381,12 @@ async def _dispose_review_case_atomically(db: AsyncSession, case_id: int, *, now
     UPDATE 的条件与处置结论在同一条语句中由数据库判定；失败时不产生任何业务写入。
     synchronize_session="evaluate" 同步会话内可能存在的旧事项对象，避免其后续 flush 覆盖。
     """
-    result = await db.execute(
+    result = await db.exec(
         update(DisposalCase)
         .where(
-            DisposalCase.id == case_id,
-            DisposalCase.status == CaseStatus.PENDING.value,
-            DisposalCase.claimed_by_id.is_(None),
+            col(DisposalCase.id) == case_id,
+            col(DisposalCase.status) == CaseStatus.PENDING.value,
+            col(DisposalCase.claimed_by_id).is_(None),
         )
         .values(
             status=CaseStatus.DISPOSED.value,
@@ -376,12 +409,12 @@ async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> 
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
     if product.status != ProductStatus.PENDING_REVIEW.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "仅待审核商品可撤回审核")
-    review = await db.scalar(
+    review = (await db.exec(
         select(ReviewRecord)
-        .where(ReviewRecord.product_id == product.id, ReviewRecord.result == ReviewResult.PENDING.value)
-        .order_by(ReviewRecord.id.desc())
+        .where(col(ReviewRecord.product_id) == product.id, col(ReviewRecord.result) == ReviewResult.PENDING.value)
+        .order_by(col(ReviewRecord.id).desc())
         .limit(1)
-    )
+    )).first()
     if not review:
         raise HTTPException(status.HTTP_409_CONFLICT, "当前没有可撤回的待审核记录")
     now = datetime.now(UTC)
@@ -396,13 +429,13 @@ async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> 
     review.reviewed_at = now
     # 旧审核的标签申请一并结束，避免在后续新审核中被误批准
     applications = (
-        await db.execute(
+        await db.exec(
             select(ProductTagApplication).where(
-                ProductTagApplication.product_id == product.id,
-                ProductTagApplication.status == "pending",
+                col(ProductTagApplication.product_id) == product.id,
+                col(ProductTagApplication.status) == "pending",
             )
         )
-    ).scalars().all()
+    ).all()
     for application in applications:
         application.status = "withdrawn"
         application.decided_at = now
@@ -418,6 +451,14 @@ async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> 
                 kind=case_service.DisposalMessageKind.NOTICE,
                 content="卖方在审核认领前撤回商品，本次审核事项结束，商品置为已下架。",
             )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_PRODUCT_WITHDRAW_REVIEW,
+        target_type="product",
+        target_id=product.id,
+        before={"status": ProductStatus.PENDING_REVIEW.value},
+        after={"status": product.status, "review_result": review.result},
+    )
     await db.commit()
     await db.refresh(product)
     return await _out(db, product, user, include_pending_count=True)
@@ -432,9 +473,9 @@ async def resubmit(
     product = await db.get(Product, product_id)
     if not product or product.seller_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
-    latest_review = await db.scalar(
-        select(ReviewRecord).where(ReviewRecord.product_id == product.id).order_by(ReviewRecord.id.desc()).limit(1)
-    )
+    latest_review = (await db.exec(
+        select(ReviewRecord).where(col(ReviewRecord.product_id) == product.id).order_by(col(ReviewRecord.id).desc()).limit(1)
+    )).first()
     can_resubmit = product.status == ProductStatus.REJECTED.value or (
         product.status == ProductStatus.DELISTED.value
         and latest_review is not None
@@ -454,13 +495,21 @@ async def resubmit(
     if body.price_cents is not None:
         product.price_cents = body.price_cents
     if body.image_keys is not None:
-        await _validate_image_keys(db, body.image_keys)
-        await db.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
+        await _validate_image_keys(db, body.image_keys, user.id)
+        await db.exec(delete(ProductImage).where(col(ProductImage.product_id) == product.id))
         for sort, key in enumerate(body.image_keys):
             db.add(ProductImage(product_id=product.id, file_key=key, sort=sort))
+        try:
+            await stored_objects.mark_committed(
+                db, body.image_keys, ref_type="product", ref_id=product.id
+            )
+        except stored_objects.StoredObjectUnavailable:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "图片已被回收，请重新上传"
+            ) from None
     if body.category_ids is not None:
         current_ids = {t.id for t in await product_service.load_product_tags(db, product.id)}
-        await db.execute(delete(ProductTag).where(ProductTag.product_id == product.id))
+        await db.exec(delete(ProductTag).where(col(ProductTag.product_id) == product.id))
         for cid in body.category_ids:
             category = await db.get(Category, cid)
             if not category or category.deleted_at is not None:
@@ -483,6 +532,13 @@ async def resubmit(
         product_id=product.id,
     )
     db.add(ReviewRecord(product_id=product.id, content_json=content, case_id=case.id))
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_PRODUCT_RESUBMIT,
+        target_type="product",
+        target_id=product.id,
+        after={"status": product.status, "price_cents": product.price_cents, "case_id": case.id},
+    )
     await db.commit()
     await db.refresh(product)
     return await _out(db, product, user, include_pending_count=True)
@@ -517,15 +573,23 @@ async def edit_product(product_id: int, body: ProductUpdateIn, user: CurrentUser
         product.price_cents = body.price_cents
         changed = True
     if body.image_keys is not None and body.image_keys != [i.file_key for i in await product_service.load_product_images(db, product.id)]:
-        await _validate_image_keys(db, body.image_keys)
-        await db.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
+        await _validate_image_keys(db, body.image_keys, user.id)
+        await db.exec(delete(ProductImage).where(col(ProductImage.product_id) == product.id))
         for sort, key in enumerate(body.image_keys):
             db.add(ProductImage(product_id=product.id, file_key=key, sort=sort))
+        try:
+            await stored_objects.mark_committed(
+                db, body.image_keys, ref_type="product", ref_id=product.id
+            )
+        except stored_objects.StoredObjectUnavailable:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "图片已被回收，请重新上传"
+            ) from None
         changed = True
     if body.category_ids is not None:
         current_ids = {t.id for t in await product_service.load_product_tags(db, product.id)}
         if set(body.category_ids) != current_ids:
-            await db.execute(delete(ProductTag).where(ProductTag.product_id == product.id))
+            await db.exec(delete(ProductTag).where(col(ProductTag.product_id) == product.id))
             for cid in set(body.category_ids):
                 category = await db.get(Category, cid)
                 if not category or category.deleted_at is not None:
@@ -539,14 +603,14 @@ async def edit_product(product_id: int, body: ProductUpdateIn, user: CurrentUser
         if product.status != ProductStatus.PENDING_REVIEW.value:
             raise HTTPException(status.HTTP_409_CONFLICT, "仅待审核期间可撤回标签申请")
         applications = (
-            await db.execute(
+            await db.exec(
                 select(ProductTagApplication).where(
-                    ProductTagApplication.product_id == product.id,
-                    ProductTagApplication.id.in_(body.withdraw_tag_application_ids),
-                    ProductTagApplication.status == "pending",
+                    col(ProductTagApplication.product_id) == product.id,
+                    col(ProductTagApplication.id).in_(body.withdraw_tag_application_ids),
+                    col(ProductTagApplication.status) == "pending",
                 )
             )
-        ).scalars().all()
+        ).all()
         if len(applications) != len(set(body.withdraw_tag_application_ids)):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "存在不可撤回的标签申请")
         for application in applications:
@@ -562,6 +626,14 @@ async def edit_product(product_id: int, body: ProductUpdateIn, user: CurrentUser
         product,
         "关注的商品信息已更新",
         f"您关注的商品「{product.title}」信息已被卖方更新，可查看最新内容。",
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_PRODUCT_EDIT,
+        target_type="product",
+        target_id=product.id,
+        before=before,
+        after=after,
     )
     await db.commit()
     await db.refresh(product)
@@ -595,6 +667,14 @@ async def delist(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
             link_type="trade",
             link_id=trade.id,
         )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_PRODUCT_DELIST,
+        target_type="product",
+        target_id=product.id,
+        before={"status": ProductStatus.LISTED.value},
+        after={"status": product.status},
+    )
     await db.commit()
     await db.refresh(product)
     return await _out(db, product, user, include_pending_count=True)
@@ -613,14 +693,22 @@ async def relist(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
         raise HTTPException(status.HTTP_409_CONFLICT, "仅已下架商品可重新上架")
     if product.display_restricted:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "商品因处置停止公开访问，暂不可上架")
-    latest = await db.scalar(
-        select(ReviewRecord).where(ReviewRecord.product_id == product.id).order_by(ReviewRecord.id.desc()).limit(1)
-    )
+    latest = (await db.exec(
+        select(ReviewRecord).where(col(ReviewRecord.product_id) == product.id).order_by(col(ReviewRecord.id).desc()).limit(1)
+    )).first()
     if not latest or latest.result != ReviewResult.APPROVED.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "商品审核无效，须重新提交审核")
     product.status = ProductStatus.LISTED.value
     product.listed_at = datetime.now(UTC)
     product.delisted_at = None
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_PRODUCT_RELIST,
+        target_type="product",
+        target_id=product.id,
+        before={"status": ProductStatus.DELISTED.value},
+        after={"status": product.status},
+    )
     await db.commit()
     await db.refresh(product)
     return await _out(db, product, user, include_pending_count=True)

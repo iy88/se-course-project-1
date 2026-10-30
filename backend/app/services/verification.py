@@ -1,18 +1,17 @@
 """邮箱验证码：注册前验证、忘记密码、更换邮箱（新旧邮箱各一码）。
 
-验证码存 KV（Redis 优先，进程内兜底），TTL 10 分钟；同一用途 60 秒内限发一次。
-开发环境可经配置将验证码随接口返回（仅联调用，见 bits/开发阶段技术决策.md）。
+验证码存放于配置指定的 KV，过期时间与发送间隔由配置控制。
+通过邮件发送验证码，不在接口响应中返回。
 """
 
-import random
+import secrets
 
 from fastapi import HTTPException, status
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 from app.kv.base import get_kv
-
-CODE_TTL_SECONDS = 600
-SEND_INTERVAL_SECONDS = 60
+from app.services.mail_delivery import deliver_code
 
 PURPOSE_REGISTER = "register"  # D-47：注册前验证当前邮箱控制权
 PURPOSE_RESET = "reset_password"
@@ -37,12 +36,15 @@ async def send_code(purpose: str, email: str) -> str:
     kv = get_kv()
     if await kv.get(_interval_key(purpose, email)):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "验证码发送过于频繁，请稍后再试")
-    code = f"{random.randint(0, 999999):06d}"
-    await kv.set(_key(purpose, email), code, CODE_TTL_SECONDS)
-    await kv.set(_interval_key(purpose, email), "1", SEND_INTERVAL_SECONDS)
-    # 本期不接入真实邮件通道：开发环境直接返回验证码（由配置开关控制）
-    if settings.environment == "dev" and settings.dev_expose_verification_code:
-        return code
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    await kv.set(_key(purpose, email), code, settings.verification_code_ttl_seconds)
+    await kv.set(_interval_key(purpose, email), "1", settings.verification_send_interval_seconds)
+    try:
+        await run_in_threadpool(deliver_code, settings, purpose, email, code)
+    except Exception:  # noqa: BLE001 - clear active codes and redact all transport/credential errors
+        await kv.delete(_key(purpose, email))
+        await kv.delete(_interval_key(purpose, email))
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "验证码邮件发送失败，请稍后重试") from None
     return ""
 
 
