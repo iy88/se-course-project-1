@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.2
-Version-Datetime: 2026-10-29T17:51:11+08:00
+Version: 0.2.3
+Version-Datetime: 2026-10-30T14:32:28+08:00
 -->
 
 # 文档构建
@@ -36,7 +36,6 @@ scripts/
       checks.py          # PDF产物、跳转和缺字检查
       commands.py        # PDF参数与命令执行
       header.tex         # 排版与链接宏
-  tests/                 # 构建工具回归用例
 ```
 
 统一使用 `cli.py` 的 `build`、`report`、`render`、`check` 和 `pdf` 子命令；各功能模块仅提供内部接口，不单独作为CLI运行。旧入口 `build.py` 和 `export_pdf.py` 已移除；原构建命令对应 `build` 子命令，原导出参数直接接在 `pdf` 后。通过 `python3 scripts/cli.py --help` 或 `python3 scripts/cli.py pdf --help` 查看帮助。
@@ -73,13 +72,9 @@ python3 scripts/cli.py check
 
 工具源码、测试及排版模板不维护文件内版本号；本说明文件保留版本信息。
 
-## 检查生成逻辑
+## 检查生成结果
 
-```text
-PYTHONPATH=scripts python3 -m unittest discover -s scripts/tests -p "test_*.py"
-```
-
-检查源文件修改传播、章节与报告一致性、链接重定位、路径范围、SC验收表投影、渲染失败时的输出保护及DPI记录。
+运行 `python3 scripts/cli.py check` 核对生成文档、本地链接与锚点。独立文档工具单元测试已收敛移除；业务验收仅由后端 UC/US/SC 全量入口执行，并与人工浏览器验收共用业务范围、角色和预期。该入口使用所选 dotenv 文件明确指定的后端，不设置 `--profile`。文档构建、渲染和导出命令保留。
 
 ## PDF 导出
 
@@ -99,3 +94,9 @@ python3 scripts/cli.py pdf --force --only docs/requirements/01-项目概述.md
 导出不修改源 Markdown。本地 `.md` 链接改写为相对 `.pdf` 路径并保留片段；标题同时登记 Pandoc ID 与 GitHub 风格片段别名，正文中的 `<a id="…">` 转为 LaTeX 目标，使目录链接可用。ASCII 片段保持原样；非 ASCII 片段在 PDF 目标中映射为稳定的 ASCII 目标名，避免 XeLaTeX 目标名编码不一致。外部 URL 原样保留；PNG、PUML 等非 Markdown 附件复制到对应目录。`docs/` 之外的仓库文档不导出；对应链接在PDF中保留标题与仓库相对路径文字，不生成点击动作或 `_repository/`。PDF间文件跳转使用显式UTF-16BE文件描述（`/Filespec`、`/UF`），保留真实中文文件名和空格，避免短中文名被误解为PDFDocEncoding，不把文件名编码为URI；网页和普通附件仍按URI处理。不展开索引目录，只处理实际链接。
 
 输出为 A4，正文使用中文字体，长代码与 URL 自动换行，图片缩放至版心并按正文位置放置，避免漂移到长表之后；列数达到 6 的宽表自动使用横向页（`--no-landscape-tables` 可关闭）。字体、页边距、字号及宽表阈值可通过 `--cjk-main-font`、`--margin`、`--fontsize`、`--wide-table-columns` 等参数调整。`scripts/doc_tools/pdf/header.tex` 将正文使用的箭头（`→`、`↔` 等）映射到数学字形，并把带圈数字 `①`—`⑳` 声明为 CJK 字符，避免中文字体缺字形成空框。
+
+## 开发应用服务
+
+开发分支的统一入口为 `./scripts/dev.sh start|stop|status`，从仓库根目录执行；也可用该脚本绝对路径从其他目录执行。start 后台启动后端8000、管理端5174、移动端5173，默认读取已有 backend/.env.dev，也可通过 APP_ENV_FILE 显式选择其他 dotenv 文件；托管进程不继承 shell 配置覆盖。不复制配置、不启动PG/Redis、不执行迁移或seed。status仅检查进程，停止状态返回1；stop只停止本入口托管服务。日志 var/log/dev-services.log，状态 var/run/dev-services.json。
+
+首次/升级结构先显式迁移；前端锁文件变化先停止服务并分别npm ci。详细配置、初始化和浏览器测试见[环境配置](../docs/development/环境配置.md)与[浏览器清单](../docs/development/浏览器交互验收清单.md)，不要同时使用一键和手动方案。
