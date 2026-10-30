@@ -135,10 +135,13 @@ if int(subprocess.check_output(['node', '-p', 'process.versions.node.split(".")[
 # Check all ports before setup; strictPort also prevents automatic port changes.
 for port in (8000, 5173, 5174):
     with socket.socket() as sock:
+        # 与服务监听 socket 一致，允许重启时复用 TIME_WAIT 地址。
+        # 已有监听者仍会使 bind 失败。
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(('127.0.0.1', port))
-        except OSError:
-            sys.exit(f'Port {port} is already in use. Stop the existing service first.')
+        except OSError as exc:
+            sys.exit(f'Port {port} cannot be bound: {exc}')
 
 children = []
 
