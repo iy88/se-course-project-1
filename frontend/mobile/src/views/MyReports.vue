@@ -26,13 +26,34 @@
 
             <p class="report-card__reason"><span class="report-card__label">原因</span>{{ r.reason }}</p>
 
+            <div v-if="r.evidence_urls?.length" class="report-card__media">
+              <van-image
+                v-for="(url, index) in r.evidence_urls"
+                :key="url"
+                :src="url"
+                fit="cover"
+                class="report-card__media-item"
+                @click="previewEvidence(r.evidence_urls, index)"
+              />
+            </div>
+
             <div v-if="r.result_confirmed" class="report-card__result">
               <span class="report-card__label">处理结论</span>
               <p>{{ r.public_result || '—' }}</p>
             </div>
 
             <div v-for="s in r.supplements" :key="s.id" class="report-card__supplement">
-              补充：{{ s.content }}
+              <span>补充：{{ s.content }}</span>
+              <div v-if="s.evidence_urls?.length" class="report-card__media">
+                <van-image
+                  v-for="(url, index) in s.evidence_urls"
+                  :key="url"
+                  :src="url"
+                  fit="cover"
+                  class="report-card__media-item"
+                  @click="previewEvidence(s.evidence_urls, index)"
+                />
+              </div>
             </div>
 
             <div v-if="supplement.reportId === r.id" class="report-card__editor">
@@ -190,7 +211,7 @@
 
 <script setup>
 import { onMounted, reactive, ref, watch } from 'vue'
-import { showToast } from 'vant'
+import { showImagePreview, showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -207,6 +228,11 @@ const mine = ref([])
 const received = ref([])
 const publicItems = ref([])
 const supplement = reactive({ reportId: null, content: '', error: '', submitting: false })
+
+function previewEvidence(urls, index) {
+  if (!urls?.length) return
+  showImagePreview({ images: urls, startPosition: index || 0 })
+}
 const supplementFiles = ref([])
 
 const mineLoading = ref(false)
@@ -533,5 +559,20 @@ onMounted(loadMine)
   width: 56px;
   height: 56px;
   border-radius: 8px;
+}
+
+.report-card__media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.report-card__media-item {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: zoom-in;
 }
 </style>
