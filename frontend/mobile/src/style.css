@@ -1066,6 +1066,17 @@ img {
   border-radius: 16px 16px 0 0;
 }
 
+/* 函数式对话框宽度兜底：即使 --van-dialog-width 未生效，也保持可读宽度。 */
+.van-dialog {
+  width: 320px;
+}
+
+@media (max-width: 321px) {
+  .van-dialog {
+    width: 90%;
+  }
+}
+
 /* 下拉面板 / 底部弹层整体与 760px 内容列对齐：
    - DropdownItem 的面板是 .van-dropdown-item 内的 Popup 子节点，只收缩该子节点；
      wrapper 内的独立 .van-overlay 仍覆盖全视口，保留遮罩变暗与点击关闭。

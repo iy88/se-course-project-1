@@ -1,6 +1,9 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import 'vant/lib/index.css'
+// 函数式对话框（showConfirmDialog 等）不经过模板自动导入，
+// 独立加载其样式，避免全量样式未就绪时退化成无宽度布局。
+import 'vant/es/dialog/index.css'
 import App from './App.vue'
 import router from './router'
 import { useSession } from './stores/session'
