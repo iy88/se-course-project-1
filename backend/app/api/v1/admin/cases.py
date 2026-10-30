@@ -158,6 +158,10 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
     # 附加上下文
     if case.product_id:
         product = await db.get(Product, case.product_id)
+        if product:
+            from app.storage.base import get_storage
+
+            product_image_urls = [get_storage().public_url(i.file_key) for i in product.images]
         data["product"] = {
             "id": product.id,
             "title": product.title,
@@ -168,6 +172,7 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
             "display_restricted_reason": product.display_restricted_reason,
             "display_restricted_case_id": product.display_restricted_case_id,
             "image_keys": [i.file_key for i in product.images],
+            "image_urls": product_image_urls,
             "tag_names": [t.name for t in product.tags],
         } if product else None
         if product:
@@ -189,6 +194,10 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
         from app.models import Report
 
         report = await db.get(Report, case.report_id)
+        if report:
+            from app.storage.base import get_storage
+
+            report_evidence_urls = [get_storage().public_url(key) for key in report.evidence_keys]
         data["report"] = {
             "id": report.id,
             "reporter_id": report.reporter_id,
@@ -197,6 +206,7 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
             "reason": report.reason,
             "detail": report.detail,
             "evidence_keys": report.evidence_keys,
+            "evidence_urls": report_evidence_urls,
             "status": report.status,
             "result_confirmed": report.result_confirmed,
         } if report else None

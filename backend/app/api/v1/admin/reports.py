@@ -48,6 +48,9 @@ async def target_snapshot(db, report: Report) -> dict | None:
         product = await db.get(Product, tid)
         if not product:
             return {"type": ttype, "missing": True}
+        from app.storage.base import get_storage
+
+        storage = get_storage()
         return {
             "type": ttype,
             "id": product.id,
@@ -56,6 +59,7 @@ async def target_snapshot(db, report: Report) -> dict | None:
             "price_cents": product.price_cents,
             "status": product.status,
             "image_keys": [i.file_key for i in product.images],
+            "image_urls": [storage.public_url(i.file_key) for i in product.images],
             "seller_id": product.seller_id,
         }
     if ttype == "comment":
@@ -79,7 +83,15 @@ async def target_snapshot(db, report: Report) -> dict | None:
         user = await db.get(User, tid)
         if not user:
             return {"type": ttype, "missing": True}
-        return {"type": ttype, "id": user.id, "display_name": user.display_name, "status": user.status}
+        from app.storage.base import get_storage
+
+        return {
+            "type": ttype,
+            "id": user.id,
+            "display_name": user.display_name,
+            "status": user.status,
+            "avatar_url": get_storage().public_url(user.avatar_key) if user.avatar_key else None,
+        }
     return None
 
 
