@@ -178,6 +178,9 @@ async def list_reports(
     if report_status != "all":
         query = query.where(col(Report.status) == report_status)
     result = await db.exec(query)
+    from app.storage.base import get_storage
+
+    storage = get_storage()
     items = []
     for report in result:
         case = (await db.exec(select(DisposalCase).where(col(DisposalCase.report_id) == report.id).order_by(col(DisposalCase.id).desc()).limit(1))).first()
@@ -189,6 +192,7 @@ async def list_reports(
                 "reason": report.reason,
                 "detail": report.detail,
                 "evidence_keys": report.evidence_keys,
+                "evidence_urls": [storage.public_url(key) for key in report.evidence_keys],
                 "status": report.status,
                 "result_confirmed": report.result_confirmed,
                 "public_result": report.public_result,

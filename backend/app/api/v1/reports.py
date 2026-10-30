@@ -241,14 +241,23 @@ async def my_reports(user: CurrentUser, db: DbSession) -> list[dict]:
     result = await db.exec(
         select(Report).where(col(Report.reporter_id) == user.id).order_by(col(Report.id).desc())
     )
+    from app.storage.base import get_storage
+
+    storage = get_storage()
     items = []
     for report in result:
         data = _report_out(report)
+        data["evidence_urls"] = [storage.public_url(key) for key in report.evidence_keys]
         supplements = (
             await db.exec(select(ReportSupplement).where(col(ReportSupplement.report_id) == report.id).order_by(col(ReportSupplement.id)))
         ).all()
         data["supplements"] = [
-            {"id": s.id, "content": s.content, "created_at": s.created_at.isoformat() if s.created_at else None}
+            {
+                "id": s.id,
+                "content": s.content,
+                "evidence_urls": [storage.public_url(key) for key in s.evidence_keys],
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
             for s in supplements
         ]
         items.append(data)
