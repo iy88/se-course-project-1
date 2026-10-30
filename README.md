@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.31
-Version-Datetime: 2026-10-29T20:56:02+08:00
+Version: 0.1.32
+Version-Datetime: 2026-10-30T20:25:57+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -13,92 +13,109 @@ Version-Datetime: 2026-10-29T20:56:02+08:00
 
 本目录保存校园二手交易与物品流转平台的需求分析交付材料。全部14个主用例、14个用户故事及16个领域类均有独立详细文档。01—08按顺序构成需求规格说明书正文，详细材料以各目录索引为入口；正文详细展开关键US、UC、类及SC并展示关键图。需求正文及US／UC／SC／领域类分析已于2026-10-23获项目负责人确认，BR／TR已讨论接受；确认范围见[需求基线](docs/requirements/08-需求基线.md)。
 
+## 开发设计与接入计划
+
+测试与浏览器复核按同一份 UC/US/SC 清单、角色和预期执行；HTTP 自动化与浏览器是不同执行通道，结果分别记录。数据库、存储与 KV 后端由选定 dotenv 文件明确配置，同一测试和 seed 命令适用，不使用 `--profile`。自动化 seed、数据库、存储及 Redis 资源按本轮隔离；浏览器人工登录使用部署初始化保留的管理员及单独注册的测试用户，不依赖自动化临时身份。SMTP 服务商配置和真实收件箱投递、生产迁移、生产资源配置、多实例广播和备份恢复演练仍未验证。步骤与结果模板见[浏览器交互验收清单](docs/development/浏览器交互验收清单.md)。
+
+ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQLAlchemy基础设施。图片使用OSS Python SDK V2的短期上传租约：前端直传，后端核对SHA256、元信息、大小与真实图片后确认引用；本地存储使用相同租约API。依赖版本对比见[直接依赖版本审计](docs/development/依赖版本审计.md)。
+
 ## 项目运行与配置
 
 ### 环境与目录
 
-本节适用于 `llm-test-only` 分支的开发实现。准备 Python 3.12及以上、uv、Node.js 22及以上及npm；Python依赖由 [uv.lock](backend/uv.lock) 固定，两个前端分别使用各自的 `package-lock.json`。以下步骤从仓库根目录开始，三个服务分别在独立终端运行。
+本节适用于 `llm-test-only` 分支的开发实现。准备 Python 3.12及以上、uv、Node.js 22及以上及npm；Python依赖由 [uv.lock](backend/uv.lock) 固定，两个前端分别使用各自的 `package-lock.json`。优先使用下方统一后台入口；手动启动备选方案需要三个独立终端。
 
 | 服务／数据 | 位置 | 本地地址／用途 |
 |---|---|---|
 | FastAPI后端 | `backend/` | `http://127.0.0.1:8000`；业务API前缀 `/api/v1` |
 | 移动用户端 | `frontend/mobile/` | `http://localhost:5173`；移动布局及PWA |
 | 桌面管理端 | `frontend/admin/` | `http://localhost:5174`；审核、共享处理池及管理处置 |
-| SQLite数据库 | `var/db/app.db` | 启动时自动建表，已有SQLite库增量补齐冻结计时字段 |
-| 本地图片存储 | `var/storage/` | 上传图片，经后端签名URL访问 |
+| 数据库 | 所选环境文件配置 | SQLite 或 PostgreSQL，结构使用显式迁移 |
+| 图片存储 | 所选环境文件配置 | local 或 OSS；上传图片经后端签名 URL 访问 |
 
-`var/`、`.env`、虚拟环境、`node_modules/`及构建目录均由Git忽略。保留已有数据库和图片目录即可保留业务数据，不需要为升级删除数据库。
+`var/`、`.env.dev`、`.env.prod`、虚拟环境、`node_modules/`及构建目录均由 Git 忽略。保留已有数据库和图片目录即可保留业务数据，不需要为升级删除数据库；生产配置不得提交。
 
 ### 后端配置
 
-配置定义见 [config.py](backend/app/core/config.py)。环境变量优先于 `.env`，未设置的项采用代码默认值；修改后重启后端。配置文件按**启动时的工作目录**查找，因此下列命令统一在 `backend/` 内执行，配置文件放 `backend/.env`，不放仓库根目录。
+配置定义见 [config.py](backend/app/core/config.py)。应用设置只从选定的 dotenv 文件读取；操作系统环境中仅 `APP_ENV_FILE` 用于选择文件，其他继承的配置变量不覆盖文件内容。默认读取 `backend/.env.dev`，不受启动 cwd 影响。修改后重启后端。
 
-先从[配置示例](backend/.env.example)创建本地配置，在 `backend/` 目录执行：
+从对应配置示例创建本地文件，在 `backend/` 目录执行：
 
 ```bash
-# -n 保留已经存在的 .env
-cp -n .env.example .env
+cp -n .env.dev.example .env.dev
+cp -n .env.prod.example .env.prod
+chmod 600 .env.dev .env.prod
 ```
 
-示例默认使用无Redis的本地开发模式，关键配置为：
+模板只使用 `REPLACE_*` 占位符，不写真实库名、角色名、bucket、AK 或密码。负责人自行填入 test/prod 值；不要把 test 文件原样当生产配置。示例中的关键项：
 
 ```dotenv
 ENVIRONMENT=dev
-REDIS_URL=
-STORAGE_BACKEND=local
-DEV_EXPOSE_VERIFICATION_CODE=true
+DATABASE_SCHEMA=app
+DATABASE_URL=postgresql+asyncpg://REPLACE_APP_DB_USER:REPLACE_URL_ENCODED_PASSWORD@127.0.0.1:5432/REPLACE_DATABASE_NAME
+MIGRATION_DATABASE_URL=postgresql+asyncpg://REPLACE_MIGRATION_DB_USER:REPLACE_URL_ENCODED_PASSWORD@127.0.0.1:5432/REPLACE_DATABASE_NAME
+MIGRATION_OWNER_ROLE=REPLACE_DB_OWNER_ROLE
+DB_AUTO_CREATE=false
+OSS_REGION=REPLACE_OSS_REGION
+OSS_ENDPOINT=https://REPLACE_OSS_ENDPOINT
+OSS_MEDIA_BUCKET=REPLACE_MEDIA_BUCKET
+OSS_EVIDENCE_BUCKET=REPLACE_EVIDENCE_BUCKET
+AUDIT_TRUSTED_PROXIES=none
 ```
 
-不要覆盖已有 `.env`；按需要合并这些配置。留空 `REDIS_URL` 使用进程内KV，验证码与频控状态会在进程重启时丢失。若使用Redis，改为 `REDIS_URL=redis://127.0.0.1:6379/0` 并先启动对应服务；默认值就是该地址。已配置Redis时连接失败会导致相关请求报错，不应把它当成自动切换到内存模式。
+| 配置 | 说明 |
+|---|---|
+| `APP_ENV_FILE` | 唯一文件选择器；默认 `backend/.env.dev`，显式指向 `.env.prod` 才运行生产 |
+| `REDIS_URL` / `REDIS_KEY_PREFIX` | 配置URL时使用Redis且必须有非空前缀；两项均省略时使用内存KV |
+| `ENVIRONMENT` | 必填：`dev`/`test`/`prod`；生产拒绝占位密钥及自动建表 |
+| `DATABASE_SCHEMA` | 必填：常驻应用配置使用 `app`；自动化 runner 为每轮生成隔离 schema 并使用私有临时 dotenv 文件 |
+| `DATABASE_URL` | 必填普通应用连接；PostgreSQL 使用 `postgresql+asyncpg`；SQLite 使用 `sqlite+aiosqlite` |
+| `MIGRATION_DATABASE_URL` / `MIGRATION_OWNER_ROLE` | 只由独立迁移命令读取，不进入常驻服务配置 |
+| `DB_AUTO_CREATE` | PostgreSQL 生产/集成必须为 false，结构由 `manage migrate` 建立；仅临时 SQLite 调试可 true |
+| `OSS_*` / `STORAGE_LOCAL_ROOT` | 任一OSS资源字段存在时必须配齐并使用OSS；未配置OSS资源时须提供本地目录。失败不回退 |
+| `OSS_*` | region、HTTPS endpoint、media/evidence 两个桶、单 RAM AK、超时与重试；缺字段只报告字段名 |
+| `AUDIT_TRUSTED_PROXIES` | 必填：`none` 或逗号分隔的代理 IP/CIDR；只信任列出的直连代理转发头 |
+| `SMTP_*` | 常规服务强制 SMTP；必填主机、端口、安全模式、账户、密码和寄件人，连接超时默认10秒 |
+| `JWT_SECRET` / `FILE_URL_SECRET` | 分别生成至少 32 字节随机值；各环境均不得使用开发默认密钥或占位符 |
 
-| 环境变量 | 默认值 | 说明 |
-|---|---|---|
-| `APP_NAME` | `CampusMarket API` | 应用及健康检查名称 |
-| `ENVIRONMENT` | `dev` | 开发验证码返回条件之一；改为 `prod` 不会自动接入生产服务 |
-| `DATABASE_URL` | 仓库内 `var/db/app.db` 的绝对SQLite URL | 格式为 `sqlite+aiosqlite:///...`；本期仅实现SQLite |
-| `REDIS_URL` | `redis://127.0.0.1:6379/0` | 非空使用Redis，空字符串使用内存KV |
-| `STORAGE_BACKEND` | `local` | 使用本地存储；`oss`仅接口桩，不能作为可用配置 |
-| `STORAGE_LOCAL_ROOT` | 仓库内 `var/storage` 的绝对路径 | 自定义相对路径按后端启动目录解析 |
-| `JWT_SECRET` | 代码中的固定开发值 | 登录令牌签名密钥；共享环境中替换为独立随机值，HS256至少32字节 |
-| `JWT_ALGORITHM`／`JWT_EXPIRE_DAYS` | `HS256`／`7` | 令牌签名算法及有效天数 |
-| `FILE_URL_SECRET`／`FILE_URL_EXPIRE_SECONDS` | 固定开发值／`3600` | 图片URL签名密钥及有效秒数；密钥单独生成 |
-| `DEV_EXPOSE_VERIFICATION_CODE` | `true` | 仅与 `ENVIRONMENT=dev` 同时满足时返回 `dev_code` |
-| `TRADE_CONFIRM_TIMEOUT_DAYS` | `7` | 单方完成确认的有效等待天数，冻结期间暂停累计 |
-| `TIMEOUT_SCAN_INTERVAL_SECONDS` | `60` | 后台超时扫描间隔秒数 |
-| `COMMENT_MAX_LENGTH` | `500` | 评论长度上限 |
-| `COMMENT_RATE_LIMIT_COUNT`／`COMMENT_RATE_LIMIT_SECONDS` | `3`／`60` | 每用户评论允许次数／窗口秒数 |
+密码含 `@`、`:`、`/`、`#`、`%` 时只对 URL 用户名/密码部分做 percent-encoding，不在报告或日志打印连接串。可运行 `uv run python -c "import secrets; print(secrets.token_urlsafe(32))"` 分别生成两个密钥。
 
-自定义数据库绝对路径示例为 `DATABASE_URL=sqlite+aiosqlite:////srv/campus/app.db`；自定义相对数据库路径按后端启动目录解析。未配置数据库与存储路径时，默认路径直接由仓库位置计算。
+必填配置缺失、空白或格式不合法时，服务在启动阶段报出字段名并退出。主机、端口、API基址与超时等运行参数可使用代码中的普通默认值；数据库、存储、KV、密钥及审计代理策略必须由所选环境文件明确配置。业务自动化只保留一套全量验收入口。
 
-可在后端依赖安装后运行以下命令生成一个随机密钥，分别生成两次后将结果填入 `JWT_SECRET` 和 `FILE_URL_SECRET`：
-
-```bash
-uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
-```
-
-前端沿用同源 `/api` 与 `/ws` 代理访问后端。
-
-当前没有真实邮件发送通道。开发模式的注册、找回密码和换邮箱通过接口返回的 `dev_code` 联调，界面会显示开发验证码；新用户注册仍须先获取并提交正确验证码。关闭该开关仅停止返回验证码，不会启用真实发信。
+注册、找回密码和换邮箱验证码通过配置的 SMTP 服务发送；正常接口响应不包含验证码，页面提示用户查收对应邮箱。启动前须在所选环境文件中填写真实邮件服务参数，未填写或使用占位值时服务启动失败。自动化验收将验证码写入私有临时 outbox 供测试读取，不连接真实 SMTP；真实收件箱投递仍须由人工按浏览器清单验证。
 
 ### 安装、初始化与启动
 
-终端一：安装后端依赖、初始化演示数据并启动API。
+日常测试优先从仓库根目录使用统一入口：
+
+```bash
+./scripts/dev.sh start
+./scripts/dev.sh status
+# 测试结束
+./scripts/dev.sh stop
+```
+
+`start` 在后台运行后端8000、管理端5174、移动端5173；默认读取已有 `backend/.env.dev`，也可用 `APP_ENV_FILE` 选择其他 dotenv 文件。托管进程不会继承 shell 中的应用、前端或工具配置覆盖。脚本检查端口、执行 `uv sync --frozen`，前端缺少 Vite 时执行 `npm ci`；不会复制配置、启动 PostgreSQL/Redis、执行迁移或 seed。首次初始化和升级结构须先按下方命令显式迁移。锁文件变化后，先停止服务、在两个前端分别运行 `npm ci` 再启动，不能依赖脚本对已有 node_modules 自动重装。
+
+`status` 只检查托管进程；未运行时返回1是正常的停止状态。日志见 `var/log/dev-services.log`，状态文件见 `var/run/dev-services.json`。启动准备可能超过5秒，先查看 status/日志，勿重复运行 start。一个服务退出时托管器停止其它服务；手动启动的进程不会由此入口接管或停止。不要同时使用后台与下方手动方案。
+
+测试与 seed 使用选定 dotenv 文件中的数据库、存储与 KV 配置；自动化 runner 为每轮建立私有临时 dotenv 文件、随机 schema 和隔离身份，结束后清理本轮资源，不要求手工切换配置文件。浏览器人工流程使用持久化初始化的管理员和单独注册的用户；管理员及必要参考数据由独立 `app.manage seed` 初始化，不使用自动化 seed。自动化验证码通过私有临时 outbox 读取，不经过真实邮件服务；人工注册、找回密码和换邮箱须查收实际邮件。清理实现与复验状态见开发验收文档。
+
+以下是初始化及手动启动备选方案。只需日常启动且数据库结构已更新时，直接使用上面的 `start`。
+
+终端一：安装后端依赖并启动 API。首次或升级数据库结构时显式迁移。部署管理员和必要参考数据由持久化初始化命令准备；自动化 runner 自行准备并清理其临时身份与数据。
 
 ```bash
 cd backend
 uv sync --locked
-uv run python -m app.seed
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+uv run python -m app.manage migrate          # 显式执行数据库迁移
+uv run python -m app.manage seed             # 持久化部署管理员及必要参考数据；密码交互输入
+uv run python -m app.manage serve --host 127.0.0.1 --port 8000
 ```
 
-种子脚本创建管理员、初始分类、禁发条目、演示用户及4件示例商品；按脚本中的账号／名称／标题检查已存在数据并跳过，不重置已有账号密码。仅需首次初始化或补齐演示数据时运行；后续直接启动API。演示数据直接写入，不代表真实邮箱验证或人工审核。
+迁移、seed、runner 和 pytest 命令使用所选 dotenv 文件指定的后端。验收报告记录实际配置目标，不把一种存储后端的结果表述成另一种后端的验证。
 
-| 用途 | 邮箱 | 初始密码 |
-|---|---|---|
-| 管理员（管理端登录） | `admin@campus.edu` | `admin123456` |
-| 张同学（移动端登录） | `zhang@campus.edu` | `secret123` |
-| 李同学（移动端登录） | `li@campus.edu` | `secret123` |
-| 王同学（移动端登录） | `wang@campus.edu` | `secret123` |
+自动化与人工测试共享业务范围、角色和预期，但使用不同身份来源：自动化通过真实 HTTP 执行并清理本轮 seed；人工浏览器使用持久化初始化的管理员与注册用户。不要把自动化临时身份当作人工登录账号。
 
 终端二：从仓库根目录启动桌面管理端。
 
@@ -132,27 +149,28 @@ curl http://127.0.0.1:8000/api/health
 
 ### 回归、构建与预览
 
-各命令分别从仓库根目录执行：
+业务测试只保留 `backend/tests/acceptance_real/` 一套完整验收。CLI与pytest调用同一个runner；后端由所选 dotenv 文件明确配置，不设另一套测试命令或 `--profile`。自动化与浏览器人工使用同一UC/US/SC业务范围、角色和预期；通道差异是自动化通过真实 HTTP、人工通过浏览器操作，人工结果不自动继承API结果。
 
 ```bash
-# 后端测试：临时SQLite、内存KV及临时图片目录
-(cd backend && uv run pytest -q)
+# 后端目录，唯一全量业务测试；runner使用本轮私有临时dotenv配置
+cd backend
+RUN_REAL_ACCEPTANCE=1 .venv/bin/python -m pytest -q
+# 同一runner的CLI入口，可指定专用服务端口/运行标识
+.venv/bin/python -m tests.acceptance_real.runner --port 8107
+```
 
-# 移动端生产构建
+runner自行准备本轮seed和隔离资源，启动专用测试服务，并在成功或失败时清理本轮数据库、存储和 Redis 数据；共享数据不得删除。最终全量与故障注入的资源清理已复验，结果见开发验收文档。退出码非0或存在FAIL/SKIP/PARTIAL/UNCOVERED均须查看报告。当前清单计数和执行状态见[整体验收](docs/development/整体验收.md)；浏览器清单维持独立 NOT-RUN，不继承 API 状态。
+
+同一全量入口默认采集整个 `backend/app` 的代码行与分支覆盖率，并合并验收驱动和真实 API 子进程的数据。HTML、JSON、XML、文本报告保存在 `var/acceptance-real/code-coverage/`，具体路径和百分比写入本轮验收报告；代码覆盖率与路由、UC/US/SC 覆盖率分别记录。
+
+lint、类型检查、文档构建检查和前端构建仍保留为工程检查，不另维护单元/专项测试套件：
+
+```bash
+(cd backend && uvx ruff check app tests alembic ../scripts)
+python3 scripts/cli.py check
 (cd frontend/mobile && npm run build)
-
-# 管理端生产构建
 (cd frontend/admin && npm run build)
 ```
-
-真实 HTTP 生命周期测试补充 pytest 夹具测试：对运行中的开发服务与开发库按现有 10 个阶段执行真实流程，会新增账号、商品、图片、交易与通知等演示数据（不可清理，勿对生产运行）。覆盖核对只统计检查项编号与实际执行状态，不代表全部验收条件语义已验证；说明见 [e2e_lifecycle](backend/tests/e2e_lifecycle/README.md)：
-
-```bash
-cd backend/tests/e2e_lifecycle
-../../.venv/bin/python e2e_runner.py --base-url http://127.0.0.1:8000
-```
-
-`--db-path` 与 `--results-dir` 未显式指定时默认使用仓库内 `var/db/app.db` 与 `var/e2e-results`；后端使用其他数据库时再传 `--db-path`。
 
 构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。本轮需求对齐后的自动化验证结果见[并行修改与审查计划](bits/需求同步并行修改计划.md)；最近一次真实开发环境 API 测试、补充数据与缺陷记录见[开发环境真实API测试与生命周期数据](bits/开发环境真实API测试与生命周期数据.md)。命令构建、真实 HTTP 测试通过与人工功能验收分别记录。
 
@@ -166,11 +184,11 @@ cd backend/tests/e2e_lifecycle
 (cd frontend/admin && npm run preview -- --port 4174 --strictPort)
 ```
 
-Vite预览沿用现有开发代理，可在本机联调；正式托管静态产物时需自行配置 `/api` 的HTTP反向代理、`/ws` 的WebSocket升级，以及前端路由回退到 `index.html`。两端均使用根路径，宜用不同域名或端口提供各自根目录，不直接拼接到同一站点的任意子路径。移动端PWA的Service Worker由生产构建生成，安装与缓存需在HTTPS或localhost安全上下文验证；业务操作仍依赖在线API。
+当前锁定的 Vite 6 预览默认继承 `server.proxy`，两端预览的 `/api`、`/ws` 仍指向本机8000，可在本机联调；后端须另行启动，预览不创建测试数据，也不由 `dev.sh` 管理。正式托管静态产物时需自行配置 `/api` 的HTTP反向代理、`/ws` 的WebSocket升级，以及前端路由回退到 `index.html`。两端均使用根路径，宜用不同域名或端口提供各自根目录，不直接拼接到同一站点的任意子路径。移动端PWA的Service Worker由生产构建生成，安装与缓存需在HTTPS或localhost安全上下文验证；业务操作仍依赖在线API。
 
 局域网手机访问时，可使用 `npm run dev -- --host 0.0.0.0 --strictPort`，手机访问开发机IP的5173端口；代理仍由开发机连接本机后端。普通局域网HTTP可用于页面联调，但不等于已满足PWA安装条件。
 
-当前运行方案面向单进程开发：WebSocket连接管理在进程内，内存KV亦不跨进程共享，后台扫描随后端启动。MySQL、OSS、真实邮件与多实例广播尚未实现，不因静态构建成功就视为生产部署完成。
+当前运行方案面向单进程开发：WebSocket连接管理在进程内；KV按所选配置使用进程内 memory 或 Redis。PostgreSQL、私有 OSS 双桶、环境隔离与审计曾在 test 目标接入；历史目标经验不代表现行 runner 清理策略已验证。生产迁移、生产资源配置、真实邮件、多实例广播及备份恢复演练仍未验证，不因静态构建或历史 test 结果就视为生产部署完成。
 
 ## 成员分工
 
