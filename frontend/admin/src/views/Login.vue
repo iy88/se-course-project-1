@@ -87,9 +87,11 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import http from '../api/http'
+import { useSession } from '../stores/session'
 import AppIcon from '../components/AppIcon.vue'
 
 const router = useRouter()
+const session = useSession()
 const form = reactive({ email: '', password: '' })
 const loading = ref(false)
 
@@ -102,9 +104,7 @@ async function submit() {
       ElMessage.error('该账户不是平台管理员')
       return
     }
-    localStorage.setItem('admin_token', data.access_token)
-    localStorage.setItem('admin_name', data.user.display_name)
-    localStorage.setItem('admin_user', JSON.stringify(data.user))
+    session.setSession(data.access_token, data.user)
     router.push('/cases')
   } catch {
     // 失败反馈由 http 响应拦截器统一提示，登录态与管理员校验保持不变。

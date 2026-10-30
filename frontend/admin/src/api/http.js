@@ -19,6 +19,7 @@ http.interceptors.response.use(
     const message = typeof detail === 'string' ? detail : '请求失败'
     if (error.response?.status === 401) {
       localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_user')
       if (!location.pathname.includes('/login')) location.href = '/login'
     } else {
       ElMessage.error(message)

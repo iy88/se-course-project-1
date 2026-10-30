@@ -71,10 +71,12 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
+import { useSession } from '../stores/session'
 
 const route = useRoute()
 const router = useRouter()
-const adminName = ref(localStorage.getItem('admin_name') || '管理员')
+const session = useSession()
+const adminName = computed(() => session.user?.display_name || '管理员')
 const windowWidth = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
 
 const navItems = [
@@ -116,9 +118,7 @@ onBeforeUnmount(() => {
 })
 
 function logout() {
-  localStorage.removeItem('admin_token')
-  localStorage.removeItem('admin_name')
-  localStorage.removeItem('admin_user')
+  session.clear()
   router.push('/login')
 }
 </script>
