@@ -3577,8 +3577,18 @@ class AcceptanceRun:
             mine = self._list(self._call("GET", "/api/v1/reports/mine", user="buyer", expected=200))
             mine_row = next(item for item in mine if int(item["id"]) == report_id)
             self.rec.must_eq(len(mine_row.get("supplements") or []), 1, "补充说明可查")
+            mine_evidence_urls = mine_row.get("evidence_urls") or []
+            self.rec.must_eq(len(mine_evidence_urls), 1, "举报证据链接返回举报人")
+            self._assert_media_url(mine_evidence_urls[0], "本人举报证据")
+            supplement_urls = (mine_row.get("supplements") or [{}])[0].get("evidence_urls") or []
+            self.rec.must_eq(len(supplement_urls), 1, "补充证据链接返回举报人")
+            self._assert_media_url(supplement_urls[0], "本人补充证据")
             rows = self._list(self._call("GET", "/api/v1/admin/reports", user="admin", expected=200, params={"status": "pending"}))
-            case_id = next(int(row["case_id"]) for row in rows if int(row.get("id") or 0) == report_id and row.get("case_id"))
+            report_row = next(row for row in rows if int(row.get("id") or 0) == report_id and row.get("case_id"))
+            case_id = int(report_row["case_id"])
+            list_evidence_urls = report_row.get("evidence_urls") or []
+            self.rec.must_eq(len(list_evidence_urls), 1, "举报列表返回证据链接")
+            self._assert_media_url(list_evidence_urls[0], "举报列表证据")
             self.cases["report_product"] = {"id": case_id, "report_id": report_id}
             self._claim(case_id)
             case_detail = self._dict(self._call("GET", f"/api/v1/admin/cases/{case_id}", user="admin", expected=200))
@@ -3664,6 +3674,7 @@ class AcceptanceRun:
             received = self._list(self._call("GET", "/api/v1/reports/received", user="seller", expected=200))
             received_row = next(item for item in received if int(item["id"]) == report_id)
             self.rec.must("reporter_id" not in received_row, "收到举报不披露举报人")
+            self.rec.must("evidence_urls" not in received_row, "收到举报不披露举报人证据")
             public = self._list(self._call("GET", "/api/v1/reports/public", user="outsider", expected=200))
             public_row = next(item for item in public if int(item["id"]) == report_id)
             self.rec.must_eq(set(public_row.keys()), {"id", "target_type", "status", "public_result", "closed_at"}, "公开结果白名单字段")
