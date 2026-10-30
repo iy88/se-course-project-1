@@ -196,6 +196,29 @@
               </div>
             </div>
 
+            <div v-if="detail.report.supplements?.length" class="supplements">
+              <h4 class="target-snapshot__title">后续补充</h4>
+              <div v-for="supplement in detail.report.supplements" :key="supplement.id" class="supplement">
+                <p class="target-snapshot__meta">{{ fmt(supplement.created_at) }}</p>
+                <p class="supplement__content">{{ supplement.content || '—' }}</p>
+                <div v-if="supplement.evidence_urls?.length" class="media-block">
+                  <span class="inline-label">补充证据（{{ supplement.evidence_urls.length }}）</span>
+                  <div class="media-grid">
+                    <el-image
+                      v-for="(url, index) in supplement.evidence_urls"
+                      :key="url"
+                      :src="url"
+                      :preview-src-list="supplement.evidence_urls"
+                      :initial-index="index"
+                      preview-teleported
+                      fit="cover"
+                      class="media-grid__item"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div v-if="detail.report_target" class="target-snapshot">
               <h4 class="target-snapshot__title">被举报内容</h4>
               <p v-if="detail.report_target.missing" class="hint">举报对象已不存在或当前不可见。</p>
@@ -926,6 +949,10 @@ async function submitAvatarDecision(approved) {
 .target-snapshot {
   margin-top: 16px;
 }
+
+.supplements { margin-top: 16px; }
+.supplement { padding: 12px 0; border-top: 1px solid var(--line); }
+.supplement__content { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .target-snapshot__title {
   margin: 0 0 8px;

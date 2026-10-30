@@ -46,7 +46,7 @@
       <p v-if="error" class="report-dialog__error">{{ error }}</p>
       <div class="report-dialog__actions">
         <van-button block :disabled="busy" @click="close">取消</van-button>
-        <van-button block type="primary" :loading="busy" :disabled="busy" @click="submit">提交举报</van-button>
+        <van-button block type="primary" :loading="busy" :disabled="busy || outcomeUnknown" @click="submit">提交举报</van-button>
       </div>
     </div>
   </van-popup>
@@ -57,6 +57,7 @@ import { ref, watch } from 'vue'
 import { showToast } from 'vant'
 import http from '../api/http'
 import { uploadImage } from '../api/uploads'
+import { createEvidenceUploads } from '../api/evidenceUploads'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -71,12 +72,17 @@ const detail = ref('')
 const files = ref([])
 const error = ref('')
 const busy = ref(false)
+const outcomeUnknown = ref(false)
+const evidenceUploads = createEvidenceUploads(uploadImage)
+watch(files, (items) => evidenceUploads.retain(items), { deep: true, flush: 'sync' })
 
 watch(() => props.show, (open) => {
   if (open) reset()
 })
 
 function reset() {
+  evidenceUploads.clear()
+  outcomeUnknown.value = false
   reason.value = ''
   detail.value = ''
   files.value = []
@@ -88,7 +94,7 @@ function close() {
 }
 
 async function submit() {
-  if (busy.value) return
+  if (busy.value || outcomeUnknown.value) return
   const targetId = Number(props.targetId)
   if (!Number.isInteger(targetId) || targetId <= 0) {
     error.value = '举报对象无效，请刷新后重试。'
@@ -106,23 +112,28 @@ async function submit() {
   busy.value = true
   error.value = ''
   try {
-    // 只在提交时上传；取消不上传，未成功引用的暂存对象由回收工具按租约到期清理。
-    const evidenceKeys = []
-    for (const item of files.value) {
-      if (item?.file) evidenceKeys.push(await uploadImage(item.file, 'report'))
+    const evidenceKeys = await evidenceUploads.upload(files.value)
+    let data
+    try {
+      data = await http.post('/reports', {
+        target_type: props.targetType,
+        target_id: targetId,
+        reason: trimmed,
+        detail: detail.value.trim() || null,
+        evidence_keys: evidenceKeys,
+      })
+    } catch (err) {
+      if (!err?.response) {
+        outcomeUnknown.value = true
+        throw new Error('提交结果未知，请先查看举报记录，确认未提交后再重新填写。')
+      }
+      throw err
     }
-    const data = await http.post('/reports', {
-      target_type: props.targetType,
-      target_id: targetId,
-      reason: trimmed,
-      detail: detail.value.trim() || null,
-      evidence_keys: evidenceKeys,
-    })
     emit('update:show', false)
     showToast(data.detail || '举报已提交')
     emit('submitted', data)
   } catch (err) {
-    error.value = err?.response?.data?.detail || '举报提交失败，请稍后重试。'
+    error.value = err?.response?.data?.detail || err?.message || '举报提交失败，请稍后重试。'
   } finally {
     busy.value = false
   }

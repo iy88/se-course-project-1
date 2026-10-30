@@ -85,7 +85,7 @@
                   size="small"
                   type="primary"
                   :loading="supplement.submitting"
-                  :disabled="supplement.submitting || !supplement.content.trim()"
+                  :disabled="supplement.submitting || supplement.outcomeUnknown || !supplement.content.trim()"
                   @click="submitSupplement"
                 >
                   提交
@@ -217,6 +217,7 @@ import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
 import { uploadImage } from '../api/uploads'
+import { createEvidenceUploads } from '../api/evidenceUploads'
 import { fmtTime, reportStatusLabels } from '../api/labels'
 import { useSession } from '../stores/session'
 
@@ -227,13 +228,15 @@ const tab = ref('mine')
 const mine = ref([])
 const received = ref([])
 const publicItems = ref([])
-const supplement = reactive({ reportId: null, content: '', error: '', submitting: false })
+const supplement = reactive({ reportId: null, content: '', error: '', submitting: false, outcomeUnknown: false })
 
 function previewEvidence(urls, index) {
   if (!urls?.length) return
   showImagePreview({ images: urls, startPosition: index || 0 })
 }
 const supplementFiles = ref([])
+const evidenceUploads = createEvidenceUploads(uploadImage)
+watch(supplementFiles, (items) => evidenceUploads.retain(items), { deep: true, flush: 'sync' })
 
 const mineLoading = ref(false)
 const receivedLoading = ref(false)
@@ -359,6 +362,8 @@ function canSupplement(report) {
 
 function openSupplement(report) {
   if (supplement.submitting) return
+  evidenceUploads.clear()
+  supplement.outcomeUnknown = false
   supplement.reportId = report.id
   supplement.content = ''
   supplement.error = ''
@@ -367,6 +372,8 @@ function openSupplement(report) {
 
 function closeSupplement() {
   if (supplement.submitting) return
+  evidenceUploads.clear()
+  supplement.outcomeUnknown = false
   supplement.reportId = null
   supplement.content = ''
   supplement.error = ''
@@ -374,7 +381,7 @@ function closeSupplement() {
 }
 
 async function submitSupplement() {
-  if (!supplement.reportId || supplement.submitting) return
+  if (!supplement.reportId || supplement.submitting || supplement.outcomeUnknown) return
   const content = supplement.content.trim()
   if (!content) {
     supplement.error = '请填写补充内容后再提交。'
@@ -388,19 +395,24 @@ async function submitSupplement() {
   supplement.submitting = true
   supplement.error = ''
   try {
-    // 只在提交时上传；取消不上传，未成功引用的暂存对象由回收工具按租约到期清理。
-    const evidenceKeys = []
-    for (const item of supplementFiles.value) {
-      if (item?.file) evidenceKeys.push(await uploadImage(item.file, 'report'))
+    const evidenceKeys = await evidenceUploads.upload(supplementFiles.value)
+    try {
+      await http.post(`/reports/${reportId}/supplements`, { content, evidence_keys: evidenceKeys })
+    } catch (err) {
+      if (!err?.response) {
+        supplement.outcomeUnknown = true
+        throw new Error('提交结果未知，请先查看举报记录，确认未提交后再重新填写。')
+      }
+      throw err
     }
-    await http.post(`/reports/${reportId}/supplements`, { content, evidence_keys: evidenceKeys })
+    evidenceUploads.clear()
     showToast('补充已提交')
     supplement.reportId = null
     supplement.content = ''
     supplementFiles.value = []
     await loadMine()
   } catch (err) {
-    supplement.error = errorText(err, '补充提交失败，请稍后重试。')
+    supplement.error = errorText(err, err?.message || '补充提交失败，请稍后重试。')
   } finally {
     supplement.submitting = false
   }

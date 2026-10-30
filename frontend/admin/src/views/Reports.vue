@@ -45,24 +45,6 @@
             </template>
           </el-table-column>
           <el-table-column prop="reason" label="举报原因" min-width="180" show-overflow-tooltip />
-          <el-table-column label="证据" width="132">
-            <template #default="{ row }">
-              <div v-if="row.evidence_urls?.length" class="evidence-cell">
-                <el-image
-                  v-for="(url, index) in row.evidence_urls.slice(0, 2)"
-                  :key="url"
-                  :src="url"
-                  :preview-src-list="row.evidence_urls"
-                  :initial-index="index"
-                  preview-teleported
-                  fit="cover"
-                  class="evidence-cell__item"
-                />
-                <span v-if="row.evidence_urls.length > 2" class="muted-text">+{{ row.evidence_urls.length - 2 }}</span>
-              </div>
-              <span v-else class="muted-text">—</span>
-            </template>
-          </el-table-column>
           <el-table-column label="状态" width="108">
             <template #default="{ row }">
               <el-tag :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag>
@@ -80,15 +62,16 @@
           <el-table-column label="操作" width="126" fixed="right">
             <template #default="{ row }">
               <el-button
-                v-if="row.case_id && row.case_status !== 'pending'"
+                v-if="canOpen(row)"
                 size="small"
                 @click="$router.push(`/cases/${row.case_id}`)"
               >
                 查看/处理
               </el-button>
-              <el-tooltip v-else-if="row.case_id" content="请先在待处理池认领该事项">
+              <el-tooltip v-else-if="row.case_id && row.case_status === 'pending'" content="请先在待处理池认领该事项">
                 <span><el-button size="small" disabled>认领后处理</el-button></span>
               </el-tooltip>
+              <span v-else-if="row.case_id" class="muted-text">由其他管理员处理</span>
               <span v-else class="muted-text">无关联事项</span>
             </template>
           </el-table-column>
@@ -108,10 +91,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import http from '../api/http'
+import { ensureAdminUser } from '../api/session'
 import { fmtTime as fmt } from '../api/time'
 import AppIcon from '../components/AppIcon.vue'
 
 const reports = ref([])
+const adminId = ref(null)
+const canOpen = (row) => row.case_id && row.case_status !== 'pending' && !!adminId.value && row.claimed_by_id === adminId.value
 const loading = ref(false)
 const statusFilter = ref('all')
 const loadError = ref('')
@@ -145,21 +131,8 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  adminId.value = (await ensureAdminUser())?.id || null
+  load()
+})
 </script>
-
-<style scoped>
-.evidence-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.evidence-cell__item {
-  width: 34px;
-  height: 34px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  cursor: zoom-in;
-}
-</style>

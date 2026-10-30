@@ -191,13 +191,19 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
                 for a in apps
             ]
     if case.report_id:
-        from app.models import Report
+        from app.models import Report, ReportSupplement
 
         report = await db.get(Report, case.report_id)
         if report:
             from app.storage.base import get_storage
 
-            report_evidence_urls = [get_storage().public_url(key) for key in report.evidence_keys]
+            storage = get_storage()
+            report_evidence_urls = [storage.public_url(key) for key in report.evidence_keys]
+            supplements = (await db.exec(
+                select(ReportSupplement)
+                .where(col(ReportSupplement.report_id) == report.id)
+                .order_by(col(ReportSupplement.id))
+            )).all()
         data["report"] = {
             "id": report.id,
             "reporter_id": report.reporter_id,
@@ -207,6 +213,15 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
             "detail": report.detail,
             "evidence_keys": report.evidence_keys,
             "evidence_urls": report_evidence_urls,
+            "supplements": [
+                {
+                    "id": supplement.id,
+                    "content": supplement.content,
+                    "created_at": supplement.created_at.isoformat() if supplement.created_at else None,
+                    "evidence_urls": [storage.public_url(key) for key in supplement.evidence_keys],
+                }
+                for supplement in supplements
+            ],
             "status": report.status,
             "result_confirmed": report.result_confirmed,
         } if report else None

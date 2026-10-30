@@ -3586,11 +3586,16 @@ class AcceptanceRun:
             rows = self._list(self._call("GET", "/api/v1/admin/reports", user="admin", expected=200, params={"status": "pending"}))
             report_row = next(row for row in rows if int(row.get("id") or 0) == report_id and row.get("case_id"))
             case_id = int(report_row["case_id"])
-            list_evidence_urls = report_row.get("evidence_urls") or []
-            self.rec.must_eq(len(list_evidence_urls), 1, "举报列表返回证据链接")
-            self._assert_media_url(list_evidence_urls[0], "举报列表证据")
+            for field in ("detail", "evidence_keys", "evidence_urls"):
+                self.rec.must(field not in report_row, f"未认领举报列表不披露 {field}")
+            self._call("GET", f"/api/v1/admin/cases/{case_id}", user="admin2", expected=403)
             self.cases["report_product"] = {"id": case_id, "report_id": report_id}
             self._claim(case_id)
+            other_rows = self._list(self._call("GET", "/api/v1/admin/reports", user="admin2", expected=200, params={"status": "all"}))
+            other_row = next(row for row in other_rows if int(row.get("id") or 0) == report_id)
+            for field in ("detail", "evidence_keys", "evidence_urls"):
+                self.rec.must(field not in other_row, f"其他管理员举报列表不披露 {field}")
+            self._call("GET", f"/api/v1/admin/cases/{case_id}", user="admin2", expected=403)
             case_detail = self._dict(self._call("GET", f"/api/v1/admin/cases/{case_id}", user="admin", expected=200))
             self.rec.must_eq(case_detail.get("case_type"), "report", "事项类型 report")
             self.rec.must_eq(int(case_detail.get("report", {}).get("id") or 0), report_id, "事项关联举报")
@@ -3598,6 +3603,12 @@ class AcceptanceRun:
             evidence_urls = case_detail.get("report", {}).get("evidence_urls") or []
             self.rec.must_eq(len(evidence_urls), 1, "证据直链在认领事项可见")
             self._assert_media_url(evidence_urls[0], "举报证据")
+            supplements = case_detail.get("report", {}).get("supplements") or []
+            self.rec.must_eq(len(supplements), 1, "认领事项可查看补充说明")
+            self.rec.must_eq(supplements[0].get("content"), "补充说明：交易前已核对描述。", "补充说明内容")
+            supplement_evidence_urls = supplements[0].get("evidence_urls") or []
+            self.rec.must_eq(len(supplement_evidence_urls), 1, "认领事项可查看补充证据")
+            self._assert_media_url(supplement_evidence_urls[0], "补充证据")
             target_image_urls = (case_detail.get("report_target") or {}).get("image_urls") or []
             self.rec.must(bool(target_image_urls), "举报对象商品图直链")
             if target_image_urls:
