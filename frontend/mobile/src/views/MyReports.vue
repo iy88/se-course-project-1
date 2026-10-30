@@ -46,6 +46,17 @@
                 :disabled="supplement.submitting"
                 placeholder="补充说明或证据（必填，最多 2000 字）"
               />
+              <div class="report-card__evidence">
+                <span class="report-card__label">截图证据（可选，最多 3 张）</span>
+                <van-uploader
+                  v-model="supplementFiles"
+                  :max-count="3"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  :max-size="10 * 1024 * 1024"
+                  :disabled="supplement.submitting"
+                  @oversize="showToast('图片不能超过 10 MiB')"
+                />
+              </div>
               <p v-if="supplement.error" class="report-card__error">{{ supplement.error }}</p>
               <div class="report-card__editor-actions">
                 <van-button size="small" :disabled="supplement.submitting" @click="closeSupplement">取消</van-button>
@@ -184,6 +195,7 @@ import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
+import { uploadImage } from '../api/uploads'
 import { fmtTime, reportStatusLabels } from '../api/labels'
 import { useSession } from '../stores/session'
 
@@ -195,6 +207,7 @@ const mine = ref([])
 const received = ref([])
 const publicItems = ref([])
 const supplement = reactive({ reportId: null, content: '', error: '', submitting: false })
+const supplementFiles = ref([])
 
 const mineLoading = ref(false)
 const receivedLoading = ref(false)
@@ -323,6 +336,7 @@ function openSupplement(report) {
   supplement.reportId = report.id
   supplement.content = ''
   supplement.error = ''
+  supplementFiles.value = []
 }
 
 function closeSupplement() {
@@ -330,6 +344,7 @@ function closeSupplement() {
   supplement.reportId = null
   supplement.content = ''
   supplement.error = ''
+  supplementFiles.value = []
 }
 
 async function submitSupplement() {
@@ -347,10 +362,16 @@ async function submitSupplement() {
   supplement.submitting = true
   supplement.error = ''
   try {
-    await http.post(`/reports/${reportId}/supplements`, { content })
+    // 只在提交时上传；取消不上传，未成功引用的暂存对象由回收工具按租约到期清理。
+    const evidenceKeys = []
+    for (const item of supplementFiles.value) {
+      if (item?.file) evidenceKeys.push(await uploadImage(item.file, 'report'))
+    }
+    await http.post(`/reports/${reportId}/supplements`, { content, evidence_keys: evidenceKeys })
     showToast('补充已提交')
     supplement.reportId = null
     supplement.content = ''
+    supplementFiles.value = []
     await loadMine()
   } catch (err) {
     supplement.error = errorText(err, '补充提交失败，请稍后重试。')
@@ -501,5 +522,16 @@ onMounted(loadMine)
 
 .public-more {
   margin-top: 12px;
+}
+
+.report-card__evidence {
+  padding: 4px 0 8px;
+}
+
+.report-card__evidence :deep(.van-uploader__upload),
+.report-card__evidence :deep(.van-uploader__preview-image) {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
 }
 </style>
