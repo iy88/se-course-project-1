@@ -1,3 +1,17 @@
+def sendBuildNotification() {
+    // Notification errors must not hide the original deployment result.
+    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE', catchInterruptions: false) {
+        timeout(time: 2, unit: 'MINUTES') {
+            emailext(
+                to: '$DEFAULT_RECIPIENTS',
+                subject: '$DEFAULT_SUBJECT',
+                body: '$DEFAULT_CONTENT',
+                attachLog: false
+            )
+        }
+    }
+}
+
 pipeline {
     agent any
 
@@ -889,6 +903,15 @@ REMOTE
 
         failure {
             echo '流水线失败，请查看第一个失败阶段；若已进入激活阶段，请同时检查回退结果。'
+            script {
+                sendBuildNotification()
+            }
+        }
+
+        fixed {
+            script {
+                sendBuildNotification()
+            }
         }
 
         always {

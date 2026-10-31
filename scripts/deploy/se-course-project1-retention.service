@@ -1,0 +1,10 @@
+[Unit]
+Description=Project1 release and backup retention
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/python3 /usr/local/sbin/se-course-project1-retention --execute
+TimeoutStartSec=15min
+Nice=10
