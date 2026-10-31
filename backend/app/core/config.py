@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
 from dotenv.parser import parse_stream
-from pydantic import ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -116,6 +116,8 @@ class DotenvOnlySettings(BaseSettings):
 
 class Settings(DotenvOnlySettings):
     app_name: str
+    api_host: str = Field(default='127.0.0.1', min_length=1)
+    api_port: int = Field(default=8000, ge=1, le=65535)
     environment: Literal['dev', 'test', 'prod']
     database_url: str
     db_auto_create: bool

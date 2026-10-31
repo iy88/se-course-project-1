@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.36
-Version-Datetime: 2026-10-31T11:19:04+08:00
+Version: 0.1.37
+Version-Datetime: 2026-10-31T13:24:59+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -75,6 +75,7 @@ AUDIT_TRUSTED_PROXIES=none
 
 | 配置 | 说明 |
 |---|---|
+| `API_HOST` / `API_PORT` | `app.manage serve` 从所选 dotenv 读取的监听地址与端口；默认 `127.0.0.1:8000`，生产示例使用 `8001`；不提供命令行覆盖 |
 | `APP_ENV_FILE` | 唯一文件选择器；默认 `backend/.env.dev`，显式指向 `.env.prod` 才运行生产 |
 | `REDIS_URL` / `REDIS_KEY_PREFIX` | 配置URL时使用Redis且必须有非空前缀；两项均省略时使用内存KV |
 | `ENVIRONMENT` | 必填：`dev`/`test`/`prod`；生产拒绝占位密钥及自动建表 |
@@ -122,7 +123,7 @@ cd backend
 uv sync --locked
 uv run python -m app.manage migrate          # 显式执行数据库迁移
 uv run python -m app.manage seed             # 持久化部署管理员及必要参考数据；密码交互输入
-uv run python -m app.manage serve --host 127.0.0.1 --port 8000
+uv run python -m app.manage serve
 ```
 
 迁移、seed、runner 和 pytest 命令使用所选 dotenv 文件指定的后端。验收报告记录实际配置目标，不把一种存储后端的结果表述成另一种后端的验证。

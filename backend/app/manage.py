@@ -3,7 +3,7 @@
 用法（默认读取 backend/.env.dev，独立迁移命令才读取迁移凭据）::
 
     python -m app.manage migrate
-    python -m app.manage serve --host 127.0.0.1 --port 8000
+    python -m app.manage serve
     python -m app.manage seed --admin-email <administrator email>
     python -m app.manage demo-seed --env-file .env.dev
 
@@ -40,9 +40,7 @@ def _parser() -> argparse.ArgumentParser:
     migrate = sub.add_parser("migrate", help="apply versioned PostgreSQL migrations")
     migrate.add_argument("--revision", default="head", help="target revision (default: head)")
 
-    serve = sub.add_parser("serve", help="run the API server")
-    serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8000)
+    sub.add_parser("serve", help="run the API server using API_HOST/API_PORT from the selected dotenv")
     seed = sub.add_parser("seed", help="persist initial administrator and optional reference categories")
     seed.add_argument("--admin-email", default=None, help="administrator email; prompted if omitted")
     seed.add_argument("--admin-name", default="管理员", help="display name for a new administrator")
@@ -93,14 +91,12 @@ def run_migrate(revision: str) -> int:
     return 0
 
 
-def run_serve(host: str, port: int) -> int:
+def run_serve() -> int:
     settings = load_settings()
     settings.validate_for_runtime()
-    if not (0 < port < 65536):
-        raise ConfigurationError("port must be between 1 and 65535")
     import uvicorn
 
-    uvicorn.run("app.main:app", host=host, port=port, log_level="info")
+    uvicorn.run("app.main:app", host=settings.api_host, port=settings.api_port, log_level="info")
     return 0
 
 
@@ -129,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "migrate":
             return run_migrate(args.revision)
         if args.command == "serve":
-            return run_serve(args.host, args.port)
+            return run_serve()
         if args.command == "seed":
             return run_seed(args.admin_email, args.admin_name, args.category)
         if args.command == "demo-seed":
