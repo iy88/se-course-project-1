@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.35
-Version-Datetime: 2026-10-31T11:10:47+08:00
+Version: 0.1.36
+Version-Datetime: 2026-10-31T11:19:04+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -183,6 +183,15 @@ python3 scripts/cli.py check
 (cd frontend/mobile && npm run build)
 (cd frontend/admin && npm run build)
 ```
+
+Jenkins 等独立构建环境可显式选择公开配置模式，无需后端 Python 环境或生产 dotenv：
+
+```bash
+(cd frontend/mobile && PROJECT1_FRONTEND_CONFIG=public npm run build)
+(cd frontend/admin && PROJECT1_FRONTEND_CONFIG=public npm run build)
+```
+
+此模式只读取公开参数 `VITE_API_BASE_URL`（默认 `/api/v1`）、`VITE_API_TIMEOUT_MS`（默认 `15000`）和开发代理参数 `API_PROXY_TARGET`（默认 `http://127.0.0.1:8000`），继续执行地址和超时校验。构建产物中的 API 地址供浏览器使用；默认值要求生产 Nginx 将同源 `/api/v1` 转发到后端，WebSocket 使用同源 `/ws`。未设置 `PROJECT1_FRONTEND_CONFIG` 时仍沿用后端 dotenv 配置；此开关不改变后端配置读取方式。
 
 构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。本轮需求对齐后的自动化验证结果见[并行修改与审查计划](bits/需求同步并行修改计划.md)；最近一次真实开发环境 API 测试、补充数据与缺陷记录见[开发环境真实API测试与生命周期数据](bits/开发环境真实API测试与生命周期数据.md)。命令构建、真实 HTTP 测试通过与人工功能验收分别记录。
 

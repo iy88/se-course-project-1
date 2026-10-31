@@ -7,7 +7,7 @@ const backendRoot = path.join(root, 'backend')
 const python = path.join(backendRoot, '.venv', 'bin', 'python')
 
 // Reuse the backend's strict dotenv loader so malformed, duplicate, blank, or
-// missing settings fail the frontend startup/build with the same rules.
+// missing settings fail the default frontend startup/build with the same rules.
 // The exporter returns only public endpoint settings; secrets never enter Vite.
 const exporter = `
 import json
@@ -24,28 +24,43 @@ result = {
 print(json.dumps(result))
 `
 
-let raw
-try {
-  raw = execFileSync(python, ['-c', exporter], {
-    cwd: backendRoot,
-    encoding: 'utf8',
-    env: {
-      PATH: process.env.PATH || '',
-      ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
-      ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
-      ...(process.env.LANG ? { LANG: process.env.LANG } : {}),
-      ...(Object.hasOwn(process.env, 'APP_ENV_FILE')
-        ? { APP_ENV_FILE: process.env.APP_ENV_FILE }
-        : {}),
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-} catch (error) {
-  const detail = error.stderr?.toString().trim()
-  throw new Error(detail || 'Selected dotenv configuration is invalid or unavailable')
+const configSource = process.env.PROJECT1_FRONTEND_CONFIG ?? 'backend'
+if (!['backend', 'public'].includes(configSource)) {
+  throw new Error('PROJECT1_FRONTEND_CONFIG must be backend or public')
 }
 
-const publicSettings = JSON.parse(raw)
+let publicSettings
+if (configSource === 'public') {
+  // CI builds need only public endpoints, never backend credentials or Python.
+  publicSettings = {
+    apiBaseUrl: process.env.VITE_API_BASE_URL ?? '/api/v1',
+    timeoutMs: process.env.VITE_API_TIMEOUT_MS ?? '15000',
+    proxyTarget: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8000',
+  }
+} else {
+  let raw
+  try {
+    raw = execFileSync(python, ['-c', exporter], {
+      cwd: backendRoot,
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH || '',
+        ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+        ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
+        ...(process.env.LANG ? { LANG: process.env.LANG } : {}),
+        ...(Object.hasOwn(process.env, 'APP_ENV_FILE')
+          ? { APP_ENV_FILE: process.env.APP_ENV_FILE }
+          : {}),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    const detail = error.stderr?.toString().trim()
+    throw new Error(detail || 'Selected dotenv configuration is invalid or unavailable')
+  }
+  publicSettings = JSON.parse(raw)
+}
+
 const apiBaseUrl = String(publicSettings.apiBaseUrl).trim()
 const timeoutMs = Number(publicSettings.timeoutMs)
 const proxyTarget = String(publicSettings.proxyTarget).trim()
