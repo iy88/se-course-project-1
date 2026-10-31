@@ -596,7 +596,13 @@ img {
   background: var(--panel);
 }
 
+.van-search .van-search__field {
+  padding: 0 var(--van-padding-xs) 0 0;
+}
+
 .van-search__content .van-field__left-icon {
+  display: flex;
+  align-items: center;
   margin-right: 6px;
   color: var(--ink-meta);
 }

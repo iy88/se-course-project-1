@@ -205,8 +205,7 @@ try:
         if not (root / folder / 'node_modules/.bin/vite').exists():
             run(['npm', 'ci'], folder)
     backend_env = child_environment(app_env_file=env_path, python_unbuffered=True)
-    backend = start(['.venv/bin/python', '-m', 'app.manage', 'serve',
-                     '--host', '127.0.0.1', '--port', '8000'], 'backend', env=backend_env)
+    backend = start(['.venv/bin/python', '-m', 'app.manage', 'serve'], 'backend', env=backend_env)
     state['services']['Backend'] = {'pid': backend.pid, 'started': identity(backend.pid)}
     save_state()
     frontend_env = child_environment(app_env_file=env_path)
