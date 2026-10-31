@@ -5,6 +5,7 @@
     python -m app.manage migrate
     python -m app.manage serve --host 127.0.0.1 --port 8000
     python -m app.manage seed --admin-email <administrator email>
+    python -m app.manage demo-seed --env-file .env.dev
 
 持久初始化使用 seed 子命令；自动化身份 seed 属于验收套件（``python -m tests.acceptance_real.seed``），
 不再由应用管理命令提供；应用模块不反向依赖 tests。
@@ -46,6 +47,9 @@ def _parser() -> argparse.ArgumentParser:
     seed.add_argument("--admin-email", default=None, help="administrator email; prompted if omitted")
     seed.add_argument("--admin-name", default="管理员", help="display name for a new administrator")
     seed.add_argument("--category", action="append", default=[], help="optional initial category; repeatable")
+    demo = sub.add_parser("demo-seed", help="persist demonstration accounts and business scenarios in the selected environment")
+    demo.add_argument("--env-file", default=None, help="dotenv file (default: APP_ENV_FILE or .env.dev)")
+    demo.add_argument("--manifest", default=None, help="private demo manifest path")
     return parser
 
 
@@ -128,6 +132,15 @@ def main(argv: list[str] | None = None) -> int:
             return run_serve(args.host, args.port)
         if args.command == "seed":
             return run_seed(args.admin_email, args.admin_name, args.category)
+        if args.command == "demo-seed":
+            from app.devtools.demo_seed import main as run_demo_seed
+
+            demo_args = []
+            if args.env_file is not None:
+                demo_args.extend(["--env-file", args.env_file])
+            if args.manifest is not None:
+                demo_args.extend(["--manifest", args.manifest])
+            return run_demo_seed(demo_args)
     except ConfigurationError as exc:
         print(str(exc), file=sys.stderr)
         return 2

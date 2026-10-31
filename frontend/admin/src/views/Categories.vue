@@ -37,12 +37,17 @@
       <div class="table-scroll">
         <el-table :data="categories" v-loading="loading" class="data-table" row-key="id">
           <el-table-column prop="id" label="ID" width="64" />
-          <el-table-column label="主名称" width="168">
+          <el-table-column label="主名称" min-width="260">
             <template #default="{ row }">
-              <el-tag :type="row.status === 'active' ? 'primary' : 'info'" effect="light">{{ row.name }}</el-tag>
+              <el-tag
+                class="name-tag"
+                :type="row.status === 'active' ? 'primary' : 'info'"
+                effect="light"
+                :title="row.name"
+              >{{ row.name }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="别名" min-width="230">
+          <el-table-column label="别名" min-width="240">
             <template #default="{ row }">
               <div class="alias-row">
                 <span v-for="a in row.aliases" :key="a" class="alias-chip">
@@ -202,6 +207,11 @@ onMounted(load)
 </script>
 
 <style scoped>
+/* 极长标签名兜底：限制在列宽内，超长时由 el-tag 内容省略，title 提供全名。 */
+.name-tag {
+  max-width: 100%;
+}
+
 .alias-row {
   display: flex;
   align-items: center;

@@ -4790,6 +4790,17 @@ class AcceptanceRun:
             ac=["US-01-AC-06", "US-08-AC-01"],
             sc=["SC-01-10"],
         ):
+            summary = self._dict(self._call('GET', '/api/v1/admin/audit/summary', user='admin', params={'days': 7}))
+            self.rec.must_eq(summary['timezone'], 'Asia/Shanghai', '审计概览采用北京时间')
+            self.rec.must_eq(len(summary['daily']), 7, '概览补齐七天日期')
+            self.rec.must_eq(sum(row['count'] for row in summary['categories']), summary['total'], '分类数量等于总量')
+            self.rec.must_eq(sum(row['count'] for row in summary['daily']), summary['total'], '趋势数量等于总量')
+            self.rec.must_eq(sum(summary['results'].values()), summary['total'], '结果数量等于总量')
+            self._call('GET', '/api/v1/admin/audit/summary', user='outsider', expected=403)
+            self._call('GET', '/api/v1/admin/audit/summary', expected=401)
+            self._call('GET', '/api/v1/admin/audit/summary', user='admin', expected=422, params={'days': 31})
+            classified = self._dict(self._call('GET', '/api/v1/admin/audit/events', user='admin', params={'category': 'account', 'limit': 20}))
+            self.rec.must(all(row['event_type'].startswith(('auth.', 'user.')) for row in classified['items']), '分类明细口径一致')
             failed = self._dict(
                 self._call(
                     "GET",
@@ -4799,7 +4810,11 @@ class AcceptanceRun:
                     params={"event_type": "auth.login_failed", "result": "failure", "limit": 10},
                 )
             )
-            self.rec.must(int(failed.get("total") or 0) >= 1, "失败登录审计存在")
+            self.rec.must(int(failed.get("total") or 0) >= 1, "已识别账户的失败登录审计存在")
+            self._call('POST', '/api/v1/auth/login', expected=401, json_body={'email': f'unknown-{self.run_id}@example.com', 'password': 'wrong-password'})
+            self._call('GET', '/api/v1/admin/users', expected=401)
+            anonymous = self._db_one("select count(*) as n from app.audit_events where actor_role='anonymous' or (actor_id is null and actor_role<>'system')")
+            self.rec.must_eq(int(anonymous['n']), 0, '匿名请求及未知账户登录失败均不记录审计')
             event_id = int(str((failed.get("items") or [{}])[0].get("event_id") or 0))
             detail = self._dict(self._call("GET", f"/api/v1/admin/audit/events/{event_id}", user="admin", expected=200))
             self.rec.must_eq(int(detail["event_id"]), event_id, "审计详情")

@@ -419,7 +419,7 @@ def _build_event(
     elif actor_role in _ALLOWED_ROLES:
         role = actor_role
     elif actor_id is not None:
-        role = _ACTOR_ROLE.get() if _ACTOR_ROLE.get() in _ALLOWED_ROLES else "user"
+        role = _ACTOR_ROLE.get() if _ACTOR_ROLE.get() in {"user", "admin", "system"} else "user"
     else:
         role = "anonymous"
 
@@ -443,6 +443,11 @@ def _build_event(
     )
 
 
+def should_record_actor(actor_id: int | None, actor_role: str | None) -> bool:
+    """只留存可归属到账户或明确系统任务的事件。"""
+    return actor_role != 'anonymous' and (actor_id is not None or actor_role == 'system')
+
+
 async def record_event(
     db: AsyncSession,
     event_type: str,
@@ -456,9 +461,14 @@ async def record_event(
     actor_id: int | None | _Unset = _UNSET,
     actor_role: str | None = None,
     request_id: str | None | _Unset = _UNSET,
-) -> AuditEvent:
-    """把成功事件加入当前事务；不 commit，失败必须让调用方回滚业务。"""
+) -> AuditEvent | None:
+    """可归属事件加入当前事务；匿名事件跳过，不改变业务事务。"""
     effective_actor = _ACTOR_ID.get() if isinstance(actor_id, _Unset) else actor_id
+    effective_role = actor_role or _ACTOR_ROLE.get()
+    if effective_actor is not None and actor_role is None and effective_role == 'anonymous':
+        effective_role = 'user'
+    if not should_record_actor(effective_actor, effective_role):
+        return None
     event = _build_event(
         event_type=event_type,
         target_type=target_type,
@@ -468,7 +478,7 @@ async def record_event(
         before=before,
         after=after,
         actor_id=effective_actor,
-        actor_role=actor_role,
+        actor_role=effective_role,
         request_id=request_id,
         ip=_UNSET,
         user_agent=_UNSET,
@@ -492,7 +502,7 @@ async def record_standalone_failure(
     request_id: str | None | _Unset = _UNSET,
 ) -> None:
     """在独立短事务中记录失败/拒绝事件；不让审计故障影响原响应。"""
-    if bind is None:
+    if bind is None or not should_record_actor(actor_id, actor_role):
         return
     if isinstance(bind, AsyncConnection):
         # 若业务会话绑定在单独连接上，独立事务使用其 engine；不能用同一连接。

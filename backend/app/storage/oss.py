@@ -27,6 +27,7 @@ from urllib.parse import urlsplit
 
 from app.core.config import validate_storage_key_prefix
 from app.storage.base import (
+    StorageAlreadyExists,
     StorageBackend,
     StorageConfigError,
     StorageError,
@@ -150,7 +151,7 @@ class _V2Bucket:
 
     def put_object(self, key: str, content: bytes, headers: dict[str, str]) -> Any:
         import alibabacloud_oss_v2 as oss
-        return self.client.put_object(oss.PutObjectRequest(bucket=self.name, key=key, body=content, content_type=headers["Content-Type"]))
+        return self.client.put_object(oss.PutObjectRequest(bucket=self.name, key=key, body=content, content_type=headers["Content-Type"], forbid_overwrite=headers.get("x-oss-forbid-overwrite") == "true"))
 
     def get_object(self, key: str) -> Any:
         import alibabacloud_oss_v2 as oss
@@ -232,6 +233,8 @@ def _translate_error(exc: Exception) -> StorageError:
     status = getattr(exc, "status_code", getattr(exc, "status", None))
     code = str(getattr(exc, "code", "") or "")
 
+    if "FileAlreadyExists" in code or "ObjectAlreadyExists" in code:
+        return StorageAlreadyExists("文件已存在，不能覆盖")
     if "NoSuchBucket" in code:
         return StorageConfigError("文件存储配置异常")
     if "NoSuchKey" in code or "NotFound" in code or status == 404:
@@ -275,7 +278,7 @@ class OssStorage(StorageBackend):
         namespace = namespace_for_key(key)
         return self._bucket_for_role(bucket_role_for_namespace(namespace))
 
-    def _run(self, operation: str, func: Callable[[], Any]) -> Any:
+    def _run(self, operation: str, func: Callable[[], Any], *, missing_ok: bool = False) -> Any:
         attempts = self.config.max_retries + 1
         for attempt in range(attempts):
             try:
@@ -291,12 +294,15 @@ class OssStorage(StorageBackend):
                     time.sleep(min(0.05 * (2**attempt), 0.5))
                     continue
                 translated = _translate_error(exc)
+                if missing_ok and isinstance(translated, StorageNotFound):
+                    raise translated from None
+                cause = _unwrap(exc)
                 logger.warning(
                     "storage_%s_failed error=%s status=%s code=%s",
                     operation,
                     type(exc).__name__,
-                    getattr(exc, "status", None),
-                    getattr(exc, "code", None),
+                    getattr(cause, "status_code", getattr(cause, "status", None)),
+                    getattr(cause, "code", None),
                 )
                 raise translated from None
         raise StorageUnavailable(
@@ -304,22 +310,25 @@ class OssStorage(StorageBackend):
         )  # pragma: no cover - 循环必然返回/抛出
 
     def save(self, namespace: str, filename: str, content: bytes) -> str:
-        role = bucket_role_for_namespace(namespace)
         key = make_key(namespace, filename)
+        self.save_to_key(key, content)
+        return key
+
+    def save_to_key(self, key: str, content: bytes) -> None:
+        """Atomically create a previously selected key; never overwrite an object."""
+        namespace = namespace_for_key(key)
+        role = bucket_role_for_namespace(namespace)
         self._journal_write(key, role)
         bucket = self._bucket_for_role(role)
-        content_type = content_type_for_key(key)
 
         def _put() -> None:
             result = bucket.put_object(
-                self.config.key_prefix + key,
-                content,
-                headers={"Content-Type": content_type},
+                self.config.key_prefix + key, content,
+                headers={"Content-Type": content_type_for_key(key), "x-oss-forbid-overwrite": "true"},
             )
             _close_result(result)
 
         self._run("put", _put)
-        return key
 
     def sign_upload(self, key: str, *, content_type: str, size_bytes: int,
                     expires_seconds: int, sha256: str) -> dict[str, Any]:
@@ -403,7 +412,7 @@ class OssStorage(StorageBackend):
             _close_result(bucket.head_object(self.config.key_prefix + key))
 
         try:
-            self._run("head", _head)
+            self._run("head", _head, missing_ok=True)
         except StorageNotFound:
             return False
         return True

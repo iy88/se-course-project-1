@@ -1,6 +1,7 @@
 """SQLite 增量结构升级（D-51）。
 
-新库由 create_all 正常建表；已有 SQLite 库只追加缺失列，不删除/重建表，不丢数据。
+新库由 create_all 建表；已有 SQLite 库补齐缺失列与头像待审事项。
+审计清理按现行规则删除匿名事件，保留账户及明确系统任务记录。
 """
 
 from sqlalchemy import inspect, text
@@ -46,4 +47,6 @@ def upgrade_additive_schema(conn: Connection) -> list[str]:
             AND NOT EXISTS (SELECT 1 FROM disposal_cases c
                 WHERE c.case_type='avatar_review' AND c.subject_user_id=users.id
                 AND c.status IN ('pending','processing'))"""))
+    if 'audit_events' in existing_tables:
+        conn.execute(text("DELETE FROM audit_events WHERE actor_role='anonymous' OR (actor_id IS NULL AND actor_role<>'system')"))
     return applied

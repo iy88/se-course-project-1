@@ -72,9 +72,8 @@ async def _record_failure(request: Request, status_code: int) -> None:
         return
     classified = audit_service.classify_denied(request.method, request.url.path, status_code)
     actor_id = audit_service.current_actor_id()
-    # 未认证访问（包括过期凭证）属于访问日志；登录失败仍须留存审计。
-    if (status_code == 401 and actor_id is None
-            and classified["event_type"] != audit_service.EVENT_AUTH_LOGIN_FAILED):
+    # 未识别操作人的所有失败与拒绝均留在访问日志，包括未知账户登录失败。
+    if actor_id is None:
         return
     target_type = classified.get("target_type")
     target_id = classified.get("target_id")

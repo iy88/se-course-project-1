@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.34
-Version-Datetime: 2026-10-31T00:18:53+08:00
+Version: 0.1.35
+Version-Datetime: 2026-10-31T11:10:47+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -18,6 +18,8 @@ Version-Datetime: 2026-10-31T00:18:53+08:00
 测试与浏览器复核按同一份 UC/US/SC 清单、角色和预期执行；HTTP 自动化与浏览器是不同执行通道，结果分别记录。数据库、存储与 KV 后端由选定 dotenv 文件明确配置，同一测试和 seed 命令适用，不使用 `--profile`。自动化 seed、数据库、存储及 Redis 资源按本轮隔离；浏览器人工登录使用部署初始化保留的管理员及单独注册的测试用户，不依赖自动化临时身份。SMTP 服务商配置和真实收件箱投递、生产迁移、生产资源配置、多实例广播和备份恢复演练仍未验证。步骤与结果模板见[浏览器交互验收清单](docs/development/浏览器交互验收清单.md)。
 
 ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQLAlchemy基础设施。图片使用OSS Python SDK V2的短期上传租约：前端直传，后端核对SHA256、元信息、大小与真实图片后确认引用；本地存储使用相同租约API。依赖版本对比见[直接依赖版本审计](docs/development/依赖版本审计.md)。
+
+人工演示使用 `(cd backend && .venv/bin/python -m app.manage demo-seed --env-file .env.dev)`，向所选环境持久添加演示账号、图片和业务记录，沿用配置的数据库 schema 与存储资源。先对同一环境执行 `migrate`；账号清单、场景入口与 US／UC／SC 演示步骤见 [Demo seed](docs/development/demo-seed.md)。
 
 ## 项目运行与配置
 
