@@ -1,8 +1,8 @@
-"""人工测试重置：默认预览，执行前停止所有后端与测试进程。"""
+"""环境数据重置：默认预览，生产须显式授权；执行前停止所有后端与测试进程。"""
 import argparse
 import asyncio
+import os
 import shutil
-import traceback
 from pathlib import Path
 
 from sqlalchemy import text
@@ -10,10 +10,13 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import (
+    PROD_ENV_FILE,
+    ConfigurationError,
     MigrationSettings,
     Settings,
     load_migration_settings,
     load_settings,
+    resolve_env_file,
     validate_migration_context,
 )
 from app.devtools._support import check_inherited_overrides, resolve_dev_env_file
@@ -95,21 +98,31 @@ async def clear_db_redis(s: Settings, m: MigrationSettings | None) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--env-file', help='dotenv 文件，默认 APP_ENV_FILE 或 .env.dev')
+    parser.add_argument('--allow-production', action='store_true', help='显式允许预览/重置 .env.prod 生产资源')
     parser.add_argument('--whole-buckets', action='store_true', help='确认空 OSS 前缀时清理两个配置桶的全部当前对象')
     parser.add_argument('--confirm', help='执行时填写目标数据库名')
     args = parser.parse_args(argv)
     try:
         check_inherited_overrides()
-        s = load_settings(resolve_dev_env_file())
-        if s.environment not in {'dev', 'test'}:
-            raise ValueError('只允许开发或测试环境')
+        selected = resolve_env_file(args.env_file)
+        if selected == PROD_ENV_FILE.resolve() or selected.name == '.env.prod':
+            if not args.allow_production:
+                raise ValueError('生产重置需要 --allow-production')
+        else:
+            selected = resolve_dev_env_file({'APP_ENV_FILE': str(selected)})
+        s = load_settings(selected)
+        if s.environment == 'prod' and not args.allow_production:
+            raise ValueError('生产重置需要 --allow-production')
+        if args.allow_production and (s.environment != 'prod' or selected != PROD_ENV_FILE.resolve()):
+            raise ValueError('--allow-production 仅用于后端 .env.prod 生产配置')
         url = make_url(s.database_url)
         database_name = url.database
         if not database_name:
             raise ValueError('数据库 URL 需要包含数据库名或 SQLite 文件路径')
         m = None
         if url.drivername == 'postgresql+asyncpg':
-            m = load_migration_settings()
+            m = load_migration_settings(selected)
             validate_migration_context(m)
             if s.database_schema in {'public', 'information_schema'}:
                 raise ValueError('需要独立应用 schema')
@@ -140,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
             print('仅预览，未修改资源。执行前停止服务，再使用 --execute --confirm <数据库名>。')
             return 0
         if s.storage_backend == 'oss' and not s.storage_key_prefix and not args.whole_buckets:
-            raise ValueError('当前 OSS 范围为整个桶；确认两个桶均为测试专用后添加 --whole-buckets')
+            raise ValueError('当前 OSS 范围为整个桶；确认清空两个配置桶的全部当前对象后添加 --whole-buckets')
         if args.confirm != confirmation:
             raise ValueError('--confirm 必须与目标数据库名一致')
         print('开始重置；跨服务无整体事务，失败后修复原因并重跑。', flush=True)
@@ -149,11 +162,22 @@ def main(argv: list[str] | None = None) -> int:
         else:
             clear_local(s)
         asyncio.run(clear_db_redis(s, m))
-        run_migrate('head')
-        print('重置完成；运行 python -m app.manage seed 初始化管理员和分类。')
+        previous = os.environ.get('APP_ENV_FILE')
+        try:
+            os.environ['APP_ENV_FILE'] = str(selected)
+            run_migrate('head')
+        finally:
+            if previous is None:
+                os.environ.pop('APP_ENV_FILE', None)
+            else:
+                os.environ['APP_ENV_FILE'] = previous
+        print('重置完成；初始化 seed 或使用新的 demo manifest 运行 demo-seed。旧 manifest 请先归档。')
         return 0
-    except Exception:  # noqa: BLE001 - CLI 顶层打印完整异常并返回失败状态
-        traceback.print_exc()
+    except (ConfigurationError, ValueError) as exc:
+        print(str(exc))
+        return 1
+    except Exception:  # noqa: BLE001 - 不输出可能包含凭据的底层异常
+        print('重置失败，请核对资源状态后重试（底层异常已隐藏）。')
         return 1
 
 

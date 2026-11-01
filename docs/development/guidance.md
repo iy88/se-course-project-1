@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-10-31T11:10:47+08:00
+Version: 0.1.1
+Version-Datetime: 2026-11-01T16:56:21+08:00
 -->
 
 # 开发与人工测试指南
@@ -102,7 +102,7 @@ PostgreSQL 使用迁移账户切换到 owner 角色，将配置的应用 schema 
 3. 删除 `REDIS_KEY_PREFIX` 下的 Redis 键。
 4. 执行正式数据库迁移，重建最新表结构。
 
-OSS 桶、版本历史、未完成分片上传及其他前缀的对象继续保留。各服务按顺序独立执行；发生错误时输出完整异常，修复原因后重新运行。
+OSS 桶、版本历史、未完成分片上传及其他前缀的对象继续保留。各服务按顺序独立执行；配置错误输出说明，底层执行错误隐藏敏感异常，修复原因后重新运行。
 
 重置完成后执行 `seed`、`start`，清除浏览器原登录状态并重新登录，开始新一轮人工测试。
 
@@ -112,6 +112,31 @@ OSS 前缀为空时，预览显示 `[整个桶]`。确认两个配置桶均为�
 (cd backend && .venv/bin/python -m app.devtools.reset \
   --execute --confirm <数据库名> --whole-buckets)
 ```
+
+### 生产环境重置与重新生成演示数据
+
+生产也使用同一 reset 入口，必须显式指定 `--env-file .env.prod --allow-production`；默认仍仅预览。实际执行另外要求数据库名确认，空 OSS 前缀还要求 `--whole-buckets`。不修改 ENVIRONMENT 来绕过环境校验。
+
+先暂停发布、完成 PostgreSQL/Redis 备份并停止后端。备份脚本不包含 OSS；执行会清理配置范围内的图片和证据。生产机以 deploy 身份进入当前 release 的 backend 后执行：
+
+```bash
+.venv/bin/python -m app.devtools.reset --env-file .env.prod --allow-production
+# 核对预览中的数据库、schema、Redis 前缀及两个 OSS 桶后执行
+.venv/bin/python -m app.devtools.reset --env-file .env.prod --allow-production \
+  --execute --confirm campus_market_prod
+# 仅当预览显示整个桶且确实需要清空时，在上一条命令追加 --whole-buckets
+```
+
+删除范围包括管理员、业务记录、审计记录和迁移表，随后自动迁移重建；不删除 schema 或数据库本身。跨服务无整体事务，失败后服务保持停止，核对已完成阶段再重试。该工具不停止服务、不自动备份、不清理 OSS 历史版本，也不修改 shared 配置。
+
+旧演示 manifest 不再适用于已重置的数据库，先将 `/srv/se-course-project1/shared/demo-manifest.json` 改名归档，再执行：
+
+```bash
+.venv/bin/python -m app.manage demo-seed --env-file .env.prod \
+  --manifest /srv/se-course-project1/shared/demo-manifest.json
+```
+
+seed 成功后由管理员启动 `se-course-project1-backend.service`，核对健康接口和演示账号登录。生产配置取自当前 release 的 `.env.prod`，并非 shared 文件的实时引用。命令仅在包含本次 reset 更新的 release 中可用。
 
 ### SQLite、本地文件与内存缓存
 
