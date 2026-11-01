@@ -1,23 +1,23 @@
 <!--
-Version: 0.1.40
-Version-Datetime: 2026-11-01T17:03:37+08:00
+Version: 0.1.42
+Version-Datetime: 2026-11-01T18:58:18+08:00
 -->
 
 # 校园二手交易与物品流转平台
 
 ## dev 开发分支说明
 
-`dev` 分支用于持续开发，包含后端 `backend/`、桌面管理端 `frontend/admin/` 和移动PWA `frontend/mobile/` 的开发实现，运行期数据位于被忽略的 `var/`。开发决策与运行入口见[开发阶段技术决策](bits/开发阶段技术决策.md)。
+`dev` 分支用于持续开发，包含后端 `backend/`、桌面管理端 `frontend/admin/` 和移动PWA `frontend/mobile/` 的开发实现，运行期数据位于被忽略的 `var/`。开发决策与技术口径见[开发技术决策](docs/development/技术决策.md)，运行与人工测试命令见[开发与人工测试指南](docs/development/guidance.md)。
 
-2026-10-28同步需求主线 `c4ee232`，A／B报告均已确认。随后按合并后的需求开展三端实现对齐、隔离副本并行开发和多轮代码审查；需求对应实现、修复轮次及实际验证结果见[需求同步并行修改计划](bits/需求同步并行修改计划.md)。历史测试及人工核验仅代表各自记录的范围，本轮自动化回归不替代系统人工验收。下文需求阶段范围约束适用于需求材料维护。
+2026-10-28同步需求主线 `c4ee232`，A／B报告均已确认。随后按合并后的需求完成三端实现对齐、隔离副本并行开发和多轮代码审查；历史测试及人工核验仅代表各自记录的范围，本轮自动化回归不替代系统人工验收，历次实现与验证记录由 Git 提交历史追踪。下文需求阶段范围约束适用于需求材料维护。
 
 本目录保存校园二手交易与物品流转平台的需求分析交付材料。全部14个主用例、14个用户故事及16个领域类均有独立详细文档。01—08按顺序构成需求规格说明书正文，详细材料以各目录索引为入口；正文详细展开关键US、UC、类及SC并展示关键图。需求正文及US／UC／SC／领域类分析已于2026-10-23获项目负责人确认，BR／TR已讨论接受；确认范围见[需求基线](docs/requirements/08-需求基线.md)。
 
 ## 开发设计与接入计划
 
-测试与浏览器复核按同一份 UC/US/SC 清单、角色和预期执行；HTTP 自动化与浏览器是不同执行通道，结果分别记录。数据库、存储与 KV 后端由选定 dotenv 文件明确配置，同一测试和 seed 命令适用，不使用 `--profile`。自动化 seed、数据库、存储及 Redis 资源按本轮隔离；浏览器人工登录使用部署初始化保留的管理员及单独注册的测试用户，不依赖自动化临时身份。SMTP 服务商配置和真实收件箱投递、生产迁移、生产资源配置、多实例广播和备份恢复演练仍未验证。步骤与结果模板见[浏览器交互验收清单](docs/development/浏览器交互验收清单.md)。
+测试与浏览器复核按同一份 UC/US/SC 清单、角色和预期执行；HTTP 自动化与浏览器是不同执行通道，结果分别记录。数据库、存储与 KV 后端由选定 dotenv 文件明确配置，同一测试和 seed 命令适用，不使用 `--profile`。自动化 seed、数据库、存储及 Redis 资源按本轮隔离；浏览器人工登录使用部署初始化保留的管理员及单独注册的测试用户，不依赖自动化临时身份。业务 SMTP 真实收件箱投递验收、多实例广播和备份恢复演练仍未验证；生产发布由流水线执行并经健康检查，见[部署说明](docs/development/部署说明.md)。测试流程与当前验收状态见[整体验收](docs/development/整体验收.md)。
 
-ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQLAlchemy基础设施。图片使用OSS Python SDK V2的短期上传租约：前端直传，后端核对SHA256、元信息、大小与真实图片后确认引用；本地存储使用相同租约API。依赖版本对比见[直接依赖版本审计](docs/development/依赖版本审计.md)。
+ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQLAlchemy基础设施。图片使用OSS Python SDK V2的短期上传租约：前端直传，后端核对SHA256、元信息、大小与真实图片后确认引用；本地存储使用相同租约API。后端与前端依赖版本分别由 `backend/uv.lock` 和各前端 `package-lock.json` 锁定。
 
 人工演示使用 `(cd backend && .venv/bin/python -m app.manage demo-seed --env-file .env.dev)`，向所选环境持久添加演示账号、图片和业务记录，沿用配置的数据库 schema 与存储资源。先对同一环境执行 `migrate`；账号清单、场景入口与 US／UC／SC 演示步骤见 [Demo seed](docs/development/demo-seed.md)。
 
@@ -65,7 +65,7 @@ bash scripts/init_database.sh --env-file .env.dev
 
 该入口在 Linux／macOS 优先使用 `backend/.venv/bin/python`，Git Bash／MSYS 使用 Windows 的 `Scripts/python.exe`；虚拟环境不存在时通过 `uv run --frozen` 安装锁定依赖。先安装 Python 3.12+ 和 uv；无需 psql。Windows、Linux 和 macOS 共用同一 Python 初始化实现。
 
-命令直接从指定 dotenv 的 `DATABASE_URL` 读取目标数据库名并显示连接目标，仅交互输入 PostgreSQL 实例管理员用户名和隐藏密码，不接受管理员凭据命令行参数，不将其写入配置或日志。此管理员是数据库资源管理员；平台业务管理员仍通过 `app.manage seed` 独立创建。普通应用及迁移角色名、密码、数据库、schema 来自指定 dotenv，流程遵循[PostgreSQL 资源准备](docs/development/PostgreSQL资源准备.md)，创建 owner／migrator／app、数据库及默认授权后调用正式 Alembic 迁移建表。无需安装 psql。维护数据库默认 postgres，可用 `--maintenance-db` 指定同实例其他维护库；保留迁移 URL 的 TLS 查询参数。
+命令直接从指定 dotenv 的 `DATABASE_URL` 读取目标数据库名并显示连接目标，仅交互输入 PostgreSQL 实例管理员用户名和隐藏密码，不接受管理员凭据命令行参数，不将其写入配置或日志。此管理员是数据库资源管理员；平台业务管理员仍通过 `app.manage seed` 独立创建。普通应用及迁移角色名、密码、数据库、schema 来自指定 dotenv，流程遵循[开发与人工测试指南](docs/development/guidance.md)，创建 owner／migrator／app、数据库及默认授权后调用正式 Alembic 迁移建表。无需安装 psql。维护数据库默认 postgres，可用 `--maintenance-db` 指定同实例其他维护库；保留迁移 URL 的 TLS 查询参数。
 
 如果资源已创建、随后迁移失败，修复原因后仍可使用初始化入口继续：
 
@@ -234,7 +234,7 @@ Jenkins 等独立构建环境可显式选择公开配置模式，无需后端 Py
 
 此模式只读取公开参数 `VITE_API_BASE_URL`（默认 `/api/v1`）、`VITE_API_TIMEOUT_MS`（默认 `15000`）和开发代理参数 `API_PROXY_TARGET`（默认 `http://127.0.0.1:8000`），继续执行地址和超时校验。构建产物中的 API 地址供浏览器使用；默认值要求生产 Nginx 将同源 `/api/v1` 转发到后端，WebSocket 使用同源 `/ws`。未设置 `PROJECT1_FRONTEND_CONFIG` 时仍沿用后端 dotenv 配置；此开关不改变后端配置读取方式。
 
-构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。本轮需求对齐后的自动化验证结果见[并行修改与审查计划](bits/需求同步并行修改计划.md)；最近一次真实开发环境 API 测试、补充数据与缺陷记录见[开发环境真实API测试与生命周期数据](bits/开发环境真实API测试与生命周期数据.md)。命令构建、真实 HTTP 测试通过与人工功能验收分别记录。
+构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。当前统一验收结果见[整体验收](docs/development/整体验收.md)；历次实现与验证记录由 Git 提交历史追踪。命令构建、真实 HTTP 测试通过与人工功能验收分别记录。
 
 先启动后端，再在两个独立终端预览构建产物：
 
@@ -250,7 +250,7 @@ Jenkins 等独立构建环境可显式选择公开配置模式，无需后端 Py
 
 局域网手机访问时，可使用 `npm run dev -- --host 0.0.0.0 --strictPort`，手机访问开发机IP的5173端口；代理仍由开发机连接本机后端。普通局域网HTTP可用于页面联调，但不等于已满足PWA安装条件。
 
-当前运行方案面向单进程开发：WebSocket连接管理在进程内；KV按所选配置使用进程内 memory 或 Redis。PostgreSQL、私有 OSS 双桶、环境隔离与审计曾在 test 目标接入；历史目标经验不代表现行 runner 清理策略已验证。生产迁移、生产资源配置、真实邮件、多实例广播及备份恢复演练仍未验证，不因静态构建或历史 test 结果就视为生产部署完成。
+当前运行方案面向单进程部署：WebSocket连接管理在进程内；KV按所选配置使用 Redis 或进程内 memory。PostgreSQL、私有 OSS 双桶、环境隔离与审计已纳入统一验收与发布流水线，发布流程见[部署说明](docs/development/部署说明.md)。业务 SMTP 真实投递验收、多实例广播及备份恢复演练仍未验证，不因自动化通过或部署完成视为人工验收完成。
 
 ## 成员分工
 
@@ -276,7 +276,7 @@ Jenkins 等独立构建环境可显式选择公开配置模式，无需后端 Py
 | `docs/appendices/prototype/` | 按用户故事组织的多页 HTML 原型及 [说明](docs/appendices/prototype/README.md)，一个 HTML 文件一个页面，示例数据不代表后台功能实现 |
 | `docs-pdf/` | 由Pandoc生成的PDF交付副本，保持docs的目录结构，文档链接使用PDF目标；该目录由Git忽略 |
 | `scripts/` | [Python构建说明](scripts/README.md)：同步关键材料、生成说明书、渲染PNG，以及按SHA-256增量导出和检查PDF |
-| `bits/` | 项目协作复盘及本分支开发阶段技术决策与运行指南；成员贡献、问题处理及需求边界分别见 A 报告与需求基线 |
+| `bits/` | 工作方法笔记（项目协作复盘）；成员贡献、问题处理及需求边界分别见 A 报告与需求基线 |
 
 文件按“编号-名称”组织；编号重排时同步更新文件名、索引及引用，需要的版本、日期按版本规范记录，需求确认事实集中登记在需求基线和证据中。正文通过相对链接及编号引用附件；尚未开展的工作不预填结果。
 
