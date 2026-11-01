@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app.api.deps import CurrentAdmin, DbSession
@@ -26,7 +26,13 @@ router = APIRouter(prefix="/admin/stats", tags=["admin-stats"])
 def _parse_date(value: str | None, end_of_day: bool = False):
     if not value:
         return None
-    dt = datetime.strptime(value, "%Y-%m-%d")
+    try:
+        dt = datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "日期格式应为 YYYY-MM-DD，例如 2026-11-01",
+        )
     if end_of_day:
         dt = dt.replace(hour=23, minute=59, second=59)
     return dt.replace(tzinfo=UTC)

@@ -4,11 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field, StringConstraints
-from sqlmodel import col, select, update
+from sqlmodel import and_, col, func, select, update
 
 from app.api.deps import CurrentAdmin, DbSession
-from app.models import DisposalCase, Product, User
-from app.models.enums import CaseStatus, CaseType
+from app.models import DisposalCase, Product, Report, User
+from app.models.enums import CaseStatus, CaseType, ReportStatus
 from app.services import audit as audit_service
 from app.services import cases as case_service
 from app.services.cases import ensure_claimant
@@ -66,16 +66,28 @@ def _case_item(case: DisposalCase) -> dict:
 async def list_cases(
     admin: CurrentAdmin,
     db: DbSession,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     case_status: str = Query(default="pending", alias="status", pattern="^(pending|processing|disposed|all)$"),
     case_type: str | None = Query(default=None),
-) -> list[dict]:
-    query = select(DisposalCase).order_by(col(DisposalCase.id).desc())
+    mine: bool = Query(default=False, description="仅列出本人认领的事项"),
+) -> dict:
+    conditions = []
     if case_status != "all":
-        query = query.where(col(DisposalCase.status) == case_status)
+        conditions.append(col(DisposalCase.status) == case_status)
     if case_type:
-        query = query.where(col(DisposalCase.case_type) == case_type)
-    result = await db.exec(query.limit(200))
-    return [_case_item(c) for c in result]
+        conditions.append(col(DisposalCase.case_type) == case_type)
+    if mine:
+        conditions.append(col(DisposalCase.claimed_by_id) == admin.id)
+    count_stmt = select(func.count()).select_from(DisposalCase)
+    rows_stmt = select(DisposalCase).order_by(col(DisposalCase.id).desc())
+    if conditions:
+        where_clause = and_(*conditions)
+        count_stmt = count_stmt.where(where_clause)
+        rows_stmt = rows_stmt.where(where_clause)
+    total = (await db.exec(count_stmt)).first() or 0
+    result = await db.exec(rows_stmt.offset((page - 1) * page_size).limit(page_size))
+    return {"items": [_case_item(c) for c in result], "total": int(total), "page": page, "page_size": page_size}
 
 
 async def _claim_pending_case(db, case_id: int, admin_id: int, claimed_at) -> bool:
@@ -122,12 +134,20 @@ async def claim_case(case_id: int, admin: CurrentAdmin, db: DbSession) -> ClaimO
     if row is None or row[0] != admin_id or row[1] != CaseStatus.PROCESSING.value:
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已被认领或已处置")
+    # 举报事项认领后同步举报状态为处理中（BR-25/US-07）；与认领同一事务提交。
+    claimed_case = await db.get(DisposalCase, case_id)
+    report_status = None
+    if claimed_case is not None and claimed_case.report_id is not None:
+        report = await db.get(Report, claimed_case.report_id)
+        if report is not None and report.status == ReportStatus.PENDING.value:
+            report.status = ReportStatus.PROCESSING.value
+            report_status = report.status
     await audit_service.record_event(
         db,
         audit_service.EVENT_ADMIN_CASE_CLAIM,
         target_type="disposal_case",
         target_id=case_id,
-        after={"status": row[1], "claimed_by_id": admin_id},
+        after={"status": row[1], "claimed_by_id": admin_id, "report_status": report_status},
     )
     await db.commit()
     return ClaimOut(id=case_id, detail="认领成功")

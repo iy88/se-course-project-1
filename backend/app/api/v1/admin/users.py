@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlmodel import col, or_, select
+from sqlmodel import and_, col, func, or_, select
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import AccountRestriction, User
@@ -26,15 +26,25 @@ class UnbanIn(BaseModel):
 async def list_users(
     admin: CurrentAdmin,
     db: DbSession,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     user_status: str = Query(default="all", alias="status", pattern="^(normal|banned|all)$"),
     keyword: str | None = Query(default=None, max_length=100),
-) -> list[dict]:
-    query = select(User).order_by(col(User.id).desc()).limit(200)
+) -> dict:
+    conditions = []
     if user_status != "all":
-        query = query.where(col(User.status) == user_status)
+        conditions.append(col(User.status) == user_status)
     if keyword:
         like = f"%{keyword}%"
-        query = query.where(or_(col(User.email).like(like), col(User.display_name).like(like)))
+        conditions.append(or_(col(User.email).like(like), col(User.display_name).like(like)))
+    count_stmt = select(func.count()).select_from(User)
+    rows_stmt = select(User).order_by(col(User.id).desc())
+    if conditions:
+        where_clause = and_(*conditions)
+        count_stmt = count_stmt.where(where_clause)
+        rows_stmt = rows_stmt.where(where_clause)
+    total = (await db.exec(count_stmt)).first() or 0
+    query = rows_stmt.offset((page - 1) * page_size).limit(page_size)
     result = await db.exec(query)
     items = []
     for user in result:
@@ -55,7 +65,7 @@ async def list_users(
                 "ban_at": active_restriction.created_at.isoformat() if active_restriction and active_restriction.created_at else None,
             }
         )
-    return items
+    return {"items": items, "total": int(total), "page": page, "page_size": page_size}
 
 
 @router.post("/{user_id}/ban")

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlmodel import col, select
+from sqlmodel import and_, col, func, select
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
@@ -172,12 +172,24 @@ async def _resolve_related_trades(db, report: Report, case: DisposalCase) -> lis
 async def list_reports(
     admin: CurrentAdmin,
     db: DbSession,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     report_status: str = Query(default="all", alias="status", pattern="^(pending|processing|unfounded|handled|all)$"),
-) -> list[dict]:
-    query = select(Report).order_by(col(Report.id).desc()).limit(200)
+    target_type: str | None = Query(default=None, pattern="^(product|comment|message|review|user)$"),
+) -> dict:
+    conditions = []
     if report_status != "all":
-        query = query.where(col(Report.status) == report_status)
-    result = await db.exec(query)
+        conditions.append(col(Report.status) == report_status)
+    if target_type:
+        conditions.append(col(Report.target_type) == target_type)
+    count_stmt = select(func.count()).select_from(Report)
+    rows_stmt = select(Report).order_by(col(Report.id).desc())
+    if conditions:
+        where_clause = and_(*conditions)
+        count_stmt = count_stmt.where(where_clause)
+        rows_stmt = rows_stmt.where(where_clause)
+    total = (await db.exec(count_stmt)).first() or 0
+    result = await db.exec(rows_stmt.offset((page - 1) * page_size).limit(page_size))
     items = []
     for report in result:
         case = (await db.exec(select(DisposalCase).where(col(DisposalCase.report_id) == report.id).order_by(col(DisposalCase.id).desc()).limit(1))).first()
@@ -196,7 +208,7 @@ async def list_reports(
                 "claimed_by_id": case.claimed_by_id if case else None,
             }
         )
-    return items
+    return {"items": items, "total": int(total), "page": page, "page_size": page_size}
 
 
 @router.post("/cases/{case_id}/decision")

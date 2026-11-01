@@ -323,7 +323,8 @@ async def detail(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在或不可见")
-    visible = product_service.is_detail_visible(user, product)
+    # 管理端商品预览：管理员可查看任意状态详情，不改变普通用户资格（评论等仍按原规则）。
+    visible = user.role == "admin" or product_service.is_detail_visible(user, product)
     if not visible and not product.display_restricted:
         # D-43：本人曾有请求／交易的买方，结束后仍可看当前详情及之后变更
         visible = await product_service.has_product_request_history(db, user.id, product.id)

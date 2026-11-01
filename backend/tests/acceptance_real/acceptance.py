@@ -178,7 +178,14 @@ class AcceptanceRun:
         return self.api.dict_of(response)
 
     def _list(self, response: httpx.Response) -> list[Any]:
-        return self.api.list_of(response)
+        # 管理端列表已改为 {items, total, page, page_size} 分页响应；此处统一解包，
+        # 兼容仍返回裸数组的公开端点，避免逐调用点修改。
+        value = self.api.json_of(response)
+        if isinstance(value, dict) and isinstance(value.get("items"), list):
+            return value["items"]
+        if isinstance(value, list):
+            return value
+        raise CheckFailure("响应不是 JSON 数组或分页对象")
 
     def _sandbox_sql(self, sql: str) -> str:
         from app.core.config import validate_schema_identifier
@@ -2364,6 +2371,24 @@ class AcceptanceRun:
             self.rec.must("纠正" in str(corrected.get("detail")), "管理员纠类入口")
             corrected_detail = self._product_detail("P_MAIN", "seller")
             self.rec.must_in(self.categories["second"]["name"], corrected_detail.get("tag_names") or [], "纠类后标签更新")
+            # 管理端商品列表与摘要：ID 关键词检索、分页响应与摘要标签（分类纠正二级页数据来源）。
+            admin_products_page = self._dict(
+                self._call(
+                    "GET",
+                    "/api/v1/admin/products",
+                    user="admin",
+                    expected=200,
+                    params={"keyword": str(self.products["P_MAIN"]["id"]), "page_size": 5},
+                )
+            )
+            self.rec.must_eq(admin_products_page.get("total"), 1, "管理端商品ID检索唯一命中")
+            self.rec.must(
+                any(
+                    int(row.get("id") or 0) == int(self.products["P_MAIN"]["id"])
+                    for row in admin_products_page.get("items") or []
+                ),
+                "管理端商品列表命中纠正商品",
+            )
             self.rec.must_eq(self._trade_detail("T_MAIN", "buyer").get("status"), "in_progress", "纠类不改交易状态")
             other_detail = self._trade_detail("T_MAIN_OTHER", "buyer2")
             self.rec.must_eq(other_detail.get("status"), "closed", "其余待接受请求关闭")

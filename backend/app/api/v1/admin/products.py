@@ -1,8 +1,8 @@
 """管理员商品审核与分类纠正（BR-10/11/13、TR-01—TR-03）。"""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlmodel import col, delete, select
+from sqlmodel import and_, col, delete, func, select
 
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
@@ -52,6 +52,85 @@ class ReviewDecisionIn(BaseModel):
 class CategoryCorrectionIn(BaseModel):
     category_ids: list[int] = Field(min_length=1)
     reason: str = Field(min_length=1, max_length=500)
+
+
+@router.get("")
+async def list_products(
+    admin: CurrentAdmin,
+    db: DbSession,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    product_status: str = Query(
+        default="all", alias="status",
+        pattern="^(pending_review|rejected|listed|in_transaction|delisted|all)$",
+    ),
+    category_id: int | None = Query(default=None, ge=1),
+    display_restricted: str = Query(default="all", pattern="^(all|yes|no)$"),
+    keyword: str | None = Query(default=None, max_length=100),
+) -> dict:
+    """管理端商品列表：服务端分页、状态/分类/展示限制筛选与关键词检索。
+
+    关键词匹配名称、描述、所关联分类的主名与活跃别名；纯数字关键词同时精确匹配商品 ID。
+    """
+    conditions = []
+    if product_status != "all":
+        conditions.append(col(Product.status) == product_status)
+    if display_restricted != "all":
+        conditions.append(col(Product.display_restricted).is_(display_restricted == "yes"))
+    if category_id is not None:
+        tagged = select(col(ProductTag.product_id)).where(col(ProductTag.category_id) == category_id)
+        conditions.append(col(Product.id).in_(tagged))
+    if keyword and keyword.strip():
+        stripped = keyword.strip()
+        like = f"%{stripped}%"
+        keyword_tag_ids = (
+            select(col(ProductTag.product_id))
+            .join(Category, col(Category.id) == col(ProductTag.category_id))
+            .outerjoin(
+                CategoryAlias,
+                and_(col(CategoryAlias.category_id) == col(Category.id), col(CategoryAlias.removed_at).is_(None)),
+            )
+            .where((col(Category.name).like(like)) | (col(CategoryAlias.name).like(like)))
+        )
+        text_match = (
+            (col(Product.title).like(like))
+            | (col(Product.description).like(like))
+            | (col(Product.id).in_(keyword_tag_ids))
+        )
+        if stripped.isdigit():
+            text_match = text_match | (col(Product.id) == int(stripped))
+        conditions.append(text_match)
+
+    count_stmt = select(func.count()).select_from(Product)
+    rows_stmt = select(Product).order_by(col(Product.id).desc())
+    if conditions:
+        where_clause = and_(*conditions)
+        count_stmt = count_stmt.where(where_clause)
+        rows_stmt = rows_stmt.where(where_clause)
+    total = (await db.exec(count_stmt)).first() or 0
+    rows = (await db.exec(
+        rows_stmt.offset((page - 1) * page_size).limit(page_size)
+    )).all()
+    seller_names = {}
+    seller_ids = {product.seller_id for product in rows}
+    if seller_ids:
+        for seller in (await db.exec(select(User).where(col(User.id).in_(seller_ids)))).all():
+            seller_names[seller.id] = seller.display_name
+    items = [
+        {
+            "id": product.id,
+            "title": product.title,
+            "status": product.status,
+            "display_restricted": product.display_restricted,
+            "price_cents": product.price_cents,
+            "seller_id": product.seller_id,
+            "seller_name": seller_names.get(product.seller_id),
+            "tag_names": [tag.name for tag in product.tags],
+            "created_at": product.created_at.isoformat() if product.created_at else None,
+        }
+        for product in rows
+    ]
+    return {"items": items, "total": int(total), "page": page, "page_size": page_size}
 
 
 class RestoreDisplayIn(BaseModel):
