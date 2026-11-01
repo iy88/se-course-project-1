@@ -4,7 +4,6 @@
       <div>
         <p class="eyebrow">治理</p>
         <h1>账户管理</h1>
-        <p class="sub">按状态与关键词检索账户，封禁或解除封禁；管理员账户不在此处处置。</p>
       </div>
     </header>
 
@@ -12,7 +11,7 @@
       <div class="filter-bar">
         <div class="filter-group">
           <span class="filter-label">状态</span>
-          <el-radio-group v-model="statusFilter" class="filter-seg" @change="load">
+          <el-radio-group v-model="statusFilter" class="filter-seg" @change="load(1)">
             <el-radio-button value="all">全部</el-radio-button>
             <el-radio-button value="normal">正常</el-radio-button>
             <el-radio-button value="banned">已封禁</el-radio-button>
@@ -23,17 +22,17 @@
             placeholder="邮箱 / 显示名称"
             clearable
             class="filter-input"
-            @change="load"
-            @keyup.enter="load"
+            @change="load(1)"
+            @keyup.enter="load(1)"
           />
-          <el-button @click="load">
+          <el-button @click="load(1)">
             <el-icon><AppIcon name="search" /></el-icon>
             查询
           </el-button>
         </div>
         <div class="toolbar-actions">
-          <span class="result-count">共 {{ users.length }} 个账户</span>
-          <el-button :loading="loading" @click="load">
+          <span class="result-count">共 {{ total }} 个账户</span>
+          <el-button :loading="loading" @click="load()">
             <el-icon><AppIcon name="refresh" /></el-icon><span>刷新</span>
           </el-button>
         </div>
@@ -105,6 +104,18 @@
           </template>
         </el-table>
       </div>
+
+      <el-pagination
+        class="list-pagination"
+        layout="total, sizes, prev, pager, next"
+        :total="total"
+        :current-page="page"
+        :page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :disabled="loading"
+        @current-change="load"
+        @size-change="onSizeChange"
+      />
     </el-card>
   </div>
 </template>
@@ -117,6 +128,9 @@ import { fmtTime as fmt } from '../api/time'
 import AppIcon from '../components/AppIcon.vue'
 
 const users = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 const loading = ref(false)
 const statusFilter = ref('all')
 const keyword = ref('')
@@ -126,18 +140,32 @@ const actionBusyId = ref(null)
 
 const serverDetail = (err) => (typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : '请求失败')
 
-async function load() {
+async function load(targetPage) {
+  const target = Math.max(1, Number(targetPage) || page.value || 1)
   loading.value = true
   loadError.value = ''
   try {
-    users.value = await http.get('/admin/users', {
-      params: { status: statusFilter.value, keyword: keyword.value || undefined },
+    const data = await http.get('/admin/users', {
+      params: {
+        page: target,
+        page_size: pageSize.value,
+        status: statusFilter.value,
+        keyword: keyword.value || undefined,
+      },
     })
+    users.value = Array.isArray(data?.items) ? data.items : []
+    total.value = Number(data?.total) || 0
+    page.value = target
   } catch (err) {
     loadError.value = `账户列表加载失败：${serverDetail(err)}`
   } finally {
     loading.value = false
   }
+}
+
+function onSizeChange(size) {
+  pageSize.value = size
+  load(1)
 }
 
 async function ban(row) {
@@ -194,5 +222,10 @@ onMounted(load)
   color: var(--brand-ink);
   font-weight: 600;
   font-size: 12.5px;
+}
+.list-pagination {
+  margin-top: 12px;
+  justify-content: flex-end;
+  padding: 0 18px 14px 0;
 }
 </style>

@@ -4,9 +4,6 @@
       <div>
         <p class="eyebrow">工作台</p>
         <h1>待处理池</h1>
-        <p class="sub">
-          认领本人负责的事项后，方可查看非公开内容并执行处置；未认领事项仅显示概要。
-        </p>
       </div>
     </header>
 
@@ -14,7 +11,7 @@
       <div class="filter-bar">
         <div class="filter-group">
           <span class="filter-label">状态</span>
-          <el-radio-group v-model="statusFilter" class="filter-seg" @change="load">
+          <el-radio-group v-model="statusFilter" class="filter-seg" @change="load(1)">
             <el-radio-button value="pending">待认领</el-radio-button>
             <el-radio-button value="processing">处理中</el-radio-button>
             <el-radio-button value="disposed">已处置</el-radio-button>
@@ -26,7 +23,7 @@
             clearable
             placeholder="全部事项类型"
             class="filter-select"
-            @change="load"
+            @change="load(1)"
           >
             <el-option label="头像审核" value="avatar_review" />
             <el-option label="商品审核" value="product_review" />
@@ -37,8 +34,8 @@
           </el-select>
         </div>
         <div class="toolbar-actions">
-          <span class="result-count">共 {{ cases.length }} 条</span>
-          <el-button :loading="loading" @click="load">
+          <span class="result-count">共 {{ total }} 条</span>
+          <el-button :loading="loading" @click="load()">
             <el-icon><AppIcon name="refresh" /></el-icon><span>刷新</span>
           </el-button>
         </div>
@@ -47,7 +44,7 @@
 
     <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon>
       <template #default>
-        <el-button size="small" @click="load">重新加载</el-button>
+        <el-button size="small" @click="load()">重新加载</el-button>
       </template>
     </el-alert>
     <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
@@ -100,6 +97,18 @@
           </template>
         </el-table>
       </div>
+
+      <el-pagination
+        class="list-pagination"
+        layout="total, sizes, prev, pager, next"
+        :total="total"
+        :current-page="page"
+        :page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :disabled="loading"
+        @current-change="load"
+        @size-change="onSizeChange"
+      />
     </el-card>
   </div>
 </template>
@@ -113,6 +122,9 @@ import { fmtTime as fmt } from '../api/time'
 import AppIcon from '../components/AppIcon.vue'
 
 const cases = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 const loading = ref(false)
 const statusFilter = ref('pending')
 const typeFilter = ref('')
@@ -122,18 +134,27 @@ const actionError = ref('')
 
 const serverDetail = (err) => (typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : '请求失败')
 
-async function load() {
+async function load(targetPage) {
+  const target = Math.max(1, Number(targetPage) || page.value || 1)
   loading.value = true
   loadError.value = ''
   try {
-    const params = { status: statusFilter.value }
+    const params = { page: target, page_size: pageSize.value, status: statusFilter.value }
     if (typeFilter.value) params.case_type = typeFilter.value
-    cases.value = await http.get('/admin/cases', { params })
+    const data = await http.get('/admin/cases', { params })
+    cases.value = Array.isArray(data?.items) ? data.items : []
+    total.value = Number(data?.total) || 0
+    page.value = target
   } catch (err) {
     loadError.value = `事项列表加载失败：${serverDetail(err)}`
   } finally {
     loading.value = false
   }
+}
+
+function onSizeChange(size) {
+  pageSize.value = size
+  load(1)
 }
 
 async function claim(row) {
@@ -176,5 +197,10 @@ onMounted(async () => {
 .case-title {
   color: var(--ink);
   font-weight: 550;
+}
+.list-pagination {
+  margin-top: 12px;
+  justify-content: flex-end;
+  padding: 0 18px 14px 0;
 }
 </style>

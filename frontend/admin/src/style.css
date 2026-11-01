@@ -501,6 +501,13 @@ a {
   align-items: flex-start;
 }
 
+/* 页面灰底与 info 默认浅灰底几乎同色；统一白底加描边保证对比度。
+   需用 .is-light 同级特异性覆盖 Element 的 .el-alert--info.is-light 背景。 */
+.el-alert.is-light {
+  background-color: #fff;
+  border: 1px solid var(--line);
+}
+
 .el-alert__title {
   font-size: 12.5px;
   line-height: 1.55;
@@ -601,7 +608,8 @@ a {
 
 .el-message-box {
   border-radius: var(--radius);
-  max-width: calc(100vw - 32px);
+  /* Element Plus 默认 width:100% 仅由 max-width 限宽；固定合理宽度避免在宽屏被撑满 */
+  width: min(480px, calc(100vw - 32px));
 }
 
 /* 日期范围弹层的双月面板固定为 646px；窄屏限制在视口内并允许面板横向滚动 */

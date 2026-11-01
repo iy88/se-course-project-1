@@ -4,7 +4,6 @@
       <div>
         <p class="eyebrow">配置</p>
         <h1>分类标签</h1>
-        <p class="sub">维护单级公共标签、别名与启停状态；停用后新发布不能选择该标签。</p>
       </div>
       <span class="result-count">共 {{ categories.length }} 个标签</span>
     </header>
@@ -157,9 +156,28 @@ async function rename(row) {
 }
 
 async function toggleStatus(row) {
+  const disabling = row.status === 'active'
+  try {
+    if (disabling) {
+      await ElMessageBox.confirm(
+        `停用分类「${row.name}」？停用后新发布不能选择该标签，已有商品归属与历史保留。`,
+        '停用分类',
+        { type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消' },
+      )
+    } else {
+      await ElMessageBox.confirm(
+        `启用分类「${row.name}」？启用后发布与筛选恢复可用。`,
+        '启用分类',
+        { type: 'info', confirmButtonText: '启用', cancelButtonText: '取消' },
+      )
+    }
+  } catch {
+    return
+  }
   await http.patch(`/categories/${row.id}`, {
-    status: row.status === 'active' ? 'disabled' : 'active',
+    status: disabling ? 'disabled' : 'active',
   })
+  ElMessage.success(disabling ? '已停用' : '已启用')
   load()
 }
 

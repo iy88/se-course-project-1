@@ -23,11 +23,11 @@
           </li>
           <li>
             <span class="point-icon"><AppIcon name="reports" :size="17" /></span>
-            <span><strong>举报核查与公开结果</strong><small>提交核查结论、匿名公开摘要与处置动作</small></span>
+            <span><strong>举报核查与公开结果</strong><small>在事项处理中提交核查结论、匿名公开摘要与处置动作</small></span>
           </li>
           <li>
             <span class="point-icon"><AppIcon name="trades" :size="17" /></span>
-            <span><strong>交易冻结与状态调整</strong><small>基于本人认领事项处理，动作记录依据并通知双方</small></span>
+            <span><strong>交易冻结与状态调整</strong><small>在事项处理中基于认领事项操作，动作记录依据并通知双方</small></span>
           </li>
           <li>
             <span class="point-icon"><AppIcon name="users" :size="17" /></span>

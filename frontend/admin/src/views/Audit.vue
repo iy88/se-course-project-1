@@ -1,7 +1,7 @@
 <template>
   <div class="audit-page">
     <header class="page-head">
-      <div><p class="eyebrow">治理</p><h1>审计查询</h1><p class="sub">查询登录、业务变更与拒绝记录；所有记录只读。</p></div>
+      <div><p class="eyebrow">治理</p><h1>审计查询</h1></div>
     </header>
     <section class="audit-overview" aria-label="审计概览" v-loading="summaryLoading">
       <div class="overview-head">

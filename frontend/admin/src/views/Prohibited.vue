@@ -4,7 +4,6 @@
       <div>
         <p class="eyebrow">配置</p>
         <h1>禁发范围</h1>
-        <p class="sub">维护登录用户发布前可查看的禁发条目；类别与细目会直接展示给用户。</p>
       </div>
       <div class="page-head-actions">
         <el-button type="primary" @click="openCreate">

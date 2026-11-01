@@ -11,6 +11,7 @@
 
       <el-menu
         :default-active="activeMenu"
+        :default-openeds="defaultOpeneds"
         router
         :collapse="compact"
         :collapse-transition="false"
@@ -19,10 +20,22 @@
         active-text-color="#ffffff"
         class="side-menu"
       >
-        <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path" :title="item.label">
-          <el-icon :size="18"><AppIcon :name="item.icon" /></el-icon>
-          <template #title><span class="nav-label">{{ item.label }}</span></template>
-        </el-menu-item>
+        <template v-for="section in navSections" :key="section.key || section.path">
+          <el-sub-menu v-if="section.children" :index="section.key">
+            <template #title>
+              <el-icon :size="18"><AppIcon :name="section.icon" /></el-icon>
+              <span class="nav-label">{{ section.label }}</span>
+            </template>
+            <el-menu-item v-for="item in section.children" :key="item.path" :index="item.path" :title="item.label">
+              <el-icon :size="18"><AppIcon :name="item.icon" /></el-icon>
+              <template #title><span class="nav-label">{{ item.label }}</span></template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-menu-item v-else :index="section.path" :title="section.label">
+            <el-icon :size="18"><AppIcon :name="section.icon" /></el-icon>
+            <template #title><span class="nav-label">{{ section.label }}</span></template>
+          </el-menu-item>
+        </template>
       </el-menu>
 
       <div v-if="!compact" class="side-foot">
@@ -79,17 +92,25 @@ const session = useSession()
 const adminName = computed(() => session.user?.display_name || '管理员')
 const windowWidth = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
 
-const navItems = [
-  { path: '/cases', label: '待处理池', icon: 'cases' },
-  { path: '/reports', label: '举报核查', icon: 'reports' },
+const navSections = [
+  {
+    key: 'review',
+    label: '事项审核',
+    icon: 'cases',
+    children: [
+      { path: '/cases', label: '待处理池', icon: 'menu' },
+      { path: '/my-cases', label: '我的审核', icon: 'user' },
+    ],
+  },
   { path: '/products', label: '商品管理', icon: 'products' },
-  { path: '/trades', label: '交易处置', icon: 'trades' },
   { path: '/users', label: '账户管理', icon: 'users' },
   { path: '/categories', label: '分类标签', icon: 'categories' },
   { path: '/prohibited', label: '禁发范围', icon: 'prohibited' },
   { path: '/audit', label: '审计查询', icon: 'shield' },
   { path: '/stats', label: '数据统计', icon: 'stats' },
 ]
+
+const defaultOpeneds = ['review']
 
 const compact = computed(() => windowWidth.value < 1080)
 const isNarrow = computed(() => windowWidth.value < 900)
@@ -98,10 +119,19 @@ const asideWidth = computed(() => {
   return windowWidth.value < 1280 ? '212px' : '232px'
 })
 const currentTitle = computed(() => route.meta.title || '管理端')
-const activeMenu = computed(() => (route.path.startsWith('/cases/') ? '/cases' : route.path))
-const parentCrumb = computed(() =>
-  route.path.startsWith('/cases/') ? { label: '待处理池', path: '/cases' } : null,
-)
+const activeMenu = computed(() => {
+  if (route.path.startsWith('/cases/')) return route.query.from === 'my-cases' ? '/my-cases' : '/cases'
+  if (route.path.startsWith('/products/')) return '/products'
+  return route.path
+})
+const parentCrumb = computed(() => {
+  if (route.path.startsWith('/cases/')) {
+    if (route.query.from === 'my-cases') return { label: '我的审核', path: '/my-cases' }
+    return { label: '待处理池', path: '/cases' }
+  }
+  if (route.path.startsWith('/products/')) return { label: '商品管理', path: '/products' }
+  return null
+})
 const initial = computed(() => (adminName.value || '管理员').trim().slice(0, 1) || '管')
 
 function onResize() {
@@ -204,6 +234,47 @@ function logout() {
   border-radius: 8px;
   color: #b9c9c0;
   font-size: 13px;
+}
+
+.side-menu :deep(.el-sub-menu__title) {
+  height: 42px;
+  line-height: 42px;
+  margin: 2px 0;
+  border-radius: 8px;
+  color: #b9c9c0;
+  font-size: 13px;
+}
+
+.side-menu :deep(.el-sub-menu__title:hover) {
+  background: #2a4035;
+  color: #fff;
+}
+
+.side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: #fff;
+}
+
+.side-menu :deep(.el-sub-menu__title .el-icon) {
+  color: inherit;
+  width: 18px;
+  margin-right: 10px;
+}
+
+.side-menu :deep(.el-sub-menu .el-menu-item) {
+  padding-left: 46px !important;
+}
+
+.side-menu.el-menu--collapse :deep(.el-sub-menu__title) {
+  justify-content: center;
+  padding: 0;
+}
+
+.side-menu.el-menu--collapse :deep(.el-sub-menu__title .el-icon) {
+  margin-right: 0;
+}
+
+.side-menu.el-menu--collapse :deep(.el-sub-menu__title .el-sub-menu__icon-arrow) {
+  display: none;
 }
 
 .side-menu :deep(.el-menu-item:hover) {

@@ -8,322 +8,266 @@
     </header>
 
     <el-card class="filter-card">
-      <template #header>
-        <div class="card-head-row">
-          <div>
-            <span class="card-title">公开商品搜索</span>
-          </div>
-        </div>
-      </template>
       <div class="filter-bar">
         <div class="filter-group">
+          <span class="filter-label">状态</span>
+          <el-select v-model="statusFilter" class="filter-select" @change="load(1)">
+            <el-option label="全部状态" value="all" />
+            <el-option label="待审核" value="pending_review" />
+            <el-option label="审核未通过" value="rejected" />
+            <el-option label="公开可交易" value="listed" />
+            <el-option label="交易中" value="in_transaction" />
+            <el-option label="已下架" value="delisted" />
+          </el-select>
+          <span class="filter-label">分类</span>
+          <el-select
+            v-model="categoryFilter"
+            clearable
+            filterable
+            placeholder="全部分类"
+            class="filter-select"
+            :loading="categoriesLoading"
+            @change="load(1)"
+          >
+            <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+          </el-select>
+          <span class="filter-label">展示限制</span>
+          <el-select v-model="restrictedFilter" class="filter-select filter-narrow" @change="load(1)">
+            <el-option label="全部" value="all" />
+            <el-option label="受限" value="yes" />
+            <el-option label="正常" value="no" />
+          </el-select>
           <span class="filter-label">搜索</span>
           <el-input
             v-model="keyword"
-            placeholder="搜索商品名称、描述或标签"
+            placeholder="名称、描述、标签或商品 ID"
             clearable
             maxlength="100"
             class="filter-input product-search"
             @keyup.enter="submitSearch"
-            @clear="clearSearch"
+            @clear="submitSearch"
           />
+          <el-button type="primary" @click="submitSearch">搜索</el-button>
         </div>
-        <el-button type="primary" :loading="searchLoading" :disabled="searchLoading" @click="submitSearch">
-          搜索
-        </el-button>
-        <el-button :disabled="!keyword && !hasSearched" @click="clearSearch">清空</el-button>
-        <span v-if="hasSearched && !searchError" class="result-count">共 {{ searchTotal }} 件</span>
-      </div>
-
-      <el-alert
-        v-if="searchError"
-        :title="searchError"
-        type="error"
-        :closable="false"
-        show-icon
-        class="search-alert"
-      >
-        <template #default>
-          <el-button size="small" :loading="searchLoading" @click="searchProducts(searchPage)">重试</el-button>
-        </template>
-      </el-alert>
-
-      <div v-if="hasSearched && !searchError" v-loading="searchLoading" class="search-results">
-        <el-table v-if="searchItems.length" :data="searchItems" row-key="id" size="small" border>
-          <el-table-column label="商品" min-width="220">
-            <template #default="{ row }">
-              <div class="product-title">{{ row.title }}</div>
-              <span class="product-id">#{{ row.id }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="价格" width="100">
-            <template #default="{ row }">{{ fmtPrice(row.price_cents) }}</template>
-          </el-table-column>
-          <el-table-column label="标签" min-width="150">
-            <template #default="{ row }">{{ row.tag_names?.join('、') || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="发布者" width="120">
-            <template #default="{ row }">{{ row.seller_name || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="发布时间" width="170">
-            <template #default="{ row }">{{ fmtTime(row.created_at) || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="100" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" type="primary" plain :disabled="searchLoading" @click="pickProduct(row)">
-                填入 ID
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <el-empty
-          v-else-if="!searchLoading && !searchError"
-          :description="searchMessage || '未找到公开可交易商品'"
-        />
-
-        <el-pagination
-          v-if="searchTotal > searchPageSize"
-          class="search-pagination"
-          layout="total, prev, pager, next"
-          :current-page="searchPage"
-          :page-size="searchPageSize"
-          :total="searchTotal"
-          :disabled="searchLoading"
-          @current-change="searchProducts"
-        />
+        <div class="toolbar-actions">
+          <span class="result-count">共 {{ total }} 件</span>
+          <el-button :loading="loading" @click="load()">
+            <el-icon><AppIcon name="refresh" /></el-icon><span>刷新</span>
+          </el-button>
+        </div>
       </div>
     </el-card>
 
-    <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
-
-    <el-card class="form-card">
-      <template #header>
-        <div class="card-head-row">
-          <div>
-            <span class="card-title">分类纠正</span>
-          </div>
-        </div>
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon>
+      <template #default>
+        <el-button size="small" @click="load()">重新加载</el-button>
       </template>
+    </el-alert>
 
-      <el-alert
-        v-if="categoriesError"
-        :title="categoriesError"
-        type="error"
-        :closable="false"
-        show-icon
-        class="category-alert"
-      >
-        <template #default>
-          <el-button size="small" :loading="categoriesLoading" @click="loadCategories">重新加载分类</el-button>
-        </template>
-      </el-alert>
+    <el-card class="data-card">
+      <div class="table-scroll">
+        <el-table :data="products" v-loading="loading" class="data-table" row-key="id">
+          <el-table-column prop="id" label="编号" width="72" />
+          <el-table-column label="商品" min-width="220">
+            <template #default="{ row }">
+              <button type="button" class="product-link" @click="$router.push(`/products/${row.id}`)">
+                {{ row.title }}
+              </button>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="112">
+            <template #default="{ row }">
+              <el-tag :type="statusTagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="展示" width="96">
+            <template #default="{ row }">
+              <el-tag v-if="row.display_restricted" type="danger" effect="light">受限</el-tag>
+              <span v-else class="muted-text">正常</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="价格" width="104">
+            <template #default="{ row }">{{ fmtPrice(row.price_cents) }}</template>
+          </el-table-column>
+          <el-table-column label="卖方" width="132">
+            <template #default="{ row }">
+              <span v-if="row.seller_name">{{ row.seller_name }} <span class="muted-text">#{{ row.seller_id }}</span></span>
+              <span v-else class="muted-text">#{{ row.seller_id }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="分类标签" min-width="150">
+            <template #default="{ row }">{{ row.tag_names?.join('、') || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="创建时间" width="172">
+            <template #default="{ row }">{{ fmt(row.created_at) || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="112" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" @click="$router.push(`/products/${row.id}`)">分类纠正</el-button>
+            </template>
+          </el-table-column>
 
-      <el-form label-position="top" class="correction-form">
-        <div class="form-grid">
-          <el-form-item label="商品 ID">
-            <el-input-number v-model="correctForm.product_id" :min="1" :controls="false" class="full-control" />
-          </el-form-item>
-          <el-form-item label="选择分类（可多选）">
-            <el-select
-              v-model="correctForm.category_ids"
-              multiple
-              filterable
-              placeholder="选择纠正后的分类"
-              :loading="categoriesLoading"
-              class="full-control"
-            >
-              <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="依据说明" class="span-2">
-            <el-input
-              v-model="correctForm.reason"
-              type="textarea"
-              placeholder="纠正原因（必填，将通知卖方）"
-             :autosize="{ minRows: 3, maxRows: 8 }"/>
-          </el-form-item>
-          <el-form-item class="span-2">
-            <el-button type="primary" :loading="submitting" @click="submitCorrection">
-              执行纠正
-            </el-button>
-          </el-form-item>
-        </div>
-      </el-form>
+          <template #empty>
+            <div class="state-block">
+              <span class="state-icon"><AppIcon name="products" :size="24" /></span>
+              <p class="state-title">当前筛选下暂无商品</p>
+            </div>
+          </template>
+        </el-table>
+      </div>
+
+      <el-pagination
+        class="list-pagination"
+        layout="total, sizes, prev, pager, next"
+        :total="total"
+        :current-page="page"
+        :page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :disabled="loading"
+        @current-change="load"
+        @size-change="onSizeChange"
+      />
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { onMounted, ref } from 'vue'
 import http from '../api/http'
-import { fmtTime } from '../api/time'
+import { fmtTime as fmt } from '../api/time'
+import AppIcon from '../components/AppIcon.vue'
 
-const PAGE_SIZE = 10
+const products = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const loading = ref(false)
+const loadError = ref('')
 
+const statusFilter = ref('all')
+const categoryFilter = ref(null)
+const restrictedFilter = ref('all')
 const keyword = ref('')
 const committedKeyword = ref('')
+
 const categories = ref([])
 const categoriesLoading = ref(false)
-const categoriesError = ref('')
-const actionError = ref('')
-const submitting = ref(false)
-const correctForm = reactive({ product_id: null, category_ids: [], reason: '' })
-
-const searchItems = ref([])
-const searchTotal = ref(0)
-const searchPage = ref(1)
-const searchPageSize = ref(PAGE_SIZE)
-const searchLoading = ref(false)
-const searchError = ref('')
-const searchMessage = ref('')
-const hasSearched = ref(false)
-let searchRequestId = 0
 
 const serverDetail = (err) => (typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : '请求失败')
 const fmtPrice = (cents) => `￥${(Number(cents || 0) / 100).toFixed(2)}`
 
-async function loadCategories() {
-  categoriesLoading.value = true
-  categoriesError.value = ''
-  try {
-    categories.value = await http.get('/categories')
-  } catch (err) {
-    categoriesError.value = `分类列表加载失败：${serverDetail(err)}；仍可提交已选分类，请刷新后重试。`
-  } finally {
-    categoriesLoading.value = false
-  }
-}
+let requestSeq = 0
 
-async function searchProducts(page = 1) {
-  const targetPage = Math.max(1, Number(page) || 1)
-  const requestId = ++searchRequestId
-  hasSearched.value = true
-  searchLoading.value = true
-  searchError.value = ''
+async function load(targetPage) {
+  const target = Math.max(1, Number(targetPage) || page.value || 1)
+  const seq = ++requestSeq
+  loading.value = true
+  loadError.value = ''
   try {
-    const params = { page: targetPage, page_size: searchPageSize.value }
+    const params = { page: target, page_size: pageSize.value, status: statusFilter.value, display_restricted: restrictedFilter.value }
+    if (categoryFilter.value) params.category_id = categoryFilter.value
     if (committedKeyword.value) params.keyword = committedKeyword.value
-    const data = await http.get('/products/search', { params })
-    // 只接收最后一次请求的结果，避免较慢的旧响应覆盖新搜索结果。
-    if (requestId !== searchRequestId) return
-    searchItems.value = Array.isArray(data?.items) ? data.items : []
-    searchTotal.value = Number(data?.total) || 0
-    searchPage.value = targetPage
-    searchMessage.value = data?.message || ''
+    const data = await http.get('/admin/products', { params })
+    if (seq !== requestSeq) return
+    products.value = Array.isArray(data?.items) ? data.items : []
+    total.value = Number(data?.total) || 0
+    page.value = target
   } catch (err) {
-    if (requestId !== searchRequestId) return
-    searchItems.value = []
-    searchTotal.value = 0
-    searchPage.value = targetPage
-    searchMessage.value = ''
-    searchError.value = `公开商品搜索失败：${serverDetail(err)}`
+    if (seq !== requestSeq) return
+    loadError.value = `商品列表加载失败：${serverDetail(err)}`
   } finally {
-    if (requestId === searchRequestId) searchLoading.value = false
+    if (seq === requestSeq) loading.value = false
   }
 }
 
 function submitSearch() {
   committedKeyword.value = keyword.value.trim()
-  searchProducts(1)
+  load(1)
 }
 
-function clearSearch() {
-  searchRequestId += 1
-  keyword.value = ''
-  committedKeyword.value = ''
-  searchItems.value = []
-  searchTotal.value = 0
-  searchPage.value = 1
-  searchMessage.value = ''
-  searchError.value = ''
-  hasSearched.value = false
-  searchLoading.value = false
+function onSizeChange(size) {
+  pageSize.value = size
+  load(1)
 }
 
-function pickProduct(row) {
-  correctForm.product_id = row.id
-  ElMessage.success(`已选择商品 #${row.id}`)
+const statusLabels = {
+  pending_review: '待审核',
+  rejected: '审核未通过',
+  listed: '公开可交易',
+  in_transaction: '交易中',
+  delisted: '已下架',
+}
+const statusLabel = (s) => statusLabels[s] || s
+const statusTagType = (s) => {
+  if (s === 'pending_review') return 'warning'
+  if (s === 'rejected') return 'danger'
+  if (s === 'listed') return 'success'
+  if (s === 'in_transaction') return 'primary'
+  return 'info'
 }
 
-async function submitCorrection() {
-  if (!correctForm.product_id || !correctForm.category_ids.length || !correctForm.reason.trim()) {
-    return ElMessage.warning('请完整填写商品 ID、分类与纠正原因')
-  }
-  submitting.value = true
-  actionError.value = ''
+async function loadCategories() {
+  categoriesLoading.value = true
   try {
-    await http.post(`/admin/products/${correctForm.product_id}/correct-category`, {
-      category_ids: correctForm.category_ids,
-      reason: correctForm.reason.trim(),
-    })
-    ElMessage.success('分类纠正完成并通知卖方')
-    correctForm.reason = ''
-  } catch (err) {
-    actionError.value = `分类纠正失败：${serverDetail(err)}；已保留当前输入。`
+    categories.value = await http.get('/categories')
+  } catch {
+    categories.value = []
   } finally {
-    submitting.value = false
+    categoriesLoading.value = false
   }
 }
 
-onMounted(loadCategories)
+onMounted(() => {
+  loadCategories()
+  load(1)
+})
 </script>
 
 <style scoped>
-.product-search {
-  width: min(420px, 100%);
+.sub {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
 }
-
 .filter-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
-
-.search-results {
-  margin-top: 14px;
-  min-height: 72px;
+.filter-select {
+  width: 148px;
 }
-
-.search-alert {
-  margin-top: 12px;
+.filter-narrow {
+  width: 96px;
 }
-
-.search-pagination {
-  margin-top: 12px;
-  justify-content: flex-end;
+.product-search {
+  width: min(300px, 100%);
 }
-
 .result-count {
   color: var(--ink-meta);
   font-size: 12px;
 }
-
-.product-title {
+.product-link {
+  border: none;
+  background: none;
+  padding: 0;
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 550;
+  cursor: pointer;
+  text-align: left;
 }
-
-.product-id {
+.product-link:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+.muted-text {
   color: var(--ink-meta);
-  font-size: 11.5px;
+  font-size: 12px;
 }
-
-.category-alert {
-  margin-bottom: 14px;
-}
-
-.full-control {
-  width: 100%;
-}
-
-.full-control :deep(.el-input__wrapper) {
-  width: 100%;
-}
-
-.correction-form {
-  max-width: 860px;
+.list-pagination {
+  margin-top: 12px;
+  justify-content: flex-end;
+  padding: 0 18px 14px 0;
 }
 </style>

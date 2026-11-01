@@ -7,10 +7,12 @@
     <div v-else-if="!detail" class="state-page">
       <span class="state-icon"><AppIcon name="alert" :size="26" /></span>
       <h2>事项详情未能打开</h2>
-      <p>{{ loadError || '事项不存在或当前账户无权查看，请返回待处理池重新选择。' }}</p>
+      <p>{{ loadError || '事项不存在或当前账户无权查看，请返回列表重新选择。' }}</p>
       <div class="state-actions">
         <el-button type="primary" @click="load()">重新加载</el-button>
-        <el-button @click="$router.push('/cases')">返回待处理池</el-button>
+        <el-button @click="$router.push($route.query.from === 'my-cases' ? '/my-cases' : '/cases')">
+          {{ $route.query.from === 'my-cases' ? '返回我的审核' : '返回待处理池' }}
+        </el-button>
       </div>
     </div>
 
@@ -270,84 +272,12 @@
             </div>
           </el-card>
 
-          <el-card v-if="detail.trade">
-            <template #header>
-              <div class="card-head-row">
-                <div>
-                  <span class="card-title">交易概要</span>
-                  <span class="card-sub">交易 #{{ detail.trade.id }}</span>
-                </div>
-                <el-tag v-if="detail.trade.frozen" type="danger" effect="light">冻结中</el-tag>
-              </div>
-            </template>
-            <el-descriptions :column="2" border>
-              <el-descriptions-item label="交易#">{{ detail.trade.id }}</el-descriptions-item>
-              <el-descriptions-item label="状态">
-                <span class="mono">{{ detail.trade.status }}</span>
-                <el-tag v-if="detail.trade.frozen" type="danger" effect="light" class="inline-tag">冻结中</el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="买方">
-                {{ detail.trade.buyer?.display_name }}（#{{ detail.trade.buyer?.id }}）
-              </el-descriptions-item>
-              <el-descriptions-item label="卖方">
-                {{ detail.trade.seller?.display_name }}（#{{ detail.trade.seller?.id }}）
-              </el-descriptions-item>
-              <el-descriptions-item label="当前有效确认" :span="2">{{ tradeConfirmText }}</el-descriptions-item>
-              <el-descriptions-item label="等待计时" :span="2">{{ tradeWaitText }}</el-descriptions-item>
-              <el-descriptions-item label="冻结原因" :span="2">
-                {{ detail.trade.frozen ? (detail.trade.frozen_reason || '处置冻结') : '未冻结' }}
-              </el-descriptions-item>
-            </el-descriptions>
-
-            <el-collapse class="trade-history">
-              <el-collapse-item title="约定、完成确认与状态变更历史" name="trade-history">
-                <div class="section-title"><h3>约定历史</h3></div>
-                <div class="table-scroll table-compact">
-                  <el-table :data="detail.trade.agreements || []" size="small" border>
-                    <el-table-column prop="round_no" label="轮次" width="62" />
-                    <el-table-column prop="status" label="状态" width="116" />
-                    <el-table-column label="金额" width="94">
-                      <template #default="{ row }">￥{{ (row.amount_cents / 100).toFixed(2) }}</template>
-                    </el-table-column>
-                    <el-table-column prop="delivery_location" label="地点" />
-                    <el-table-column prop="payment_method" label="支付方式" width="104" />
-                  </el-table>
-                </div>
-
-                <div class="section-title"><h3>完成确认记录</h3></div>
-                <div class="table-scroll table-compact">
-                  <el-table :data="detail.trade.confirmations || []" size="small" border>
-                    <el-table-column prop="confirmer_id" label="确认人" width="84" />
-                    <el-table-column label="当前有效" width="92">
-                      <template #default="{ row }">{{ row.is_current ? '是' : '否' }}</template>
-                    </el-table-column>
-                    <el-table-column prop="confirmed_at" label="时间">
-                      <template #default="{ row }">{{ fmt(row.confirmed_at) }}</template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-
-                <div class="section-title"><h3>状态变更</h3></div>
-                <div class="table-scroll table-compact">
-                  <el-table :data="detail.trade.transitions || []" size="small" border max-height="260">
-                    <el-table-column prop="from_status" label="前状态" width="162" />
-                    <el-table-column prop="to_status" label="后状态" width="162" />
-                    <el-table-column prop="actor_role" label="主体" width="74" />
-                    <el-table-column prop="reason" label="原因/依据" show-overflow-tooltip />
-                  </el-table>
-                </div>
-              </el-collapse-item>
-            </el-collapse>
-
-            <div v-if="detail.case_type !== 'product_review'" class="card-actions">
-              <el-button
-                size="small"
-                @click="$router.push(`/trades?trade_id=${detail.trade.id}&case_id=${detail.id}`)"
-              >
-                进入交易处置
-              </el-button>
-            </div>
-          </el-card>
+          <TradeCasePanel
+            v-if="showTradePanel"
+            :key="detail.id"
+            :case-id="detail.id"
+            :trade-id="detail.trade?.id || null"
+          />
         </div>
 
         <aside class="detail-side">
@@ -513,6 +443,7 @@ import http from '../api/http'
 import { fmtTime as fmt } from '../api/time'
 import { ensureAdminUser } from '../api/session'
 import AppIcon from '../components/AppIcon.vue'
+import TradeCasePanel from '../components/TradeCasePanel.vue'
 import CaseConversation from '../components/CaseConversation.vue'
 
 const route = useRoute()
@@ -566,24 +497,9 @@ const canRestoreDisplay = computed(
     !!adminId.value &&
     Number(detail.value.claimed_by_id) === Number(adminId.value),
 )
-const tradeConfirmText = computed(() => {
-  const rows = (detail.value?.trade?.confirmations || []).filter((c) => c.is_current)
-  if (!rows.length) return '无当前有效声明'
-  return rows.map((c) => `#${c.confirmer_id} ${fmt(c.confirmed_at)}`).join('；')
-})
-const tradeWaitText = computed(() => {
-  const t = detail.value?.trade
-  if (!t) return '无'
-  const remaining = fmtDuration(t.confirm_wait_remaining_seconds)
-  if (t.frozen && t.confirm_wait_paused_at) {
-    return `暂停于 ${fmt(t.confirm_wait_paused_at)}${remaining ? `，剩余 ${remaining}` : ''}（服务端记录）`
-  }
-  if (t.frozen) return '冻结期间不累计等待时间'
-  if (t.confirm_wait_started_at) {
-    return `自 ${fmt(t.confirm_wait_started_at)} 起算${remaining ? `，剩余 ${remaining}` : '，剩余以服务端为准'}`
-  }
-  return '无'
-})
+const showTradePanel = computed(() =>
+  ['trade_dispute', 'abnormal_trade', 'report', 'account_ban'].includes(detail.value?.case_type),
+)
 
 const serverDetail = (err) => {
   const detail = err?.response?.data?.detail

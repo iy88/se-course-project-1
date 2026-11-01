@@ -1,105 +1,33 @@
 <template>
-  <div class="page">
-    <header class="page-head">
-      <div>
-        <p class="eyebrow">处置</p>
-        <h1>交易处置</h1>
-        <p class="sub">须关联本人认领事项；冻结、解冻和状态调整基于该事项执行，并记录依据、通知双方。</p>
-      </div>
-    </header>
-
+  <div class="trade-panel">
     <el-card class="filter-card">
-      <template #header>
-        <div class="card-head-row">
-          <div>
-            <span class="card-title">事项上下文</span>
-            <span class="card-sub">选择本人认领且与本交易相关的事项后加载交易。</span>
-          </div>
-          <span class="result-count">可用事项 {{ caseOptions.length }} 个</span>
-        </div>
-      </template>
+      <div class="query-bar">
+        <span class="query-label">交易编号</span>
+        <el-input-number
+          v-model="tradeIdInput"
+          :min="1"
+          :controls="false"
+          placeholder="直接关联自动填入，否则输入编号"
+          class="trade-id-input"
+          @change="onTradeIdChange"
+        />
+        <el-button type="primary" :loading="tradeLoading" :disabled="!tradeIdInput || actionBusy" @click="load()">
+          {{ trade ? '刷新交易' : '加载交易' }}
+        </el-button>
+        <span v-if="!tradeId" class="query-hint">
+          事项直接关联的交易会自动填入；举报、封禁类事项请输入相关交易编号，服务端将校验关联。
+        </span>
+      </div>
 
-      <el-form inline class="trade-query-form">
-        <el-form-item label="交易 ID">
-          <el-input-number v-model="tradeId" :min="1" :controls="false" class="trade-id-input" @change="onTradeIdChange" />
-        </el-form-item>
-        <el-form-item label="关联事项">
-          <el-select
-            v-model="caseSelectValue"
-            filterable
-            clearable
-            placeholder="选择本人认领且相关的事项"
-            class="case-select"
-            :loading="casesLoading"
-            @change="onCaseChange"
-          >
-            <el-option v-for="c in caseOptions" :key="c.id" :label="caseOptionLabel(c)" :value="c.id" />
-          </el-select>
-          <el-button :loading="casesLoading" @click="loadCases">刷新事项</el-button>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="tradeLoading" :disabled="!canQuery || actionBusy" @click="load()">
-            加载交易
-          </el-button>
-        </el-form-item>
-      </el-form>
-
-      <div class="notice-stack context-notices">
-        <el-alert
-          v-if="!caseId"
-          title="请选择本人认领且与本交易相关的事项后再加载交易。"
-          type="warning"
-          :closable="false"
-          show-icon
-        />
-        <el-alert v-if="casesError" :title="casesError" type="error" :closable="false" show-icon>
-          <template #default>
-            <el-button size="small" @click="loadCases">重试</el-button>
-          </template>
-        </el-alert>
-        <el-alert
-          v-if="selectedCase && !isCaseClaimant"
-          title="该事项非本人认领：不能查看私人交易详情或执行冻结、解冻、状态调整。"
-          type="warning"
-          :closable="false"
-          show-icon
-        />
-        <el-alert
-          v-if="selectedCase && directMismatch"
-          :title="`所选事项直接关联交易 #${selectedCase.trade_id}，与当前交易 #${tradeId} 不一致；不能用于本交易。`"
-          type="error"
-          :closable="false"
-          show-icon
-        />
-        <el-alert
-          v-if="selectedCase && !directMismatch && !caseHasDirectTrade"
-          title="该事项未直接关联本交易；加载后请核对交易概要是否与事项相关。"
-          type="info"
-          :closable="false"
-          show-icon
-        />
-        <el-alert
-          v-if="caseContext"
-          :title="`关联事项 #${caseContext.id}（${caseContext.title}）· ${caseStatusLabel(caseContext.status)} · 认领人 #${caseContext.claimed_by_id || '未认领'}`"
-          :type="isCaseClaimant ? 'success' : 'warning'"
-          :closable="false"
-          show-icon
-        />
-        <el-alert
-          v-if="caseContext && caseContext.status === 'disposed' && isCaseClaimant"
-          title="事项已处置：仍可基于该事项办理后续解冻或状态调整。"
-          type="info"
-          :closable="false"
-          show-icon
-        />
+      <div class="notice-stack">
         <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon>
           <template #default>
-            <el-button v-if="canQuery" size="small" @click="load()">重新加载</el-button>
+            <el-button v-if="tradeIdInput" size="small" @click="load()">重新加载</el-button>
           </template>
         </el-alert>
         <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon>
           <template #default>
-            <el-button v-if="canQuery" size="small" @click="load()">重新加载</el-button>
+            <el-button v-if="tradeIdInput" size="small" @click="load()">重新加载</el-button>
           </template>
         </el-alert>
       </div>
@@ -188,9 +116,6 @@
       </div>
 
       <el-divider content-position="left">处置操作</el-divider>
-      <p v-if="!actionsEnabled" class="hint">
-        需先选择本人认领且与本交易相关的事项；已处置事项仍可用于后续合法解冻或调整。
-      </p>
       <el-form inline :disabled="!actionsEnabled" class="action-form trade-action-form">
         <div class="action-row">
           <el-form-item label="冻结理由">
@@ -238,7 +163,7 @@
       <div class="state-block">
         <span class="state-icon"><AppIcon name="trades" :size="24" /></span>
         <p class="state-title">尚未加载交易</p>
-        <p v-if="!canQuery">选择本人认领且与本交易相关的事项后加载交易。</p>
+        <p class="state-hint">输入与本事项相关的交易编号后加载；是否允许访问由服务端按事项关联校验。</p>
       </div>
     </el-card>
   </div>
@@ -246,12 +171,9 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api/http'
 import { fmtTime as fmt } from '../api/time'
-import { ensureAdminUser } from '../api/session'
-import { caseCanContextTrade, isDirectTradeMismatch, ownedUsableCases } from '../api/tradeCaseContext'
 import {
   beginTradeAction,
   beginTradeLoad,
@@ -264,16 +186,15 @@ import {
   isSameTradeContext,
   normalizeTradeContext,
 } from '../api/tradeContextState'
-import AppIcon from '../components/AppIcon.vue'
+import AppIcon from './AppIcon.vue'
 
-const route = useRoute()
-const tradeId = ref(Number(route.query.trade_id) || null)
-const caseId = ref(Number(route.query.case_id) || 0)
+const props = defineProps({
+  caseId: { type: Number, required: true },
+  tradeId: { type: Number, default: null },
+})
+
+const tradeIdInput = ref(Number(props.tradeId) || null)
 const session = ref(createTradeSession())
-const caseOptions = ref([])
-const adminId = ref(null)
-const casesLoading = ref(false)
-const casesError = ref('')
 const loadError = ref('')
 const actionError = ref('')
 const freezeReason = ref('')
@@ -287,6 +208,7 @@ const adjustTargets = [
   { value: 'terminated', label: '已终止' },
   { value: 'completed', label: '已完成（不生成双方确认）' },
 ]
+
 const fmtDuration = (seconds) => {
   const total = Number(seconds)
   if (!Number.isFinite(total) || total < 0) return ''
@@ -298,39 +220,14 @@ const fmtDuration = (seconds) => {
   return `${minutes} 分`
 }
 
-// 未选择事项时按 null 展示占位符；内部仍沿用 0 表示未选择，不改变上下文规则。
-const caseSelectValue = computed({
-  get: () => (caseId.value ? caseId.value : null),
-  set: (value) => {
-    caseId.value = value || 0
-  },
-})
-
-const currentContext = computed(() => normalizeTradeContext(tradeId.value, caseId.value))
+const currentContext = computed(() => normalizeTradeContext(tradeIdInput.value, props.caseId))
 const trade = computed(() => {
   const loaded = session.value.loaded
   return loaded && isSameTradeContext(loaded, currentContext.value) ? loaded.trade : null
 })
 const actionBusy = computed(() => session.value.actionBusy)
 const tradeLoading = computed(() => session.value.loading)
-const selectedCase = computed(() => caseOptions.value.find((c) => c.id === caseId.value) || null)
-const caseContext = computed(() => selectedCase.value)
-const isCaseClaimant = computed(
-  () =>
-    !!selectedCase.value &&
-    !!adminId.value &&
-    Number(selectedCase.value.claimed_by_id) === Number(adminId.value),
-)
-const directMismatch = computed(() => isDirectTradeMismatch(selectedCase.value, tradeId.value))
-const caseHasDirectTrade = computed(
-  () => selectedCase.value?.trade_id != null && Number(selectedCase.value.trade_id) === Number(tradeId.value),
-)
-const canQuery = computed(() => {
-  const ctx = currentContext.value
-  if (!ctx.tradeId || !ctx.caseId || !selectedCase.value || !isCaseClaimant.value) return false
-  if (directMismatch.value) return false
-  return caseCanContextTrade(selectedCase.value, ctx.tradeId)
-})
+const canQuery = computed(() => !!(currentContext.value.tradeId && currentContext.value.caseId))
 const actionsEnabled = computed(() => canQuery.value && canUseLoadedTrade(session.value, currentContext.value))
 
 const currentConfirmText = computed(() => {
@@ -355,30 +252,7 @@ const waitText = computed(() => {
   return '无'
 })
 
-const typeLabels = {
-  product_review: '商品审核',
-  report: '举报事项',
-  trade_dispute: '交易争议',
-  abnormal_trade: '异常交易',
-  account_ban: '账户处置',
-}
-const statusLabels = { pending: '待认领', processing: '处理中', disposed: '已处置' }
-const caseStatusLabel = (s) => statusLabels[s] || s || '未知'
-const caseOptionLabel = (c) => {
-  const related = c.trade_id
-    ? `交易#${c.trade_id}`
-    : c.product_id
-      ? `商品#${c.product_id}`
-      : c.report_id
-        ? `举报#${c.report_id}`
-        : c.subject_user_id
-          ? `账户#${c.subject_user_id}`
-          : '无业务关联'
-  return `#${c.id} ${typeLabels[c.case_type] || c.case_type} · ${c.title}（${related}，${caseStatusLabel(c.status)}）`
-}
 const serverDetail = (err) => (typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : '请求失败')
-
-let casesRequestSeq = 0
 
 function dropLoadedContext() {
   session.value = invalidateTradeSession(session.value)
@@ -390,76 +264,9 @@ function resetView() {
   actionError.value = ''
 }
 
-async function loadCases() {
-  casesError.value = ''
-  if (!adminId.value) {
-    casesError.value = '无法确认当前管理员身份，不能加载事项。'
-    return
-  }
-  const seq = ++casesRequestSeq
-  const requestedCaseId = caseId.value
-  casesLoading.value = true
-  try {
-    const rows = await http.get('/admin/cases', { params: { status: 'all' } })
-    if (seq !== casesRequestSeq) return
-    let usable = ownedUsableCases(rows, adminId.value)
-    if (requestedCaseId && !usable.some((c) => c.id === requestedCaseId)) {
-      try {
-        const detail = await http.get(`/admin/cases/${requestedCaseId}`)
-        if (seq !== casesRequestSeq) return
-        usable = ownedUsableCases([...rows, detail], adminId.value)
-        if (!usable.some((c) => c.id === requestedCaseId)) {
-          casesError.value =
-            detail?.case_type === 'product_review'
-              ? '商品审核事项不能作为私人交易上下文，请选择举报、争议或账户处置等相关事项。'
-              : `指定事项 #${requestedCaseId} 不可作为本人交易上下文（未认领、非本人认领或不可用）。`
-          if (Number(caseId.value) === Number(requestedCaseId)) {
-            caseId.value = 0
-            dropLoadedContext()
-          }
-        }
-      } catch {
-        if (seq !== casesRequestSeq) return
-        casesError.value = `指定事项 #${requestedCaseId} 不可作为本人交易上下文（未认领、非本人认领或不可用）。`
-        if (Number(caseId.value) === Number(requestedCaseId)) {
-          caseId.value = 0
-          dropLoadedContext()
-        }
-      }
-    }
-    if (seq !== casesRequestSeq) return
-    caseOptions.value = usable
-  } catch (err) {
-    if (seq !== casesRequestSeq) return
-    casesError.value = `事项列表加载失败：${serverDetail(err)}`
-  } finally {
-    if (seq === casesRequestSeq) casesLoading.value = false
-  }
-}
-
-function contextProblem(ctx) {
-  if (!ctx.tradeId) return '请输入交易 ID。'
-  if (!ctx.caseId) return '请选择本人认领且与本交易相关的事项后再加载交易。'
-  if (!selectedCase.value) return '所选事项不在本人可用事项中，请刷新事项后重新选择。'
-  if (!isCaseClaimant.value) return '该事项非本人认领，不能读取私人交易详情。'
-  if (directMismatch.value) return '所选事项已关联其他交易，不能用于本交易。'
-  if (!caseCanContextTrade(selectedCase.value, ctx.tradeId)) {
-    return '所选事项不能作为本交易的上下文，请选择本人认领的相关事项。'
-  }
-  return ''
-}
-
 function onTradeIdChange() {
   resetView()
-  if (caseId.value && tradeId.value) load()
-}
-
-function onCaseChange() {
-  resetView()
-  if (selectedCase.value?.trade_id != null) {
-    tradeId.value = Number(selectedCase.value.trade_id)
-  }
-  if (caseId.value && tradeId.value) load()
+  if (tradeIdInput.value) load()
 }
 
 async function load(expectedContext = null) {
@@ -467,10 +274,8 @@ async function load(expectedContext = null) {
   actionError.value = ''
   const ctx = currentContext.value
   if (expectedContext && !isSameTradeContext(expectedContext, ctx)) return
-  const problem = contextProblem(ctx)
-  if (problem) {
-    dropLoadedContext()
-    loadError.value = problem
+  if (!ctx.tradeId) {
+    loadError.value = '请输入交易编号。'
     return
   }
   if (session.value.actionBusy) return
@@ -495,7 +300,7 @@ async function executeAction(ctx, prefix, request, successMessage) {
   if (!isSameTradeContext(ctx, currentContext.value)) {
     return ElMessage.warning('交易上下文已变更，请重新确认')
   }
-  if (!canQuery.value) return ElMessage.warning('当前事项不能用于本交易')
+  if (!canQuery.value) return ElMessage.warning('请先加载与本事项相关的交易')
   const started = beginTradeAction(session.value, ctx)
   if (!started) {
     return ElMessage.warning(
@@ -522,7 +327,6 @@ async function executeAction(ctx, prefix, request, successMessage) {
 
 async function doFreeze() {
   const ctx = currentContext.value
-  if (!canQuery.value) return ElMessage.warning('当前事项不能用于本交易')
   if (!freezeReason.value.trim()) {
     actionError.value = '冻结须填写依据'
     return ElMessage.warning('冻结须填写依据')
@@ -540,21 +344,17 @@ async function doFreeze() {
 }
 
 async function doUnfreeze() {
-  const ctx = currentContext.value
-  if (!canQuery.value) return ElMessage.warning('当前事项不能用于本交易')
   let value
   try {
-    ({ value } = await ElMessageBox.prompt('解除冻结依据', '解除冻结', { inputType: 'textarea' }))
+    ;({ value } = await ElMessageBox.prompt('解除冻结依据', '解除冻结', { inputType: 'textarea' }))
   } catch {
     return
-  }
-  if (!isSameTradeContext(ctx, currentContext.value)) {
-    return ElMessage.warning('交易上下文已变更，请重新确认')
   }
   if (!value?.trim()) {
     actionError.value = '解除冻结须填写依据'
     return ElMessage.warning('解除冻结须填写依据')
   }
+  const ctx = currentContext.value
   await executeAction(
     ctx,
     '解除冻结失败',
@@ -568,8 +368,6 @@ async function doUnfreeze() {
 }
 
 async function doAdjust() {
-  const ctx = currentContext.value
-  if (!canQuery.value) return ElMessage.warning('当前事项不能用于本交易')
   if (!adjustTarget.value || !adjustReason.value.trim()) {
     actionError.value = '请选择目标状态并填写调整依据'
     return ElMessage.warning('请选择目标状态并填写调整依据')
@@ -583,9 +381,7 @@ async function doAdjust() {
   } catch {
     return
   }
-  if (!isSameTradeContext(ctx, currentContext.value)) {
-    return ElMessage.warning('交易上下文已变更，请重新确认')
-  }
+  const ctx = currentContext.value
   await executeAction(
     ctx,
     '状态调整失败',
@@ -599,142 +395,82 @@ async function doAdjust() {
   )
 }
 
+onMounted(() => {
+  if (tradeIdInput.value) load()
+})
+
 watch(
-  () => [route.query.trade_id, route.query.case_id],
-  async ([tid, cid]) => {
+  () => props.tradeId,
+  (value) => {
     resetView()
-    tradeId.value = Number(tid) || null
-    caseId.value = Number(cid) || 0
-    await loadCases()
-    if (caseId.value && !tradeId.value && selectedCase.value?.trade_id != null) {
-      tradeId.value = Number(selectedCase.value.trade_id)
-    }
-    if (caseId.value && tradeId.value) await load()
+    tradeIdInput.value = Number(value) || null
+    if (tradeIdInput.value) load()
   },
 )
-
-onMounted(async () => {
-  adminId.value = (await ensureAdminUser())?.id || null
-  await loadCases()
-  if (caseId.value && !tradeId.value && selectedCase.value?.trade_id != null) {
-    tradeId.value = Number(selectedCase.value.trade_id)
-  }
-  if (caseId.value && tradeId.value) await load()
-})
 </script>
 
 <style scoped>
-.trade-query-form {
-  margin-top: 14px;
+.query-bar {
   display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
-  gap: 0 16px;
-  align-items: flex-start;
 }
-
-.trade-query-form :deep(.el-form-item) {
-  margin-right: 0;
-  margin-bottom: 12px;
+.query-label {
+  color: var(--ink-soft);
+  font-size: 13px;
 }
-
 .trade-id-input {
-  width: 150px;
+  width: 220px;
 }
-
-.case-select {
-  width: 420px;
-  max-width: 100%;
+.query-hint {
+  color: var(--ink-meta);
+  font-size: 12px;
 }
-
-.context-notices {
-  margin-top: 2px;
-}
-
 .trade-history-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 16px;
 }
-
 .transition-title {
   margin-top: 18px;
 }
-
-.data-card .load-skeleton {
-  border: 0;
+.load-skeleton {
   padding: 4px 0;
   background: transparent;
 }
-
 .inline-tag {
   margin-left: 6px;
 }
-
 .reason-input {
   width: 240px;
 }
-
 .adjust-select {
-  width: 230px;
+  width: 220px;
 }
-
 .adjust-reason {
-  width: 270px;
+  width: 240px;
 }
-
 .action-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 16px;
-  align-items: flex-end;
+  gap: 0 16px;
+  align-items: flex-start;
 }
-
+.action-row :deep(.el-form-item) {
+  margin-bottom: 10px;
+}
 .adjust-row {
-  border-top: 1px dashed var(--line);
-  padding-top: 12px;
+  margin-top: 2px;
 }
-
 .hint {
-  color: var(--ink-faint);
-  font-size: 12px;
-  margin: 0 0 10px;
+  color: var(--ink-meta);
+  font-size: 12.5px;
 }
-
-@media (max-width: 1280px) {
-  .trade-history-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 900px) {
-  .case-select,
-  .reason-input,
-  .adjust-select,
-  .adjust-reason {
-    width: 100%;
-  }
-
-  .trade-query-form {
-    flex-direction: column;
-  }
-
-  .trade-query-form :deep(.el-form-item) {
-    width: 100%;
-  }
-
-  .trade-query-form :deep(.el-form-item__content) {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .action-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .action-row :deep(.el-form-item) {
-    width: 100%;
-  }
+.state-hint {
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
 }
 </style>
