@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.0
-Version-Datetime: 2026-11-01T18:52:27+08:00
+Version: 0.2.1
+Version-Datetime: 2026-11-02T01:46:00+08:00
 -->
 
 # 开发与人工测试指南
@@ -40,7 +40,7 @@ chmod 600 backend/.env.dev backend/.env.prod
 
 `seed` 交互输入管理员邮箱与初始密码；已有正常管理员沿用，邮箱对应其他角色或受限账户时输出状态提示并结束。可用参数显式指定：`--admin-email admin@example.com --category '书籍教材' --category '数码产品'`，已有同名分类或别名时沿用。需要第二名管理员时用 `--admin-email` 再次运行。部署管理员及参考数据持久保留，不由自动化清理。
 
-演示数据按[演示数据与操作路线](demo-seed.md)执行 `app.manage demo-seed`。
+演示数据按[演示数据与操作路线](demo-seed.md)执行 `app.manage demo-seed`；随后用 `app.manage demo-verify` 做只读校验。
 
 ## 服务托管
 

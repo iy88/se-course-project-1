@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.42
-Version-Datetime: 2026-11-01T18:58:18+08:00
+Version: 0.1.43
+Version-Datetime: 2026-11-02T01:50:00+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -19,7 +19,7 @@ Version-Datetime: 2026-11-01T18:58:18+08:00
 
 ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQLAlchemy基础设施。图片使用OSS Python SDK V2的短期上传租约：前端直传，后端核对SHA256、元信息、大小与真实图片后确认引用；本地存储使用相同租约API。后端与前端依赖版本分别由 `backend/uv.lock` 和各前端 `package-lock.json` 锁定。
 
-人工演示使用 `(cd backend && .venv/bin/python -m app.manage demo-seed --env-file .env.dev)`，向所选环境持久添加演示账号、图片和业务记录，沿用配置的数据库 schema 与存储资源。先对同一环境执行 `migrate`；账号清单、场景入口与 US／UC／SC 演示步骤见 [Demo seed](docs/development/demo-seed.md)。
+人工演示使用 `(cd backend && .venv/bin/python -m app.manage demo-seed --env-file .env.dev)`，向所选环境持久添加演示账号、图片和业务记录，沿用配置的数据库 schema 与存储资源。先对同一环境执行 `migrate`；seed 后可用 `(cd backend && .venv/bin/python -m app.manage demo-verify --env-file .env.dev)` 只读校验记录、文件、场景覆盖与权限，不修改演示状态。共享场景目录、账号清单、现场起点、验证命令与 US／UC／SC 演示步骤见 [Demo seed](docs/development/demo-seed.md)。
 
 ## 项目运行与配置
 
