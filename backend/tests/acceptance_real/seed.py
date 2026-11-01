@@ -20,7 +20,6 @@ import argparse
 import asyncio
 import hashlib
 import json
-import os
 import re
 import secrets
 import sys
@@ -30,12 +29,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.core.private_files import protect_private
+from app.core.private_files import require_private as validate_private_file
 from app.devtools._support import (
     DevConfig,
     GuardError,
     SeedError,
     credentials_lock,
-    file_mode,
     is_undefined_table,
     load_dev_config,
     make_async_engine,
@@ -191,9 +191,8 @@ def load_credentials(
     """
     if not path.exists():
         return None
-    mode = file_mode(path)
-    if require_private and mode != 0o600:
-        raise SeedError("凭据文件权限不是 0600；拒绝读取，请先修正权限")
+    if require_private:
+        validate_private_file(path)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -414,7 +413,7 @@ async def seed_identities_core(
         )
     else:
         try:
-            os.chmod(credentials_path, 0o600)
+            protect_private(credentials_path)
         except OSError:
             raise SeedError("无法将凭据文件权限修正为 0600；请人工检查") from None
 

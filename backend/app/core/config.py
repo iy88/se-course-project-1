@@ -5,7 +5,6 @@ from __future__ import annotations
 import ipaddress
 import os
 import re
-import stat
 from email.utils import parseaddr
 from functools import lru_cache
 from pathlib import Path
@@ -18,6 +17,8 @@ from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
+
+from app.core.private_files import require_private
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 PROJECT_ROOT = BACKEND_ROOT.parent
@@ -259,13 +260,9 @@ class Settings(DotenvOnlySettings):
                     or capture.parent.is_symlink() or capture.is_symlink()
                     or selected.resolve().parent != capture.parent.resolve()):
                     raise ValueError()
-                parent_stat = capture.parent.stat()
-                if parent_stat.st_uid != os.getuid() or stat.S_IMODE(parent_stat.st_mode) != 0o700:
-                    raise ValueError()
+                require_private(capture.parent, directory=True)
                 if capture.exists():
-                    info = capture.stat()
-                    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600:
-                        raise ValueError()
+                    require_private(capture)
             except (OSError, ValueError):
                 errors.append('MAIL_CAPTURE_PATH requires a private acceptance sandbox')
         if self.redis_key_prefix.strip() and not self.redis_url.strip():

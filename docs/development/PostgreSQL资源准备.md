@@ -1,13 +1,35 @@
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-10-30T14:32:28+08:00
+Version: 0.1.2
+Version-Datetime: 2026-11-01T17:03:37+08:00
 -->
 
 # PostgreSQL 资源准备
 
-由实例管理员执行，示例 host 为本机。将 `postgres` 换成实际管理员角色；先确认实例端口及版本。命令只建空数据库，不导入 SQLite 数据，也不执行应用迁移。不要对现有同名库先 DROP；遇到已存在先停止并核对归属。
+由实例管理员执行，示例 host 为本机。将 `postgres` 换成实际管理员角色；先确认实例端口及版本。下方手动 SQL 只建空数据库，不导入 SQLite 数据，也不执行应用迁移。不要对现有同名库先 DROP；遇到已存在先停止并核对归属。
 
-本机 test 资源已按本节规则实测：PostgreSQL 18.6，`campus_market_test`、`campus_test_app`、`campus_test_migrator`、`campus_test_owner` 可用，migrator 连接后可 `SET ROLE campus_test_owner`，schema 为 `app`；Alembic 四项迁移（当前 head：`b7c1d2e3f4a5`） 已在 test 库应用，重复迁移无变更。生产库未由本轮连接、迁移或读取，禁止把下列示例直接套用于生产。
+## 交互式自动初始化
+
+仓库提供跨平台 Python 初始化器、Linux／macOS Bash 入口及 Windows PowerShell／BAT 入口，具体命令见仓库运行说明。指定 dotenv 后读取应用、迁移、owner 角色、数据库与 schema；管理员用户名和隐藏密码只允许在交互终端输入，不写入环境文件或程序日志。初始化器按本节权限规则创建全新资源，并调用正式 Alembic 迁移建立表及审计／对象登记表权限。平台业务管理员仍由独立 seed 命令初始化。
+
+在仓库根目录运行，需先准备 Python 3.12+、uv 和已填写的后端 dotenv；入口在虚拟环境缺失时安装锁定依赖：
+
+```bash
+# Linux、macOS、Git Bash
+bash scripts/init_database.sh --env-file .env.dev
+```
+
+```powershell
+# Windows PowerShell；CMD 使用 scripts\init_database.bat 和相同参数
+.\scripts\init_database.ps1 --env-file .env.dev
+```
+
+数据库名直接读取 `DATABASE_URL`，角色读取应用及迁移配置；管理员凭据不作为命令行参数。若资源创建完成后迁移中断，修复原因后使用同一入口追加 `--resume-migrations`：该模式仅使用已配置的 migrator 继续建表，不重复创建数据库、角色或 schema。
+
+遇到同名数据库或角色立即停止，不接管已有资源、不重置密码。数据库创建无法与角色、schema 和迁移形成整体事务；失败后须先核对部分完成资源，已有资源升级走独立迁移。管理员身份可能由 PostgreSQL 实例自身认证／审计记录，脚本不修改服务器日志策略。
+
+## 手动资源准备与历史验证
+
+此前本机 test 资源曾按本节规则实测：PostgreSQL 18.6，`campus_market_test`、`campus_test_app`、`campus_test_migrator`、`campus_test_owner` 可用，migrator 连接后可 `SET ROLE campus_test_owner`，schema 为 `app`；Alembic 四项迁移（当时 head：`b7c1d2e3f4a5`） 已在 test 库应用，重复迁移无变更。生产库未由本轮连接、迁移或读取，禁止把下列示例直接套用于生产。
 
 ```bash
 psql -h 127.0.0.1 -p 5432 -U postgres -d postgres -W

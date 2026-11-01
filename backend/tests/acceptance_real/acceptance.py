@@ -9,7 +9,6 @@ import asyncio
 import concurrent.futures
 import hashlib
 import json
-import os
 import re
 import subprocess
 import time
@@ -21,6 +20,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from app.core.private_files import protect_private, require_private
 from app.devtools._support import (
     DevConfig,
     StorageProbe,
@@ -93,18 +93,13 @@ class ServerHandle:
     def set_clock_offset(self, seconds: int) -> None:
         self.clock_file.write_text(f"{int(seconds)}\n", encoding="ascii")
         try:
-            os.chmod(self.clock_file, 0o600)
+            protect_private(self.clock_file)
         except OSError:
             pass
 
     def stop(self) -> None:
-        if self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=10)
+        from tests.acceptance_real.processes import stop_server
+        stop_server(self.process, self.clock_file)
 
 
 class AcceptanceRun:
@@ -258,8 +253,7 @@ class AcceptanceRun:
         credentials = load_credentials(path, require_private=True, identities=identities_for_run(self.run_id))
         if credentials is None:
             raise CheckFailure("缺少本轮 seed 凭据")
-        if not path.exists() or (os.stat(path).st_mode & 0o777) != 0o600:
-            raise CheckFailure("seed 凭据文件不存在或权限不是 0600")
+        require_private(path)
         self.seed_fingerprint = credentials.fingerprint
         expected = {identity.key for identity in identities_for_run(self.run_id)}
         if set(credentials.accounts) != expected:
@@ -336,9 +330,8 @@ class AcceptanceRun:
         if settings.mail_backend != "capture" or settings.mail_capture_path is None:
             raise CheckFailure("自动化只能读取本轮隔离邮件捕获")
         path=Path(settings.mail_capture_path)
-        if path.is_symlink() or path.stat().st_mode & 0o077:
-            raise CheckFailure("自动化邮箱权限不安全")
-        messages=[json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+        require_private(path)
+        messages=[json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
         matching=[m for m in messages if m['email']==email.strip().lower() and m['purpose']==purpose]
         if not matching or not re.fullmatch(r"[0-9]{6}",matching[-1]['code']):
             raise CheckFailure("未收到对应的隔离验证码邮件")

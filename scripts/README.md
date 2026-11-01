@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.4
-Version-Datetime: 2026-10-31T00:18:53+08:00
+Version: 0.2.5
+Version-Datetime: 2026-11-01T17:03:37+08:00
 -->
 
 # 文档构建
@@ -100,3 +100,5 @@ python3 scripts/cli.py pdf --force --only docs/requirements/01-项目概述.md
 开发分支的统一入口为 `./scripts/dev.sh start|stop|restart|status`，从仓库根目录执行；也可用该脚本绝对路径从其他目录执行。start 后台启动后端8000、管理端5174、移动端5173，默认读取已有 backend/.env.dev，也可通过 APP_ENV_FILE 显式选择其他 dotenv 文件；托管进程不继承 shell 配置覆盖。不复制配置、不启动PG/Redis、不执行迁移或seed。restart先停止再启动三端，默认沿用托管环境文件，后端代码通过重启加载；status仅检查进程，停止状态返回1；stop只停止本入口托管服务。日志 var/log/dev-services.log，状态 var/run/dev-services.json。
 
 首次/升级结构先显式迁移；前端锁文件变化先停止服务并分别npm ci。详细配置、初始化和浏览器测试见[环境配置](../docs/development/环境配置.md)与[浏览器清单](../docs/development/浏览器交互验收清单.md)，不要同时使用一键和手动方案。
+
+Windows 使用 `dev.ps1` 或 `dev.bat`，支持同一组 start／stop／restart／status 命令。全新 PostgreSQL 资源使用 `init_database.ps1 --env-file .env.dev`（CMD 使用同名 BAT）；用户名与密码均交互输入。Linux／macOS 使用 `bash scripts/init_database.sh --env-file .env.dev`，可从任意目录通过脚本绝对路径调用；入口优先使用后端虚拟环境，否则使用 `uv run --frozen`。跨平台也可用后端虚拟环境 Python 执行 `init_database.py`，详见[PostgreSQL 资源准备](../docs/development/PostgreSQL资源准备.md)。

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const backendRoot = path.join(root, 'backend')
-const python = path.join(backendRoot, '.venv', 'bin', 'python')
+const python = path.join(backendRoot, '.venv', ...(process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']))
 
 // Reuse the backend's strict dotenv loader so malformed, duplicate, blank, or
 // missing settings fail the default frontend startup/build with the same rules.
@@ -45,6 +45,8 @@ if (configSource === 'public') {
       encoding: 'utf8',
       env: {
         PATH: process.env.PATH || '',
+        ...(process.env.SYSTEMROOT ? { SYSTEMROOT: process.env.SYSTEMROOT } : {}),
+        ...(process.env.TEMP ? { TEMP: process.env.TEMP } : {}),
         ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
         ...(process.env.TMPDIR ? { TMPDIR: process.env.TMPDIR } : {}),
         ...(process.env.LANG ? { LANG: process.env.LANG } : {}),

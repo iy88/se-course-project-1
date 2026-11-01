@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import smtplib
 import ssl
-import stat
 from email.message import EmailMessage
 from email.utils import formataddr
 
 from app.core.config import Settings
+from app.core.private_files import exclusive_lock, require_private
 
 
 def deliver_code(settings: Settings, purpose: str, email: str, code: str) -> None:
@@ -41,17 +40,14 @@ def _capture(settings: Settings, purpose: str, email: str, code: str) -> None:
     path = settings.mail_capture_path
     assert path is not None
     # Refuse symlink substitution and validate permissions again at the point of use.
-    parent = path.parent.stat()
-    if path.parent.is_symlink() or parent.st_uid != os.getuid() or stat.S_IMODE(parent.st_mode) != 0o700:
-        raise OSError('invalid private mailbox directory')
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    require_private(path.parent, directory=True)
+    if path.is_symlink():
+        raise OSError('invalid private mailbox')
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_APPEND | getattr(os, 'O_NOFOLLOW', 0), 0o600)
     try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600:
-            raise OSError('invalid private mailbox')
+        require_private(path, fd=fd)
         record = (json.dumps({'purpose': purpose, 'email': email.strip().lower(), 'code': code}, ensure_ascii=False) + '\n').encode('utf-8')
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        with os.fdopen(fd, 'ab', closefd=False) as stream:
+        with exclusive_lock(fd), os.fdopen(fd, 'ab', closefd=False) as stream:
             stream.write(record)
             stream.flush()
             os.fsync(fd)

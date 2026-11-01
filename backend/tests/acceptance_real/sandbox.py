@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from app.core.config import load_migration_settings, validate_migration_context
+from app.core.private_files import protect_private, require_private
 from app.devtools._support import (
     BACKEND_ROOT,
     FORBIDDEN_INHERITED_ENV,
@@ -66,9 +67,8 @@ class Sandbox:
         root = path.parent.resolve()
         if root.parent != (PROJECT_ROOT / "var").resolve() or root.is_symlink():
             raise GuardError("恢复目录不在受控位置")
-        info = path.stat()
-        if info.st_uid != os.getuid() or info.st_mode & 0o077:
-            raise GuardError("恢复清单所有者或权限非法")
+        require_private(root, directory=True)
+        require_private(path)
         data = json.loads(path.read_text(encoding="utf-8"))
         name = data.get("name", "")
         if data.get("version") != 1 or not _PATTERN.fullmatch(name) or not root.name.startswith(name + "-"):
@@ -192,6 +192,7 @@ class Sandbox:
         journal = self.root / "storage-journal.jsonl"
         fd = os.open(journal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         os.close(fd)
+        protect_private(journal)
         updates = {"jwt_secret": self._jwt_secret, "file_url_secret": self._file_secret,
                    "mail_capture_path":self.root / "mailbox.jsonl",
                    "storage_operation_journal": journal, "database_schema": self.name, "storage_key_prefix": self.name + "/",
@@ -200,7 +201,7 @@ class Sandbox:
         if self.base.database_url.startswith("postgresql+"):
             asyncio.run(self._create_pg())
             env = self.server_env()
-            result = subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], cwd=BACKEND_ROOT,
+            result = subprocess.run([sys.executable, "-m", "app.manage", "migrate"], cwd=BACKEND_ROOT,
                 env=env, capture_output=True, timeout=120, check=False)
             if result.returncode:
                 raise GuardError(f"隔离 schema 迁移失败（exit={result.returncode}）")
@@ -218,6 +219,7 @@ class Sandbox:
         if not path.exists():
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             os.close(fd)
+            protect_private(path)
             values = {k: v for k, v in dotenv_values(self.base.env_file, interpolate=False).items() if v is not None and v.strip()}
             # SMTP credentials are unnecessary in the isolated test service.
             values = {k:v for k,v in values.items() if not k.startswith("SMTP_") or k=="SMTP_SECURITY"}

@@ -85,7 +85,14 @@ def run_migrate(revision: str) -> int:
 
     if not logging.getLogger().handlers:
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    config = Config(str(BACKEND_ROOT / "alembic.ini"))
+    # Alembic reads INI files with the OS locale encoding (GBK on some Windows
+    # machines). Load this repository's UTF-8 file explicitly before attaching
+    # its filename; Config.file_config is then cached and will not reread it.
+    config_path = BACKEND_ROOT / "alembic.ini"
+    config = Config()
+    config.file_config.read_string(config_path.read_text(encoding="utf-8"))
+    config.file_config.set("DEFAULT", "here", str(BACKEND_ROOT).replace("%", "%%"))
+    config.config_file_name = str(config_path)
     config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
     command.upgrade(config, revision)
     return 0

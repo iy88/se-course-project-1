@@ -26,6 +26,8 @@ from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.core.private_files import exclusive_lock, protect_private
+
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_ROOT.parent
 DEFAULT_ENV_FILE = BACKEND_ROOT / ".env.dev"
@@ -510,10 +512,7 @@ class StorageProbe:
 
 def ensure_private_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
-    try:
-        path.chmod(0o700)
-    except OSError:
-        pass
+    protect_private(path, directory=True)
 
 
 def file_mode(path: Path) -> int:
@@ -530,9 +529,9 @@ def write_private_json(path: Path, payload: Mapping[str, Any]) -> None:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
-        os.chmod(temp, 0o600)
+        protect_private(temp)
         os.replace(temp, path)
-        os.chmod(path, 0o600)
+        protect_private(path)
         try:
             dir_fd = os.open(path.parent, os.O_RDONLY)
             try:
@@ -551,20 +550,17 @@ def write_private_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 @contextmanager
 def credentials_lock(path: Path) -> Iterator[None]:
-    import fcntl
-
     ensure_private_dir(path.parent)
     lock_path = path.with_suffix(path.suffix + ".lock")
-    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    if lock_path.is_symlink():
+        raise OSError('Lock file must not be a symlink')
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
     try:
-        os.chmod(lock_path, 0o600)
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
+        protect_private(lock_path)
+        with exclusive_lock(fd):
+            yield
     finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
+        os.close(fd)
 
 
 # ---------------------------------------------------------------------------

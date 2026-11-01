@@ -10,13 +10,12 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import json
 import logging
 import os
 import re
-import stat
 import time
+import traceback
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -26,6 +25,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from app.core.config import validate_storage_key_prefix
+from app.core.private_files import exclusive_lock, require_private
 from app.storage.base import (
     StorageAlreadyExists,
     StorageBackend,
@@ -208,6 +208,42 @@ def _unwrap(exc: Exception) -> Exception:
             return inner
     return exc
 
+
+def _error_details(exc: Exception) -> dict[str, Any]:
+    """Inspect SDK/requests/urllib3 causes without logging messages or request data."""
+    pending = [exc]
+    seen: set[int] = set()
+    chain = []
+    details: dict[str, Any] = {}
+    while pending and len(chain) < 12:
+        current = pending.pop(0)
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        entry: dict[str, Any] = {'type': type(current).__name__}
+        number = getattr(current, 'errno', None)
+        if isinstance(number, int):
+            entry['errno'] = number
+        frames = traceback.extract_tb(current.__traceback__)
+        if frames:
+            entry['frames'] = [f'{Path(frame.filename).name}:{frame.lineno}:{frame.name}' for frame in frames[-5:]]
+        chain.append(entry)
+        for name in ('status_code', 'status', 'code', 'request_id', 'ec'):
+            value = getattr(current, name, None)
+            if isinstance(value, int) and name in {'status_code', 'status'}:
+                details.setdefault('status', value)
+            elif isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_.:-]{1,160}', value):
+                details.setdefault(name, value)
+        unwrap = getattr(current, 'unwrap', None)
+        nested = [current.__cause__, current.__context__, getattr(current, 'reason', None)]
+        if callable(unwrap):
+            nested.append(unwrap())
+        nested.extend(arg for arg in current.args if isinstance(arg, Exception))
+        pending.extend(item for item in nested if isinstance(item, Exception))
+    details['causes'] = chain
+    return details
+
+
 def _is_retryable(exc: Exception) -> bool:
     if isinstance(exc, StorageError):
         return False
@@ -280,30 +316,35 @@ class OssStorage(StorageBackend):
 
     def _run(self, operation: str, func: Callable[[], Any], *, missing_ok: bool = False) -> Any:
         attempts = self.config.max_retries + 1
+        started = time.monotonic()
         for attempt in range(attempts):
+            attempt_started = time.monotonic()
             try:
-                return func()
-            except Exception as exc:  # noqa: BLE001 - SDK 异常类型较多，统一翻译
-                if attempt + 1 < attempts and _is_retryable(exc):
-                    logger.warning(
-                        "storage_%s_retry attempt=%s error=%s",
-                        operation,
-                        attempt + 1,
-                        type(exc).__name__,
-                    )
-                    time.sleep(min(0.05 * (2**attempt), 0.5))
-                    continue
+                result = func()
+                if attempt:
+                    logger.info('storage_%s_recovered attempts=%s elapsed_ms=%.1f',
+                                operation, attempt + 1, (time.monotonic() - started) * 1000)
+                return result
+            except Exception as exc:  # noqa: BLE001 - SDK 异常统一翻译，日志仅输出白名单元数据
+                retryable = _is_retryable(exc)
+                retry = attempt + 1 < attempts and retryable
                 translated = _translate_error(exc)
                 if missing_ok and isinstance(translated, StorageNotFound):
                     raise translated from None
-                cause = _unwrap(exc)
+                delay = min(0.05 * (2**attempt), 0.5) if retry else 0
+                details = _error_details(exc)
                 logger.warning(
-                    "storage_%s_failed error=%s status=%s code=%s",
-                    operation,
-                    type(exc).__name__,
-                    getattr(cause, "status_code", getattr(cause, "status", None)),
-                    getattr(cause, "code", None),
+                    'storage_%s_%s attempt=%s/%s attempt_ms=%.1f elapsed_ms=%.1f '
+                    'timeout_s=%s retryable=%s next_delay_s=%s status=%s code=%s request_id=%s details=%s',
+                    operation, 'retry' if retry else 'failed', attempt + 1, attempts,
+                    (time.monotonic() - attempt_started) * 1000,
+                    (time.monotonic() - started) * 1000, self.config.timeout_seconds,
+                    retryable, delay, details.get('status'), details.get('code'), details.get('request_id'),
+                    json.dumps(details, ensure_ascii=True),
                 )
+                if retry:
+                    time.sleep(delay)
+                    continue
                 raise translated from None
         raise StorageUnavailable(
             "文件存储暂不可用"
@@ -426,10 +467,11 @@ class OssStorage(StorageBackend):
             flags |= os.O_CREAT
         try:
             fd = os.open(path, flags, 0o600)
-            info = os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            try:
+                require_private(path, fd=fd)
+            except OSError:
                 os.close(fd)
-                raise StorageConfigError("对象日志权限或所有者不安全")
+                raise
             return fd
         except OSError:
             raise StorageUnavailable("无法访问对象操作日志") from None
@@ -442,14 +484,14 @@ class OssStorage(StorageBackend):
                             ensure_ascii=True, separators=(",", ":")) + "\n"
         fd = self._open_journal(create=True)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            data = record.encode("utf-8")
-            while data:
-                count = os.write(fd, data)
-                if count <= 0:
-                    raise OSError("journal write failed")
-                data = data[count:]
-            os.fsync(fd)
+            with exclusive_lock(fd):
+                data = record.encode("utf-8")
+                while data:
+                    count = os.write(fd, data)
+                    if count <= 0:
+                        raise OSError("journal write failed")
+                    data = data[count:]
+                os.fsync(fd)
         except OSError:
             raise StorageUnavailable("无法写入对象操作日志") from None
         finally:
@@ -461,46 +503,46 @@ class OssStorage(StorageBackend):
             raise StorageConfigError("清理仅允许独立的 acceptance 前缀")
         fd = self._open_journal(create=False)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            with os.fdopen(fd, "r", encoding="utf-8", closefd=False) as journal:
-                records = []
-                failures = 0
-                for line in journal:
+            with exclusive_lock(fd):
+                with os.fdopen(fd, "r", encoding="utf-8", closefd=False) as journal:
+                    records = []
+                    failures = 0
+                    for line in journal:
+                        try:
+                            record = json.loads(line)
+                            if not isinstance(record, dict) or set(record) != {"logical_key", "bucket_role", "physical_prefix"}:
+                                raise ValueError("invalid journal record")
+                            key, role = record["logical_key"], record["bucket_role"]
+                            if record["physical_prefix"] != self.config.key_prefix or role != bucket_role_for_namespace(namespace_for_key(key)):
+                                raise ValueError("invalid journal ownership")
+                            records.append((key, role))
+                        except (ValueError, TypeError, KeyError, StorageInvalidKey):
+                            failures += 1
+                removed = 0
+                for key, role in dict.fromkeys(records):
                     try:
-                        record = json.loads(line)
-                        if not isinstance(record, dict) or set(record) != {"logical_key", "bucket_role", "physical_prefix"}:
-                            raise ValueError("invalid journal record")
-                        key, role = record["logical_key"], record["bucket_role"]
-                        if record["physical_prefix"] != self.config.key_prefix or role != bucket_role_for_namespace(namespace_for_key(key)):
-                            raise ValueError("invalid journal ownership")
-                        records.append((key, role))
-                    except (ValueError, TypeError, KeyError, StorageInvalidKey):
+                        bucket = self._bucket_for_role(role)
+                    except StorageError:
                         failures += 1
-            removed = 0
-            for key, role in dict.fromkeys(records):
-                try:
-                    bucket = self._bucket_for_role(role)
-                except StorageError:
-                    failures += 1
-                    continue
-                physical_key = self.config.key_prefix + key
-                try:
-                    self._run("delete", lambda bucket=bucket, physical_key=physical_key: _close_result(bucket.delete_object(physical_key)))
-                except StorageNotFound:
-                    pass
-                except StorageError:
-                    failures += 1
-                try:
-                    self._run("head", lambda bucket=bucket, physical_key=physical_key: _close_result(bucket.head_object(physical_key)))
-                except StorageNotFound:
-                    removed += 1
-                except StorageError:
-                    failures += 1
-                else:
-                    failures += 1
-            if failures:
-                raise StorageUnavailable("验收对象清理未完全成功，请重试同一日志")
-            return removed
+                        continue
+                    physical_key = self.config.key_prefix + key
+                    try:
+                        self._run("delete", lambda bucket=bucket, physical_key=physical_key: _close_result(bucket.delete_object(physical_key)))
+                    except StorageNotFound:
+                        pass
+                    except StorageError:
+                        failures += 1
+                    try:
+                        self._run("head", lambda bucket=bucket, physical_key=physical_key: _close_result(bucket.head_object(physical_key)))
+                    except StorageNotFound:
+                        removed += 1
+                    except StorageError:
+                        failures += 1
+                    else:
+                        failures += 1
+                if failures:
+                    raise StorageUnavailable("验收对象清理未完全成功，请重试同一日志")
+                return removed
         except (OSError, UnicodeError, ValueError, TypeError, KeyError, StorageInvalidKey):
             raise StorageConfigError("对象操作日志无效或不可读取") from None
         finally:

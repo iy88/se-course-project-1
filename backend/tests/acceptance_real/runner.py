@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from app.core.private_files import protect_private
 
 from tests.acceptance_real.catalog import build_payload
 from tests.acceptance_real.core import (
@@ -121,7 +122,7 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
     clock_file = sandbox.root / f"clock-{run_id}.txt"
     clock_file.parent.mkdir(parents=True, exist_ok=True)
     clock_file.write_text("0\n", encoding="ascii")
-    os.chmod(clock_file, 0o600)
+    protect_private(clock_file)
     log_path = sandbox.root / f"server-{run_id}.log"
     log_handle = log_path.open("wb")
     env = sandbox.server_env()
@@ -142,9 +143,11 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
         env=env,
         stdout=log_handle,
         stderr=subprocess.STDOUT,
-        start_new_session=True,
+        start_new_session=sys.platform != "win32",
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
     )
     sandbox.process = process
+    sandbox.clock_file = clock_file
     sandbox._write_manifest("server_started")
     log_handle.close()
     base_url = f"http://127.0.0.1:{port}"
@@ -161,8 +164,8 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
         except httpx.HTTPError as exc:
             last_error = type(exc).__name__
         time.sleep(0.5)
-    process.terminate()
-    process.wait(timeout=15)
+    from tests.acceptance_real.processes import stop_server
+    stop_server(process, clock_file)
     raise CheckFailure(f"测试服务未在 45s 内健康（最后 {last_error}）")
 
 
@@ -428,6 +431,17 @@ def _markdown(report: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Task F 全 API/全 AC/SC 真实验收")
+    parser.add_argument("--base-url", default=None, help="已运行服务地址；默认由本任务启动 127.0.0.1:8101")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--no-start-server", action="store_true", help="复用已启动服务（不注入受控时钟，7 天场景将 FAIL/SKIP）")
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--inject-failure", choices=["after-files"], help=argparse.SUPPRESS)
+    parser.add_argument("--only", nargs="*", default=None, help="只跑指定组（调试）")
+    return parser
+
+
 def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
     from tests.acceptance_real.acceptance import AcceptanceRun
     from tests.acceptance_real.seed import (
@@ -436,14 +450,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
         seed_identities,
     )
 
-    parser = argparse.ArgumentParser(description="Task F 全 API/全 AC/SC 真实验收")
-    parser.add_argument("--base-url", default=None, help="已运行服务地址；默认由本任务启动 127.0.0.1:8101")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--no-start-server", action="store_true", help="复用已启动服务（不注入受控时钟，7 天场景将 FAIL/SKIP）")
-    parser.add_argument("--run-id", default=None)
-    parser.add_argument("--inject-failure", choices=["after-files"], help=argparse.SUPPRESS)
-    parser.add_argument("--only", nargs="*", default=None, help="只跑指定组（调试）")
-    args = parser.parse_args(argv)
+    args = _parser().parse_args(argv)
 
     from app.devtools._support import validate_run_id
     run_id = validate_run_id(args.run_id or _run_id())
@@ -638,7 +645,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             "clock_events": run.clock_events,
             "time_simulation": {
                 "method": "测试服务进程注入 UTC offset（文件控制，now()=真实UTC+offset）；未修改数据库时间字段；未缩短 7 天阈值",
-                "clock_file_mode": "0600",
+                "clock_file_mode": "Windows private ACL" if sys.platform == "win32" else "0600",
                 "scan_interval_seconds": 2,
                 "production_rule_unchanged": True,
             },
@@ -719,6 +726,7 @@ def main(argv: list[str] | None = None) -> int:
         except BaseException as exc:  # noqa: BLE001 - cleanup also handles interruption
             print(f"recovery failed: {type(exc).__name__}", file=sys.stderr)
             return 2
+    _parser().parse_args(actual_args)  # Validate/help before allocating any resources.
     previous = signal.getsignal(signal.SIGTERM)
     def interrupted(signum, frame):
         raise KeyboardInterrupt()
@@ -745,12 +753,8 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 process = getattr(sandbox, "process", None)
                 if process is not None and process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=15)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait(timeout=10)
+                    from tests.acceptance_real.processes import stop_server
+                    stop_server(process, sandbox.clock_file)
                 cleanup = sandbox.cleanup()
                 print("cleanup: " + json.dumps(cleanup, ensure_ascii=False))
                 paths = getattr(sandbox, "report_paths", None)

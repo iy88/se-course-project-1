@@ -13,9 +13,12 @@ import argparse
 import os
 import re
 import sys
+import threading
 from datetime import datetime as RealDateTime
 from datetime import timedelta
 from pathlib import Path
+
+from app.core.private_files import protect_private, require_private
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
@@ -85,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     clock_file.parent.mkdir(parents=True, exist_ok=True)
     if not clock_file.exists():
         clock_file.write_text("0\n", encoding="ascii")
-        os.chmod(clock_file, 0o600)
+        protect_private(clock_file)
 
     # 仅允许本轮私有隔离目录内的临时配置，与时钟文件位于同一目录。
     selected = os.environ.get("APP_ENV_FILE", "")
@@ -96,9 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             or clock_file.parent.parent != (PROJECT_ROOT / "var").resolve()
             or not re.fullmatch(r"acceptance_[0-9a-f]{32}-.+", clock_file.parent.name)):
         raise RuntimeError("invalid acceptance dotenv path")
-    info = env_path.stat()
-    if info.st_uid != os.getuid() or info.st_mode & 0o077:
-        raise RuntimeError("invalid acceptance dotenv ownership or permissions")
+    require_private(env_path)
     from app.core.config import load_settings
 
     settings = load_settings(env_path)
@@ -116,14 +117,31 @@ def main(argv: list[str] | None = None) -> int:
         f"clock_file={clock_file.name} patched={len(patched)}",
         flush=True,
     )
-    uvicorn.run(
+    server = uvicorn.Server(uvicorn.Config(
         app,
         host=args.host,
         port=args.port,
         log_level="warning",
         access_log=False,
         lifespan="on",
-    )
+    ))
+    finished = threading.Event()
+    stop_file = clock_file.with_suffix('.stop')
+
+    def watch_stop_file():
+        while not finished.wait(0.1):
+            if stop_file.is_file():
+                require_private(stop_file)
+                server.should_exit = True
+                return
+
+    watcher = threading.Thread(target=watch_stop_file, daemon=True)
+    watcher.start()
+    try:
+        server.run()
+    finally:
+        finished.set()
+        watcher.join(timeout=2)
     return 0
 
 

@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.39
-Version-Datetime: 2026-11-01T16:56:21+08:00
+Version: 0.1.40
+Version-Datetime: 2026-11-01T17:03:37+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -36,6 +36,46 @@ ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQL
 | 图片存储 | 所选环境文件配置 | local 或 OSS；local 经后端 HMAC 签名入口读取，OSS 使用私有桶短期签名 GET 直链 |
 
 `var/`、`.env.dev`、`.env.prod`、虚拟环境、`node_modules/`及构建目录均由 Git 忽略。保留已有数据库和图片目录即可保留业务数据，不需要为升级删除数据库；生产配置不得提交。
+
+### Windows 开发入口与跨平台数据库初始化
+
+在 PowerShell 中运行（CMD 可将 `.ps1` 换为 `.bat`）：
+
+```powershell
+.\scripts\dev.ps1 start
+.\scripts\dev.ps1 status
+.\scripts\dev.ps1 restart
+.\scripts\dev.ps1 stop
+```
+
+首次先在 `backend` 执行 `uv sync --frozen`，并在两个前端分别执行 `npm ci`。Windows Python 位于 `backend/.venv/Scripts/python.exe`；前端配置自动选择此路径。可用 `$env:APP_ENV_FILE = '.env.dev'` 选择环境，文件解析规则与原入口相同。日常服务使用 SMTP，验收使用隔离的私有验证码邮箱。私有文件在 Windows 使用当前用户专属 ACL、在 Linux／macOS 使用 POSIX 权限；凭据、邮箱及 OSS 清理日志使用跨进程文件锁。Windows 验收服务通过私有停止文件正常退出，以保存子进程覆盖率。Windows 后台进程隐藏运行，stop 通过本地请求通知托管器，再结束其托管进程树；仅检查进程的 status 不代表数据库或 API 健康。
+
+首次准备全新的 PostgreSQL 数据库和角色时运行：
+
+```powershell
+.\scripts\init_database.ps1 --env-file .env.dev
+# CMD: scripts\init_database.bat --env-file .env.dev
+```
+
+Linux／macOS 或 Windows Git Bash 在仓库根目录运行（脚本也可通过绝对路径从其他工作目录调用）：
+
+```bash
+bash scripts/init_database.sh --env-file .env.dev
+```
+
+该入口在 Linux／macOS 优先使用 `backend/.venv/bin/python`，Git Bash／MSYS 使用 Windows 的 `Scripts/python.exe`；虚拟环境不存在时通过 `uv run --frozen` 安装锁定依赖。先安装 Python 3.12+ 和 uv；无需 psql。Windows、Linux 和 macOS 共用同一 Python 初始化实现。
+
+命令直接从指定 dotenv 的 `DATABASE_URL` 读取目标数据库名并显示连接目标，仅交互输入 PostgreSQL 实例管理员用户名和隐藏密码，不接受管理员凭据命令行参数，不将其写入配置或日志。此管理员是数据库资源管理员；平台业务管理员仍通过 `app.manage seed` 独立创建。普通应用及迁移角色名、密码、数据库、schema 来自指定 dotenv，流程遵循[PostgreSQL 资源准备](docs/development/PostgreSQL资源准备.md)，创建 owner／migrator／app、数据库及默认授权后调用正式 Alembic 迁移建表。无需安装 psql。维护数据库默认 postgres，可用 `--maintenance-db` 指定同实例其他维护库；保留迁移 URL 的 TLS 查询参数。
+
+如果资源已创建、随后迁移失败，修复原因后仍可使用初始化入口继续：
+
+```bash
+bash scripts/init_database.sh --env-file .env.dev --resume-migrations
+```
+
+Windows PowerShell／BAT 入口支持同一参数。此模式只使用 dotenv 中的 migrator 执行正式迁移，不重复创建数据库、角色或 schema，也不需要实例管理员凭据；缺少前置资源时会报错，不能用于首次资源创建。
+
+目标数据库或任一角色已存在则停止，不覆盖密码、不 DROP、不自动接管。跨数据库步骤无法整体回滚，失败后先人工核对已创建资源；已有资源升级仍使用 `python -m app.manage migrate`。管理员凭据仅在进程内使用，数据库服务器自身的认证／审计记录仍受实例配置控制。
 
 ### 人工测试环境重置
 

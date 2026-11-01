@@ -1,4 +1,3 @@
-import fcntl
 import json
 import os
 import shutil
@@ -7,11 +6,13 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 state_path = root / 'var/run/dev-services.json'
 log_path = root / 'var/log/dev-services.log'
+stop_path = root / 'var/run/dev-services.stop'
 
 def selected_env_path():
     if 'APP_ENV_FILE' not in os.environ:
@@ -29,7 +30,7 @@ def selected_env_path():
 def child_environment(*, app_env_file=None, python_unbuffered=False):
     # Keep operating-system necessities, but never pass arbitrary shell settings
     # (including application, Vite, npm, or uv overrides) to managed processes.
-    env = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL')
+    env = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA')
            if key in os.environ}
     if app_env_file is not None:
         env['APP_ENV_FILE'] = str(app_env_file)
@@ -38,6 +39,28 @@ def child_environment(*, app_env_file=None, python_unbuffered=False):
     return env
 
 def identity(pid):
+    if sys.platform == 'win32':
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+        kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel.OpenProcess(0x1000, False, pid)
+        if not handle:
+            return None
+        try:
+            times = [wintypes.FILETIME() for _ in range(4)]
+            code = wintypes.DWORD()
+            if not kernel.GetProcessTimes(handle, *(ctypes.byref(t) for t in times)):
+                return None
+            if not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value != 259:
+                return None
+            return str((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime)
+        finally:
+            kernel.CloseHandle(handle)
     result = subprocess.run(['ps', '-p', str(pid), '-o', 'lstart=,stat='],
                             capture_output=True, text=True, check=False)
     value = result.stdout.strip()
@@ -86,22 +109,25 @@ if action == 'restart':
     result = subprocess.run([sys.executable, script, 'stop'], check=False)
     if result.returncode:
         sys.exit(result.returncode)
-    os.execv(sys.executable, [sys.executable, script, 'start'])
+    sys.exit(subprocess.run([sys.executable, script, 'start'], check=False).returncode)
 if action == 'start':
     if alive(load_state().get('supervisor')):
         sys.exit('A managed start is already active. Use status or stop.')
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    start_token = uuid.uuid4().hex
+    launch_env = dict(os.environ, DEV_SERVICES_START_TOKEN=start_token)
     with log_path.open('a') as log:
         child = subprocess.Popen([sys.executable, '-u', str(Path(__file__).resolve()), '_run'],
-                                 cwd=root, stdin=subprocess.DEVNULL, stdout=log,
-                                 stderr=subprocess.STDOUT, start_new_session=True)
+                                 cwd=root, env=launch_env, stdin=subprocess.DEVNULL, stdout=log,
+                                 stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
+                                 start_new_session=sys.platform != 'win32')
     # Briefly wait for startup, but do not block the terminal on dependency installation.
     for _ in range(50):
         if child.poll() is not None:
             sys.exit(f'Start failed (exit {child.returncode}). See {log_path}')
         state = load_state()
-        if state.get('supervisor', {}).get('pid') == child.pid and state['phase'] == 'running':
-            print(f'Services started in the background (supervisor PID {child.pid}).')
+        if state.get('start_token') == start_token and state['phase'] == 'running':
+            print(f"Services started in the background (supervisor PID {state['supervisor']['pid']}).")
             print(f'Logs: {log_path}')
             sys.exit(0)
         time.sleep(0.1)
@@ -116,7 +142,7 @@ if action == 'stop':
     if supervisor is None or not alive(supervisor):
         print('No active managed supervisor. No processes were signalled.')
         sys.exit(0)
-    os.kill(supervisor['pid'], signal.SIGTERM)
+    stop_path.write_text(str(supervisor['pid']))
     for _ in range(100):
         if not alive(supervisor):
             print('Managed services stopped.')
@@ -127,11 +153,19 @@ env_path = selected_env_path()
 state_path.parent.mkdir(parents=True, exist_ok=True)
 lock = (state_path.parent / 'dev-services.lock').open('a')
 try:
-    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-except BlockingIOError:
+    if sys.platform == 'win32':
+        import msvcrt
+        lock.seek(0)
+        msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except OSError:
     sys.exit('A managed start is already active. Use status or stop.')
+stop_path.unlink(missing_ok=True)
 state = {'supervisor': {'pid': os.getpid(), 'started': identity(os.getpid())},
-         'phase': 'preparing dependencies', 'services': {}, 'env_file': str(env_path)}
+         'phase': 'preparing dependencies', 'services': {}, 'env_file': str(env_path),
+         'start_token': os.environ.get('DEV_SERVICES_START_TOKEN')}
 
 def save_state():
     temporary = state_path.with_suffix('.tmp')
@@ -148,7 +182,7 @@ for port in (8000, 5173, 5174):
     with socket.socket() as sock:
         # 与服务监听 socket 一致，允许重启时复用 TIME_WAIT 地址。
         # 已有监听者仍会使 bind 失败。
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE if sys.platform == 'win32' else socket.SO_REUSEADDR, 1)
         try:
             sock.bind(('127.0.0.1', port))
         except OSError as exc:
@@ -157,6 +191,14 @@ for port in (8000, 5173, 5174):
 children = []
 
 def stop_all():
+    if sys.platform == 'win32':
+        for child in children:
+            if child.poll() is None:
+                subprocess.run(['taskkill', '/PID', str(child.pid), '/T', '/F'],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               creationflags=subprocess.CREATE_NO_WINDOW, check=False)
+            child.wait()
+        return
     for child in children:
         try:
             os.killpg(child.pid, signal.SIGTERM)
@@ -179,9 +221,18 @@ signal.signal(signal.SIGTERM, interrupted)
 signal.signal(signal.SIGINT, interrupted)
 
 def start(command, folder, env=None):
+    if stop_path.exists() and stop_path.read_text() == str(os.getpid()):
+        raise KeyboardInterrupt
+    if sys.platform == 'win32' and command[0] == 'npm':
+        npm = shutil.which('npm.cmd')
+        if npm is None:
+            raise RuntimeError('Missing npm.cmd. Install Node.js and npm first.')
+        command = [npm, *command[1:]]
     child = subprocess.Popen(command, cwd=root / folder,
+                             stdin=subprocess.DEVNULL, stdout=sys.stdout, stderr=sys.stderr,
                              env=env if env is not None else child_environment(),
-                             start_new_session=True)
+                             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
+                             start_new_session=sys.platform != 'win32')
     children.append(child)
     return child
 
@@ -202,10 +253,10 @@ try:
         )
     run(['uv', 'sync', '--frozen'], 'backend')
     for folder in ('frontend/admin', 'frontend/mobile'):
-        if not (root / folder / 'node_modules/.bin/vite').exists():
+        if not (root / folder / ('node_modules/.bin/vite.cmd' if sys.platform == 'win32' else 'node_modules/.bin/vite')).exists():
             run(['npm', 'ci'], folder)
     backend_env = child_environment(app_env_file=env_path, python_unbuffered=True)
-    backend = start(['.venv/bin/python', '-m', 'app.manage', 'serve'], 'backend', env=backend_env)
+    backend = start([str(root / 'backend' / ('.venv/Scripts/python.exe' if sys.platform == 'win32' else '.venv/bin/python')), '-m', 'app.manage', 'serve'], 'backend', env=backend_env)
     state['services']['Backend'] = {'pid': backend.pid, 'started': identity(backend.pid)}
     save_state()
     frontend_env = child_environment(app_env_file=env_path)
@@ -219,6 +270,8 @@ try:
     print('\nStarting services:\nMobile: http://localhost:5173\nAdmin: http://localhost:5174'
           '\nBackend: http://127.0.0.1:8000/docs\nUse ./scripts/dev.sh stop to stop all services.', flush=True)
     while True:
+        if stop_path.exists() and stop_path.read_text() == str(os.getpid()):
+            break
         for name, child in (('Backend', backend), ('Admin', admin), ('Mobile', mobile)):
             if child.poll() is not None:
                 raise RuntimeError(f'{name} exited ({child.returncode}); stopping the other services.')
@@ -233,3 +286,4 @@ finally:
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     stop_all()
     state_path.unlink(missing_ok=True)
+    stop_path.unlink(missing_ok=True)

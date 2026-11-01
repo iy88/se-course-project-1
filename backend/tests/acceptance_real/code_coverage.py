@@ -7,6 +7,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
+from app.core.private_files import protect_private
 from coverage import Coverage, CoverageData
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +18,7 @@ class CodeCoverage:
     def __init__(self) -> None:
         self.root = REPORT_ROOT / secrets.token_hex(16)
         self.root.mkdir(parents=True, mode=0o700)
+        protect_private(self.root, directory=True)
         self.config = BACKEND_ROOT / "pyproject.toml"
         self.source = BACKEND_ROOT / "app"
         self.server_data = self.root / ".coverage.server"
@@ -42,7 +44,7 @@ class CodeCoverage:
                 raise RuntimeError("API subprocess coverage data is missing")
             data = CoverageData(basename=str(self.server_data))
             data.read()
-            api_files = [name for name in data.measured_files() if "/app/api/v1/" in name]
+            api_files = [name for name in data.measured_files() if "/app/api/v1/" in name.replace("\\", "/")]
             server_verified = bool(data.lines(str(self.source / "main.py"))) and any(data.lines(name) for name in api_files)
             if not server_verified or not data.has_arcs():
                 raise RuntimeError("API subprocess did not measure application lines and branches")

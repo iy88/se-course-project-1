@@ -1,0 +1,2 @@
+# Keep Bash entrypoints usable with Windows autocrlf and on Unix.
+scripts/*.sh text eol=lf

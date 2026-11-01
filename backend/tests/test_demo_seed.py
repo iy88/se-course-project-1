@@ -2,7 +2,6 @@
 import asyncio
 import json
 import os
-import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +11,7 @@ import pytest
 from app.api.v1.admin.cases import claim_case
 from app.api.v1.admin.products import ReviewDecisionIn, review_product
 from app.api.v1.trades import trade_detail
+from app.core.private_files import require_private
 from app.core.security import verify_password
 from app.db.session import Base
 from app.models import User
@@ -66,8 +66,8 @@ SMTP_FROM_NAME=Demo
     def run():
         # Isolate the selected target from any shell configuration and never read .env.dev.
         environment = {k: v for k, v in os.environ.items() if not k.startswith(('APP_ENV_', 'DATABASE_', 'STORAGE_', 'OSS_', 'JWT_', 'FILE_URL_'))}
-        return subprocess.run([sys.executable, '-m', 'app.manage', 'demo-seed', '--env-file', str(env_file), '--manifest', str(manifest)],
-                              cwd=Path(__file__).resolve().parents[1], env=environment, capture_output=True, text=True, check=False)
+        return subprocess.run([sys.executable, '-X', 'utf8', '-m', 'app.manage', 'demo-seed', '--env-file', str(env_file), '--manifest', str(manifest)],
+                              cwd=Path(__file__).resolve().parents[1], env=environment, capture_output=True, text=True, encoding='utf-8', check=False)
 
     # Fail after the first file is persisted but before the DB transaction commits.
     fault_code = """
@@ -93,14 +93,14 @@ raise SystemExit(main(sys.argv[1:]))
 """
     fault_code = fault_code.replace('RESPONSE_LOST', str(response_lost))
     failed = subprocess.run(
-        [sys.executable, '-c', fault_code, '--env-file', str(env_file), '--manifest', str(manifest)],
-        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, check=False,
+        [sys.executable, '-X', 'utf8', '-c', fault_code, '--env-file', str(env_file), '--manifest', str(manifest)],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, encoding='utf-8', check=False,
     )
     assert failed.returncode != 0 and 'RuntimeError' in failed.stderr
-    partial = json.loads(manifest.read_text())
+    partial = json.loads(manifest.read_text(encoding='utf-8'))
     assert not partial['complete'] and len(partial['files']) == 2
     partial_keys = {entry['key'] for entry in partial['files'].values()}
-    existing_keys = {str(p.relative_to(storage)) for p in storage.rglob('*') if p.is_file()}
+    existing_keys = {p.relative_to(storage).as_posix() for p in storage.rglob('*') if p.is_file()}
     assert len(existing_keys) == (2 if response_lost else 1)
     assert existing_keys <= partial_keys
     partial_contents = {key: (storage / key).read_bytes() for key in existing_keys}
@@ -119,11 +119,12 @@ raise SystemExit(main(sys.argv[1:]))
 
     first = run()
     assert first.returncode == 0, first.stderr
-    data = json.loads(manifest.read_text())
-    assert data['complete'] and stat.S_IMODE(manifest.stat().st_mode) == 0o600
+    data = json.loads(manifest.read_text(encoding='utf-8'))
+    assert data['complete']
+    require_private(manifest)
     final_keys = {entry['key'] for entry in data['files'].values()}
     assert partial_keys <= final_keys
-    assert {str(p.relative_to(storage)) for p in storage.rglob('*') if p.is_file()} == final_keys
+    assert {p.relative_to(storage).as_posix() for p in storage.rglob('*') if p.is_file()} == final_keys
     assert all((storage / key).read_bytes() == content for key, content in partial_contents.items())
     assert data['accounts'] and data['objects'] and data['files']
 

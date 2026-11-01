@@ -11,12 +11,12 @@ import hashlib
 import json
 import os
 import secrets
-import stat
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app.core.config import load_settings, resolve_env_file
+from app.core.private_files import require_private
 from app.devtools._support import credentials_lock, write_private_json
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -36,8 +36,7 @@ def _target(settings) -> str:
 
 def _load(path: Path, target: str) -> dict:
     if path.exists():
-        if path.is_symlink() or stat.S_IMODE(path.stat().st_mode) != 0o600:
-            raise ValueError('manifest 必须是权限为 0600 的普通文件')
+        require_private(path)
         data = json.loads(path.read_text(encoding='utf-8'))
         if data.get('version') != 1 or data.get('target') != target:
             raise ValueError('manifest 版本或资源目标不匹配')
@@ -137,7 +136,7 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
                               for account in data['accounts'].values()]
             if any(found_accounts):
                 if (not data['objects'] or not all(found_accounts) or
-                    any(user.id != account.get('id') or user.role != account['role'] or
+                    any(user is None or user.id != account.get('id') or user.role != account['role'] or
                         not verify_password(account['password'], user.password_hash)
                         for user, account in zip(found_accounts, data['accounts'].values()))):
                     raise ValueError('检测到部分或冲突账号；拒绝接管，请人工核对')
@@ -276,6 +275,8 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
                         trade.frozen_by_id = uid['admin']
                         trade.frozen_case_id = case.id
             banned_user = await session.get(User, uid['banned'])
+            if banned_user is None:
+                raise ValueError('演示封禁账号缺失')
             ban_case = await add('case_ban', DisposalCase(case_type='account_ban', status='disposed',
                 claimed_by_id=uid['admin'], claimed_at=now, subject_user_id=uid['banned'], title='演示账号封禁',
                 conclusion='封禁账号', conclusion_reason='演示违规处置', basis='演示管理事项', disposed_at=now))
@@ -292,6 +293,8 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
             avatar_content = image_buffer.getvalue()
             avatar = ensure_file('avatar', 'avatar', 'avatar.jpg', 'product_racket.jpg', avatar_content)
             avatar_user = await session.get(User, uid['outsider'])
+            if avatar_user is None:
+                raise ValueError('演示头像账号缺失')
             avatar_user.avatar_pending_key = avatar['key']
             avatar_user.avatar_review_status = 'pending'
             session.add(StoredObject(key=avatar['key'], namespace='avatar', bucket_role='media', owner_id=uid['outsider'],
