@@ -2381,11 +2381,18 @@ class AcceptanceRun:
                     params={"keyword": str(self.products["P_MAIN"]["id"]), "page_size": 5},
                 )
             )
-            self.rec.must_eq(admin_products_page.get("total"), 1, "管理端商品ID检索唯一命中")
+            # 数字关键词也匹配正文；目标可能位于后续分页，不要求唯一命中。
+            admin_product_rows = list(admin_products_page.get("items") or [])
+            for page in range(2, (int(admin_products_page.get("total") or 0) + 4) // 5 + 1):
+                batch = self._dict(self._call(
+                    "GET", "/api/v1/admin/products", user="admin", expected=200,
+                    params={"keyword": str(self.products["P_MAIN"]["id"]), "page_size": 5, "page": page},
+                ))
+                admin_product_rows.extend(batch.get("items") or [])
             self.rec.must(
                 any(
                     int(row.get("id") or 0) == int(self.products["P_MAIN"]["id"])
-                    for row in admin_products_page.get("items") or []
+                    for row in admin_product_rows
                 ),
                 "管理端商品列表命中纠正商品",
             )
@@ -3704,10 +3711,17 @@ class AcceptanceRun:
             received_row = next(item for item in received if int(item["id"]) == report_id)
             self.rec.must("reporter_id" not in received_row, "收到举报不披露举报人")
             self.rec.must("evidence_urls" not in received_row, "收到举报不披露举报人证据")
-            public = self._list(self._call("GET", "/api/v1/reports/public", user="outsider", expected=200))
-            public_row = next(item for item in public if int(item["id"]) == report_id)
-            self.rec.must_eq(set(public_row.keys()), {"id", "target_type", "status", "public_result", "closed_at"}, "公开结果白名单字段")
-            self.rec.must("reporter_id" not in json.dumps(public_row), "公开结果不含举报人")
+            public_notice = self._dict(self._call(
+                "GET", f"/api/v1/products/{product_id}/restriction-result", user="outsider", expected=200,
+            ))
+            self.rec.must_eq(set(public_notice), {"public_result"}, "原入口仅返回匿名结果")
+            self.rec.must_eq(public_notice["public_result"], "经核查，涉事商品已停止公开。", "第三方可读匿名处置提示")
+            restricted_detail = self._product_detail("P_REPORT", "seller")
+            self.rec.must_eq(
+                restricted_detail.get("restriction_result"),
+                "经核查，涉事商品已停止公开。",
+                "受限商品入口匿名结果提示",
+            )
             seller_notifications = self._notifications("seller")
             buyer_notifications = self._notifications("buyer")
             self.rec.must(self._has_notification(seller_notifications, "inquiry", link_id=case_id), "问询通知被询问人")
@@ -3863,7 +3877,7 @@ class AcceptanceRun:
             mine = self._list(self._call("GET", "/api/v1/reports/mine", user="outsider", expected=200))
             row = next(item for item in mine if int(item["id"]) == report_id)
             self.rec.must_eq(row.get("status"), "unfounded", "举报 unfounded")
-            self.rec.must_eq(row.get("public_result"), "依据不足，不予处理。", "公开结果")
+            self.rec.must_eq(row.get("public_result"), None, "不予处理不生成公开结果")
             review_after = self._list(
                 self._call("GET", "/api/v1/me/reviews", user="buyer", expected=200, params={"type": "published"})
             )

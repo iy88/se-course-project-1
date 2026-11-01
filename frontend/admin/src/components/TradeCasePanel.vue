@@ -3,21 +3,11 @@
     <el-card class="filter-card">
       <div class="query-bar">
         <span class="query-label">交易编号</span>
-        <el-input-number
-          v-model="tradeIdInput"
-          :min="1"
-          :controls="false"
-          placeholder="直接关联自动填入，否则输入编号"
-          class="trade-id-input"
-          @change="onTradeIdChange"
-        />
-        <el-button type="primary" :loading="tradeLoading" :disabled="!tradeIdInput || actionBusy" @click="load()">
-          {{ trade ? '刷新交易' : '加载交易' }}
-        </el-button>
-        <span v-if="!tradeId" class="query-hint">
-          事项直接关联的交易会自动填入；举报、封禁类事项请输入相关交易编号，服务端将校验关联。
-        </span>
+        <el-input-number v-model="tradeIdInput" :min="1" :controls="false" @change="onTradeIdChange" />
+        <el-button :disabled="!tradeIdInput || actionBusy" :loading="tradeLoading" @click="load()">加载交易</el-button>
+        <span class="query-hint">服务端按本事项与交易的关联校验访问资格。</span>
       </div>
+
 
       <div class="notice-stack">
         <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon>
@@ -63,7 +53,7 @@
         <el-descriptions-item label="买方">{{ trade.buyer?.display_name }}#{{ trade.buyer?.id }}</el-descriptions-item>
         <el-descriptions-item label="卖方">{{ trade.seller?.display_name }}#{{ trade.seller?.id }}</el-descriptions-item>
         <el-descriptions-item label="当前约定">
-          {{ trade.current_agreement_id ? `约定#${trade.current_agreement_id}` : '无' }}
+          {{ currentAgreementText }}
         </el-descriptions-item>
         <el-descriptions-item label="当前有效确认" :span="2">{{ currentConfirmText }}</el-descriptions-item>
         <el-descriptions-item label="等待计时">{{ waitText }}</el-descriptions-item>
@@ -92,7 +82,9 @@
           <div class="section-title"><h3>完成确认</h3></div>
           <div class="table-scroll table-compact">
             <el-table :data="trade.confirmations" size="small" border>
-              <el-table-column prop="confirmer_id" label="确认人" width="84" />
+              <el-table-column label="确认人" width="190">
+                <template #default="{ row }">{{ confirmerLabel(row) }}</template>
+              </el-table-column>
               <el-table-column label="当前有效" width="92">
                 <template #default="{ row }">{{ row.is_current ? '是' : '否' }}</template>
               </el-table-column>
@@ -159,13 +151,6 @@
       </el-form>
     </el-card>
 
-    <el-card v-else-if="!loadError" class="data-card">
-      <div class="state-block">
-        <span class="state-icon"><AppIcon name="trades" :size="24" /></span>
-        <p class="state-title">尚未加载交易</p>
-        <p class="state-hint">输入与本事项相关的交易编号后加载；是否允许访问由服务端按事项关联校验。</p>
-      </div>
-    </el-card>
   </div>
 </template>
 
@@ -230,6 +215,19 @@ const tradeLoading = computed(() => session.value.loading)
 const canQuery = computed(() => !!(currentContext.value.tradeId && currentContext.value.caseId))
 const actionsEnabled = computed(() => canQuery.value && canUseLoadedTrade(session.value, currentContext.value))
 
+const currentAgreementText = computed(() => {
+  const t = trade.value
+  if (!t?.current_agreement_id) return '无'
+  const row = (t.agreements || []).find((a) => a.id === t.current_agreement_id)
+  return row ? `第 ${row.round_no} 轮约定（约定#${row.id}）` : `约定#${t.current_agreement_id}`
+})
+const confirmerLabel = (row) => {
+  const t = trade.value
+  if (!t) return `#${row.confirmer_id}`
+  if (row.confirmer_id === t.buyer?.id) return `买方 ${t.buyer?.display_name}（#${row.confirmer_id}）`
+  if (row.confirmer_id === t.seller?.id) return `卖方 ${t.seller?.display_name}（#${row.confirmer_id}）`
+  return `#${row.confirmer_id}`
+}
 const currentConfirmText = computed(() => {
   const rows = (trade.value?.confirmations || []).filter((c) => c.is_current)
   if (!rows.length) return '无当前有效声明'
@@ -422,6 +420,10 @@ watch(
 }
 .trade-id-input {
   width: 220px;
+}
+.trade-id-text {
+  font-weight: 650;
+  color: var(--ink);
 }
 .query-hint {
   color: var(--ink-meta);

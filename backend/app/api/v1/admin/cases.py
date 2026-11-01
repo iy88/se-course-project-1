@@ -175,6 +175,20 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
         }
         for m in case.messages
     ]
+    # 沟通资格参与方：问询通知对象，展示名称供事项页标注问询对象。
+    participant_ids = await case_service.case_participant_ids(db, case)
+    participants = []
+    if participant_ids:
+        users = (await db.exec(
+            select(User).where(col(User.id).in_(participant_ids)).order_by(col(User.id))
+        )).all()
+        by_id = {u.id: u for u in users}
+        participants = [
+            {"id": pid, "display_name": by_id[pid].display_name if pid in by_id else None}
+            for pid in participant_ids
+        ]
+    data["participants"] = participants
+
     # 附加上下文
     if case.product_id:
         product = await db.get(Product, case.product_id)

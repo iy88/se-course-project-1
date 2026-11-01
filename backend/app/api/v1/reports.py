@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, StringConstraints
 from sqlmodel import col, or_, select
 
@@ -10,11 +10,13 @@ from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.api.upload_keys import validate_upload_keys
 from app.models import (
     Comment,
+    Conversation,
     DisposalCase,
     Message,
     Product,
     Report,
     ReportSupplement,
+    Trade,
     TradeReview,
     User,
 )
@@ -41,16 +43,6 @@ class ReportCreateIn(BaseModel):
 class SupplementIn(BaseModel):
     content: _NonBlank2000
     evidence_keys: list[str] = []
-
-
-class PublicReportOut(BaseModel):
-    """匿名公开结果的白名单字段；不包含对象、举报人、事项及私有理由。"""
-
-    id: int
-    target_type: str
-    status: str
-    public_result: str | None
-    closed_at: str | None
 
 
 async def _target_is_reportable(db, target_type: str, target_id: int) -> bool:
@@ -81,6 +73,7 @@ def _report_out(report: Report, include_reporter: bool = False) -> dict:
         "target_type": report.target_type,
         "target_id": report.target_id,
         "reason": report.reason,
+        "detail": report.detail,
         "status": report.status,
         "result_confirmed": report.result_confirmed,
         "public_result": report.public_result if report.result_confirmed else None,
@@ -202,40 +195,6 @@ async def add_supplement(report_id: int, body: SupplementIn, user: CurrentUser, 
     return {"detail": "补充已提交"}
 
 
-@router.get("/public", response_model=list[PublicReportOut])
-async def public_reports(
-    user: CurrentUser,
-    db: DbSession,
-    offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=20, ge=1, le=50),
-) -> list[PublicReportOut]:
-    """匿名公开举报结果（BR-25）：仅管理员确认的终态记录，登录用户可读。
-
-    包括封禁用户的公共只读访问；显式白名单输出，绝不返回举报人、对象 ID、
-    事项、私有理由或沟通内容。
-    """
-    result = await db.exec(
-        select(Report)
-        .where(
-            col(Report.result_confirmed).is_(True),
-            col(Report.status).in_([ReportStatus.HANDLED.value, ReportStatus.UNFOUNDED.value]),
-        )
-        .order_by(col(Report.closed_at).desc(), col(Report.id).desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    return [
-        PublicReportOut(
-            id=report.id,
-            target_type=report.target_type,
-            status=report.status,
-            public_result=report.public_result,
-            closed_at=report.closed_at.isoformat() if report.closed_at else None,
-        )
-        for report in result
-    ]
-
-
 @router.get("/mine")
 async def my_reports(user: CurrentUser, db: DbSession) -> list[dict]:
     result = await db.exec(
@@ -247,6 +206,33 @@ async def my_reports(user: CurrentUser, db: DbSession) -> list[dict]:
     items = []
     for report in result:
         data = _report_out(report)
+        data["result_reason"] = report.result_reason if report.result_confirmed else None
+        data["target_title"] = None
+        data["target_status"] = None
+        target_product = None
+        if report.target_type == "product":
+            target_product = await db.get(Product, report.target_id)
+        elif report.target_type == "comment":
+            comment = await db.get(Comment, report.target_id)
+            if comment is not None and comment.product_id:
+                target_product = await db.get(Product, comment.product_id)
+        elif report.target_type == "review":
+            review = await db.get(TradeReview, report.target_id)
+            if review is not None:
+                trade = await db.get(Trade, review.trade_id)
+                if trade is not None:
+                    target_product = await db.get(Product, trade.product_id)
+        elif report.target_type == "message":
+            message = await db.get(Message, report.target_id)
+            if message is not None:
+                conversation = await db.get(Conversation, message.conversation_id)
+                if conversation is not None and conversation.trade_id is not None:
+                    trade = await db.get(Trade, conversation.trade_id)
+                    if trade is not None:
+                        target_product = await db.get(Product, trade.product_id)
+        if target_product is not None:
+            data["target_title"] = target_product.title
+            data["target_status"] = target_product.status
         data["evidence_urls"] = [storage.public_url(key) for key in report.evidence_keys]
         supplements = (
             await db.exec(select(ReportSupplement).where(col(ReportSupplement.report_id) == report.id).order_by(col(ReportSupplement.id)))

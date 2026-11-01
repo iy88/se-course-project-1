@@ -632,6 +632,39 @@ a {
   padding: 18px 0;
 }
 
+/* 折叠侧栏的子菜单弹出层：teleport 到 body，需单独收敛底色与描边 */
+.el-menu--vertical .el-popper {
+  background: transparent;
+  border: none;
+  box-shadow: 0 8px 22px rgba(15, 26, 21, 0.28);
+}
+
+.el-menu--popup {
+  background-color: #1e2f28;
+  padding: 6px;
+  border-radius: 10px;
+}
+
+.el-menu--popup .el-menu-item {
+  height: 42px;
+  line-height: 42px;
+  margin: 2px 0;
+  border-radius: 8px;
+  color: #b9c9c0;
+  font-size: 13px;
+}
+
+.el-menu--popup .el-menu-item:hover {
+  background: #2a4035;
+  color: #fff;
+}
+
+.el-menu--popup .el-menu-item.is-active {
+  background: #2a4739;
+  color: #fff;
+  box-shadow: inset 3px 0 0 #8fc0a7;
+}
+
 .el-empty__description p {
   color: var(--ink-faint);
   font-size: 12.5px;

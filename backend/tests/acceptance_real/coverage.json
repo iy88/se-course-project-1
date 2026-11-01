@@ -3,7 +3,7 @@
   "generated_by": "tests.acceptance_real.catalog",
   "note": "MAPPED 仅表示静态清单有具体 check 与人工审查证据；运行结果以真实报告 PASS 为准。",
   "source": {
-    "source_digest_sha256": "96c73f3e95404c2ae70bcd249291b51425e5142a02849dd6e3cc60972f7609d0",
+    "source_digest_sha256": "6fba03e7ee33a26a4e22907f10bbcac98bf9ebad5cef437ac107214cd1be6031",
     "source_files": [
       "docs/appendices/user-stories/US-01-账户生命周期.md",
       "docs/appendices/user-stories/US-02-发布与维护商品.md",
@@ -1240,7 +1240,7 @@
       "role": "outsider / buyer / buyer2 / admin",
       "precondition": "已完成交易评价可作为举报对象",
       "action": "举报评价、认领、无法认定；另一举报认定违规并移除评价",
-      "expected": "unfounded 公开且不删评价；不推定平台外事实；认定违规时管理员有依据移除评价",
+      "expected": "unfounded 通知举报人、不公开且不删评价；不推定平台外事实；认定违规时管理员有依据移除评价",
       "ac": [
         "US-07-AC-02",
         "US-07-AC-05",

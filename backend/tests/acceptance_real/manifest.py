@@ -245,7 +245,7 @@ CHECK_META: dict[str, CheckMeta] = {
         "outsider / buyer / buyer2 / admin",
         "已完成交易评价可作为举报对象",
         "举报评价、认领、无法认定；另一举报认定违规并移除评价",
-        "unfounded 公开且不删评价；不推定平台外事实；认定违规时管理员有依据移除评价",
+        "unfounded 通知举报人、不公开且不删评价；不推定平台外事实；认定违规时管理员有依据移除评价",
     ),
     "GOV-04": CheckMeta(
         "seller2 / buyer / buyer2 / admin",

@@ -5,7 +5,6 @@
     <van-tabs v-model:active="tab">
       <van-tab title="我的举报" name="mine" />
       <van-tab title="我收到的" name="received" />
-      <van-tab title="公开结果" name="public" />
     </van-tabs>
 
     <div class="view">
@@ -20,11 +19,12 @@
           <article v-for="r in mine" :key="r.id" class="surface report-card">
             <div class="report-card__head">
               <span class="pill" :class="statusTone(r.status)">{{ reportStatusLabels[r.status] }}</span>
-              <span class="report-card__target">{{ r.target_type }} #{{ r.target_id }}</span>
+              <span class="report-card__target">{{ r.target_title || `${r.target_type} #${r.target_id}` }}<template v-if="r.target_status">（{{ r.target_status }}）</template></span>
               <span class="report-card__time">{{ fmtTime(r.created_at) }}</span>
             </div>
 
             <p class="report-card__reason"><span class="report-card__label">原因</span>{{ r.reason }}</p>
+            <p v-if="r.detail" class="report-card__reason"><span class="report-card__label">说明</span>{{ r.detail }}</p>
 
             <div v-if="r.evidence_urls?.length" class="report-card__media">
               <van-image
@@ -39,7 +39,8 @@
 
             <div v-if="r.result_confirmed" class="report-card__result">
               <span class="report-card__label">处理结论</span>
-              <p>{{ r.public_result || '—' }}</p>
+              <p>{{ r.status === 'unfounded' ? '不予处理' : (r.public_result || '已处置') }}</p>
+              <p v-if="r.result_reason">原因：{{ r.result_reason }}</p>
             </div>
 
             <div v-for="s in r.supplements" :key="s.id" class="report-card__supplement">
@@ -129,7 +130,7 @@
           <template v-for="r in received" :key="r.id">
             <router-link v-if="r.case_id" :to="`/cases/${r.case_id}`" class="surface report-card report-card--link">
               <div class="report-card__head">
-                <span class="report-card__target">{{ r.target_type }} #{{ r.target_id }}</span>
+                <span class="report-card__target">{{ r.target_title || `${r.target_type} #${r.target_id}` }}<template v-if="r.target_status">（{{ r.target_status }}）</template></span>
                 <span class="report-card__time">{{ fmtTime(r.created_at) }}</span>
               </div>
               <p class="report-card__reason">{{ r.public_result || '已处置' }}</p>
@@ -141,7 +142,7 @@
 
             <div v-else class="surface report-card">
               <div class="report-card__head">
-                <span class="report-card__target">{{ r.target_type }} #{{ r.target_id }}</span>
+                <span class="report-card__target">{{ r.target_title || `${r.target_type} #${r.target_id}` }}<template v-if="r.target_status">（{{ r.target_status }}）</template></span>
                 <span class="report-card__time">{{ fmtTime(r.created_at) }}</span>
               </div>
               <p class="report-card__reason">{{ r.public_result || '已处置' }}</p>
@@ -158,52 +159,6 @@
           icon="info"
           title="暂无我收到的举报"
         />
-      </template>
-
-      <template v-else>
-        <div v-if="publicError" class="error-banner">
-          <AppIcon name="alert" :size="18" />
-          <span class="error-banner__text">{{ publicError }}</span>
-          <van-button size="small" plain type="primary" :loading="publicLoading" @click="retryPublic">
-            重试
-          </van-button>
-        </div>
-
-        <div v-if="publicItems.length" class="report-list">
-          <article v-for="r in publicItems" :key="r.id" class="surface report-card">
-            <div class="report-card__head">
-              <span class="report-card__target">{{ targetTypeLabel(r.target_type) }}</span>
-              <span class="pill" :class="statusTone(r.status)">{{ reportStatusLabels[r.status] || r.status }}</span>
-              <span class="report-card__time">{{ fmtTime(r.closed_at) || '—' }}</span>
-            </div>
-            <p class="report-card__reason">
-              <span class="report-card__label">结果</span>{{ r.public_result || '—' }}
-            </p>
-          </article>
-        </div>
-
-        <div v-else-if="publicLoading" class="tab-loading">
-          <van-loading size="18" />
-        </div>
-
-        <EmptyState
-          v-else-if="publicLoaded && !publicError"
-          icon="shield"
-          title="暂无公开结果"
-        />
-
-        <van-button
-          v-if="publicLoaded && publicItems.length && publicHasMore && !publicError"
-          class="public-more"
-          block
-          plain
-          type="primary"
-          :loading="publicLoading"
-          :disabled="publicLoading"
-          @click="loadPublic(false)"
-        >
-          加载更多
-        </van-button>
       </template>
     </div>
   </div>
@@ -227,7 +182,6 @@ const session = useSession()
 const tab = ref('mine')
 const mine = ref([])
 const received = ref([])
-const publicItems = ref([])
 const supplement = reactive({ reportId: null, content: '', error: '', submitting: false, outcomeUnknown: false })
 
 function previewEvidence(urls, index) {
@@ -240,18 +194,13 @@ watch(supplementFiles, (items) => evidenceUploads.retain(items), { deep: true, f
 
 const mineLoading = ref(false)
 const receivedLoading = ref(false)
-const publicLoading = ref(false)
 
 const mineLoaded = ref(false)
 const receivedLoaded = ref(false)
-const publicLoaded = ref(false)
 
 const mineError = ref('')
 const receivedError = ref('')
-const publicError = ref('')
 
-const publicOffset = ref(0)
-const publicHasMore = ref(true)
 
 const statusTone = (s) =>
   ({
@@ -322,40 +271,6 @@ async function loadReceived() {
   }
 }
 
-async function loadPublic(reset = false) {
-  if (publicLoading.value) return
-  if (reset) {
-    publicItems.value = []
-    publicOffset.value = 0
-    publicLoaded.value = false
-    publicHasMore.value = true
-  }
-  if (!publicHasMore.value && !reset) return
-  publicLoading.value = true
-  publicError.value = ''
-  try {
-    const batch = await http.get('/reports/public', {
-      params: { offset: publicOffset.value, limit: PAGE_SIZE },
-    })
-    const rows = Array.isArray(batch) ? batch : []
-    const seen = new Set(publicItems.value.map((item) => item.id))
-    const fresh = rows.filter((item) => item && !seen.has(item.id))
-    publicItems.value = [...publicItems.value, ...fresh]
-    publicOffset.value += rows.length
-    // 空批次或整批均为已加载条目时不再提供“加载更多”，避免重复与死循环。
-    publicHasMore.value = rows.length === PAGE_SIZE && fresh.length > 0
-    publicLoaded.value = true
-  } catch {
-    publicError.value = '公开结果加载失败，请稍后重试。'
-  } finally {
-    publicLoading.value = false
-  }
-}
-
-function retryPublic() {
-  loadPublic(publicItems.value.length === 0)
-}
-
 function canSupplement(report) {
   return ['pending', 'processing'].includes(report.status) && session.user?.status !== 'banned'
 }
@@ -421,7 +336,6 @@ async function submitSupplement() {
 watch(tab, (value) => {
   if (value === 'mine' && !mineLoaded.value && !mineLoading.value) loadMine()
   if (value === 'received' && !receivedLoaded.value && !receivedLoading.value) loadReceived()
-  if (value === 'public' && !publicLoaded.value && !publicLoading.value) loadPublic(true)
 })
 
 onMounted(loadMine)

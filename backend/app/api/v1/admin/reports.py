@@ -221,7 +221,7 @@ async def decide_report(case_id: int, body: ReportDecisionIn, admin: CurrentAdmi
     if body.outcome == "unfounded":
         report.status = ReportStatus.UNFOUNDED.value
         report.result_confirmed = True
-        report.public_result = body.public_summary or "依据不足，不予处理"
+        report.public_result = None
         report.result_reason = body.reason
         report.closed_at = case_service.now_utc()
         await case_service.add_case_message(
@@ -232,7 +232,7 @@ async def decide_report(case_id: int, body: ReportDecisionIn, admin: CurrentAdmi
         await case_service.dispose_case(db, case, conclusion="不予处理", reason=body.reason, basis=body.basis)
         await notify(
             db, [report.reporter_id], "report_result", "您的举报已处理",
-            f"处理结论：{report.public_result}。结果已匿名公开；不披露他人私人信息。",
+            f"处理结论：不予处理。原因：{body.reason}",
             link_type="report", link_id=report.id,
         )
         await audit_service.record_event(

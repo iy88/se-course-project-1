@@ -129,7 +129,7 @@ class AdjustIn(BaseModel):
     case_id: int | None = None  # 关联处置事项（依据）
 
 
-async def _case_relevant_to_trade(db, case: DisposalCase, trade: Trade) -> bool:
+async def case_relevant_to_trade(db, case: DisposalCase, trade: Trade) -> bool:
     """事项须与本笔交易直接相关，而非仅同商品或任意账户。
 
     绑定具体交易的事项只对本笔交易有效；case.trade_id 指向其他交易时，
@@ -200,7 +200,7 @@ async def _resolve_trade_case(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "关联事项不存在")
         if case.claimed_by_id != admin_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "仅该事项认领管理员可查看或处理该交易")
-        if not await _case_relevant_to_trade(db, case, trade):
+        if not await case_relevant_to_trade(db, case, trade):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "关联事项与该交易无关")
         return case
     result = await db.exec(
@@ -209,7 +209,7 @@ async def _resolve_trade_case(
         .order_by(col(DisposalCase.id).desc())
     )
     for case in result:
-        if await _case_relevant_to_trade(db, case, trade):
+        if await case_relevant_to_trade(db, case, trade):
             return case
     raise HTTPException(
         status.HTTP_403_FORBIDDEN,

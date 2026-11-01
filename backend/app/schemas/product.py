@@ -63,6 +63,8 @@ class ProductOut(BaseModel):
     status: ProductStatus
     display_restricted: bool = False
     display_restricted_reason: str | None = None
+    # 受限商品的匿名公开结果（BR-25）：经原举报事项关联，仅确认后非空
+    restriction_result: str | None = None
     reject_reason: str | None = None
     image_keys: list[str] = []
     image_urls: list[str] = []

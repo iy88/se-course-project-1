@@ -74,6 +74,9 @@
               <el-descriptions-item label="结论理由" :span="2">
                 {{ detail.conclusion_reason || '—' }}
               </el-descriptions-item>
+              <el-descriptions-item v-if="detail.basis" label="处置依据" :span="2">
+                {{ detail.basis }}
+              </el-descriptions-item>
             </el-descriptions>
           </el-card>
 
@@ -274,7 +277,7 @@
 
           <TradeCasePanel
             v-if="showTradePanel"
-            :key="detail.id"
+            :key="`${detail.id}-${detailRevision}`"
             :case-id="detail.id"
             :trade-id="detail.trade?.id || null"
           />
@@ -364,11 +367,11 @@
                 <el-form-item label="结论理由">
                   <el-input v-model="reportForm.reason" type="textarea"  :autosize="{ minRows: 3, maxRows: 8 }"/>
                 </el-form-item>
-                <el-form-item label="匿名公开结果说明">
+                <el-form-item v-if="reportForm.outcome === 'handled'" label="匿名公开结果说明">
                   <el-input
                     v-model="reportForm.public_summary"
                     type="textarea"
-                    placeholder="将向所有登录用户匿名展示"
+                    placeholder="将展示在被处置内容的原入口（BR-25）"
                    :autosize="{ minRows: 3, maxRows: 8 }"/>
                 </el-form-item>
                 <template v-if="reportForm.outcome === 'handled'">
@@ -382,9 +385,10 @@
                     <el-input v-model="reportForm.actions.ban_reason" />
                   </el-form-item>
                 </template>
-                <el-button type="primary" :disabled="!canAct" @click="submitReportDecision">
-                  提交核查结论
+                <el-button type="danger" :disabled="!canAct" @click="submitReportDecision">
+                  提交结论并办结
                 </el-button>
+                <p class="hint">提交后事项办结归档；认定违规时，匿名结果显示在被处置内容的原入口</p>
                 <p v-if="!canAct" class="hint">仅事项认领管理员在处理中可提交核查结论</p>
               </el-form>
             </template>
@@ -410,7 +414,13 @@
             <template v-if="canAct">
               <div class="case-composer">
               <h3>发起问询</h3>
-              <p>向涉事用户说明需要回应的内容与范围</p>
+              <p>要求参与方在事项内作出说明，将推送站内通知</p>
+              <div v-if="detail.participants?.length" class="participant-row">
+                <span class="participant-label">问询对象</span>
+                <el-tag v-for="u in detail.participants" :key="u.id" effect="plain" size="small">
+                  {{ u.display_name || '用户' }}（#{{ u.id }}）
+                </el-tag>
+              </div>
               <el-input v-model="inquiryText" type="textarea" placeholder="说明需要回应的范围"  :autosize="{ minRows: 3, maxRows: 8 }"/>
               <el-button class="message-submit" @click="sendInquiry">
                 <el-icon><AppIcon name="send" /></el-icon>
@@ -420,11 +430,42 @@
               </div>
               <div class="case-composer">
               <h3>事项回复</h3>
-              <p>记录处理说明，与用户沟通后续安排</p>
+              <p>在沟通单记录处理说明或结论；将推送站内通知，参与方从通知进入查看</p>
+              <div v-if="detail.participants?.length" class="participant-row">
+                <span class="participant-label">可见对象</span>
+                <el-tag v-for="u in detail.participants" :key="u.id" effect="plain" size="small">
+                  {{ u.display_name || '用户' }}（#{{ u.id }}）
+                </el-tag>
+              </div>
               <el-input v-model="replyText" type="textarea" placeholder="在沟通单回复说明/结论"  :autosize="{ minRows: 3, maxRows: 8 }"/>
               <el-button class="message-submit" @click="sendReply">
                 <el-icon><AppIcon name="send" /></el-icon>
                 发送回复
+              </el-button>
+              </div>
+              <div v-if="showDisposeForm" class="case-composer dispose-composer">
+              <h3>办结事项</h3>
+              <p>记录处置结论后事项归档；已办结事项仍可作为后续交易处置的依据</p>
+              <el-input
+                v-model="disposeForm.conclusion"
+                placeholder="处置结论（必填，如：异常已处理，交易维持完成）"
+                :maxlength="200"
+                show-word-limit
+              />
+              <el-input
+                v-model="disposeForm.reason"
+                type="textarea"
+                placeholder="结论理由（留据，参与方查看事项时可见）"
+                :autosize="{ minRows: 2, maxRows: 6 }"
+              />
+              <el-input
+                v-model="disposeForm.basis"
+                type="textarea"
+                placeholder="处置依据（可选，如调整记录、沟通情况）"
+                :autosize="{ minRows: 2, maxRows: 6 }"
+              />
+              <el-button class="message-submit" type="danger" :disabled="actionBusy" @click="submitDispose">
+                办结事项
               </el-button>
               </div>
             </template>
@@ -448,6 +489,11 @@ import CaseConversation from '../components/CaseConversation.vue'
 
 const route = useRoute()
 const detail = ref(null)
+const detailRevision = ref(0)
+const disposeForm = reactive({ conclusion: '', reason: '', basis: '' })
+const showDisposeForm = computed(() =>
+  ['trade_dispute', 'abnormal_trade', 'account_ban'].includes(detail.value?.case_type),
+)
 const adminId = ref(null)
 const loading = ref(true)
 const loadError = ref('')
@@ -501,6 +547,36 @@ const showTradePanel = computed(() =>
   ['trade_dispute', 'abnormal_trade', 'report', 'account_ban'].includes(detail.value?.case_type),
 )
 
+async function submitDispose() {
+  if (!disposeForm.conclusion.trim()) {
+    return ElMessage.warning('请填写处置结论')
+  }
+  try {
+    await ElMessageBox.confirm('办结后事项归档，不再接收问询与回复；确认提交？', '办结事项', {
+      type: 'warning',
+      confirmButtonText: '办结',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  actionError.value = ''
+  try {
+    await http.post(`/admin/cases/${detail.value.id}/dispose`, {
+      conclusion: disposeForm.conclusion.trim(),
+      reason: disposeForm.reason.trim() || null,
+      basis: disposeForm.basis.trim() || null,
+    })
+    ElMessage.success('事项已办结')
+    disposeForm.conclusion = ''
+    disposeForm.reason = ''
+    disposeForm.basis = ''
+    await load(true)
+  } catch (err) {
+    actionError.value = `办结失败：${serverDetail(err)}`
+  }
+}
+
 const serverDetail = (err) => {
   const detail = err?.response?.data?.detail
   if (typeof detail === 'string' && detail.trim()) return detail
@@ -537,6 +613,7 @@ async function load(keepActionError = false) {
     const data = await http.get(`/admin/cases/${caseId}`)
     if (version !== loadVersion) return
     detail.value = data
+    detailRevision.value += 1
   } catch (err) {
     if (version !== loadVersion) return
     loadError.value = `事项详情加载失败：${serverDetail(err)}。仅该事项认领管理员可查看非公开内容；请先在共享池认领。`
@@ -607,7 +684,7 @@ async function submitReportDecision() {
     await http.post(`/admin/reports/cases/${detail.value.id}/decision`, {
       outcome: reportForm.outcome,
       reason: reportForm.reason,
-      public_summary: reportForm.public_summary || null,
+      public_summary: reportForm.outcome === 'handled' ? reportForm.public_summary || null : null,
       actions: {
         ...reportForm.actions,
         ban_reason: reportForm.actions.ban_reason || null,
@@ -786,7 +863,14 @@ async function submitAvatarDecision(approved) {
 
 .detail-side {
   position: sticky;
-  top: 80px;
+  /* 滚动容器是 .main（顶栏在其外部），top 相对它解析即可；右栏内部滚动保证底部操作可达 */
+  top: 16px;
+  max-height: calc(100vh - 64px - 16px - 34px);
+  overflow-y: auto;
+  padding-right: 2px;
+  /* 可见的细滚动条，提示右栏内容可滚动 */
+  scrollbar-width: thin;
+  scrollbar-color: #b7c6be transparent;
 }
 
 .tag-applications {
@@ -940,5 +1024,25 @@ async function submitAvatarDecision(approved) {
     flex-direction: column;
     width: 100%;
   }
+}
+.participant-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+.participant-label {
+  color: var(--ink-meta);
+  font-size: 12.5px;
+}
+.dispose-composer {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+.dispose-composer .el-input,
+.dispose-composer .el-textarea {
+  margin-bottom: 10px;
 }
 </style>

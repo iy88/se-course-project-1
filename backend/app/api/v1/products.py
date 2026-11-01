@@ -19,6 +19,7 @@ from app.models import (
     ProductImage,
     ProductTag,
     ProductTagApplication,
+    Report,
     ReviewRecord,
     Trade,
     User,
@@ -107,6 +108,7 @@ async def _out(db: AsyncSession, product: Product, user: User, include_pending_c
         ):
             # 仅“认领前撤回审核”形成的已下架可重提，普通已下架已审商品走重新上架
             can_resubmit = True
+    restriction_result = await _restriction_result(db, product)
     return ProductOut(
         id=product.id,
         seller_id=product.seller_id,
@@ -116,6 +118,7 @@ async def _out(db: AsyncSession, product: Product, user: User, include_pending_c
         status=ProductStatus(product.status),
         display_restricted=product.display_restricted,
         display_restricted_reason=product.display_restricted_reason,
+        restriction_result=restriction_result,
         reject_reason=product.reject_reason if user.id == product.seller_id else None,
         image_keys=[i.file_key for i in images],
         image_urls=[storage.public_url(i.file_key) for i in images],
@@ -129,6 +132,28 @@ async def _out(db: AsyncSession, product: Product, user: User, include_pending_c
         can_withdraw_review=can_withdraw_review,
         can_resubmit=can_resubmit,
     )
+
+
+async def _restriction_result(db: AsyncSession, product: Product) -> str | None:
+    if not product.display_restricted or not product.display_restricted_case_id:
+        return None
+    case = await db.get(DisposalCase, product.display_restricted_case_id)
+    if case is None or not case.report_id:
+        return None
+    report = await db.get(Report, case.report_id)
+    if report is not None and report.result_confirmed and report.status == "handled":
+        return report.public_result
+    return None
+
+
+@router.get("/{product_id}/restriction-result")
+async def restriction_result(product_id: int, user: CurrentUser, db: DbSession) -> dict:
+    """原入口的匿名处置提示；不开放受限商品正文或私人事项。"""
+    product = await db.get(Product, product_id)
+    result = await _restriction_result(db, product) if product else None
+    if not result:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "暂无公开处置结果")
+    return {"public_result": result}
 
 
 def _card(product: Product, seller_name: str, image_key: str | None) -> ProductCardOut:

@@ -2,7 +2,11 @@
   <div class="detail-page">
     <AppNavBar title="商品详情" />
 
+    <div v-if="restrictionNotice && !product" class="view">
+      <div class="surface reject-box"><span>商品已停止公开</span><p>{{ restrictionNotice }}</p></div>
+    </div>
     <div v-if="product" class="view view--with-bar">
+      <div v-if="product.restriction_result" class="alert alert--warn">核查结果：{{ product.restriction_result }}</div>
       <div v-if="isMine && session.banned" class="alert alert--danger">
         <AppIcon name="alert" :size="17" />
         <span>账户封禁中：禁止修改、上下架或重新提交商品；仍可只读查看并管理沟通。</span>
@@ -103,6 +107,7 @@
                 <span class="comment__time">{{ fmtTime(c.created_at) }}</span>
               </div>
               <p class="comment__content" :class="{ 'comment__content--deleted': c.deleted }">{{ c.content }}</p>
+              <p v-if="c.report_result" class="comment__result">核查结果：{{ c.report_result }}</p>
               <van-button
                 v-if="c.author_id === session.user.id && !c.deleted && !session.banned"
                 size="mini"
@@ -252,11 +257,23 @@ function initialOf(name) {
   return name ? Array.from(name)[0] : '用'
 }
 
+const restrictionNotice = ref('')
+
 async function load() {
+  product.value = null
+  restrictionNotice.value = ''
   loading.value = true
   try {
     product.value = await http.get(`/products/${route.params.id}`)
-  } catch {
+  } catch (err) {
+    if (err?.response?.status === 404) {
+      const result = await http.get(`/products/${route.params.id}/restriction-result`).catch(() => null)
+      if (result?.public_result) {
+        restrictionNotice.value = result.public_result
+        loading.value = false
+        return
+      }
+    }
     loading.value = false
     showDialog({ title: '商品不可见', message: '商品不存在或当前不可访问' }).then(() => router.back())
     return
@@ -688,5 +705,10 @@ watch(() => route.params.id, load)
 .comment__report {
   margin-top: 4px;
   margin-left: 8px;
+}
+.comment__result {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ink-soft, #4d5f58);
 }
 </style>

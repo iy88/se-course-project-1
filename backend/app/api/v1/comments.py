@@ -10,8 +10,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.core.config import get_settings
 from app.kv.base import get_kv
-from app.models import Comment, Product, User
-from app.models.enums import ProductStatus
+from app.models import Comment, Product, Report, User
+from app.models.enums import ProductStatus, ReportStatus
 from app.services import audit as audit_service
 from app.services.products import is_detail_visible
 
@@ -50,6 +50,23 @@ async def list_comments(product_id: int, user: CurrentUser, db: DbSession) -> li
     if author_ids:
         rows = await db.exec(select(col(User.id), col(User.display_name)).where(col(User.id).in_(author_ids)))
         authors = {uid: name for uid, name in rows.all()}
+    removed_results: dict[int, str | None] = {}
+    removed_ids = [c.id for c in comments if c.deleted_at is not None]
+    if removed_ids:
+        linked_reports = (await db.exec(
+            select(Report)
+            .where(
+                col(Report.target_type) == "comment",
+                col(Report.target_id).in_(removed_ids),
+                col(Report.status) == ReportStatus.HANDLED.value,
+                col(Report.result_confirmed).is_(True),
+                col(Report.public_result).is_not(None),
+            )
+            .order_by(col(Report.id).desc())
+        )).all()
+        for linked in linked_reports:
+            removed_results.setdefault(linked.target_id, linked.public_result)
+
     return [
         {
             "id": c.id,
@@ -60,6 +77,7 @@ async def list_comments(product_id: int, user: CurrentUser, db: DbSession) -> li
             "reply_to_user_id": c.reply_to_user_id,
             "created_at": c.created_at.isoformat() if c.created_at else None,
             "deleted": c.deleted_at is not None,
+            "report_result": removed_results.get(c.id) if c.deleted_at is not None else None,
         }
         for c in comments
     ]
