@@ -1,6 +1,7 @@
 """环境数据重置：默认预览，生产须显式授权；执行前停止所有后端与测试进程。"""
 import argparse
 import asyncio
+import json
 import os
 import shutil
 from pathlib import Path
@@ -29,6 +30,7 @@ def clear_oss(s: Settings) -> None:
     from app.storage.oss import OssConfig, _close_result, _create_bucket
     config = OssConfig.from_settings(s)
     for name in (config.media_bucket, config.evidence_bucket):
+        print(f'OSS clearing: {name}/{config.key_prefix}', flush=True)
         bucket = _create_bucket(config, name)
         while True:
             result = bucket.client.list_objects_v2(oss.ListObjectsV2Request(bucket=name, prefix=config.key_prefix, max_keys=1000))
@@ -103,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--whole-buckets', action='store_true', help='确认空 OSS 前缀时清理两个配置桶的全部当前对象')
     parser.add_argument('--confirm', help='执行时填写目标数据库名')
     args = parser.parse_args(argv)
+    stage = 'configuration'
     try:
         check_inherited_overrides()
         selected = resolve_env_file(args.env_file)
@@ -157,11 +160,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.confirm != confirmation:
             raise ValueError('--confirm 必须与目标数据库名一致')
         print('开始重置；跨服务无整体事务，失败后修复原因并重跑。', flush=True)
+        stage = 'storage'
         if s.storage_backend == 'oss':
             clear_oss(s)
         else:
             clear_local(s)
+        stage = 'database/redis'
         asyncio.run(clear_db_redis(s, m))
+        stage = 'migrations'
         previous = os.environ.get('APP_ENV_FILE')
         try:
             os.environ['APP_ENV_FILE'] = str(selected)
@@ -176,8 +182,10 @@ def main(argv: list[str] | None = None) -> int:
     except (ConfigurationError, ValueError) as exc:
         print(str(exc))
         return 1
-    except Exception:  # noqa: BLE001 - 不输出可能包含凭据的底层异常
-        print('重置失败，请核对资源状态后重试（底层异常已隐藏）。')
+    except Exception as exc:  # noqa: BLE001 - 仅输出白名单诊断，不输出凭据或底层消息
+        from app.storage.oss import _error_details
+        print(f'重置失败，stage={stage}; diagnostics=' + json.dumps(_error_details(exc), ensure_ascii=True))
+        print('请核对资源状态后重试；未输出底层消息或连接串。')
         return 1
 
 
