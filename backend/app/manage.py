@@ -6,6 +6,7 @@
     python -m app.manage serve
     python -m app.manage seed --admin-email <administrator email>
     python -m app.manage demo-seed --env-file .env.dev
+    python -m app.manage demo-verify --env-file .env.dev
 
 持久初始化使用 seed 子命令；自动化身份 seed 属于验收套件（``python -m tests.acceptance_real.seed``），
 不再由应用管理命令提供；应用模块不反向依赖 tests。
@@ -48,6 +49,11 @@ def _parser() -> argparse.ArgumentParser:
     demo = sub.add_parser("demo-seed", help="persist demonstration accounts and business scenarios in the selected environment")
     demo.add_argument("--env-file", default=None, help="dotenv file (default: APP_ENV_FILE or .env.dev)")
     demo.add_argument("--manifest", default=None, help="private demo manifest path")
+    verify = sub.add_parser("demo-verify", help="read-only verification for persistent demo-seed records")
+    verify.add_argument("--env-file", default=None, help="dotenv file (default: APP_ENV_FILE or .env.dev)")
+    verify.add_argument("--manifest", default=None, help="private demo manifest path")
+    verify.add_argument("--skip-api", action="store_true", help="skip read-only API visibility checks")
+    verify.add_argument("--json", action="store_true", help="print JSON summary")
     return parser
 
 
@@ -144,6 +150,19 @@ def main(argv: list[str] | None = None) -> int:
             if args.manifest is not None:
                 demo_args.extend(["--manifest", args.manifest])
             return run_demo_seed(demo_args)
+        if args.command == "demo-verify":
+            from app.devtools.demo_verify import main as run_demo_verify
+
+            verify_args = []
+            if args.env_file is not None:
+                verify_args.extend(["--env-file", args.env_file])
+            if args.manifest is not None:
+                verify_args.extend(["--manifest", args.manifest])
+            if args.skip_api:
+                verify_args.append("--skip-api")
+            if args.json:
+                verify_args.append("--json")
+            return run_demo_verify(verify_args)
     except ConfigurationError as exc:
         print(str(exc), file=sys.stderr)
         return 2
