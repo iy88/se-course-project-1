@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-acceptance:
+    name: Backend acceptance (SQLite/local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Sync backend dependencies
+        run: uv sync --locked --managed-python --python 3.13
+
+      - name: Create private SQLite/local CI dotenv
+        shell: bash
+        run: |
+          umask 077
+          .venv/bin/python - <<'PY'
+          from pathlib import Path
+          import os
+          import secrets
+
+          backend = Path.cwd()
+          local_root = backend.parent / "var" / "ci-local-base"
+          local_root.mkdir(parents=True, exist_ok=True)
+
+          values = {
+              "APP_NAME": "Project1 CI",
+              "ENVIRONMENT": "test",
+              "DATABASE_URL": "sqlite+aiosqlite:///" + str(local_root / "test.db"),
+              "DATABASE_SCHEMA": "app",
+              "DB_AUTO_CREATE": "false",
+              "AUDIT_TRUSTED_PROXIES": "none",
+              "STORAGE_LOCAL_ROOT": str(local_root / "storage"),
+              "JWT_SECRET": secrets.token_urlsafe(48),
+              "JWT_ALGORITHM": "HS256",
+              "FILE_URL_SECRET": secrets.token_urlsafe(48),
+              "SMTP_SECURITY": "ssl",
+          }
+          with open(".env.dev", "x", encoding="utf-8") as handle:
+              for key, value in values.items():
+                  handle.write(f"{key}='{value}'\n")
+          os.chmod(".env.dev", 0o600)
+          PY
+
+      - name: Run real acceptance suite
+        env:
+          APP_ENV_FILE: .env.dev
+        run: .venv/bin/python -m tests.acceptance_real.runner --port 8101
+
+      - name: Upload acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-report
+          path: |
+            var/acceptance-real/acceptance-*.md
+            var/acceptance-real/acceptance-*.json
+          if-no-files-found: warn
+
+  frontend-mobile:
+    name: Mobile build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26.12.1"
+          cache: npm
+          cache-dependency-path: frontend/mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run mobile tests
+        run: node --test tests/evidenceUploads.test.js
+
+      - name: Build mobile frontend
+        env:
+          PROJECT1_FRONTEND_CONFIG: public
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          test -s dist/index.html
+          test -s dist/manifest.webmanifest
+          test -s dist/sw.js
+
+  frontend-admin:
+    name: Admin build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend/admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26.12.1"
+          cache: npm
+          cache-dependency-path: frontend/admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build admin frontend
+        env:
+          PROJECT1_FRONTEND_CONFIG: public
+        run: npm run build
+
+      - name: Verify build output
+        run: test -s dist/index.html
