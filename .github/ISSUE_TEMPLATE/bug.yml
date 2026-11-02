@@ -1,0 +1,124 @@
+name: 缺陷报告
+description: 需求已实现但行为错误、页面报错或与自动化结论冲突的可复现缺陷
+title: "[缺陷] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **先判断类型，再提交**
+        - 需求已实现、实际行为错误 → 用本模板建「缺陷」。
+        - 需求要求但功能/页面入口缺失 → 用「需求缺口（feature）」模板，不要用本模板。
+        - 业务规则正确性已由 `backend/tests/acceptance_real`（51 项真实 API 检查）覆盖；本缺陷应属于界面、交互、浏览器集成或自动化未覆盖范围。若怀疑接口行为不符，请附复现请求与期望/实际。
+        - 不要粘贴密码、token、连接串、签名 URL、完整对象 key；截图需脱敏。
+        - 修复时在 PR 正文写 `Closes #<本缺陷号>`，由负责人 review 后合并。
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 严重级别
+      description: P0/P1 修复前不宣告该范围通过
+      options:
+        - P0 阻断（越权、秘密泄漏、数据不可恢复破坏）
+        - P1 主流程不可达 / 重要状态错误 / 缺权限控制
+        - P2 可恢复的局部问题
+        - P3 细节与优化
+    validations:
+      required: true
+  - type: input
+    id: parent_task
+    attributes:
+      label: 发现任务的 Issue
+      description: 关联人工验收任务编号
+      placeholder: "#12"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: HEAD、manifest tag/run_id、页面地址、浏览器与视口、账号角色（不写密码）
+      placeholder: |
+        HEAD: ______
+        manifest tag: ______ / run_id: ______
+        页面: http://localhost:5173/...
+        浏览器: Chrome ______ / 视口 390×844
+        角色: buyer
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 编号步骤，含前置数据/场景 key；不要包含密码
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+      description: 引用需求/场景编号（US/UC/SC/AC/BR）
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 页面/接口实际表现、错误提示、状态；附脱敏截图或文本
+    validations:
+      required: true
+  - type: dropdown
+    id: reproducibility
+    attributes:
+      label: 复现概率
+      options:
+        - 必现
+        - 偶发（在问题中补充次数）
+        - 仅一次（待确认）
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据（脱敏）
+      description: 截图文件名/路径、关键文本；不粘贴秘密
+  - type: input
+    id: requirement
+    attributes:
+      label: 需求依据
+      placeholder: "US-..-AC-..；SC-..；BR-..；规则 4.x"
+  - type: dropdown
+    id: automation
+    attributes:
+      label: 是否属于自动化可判定范围
+      options:
+        - 否（界面/浏览器/展示问题）
+        - 是（接口行为，自动化未覆盖的新场景）
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: 修复与验证（修复者填写）
+      description: 分支、PR、修复说明、验证命令与回归结果；合并后回归
+      placeholder: |
+        Branch: fix/<issue>-<slug>
+        PR: #__
+        验证: ...
+        回归: ...
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 提交检查
+      options:
+        - label: 已确认这是"需求已实现但行为错误"，而不是功能缺失（缺失请用 feature 模板）
+          required: true
+        - label: 已确认该现象不是自动化已覆盖并通过的规则（或已说明接口疑点）
+          required: true
+        - label: 已脱敏，不含密码/token/连接串/签名 URL
+          required: true
+        - label: 已关联发现任务的 Issue
+          required: true
