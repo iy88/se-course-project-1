@@ -349,7 +349,7 @@ def validate_catalog() -> CatalogSummary:
         products=len(catalog.PRODUCTS),
         trades=len(catalog.TRADES),
         reports=len(catalog.REPORTS),
-        cases=sum(1 for key, kind in inventory.items() if kind == "disposal_case"),
+        cases=sum(1 for kind in inventory.values() if kind == "disposal_case"),
         conversations=sum(1 for kind in inventory.values() if kind == "conversation"),
         notifications=len(catalog.NOTIFICATIONS),
         scenarios=len(catalog.SCENARIOS),

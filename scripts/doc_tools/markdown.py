@@ -91,9 +91,9 @@ def expand_chapter(path: Path) -> str:
                 rows.append(f"| {cells[0]} | {cells[2]}；{cells[3]} | {cells[4]} | {cells[6]} | |")
             if not rows:
                 raise ValueError(f"No scenario branches: {source}")
-            body = (f"# {title}验收检查\n\n"
-                    "| 场景 | 检查操作／情境 | 期望结果 | 依据 | 结论 |\n"
-                    "|---|---|---|---|---|\n" + "\n".join(rows))
+            body = ((f"# {title}验收检查\n\n"
+                     "| 场景 | 检查操作／情境 | 期望结果 | 依据 | 结论 |\n"
+                     "|---|---|---|---|---|\n") + "\n".join(rows))
         body = shift_headings(body + "\n", level - 1).strip()
         body = relocate(body, source, path)
         return (

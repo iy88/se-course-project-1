@@ -1,4 +1,6 @@
 """站内通知服务（4.17）：创建通知并经 WS 推送未读提醒。"""
+from collections.abc import Iterable
+
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -9,7 +11,7 @@ from app.ws.manager import manager
 
 async def notify(
     db: AsyncSession,
-    user_ids: list[int],
+    user_ids: Iterable[int | None],
     type_: str,
     title: str,
     content: str = "",

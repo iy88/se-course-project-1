@@ -1,4 +1,8 @@
-"""任务 F 全 API/全 AC/SC 真实验收运行器（显式 opt-in）。"""
+"""任务 F 全 API/全 AC/SC 真实验收运行器（显式 opt-in）。
+
+通过时不写测试报告；失败时仅写 ``var/acceptance-real/acceptance-failure-<run_id>.log``，
+只包含未通过检查、缺口、清理与调试信息。覆盖率仅保留 coverage 原生产物。
+"""
 
 from __future__ import annotations
 
@@ -351,84 +355,154 @@ def _route_coverage(run: AcceptanceRun, checks: Sequence[Any]) -> dict[str, Any]
     }
 
 
-def _markdown(report: Mapping[str, Any]) -> str:
-    summary = report["summary"]
-    lines = [
-        f"# 真实验收报告 {report['run_id']}",
-        "",
-        f"- 时间：{report['started_at']} — {report['finished_at']}",
-        f"- 目标：`{report['environment']['base_url']}`（{report['environment']['database']} / {report['environment']['storage_backend']}；独立服务）",
-        f"- 源码：HEAD `{report['runtime_source']['git_head']}`，工作区脏={report['runtime_source']['working_tree_dirty']}，摘要 `{report['runtime_source']['source_digest_sha256'][:16]}…`",
-        f"- 检查：PASS={summary['checks']['PASS']} FAIL={summary['checks']['FAIL']} SKIP={summary['checks']['SKIP']}",
-        f"- 路由：语义通过 {report['routes']['covered']}/{report['routes']['total']}",
-        f"- AC：{summary['ac']['counts']}",
-        f"- SC：{summary['sc']['counts']}",
-        "",
-    ]
-    measurement = report.get("code_coverage")
-    if measurement:
-        lines.extend([
-            "", "## 应用代码覆盖率", "",
-            f"- 行：{measurement['covered_lines']}/{measurement['total_lines']}（{measurement['line_percent']}%）",
-            f"- 分支：{measurement['covered_branches']}/{measurement['total_branches']}（{measurement['branch_percent']}%）",
-            f"- 范围：{measurement['scope']}；进程：{', '.join(measurement['processes'])}",
-            f"- 真实 API 子进程采集验证：{measurement['api_subprocess_verified']}",
-            f"- [HTML 逐行报告]({measurement['artifacts']['html']}) / [JSON]({measurement['artifacts']['json']}) / [XML]({measurement['artifacts']['xml']})",
-            "",
-        ])
-    if report.get("code_coverage_error"):
-        lines.extend(["", "## 代码覆盖率采集失败", "", report["code_coverage_error"], ""])
-    lines.extend(["", "## 检查结果", ""])
-    for check in report["checks"]:
-        mark = {"PASS": "✅", "FAIL": "❌", "SKIP": "⏭️"}.get(check["status"], "❔")
-        lines.append(f"- {mark} `{check['check_id']}` {check['title']}（{check['coverage']}）")
-        if check.get("error"):
-            lines.append(f"  - 失败：{check['error']}")
-        if check.get("assertions"):
-            lines.append(f"  - 断言：{len(check['assertions'])} 条")
-    lines += ["", "## 路由缺口", ""]
-    missing = report["routes"]["missing_or_unverified"]
-    if missing:
-        for row in missing:
-            lines.append(f"- ❌ `{row['method']} {row['path']}` calls={row['calls']} semantic={row['semantic_success']}")
-    else:
-        lines.append("- 全部业务路由均有真实 2xx 成功语义调用。")
-    uc = report["uc"]
-    uc_gaps = [row for row in uc["items"] if row["status"] != "PASS"] + [
-        row for row in uc["subcases"] if row["status"] != "PASS"
-    ]
-    lines += ["", f"## UC 缺口（主用例 {uc['counts']}；子用例 {uc['subcase_counts']}）", ""]
-    if not uc_gaps:
-        lines.append("- 14 主用例 / 66 子用例全部映射检查 PASS。")
-    else:
-        for row in uc_gaps:
-            mapped = ", ".join(row.get("check_ids") or []) or "无"
-            lines.append(f"- {row['status']} `{row['id']}`（映射：{mapped}）")
-    for kind, key in (("AC", "ac"), ("SC", "sc")):
-        data = report[key]
-        gaps = [row for row in data["items"] if row["status"] != "PASS"]
-        lines += ["", f"## {kind} 缺口（{len(gaps)}/{data['total']}）", ""]
-        if not gaps:
-            lines.append(f"- 全部 {kind} 有 full PASS 映射。")
-        else:
-            for row in gaps:
-                mapped = ", ".join(item["check_id"] for item in row["mappings"]) or "无"
-                lines.append(f"- {row['status']} `{row['id']}`（映射：{mapped}）")
-    lines += [
-        "",
-        "## 时间模拟与并发",
-        "",
-        f"- 7 天/冻结：{report['time_simulation']['method']}",
-        f"- 扫描周期 override：{report['time_simulation']['scan_interval_seconds']}s（7 天业务阈值未改）",
-        f"- 时钟事件：{len(report['clock_events'])} 条",
-        f"- 并发证据：{len(report['concurrency'])} 组",
-        "",
-        "## 清理与保留",
-        "",
-        f"- 隔离清理：{json.dumps(report['cleanup'], ensure_ascii=False)}",
-        f"- 服务进程：{'已停止' if report['cleanup']['server_stopped'] else '未停止（需人工检查）'}",
-    ]
+def _call_index(calls: Sequence[Any]) -> dict[int, dict[str, Any]]:
+    return {int(call.seq): call.as_dict() for call in calls}
+
+
+def _json_excerpt(value: Any, limit: int = 4000) -> str:
+    rendered = json.dumps(value, ensure_ascii=False, default=str)
+    return rendered if len(rendered) <= limit else rendered[:limit] + "…（截断）"
+
+
+def _append_excerpts(lines: list[str], rows: Sequence[Mapping[str, Any]]) -> None:
+    for row in rows[:50]:
+        lines.append("- " + _json_excerpt(row, 600))
+    if len(rows) > 50:
+        lines.append(f"- … 其余 {len(rows) - 50} 条省略")
+
+
+def _append_check_debug(
+    lines: list[str],
+    check: Mapping[str, Any],
+    call_index: Mapping[int, Mapping[str, Any]],
+) -> None:
+    lines += ["", f"### [{check.get('status')}] `{check.get('check_id')}` {check.get('title')}", ""]
+    meta = [f"{key}={check.get(key)}" for key in ("coverage", "duration_ms", "role") if check.get(key) is not None]
+    if meta:
+        lines.append("- " + "；".join(meta))
+    for key, label in (("precondition", "前置"), ("action", "动作"), ("expected", "期望"), ("note", "说明")):
+        value = check.get(key)
+        if value:
+            lines.append(f"- {label}：{value}")
+    ac = check.get("ac") or []
+    sc = check.get("sc") or []
+    subcases = check.get("uc_subcases") or []
+    if ac or sc or subcases:
+        lines.append(f"- 映射：AC={ac} SC={sc} UC子用例={subcases}")
+    if check.get("error"):
+        lines.append(f"- 错误：{check['error']}")
+    assertions = check.get("assertions") or []
+    if assertions:
+        lines.append(f"- 断言：{len(assertions)} 条已通过（通过内容不写入日志）")
+    calls: list[Mapping[str, Any]] = []
+    for seq in check.get("call_seq") or []:
+        call = call_index.get(int(seq))
+        if call is not None:
+            calls.append(call)
+    if calls:
+        lines.append("- 实际调用：")
+        for call in calls[:40]:
+            lines.append(
+                f"  - #{call.get('seq')} {call.get('method')} {call.get('actual_path')} -> {call.get('status')} "
+                + f"（预期 {call.get('expected')}，{call.get('duration_ms')}ms，{call.get('role')}）"
+            )
+        if len(calls) > 40:
+            lines.append(f"  - … 其余 {len(calls) - 40} 条调用省略")
+    data = check.get("data") or {}
+    if data:
+        lines += ["- 实际数据：", "```json", _json_excerpt(data), "```"]
+
+
+def _coverage_line(measurement: Mapping[str, Any]) -> str:
+    artifacts = measurement.get("artifacts") or {}
+    directory = Path(str(artifacts.get("html") or "")).parent.parent if artifacts.get("html") else "未生成"
+    return " ".join([
+        "coverage:",
+        f"line={measurement.get('covered_lines')}/{measurement.get('total_lines')}({measurement.get('line_percent')}%)",
+        f"branch={measurement.get('covered_branches')}/{measurement.get('total_branches')}({measurement.get('branch_percent')}%)",
+        f"dir={directory}",
+    ])
+
+
+_GAP_LABELS: tuple[tuple[str, str], ...] = (
+    ("routes_missing_or_unverified", "路由缺口"),
+    ("ac_failing", "AC 失败"),
+    ("ac_partial", "AC 部分覆盖"),
+    ("ac_uncovered", "AC 未覆盖"),
+    ("sc_failing", "SC 失败"),
+    ("sc_partial", "SC 部分覆盖"),
+    ("sc_uncovered", "SC 未覆盖"),
+    ("uc_main_failing", "UC 主用例失败"),
+    ("uc_main_missing", "UC 主用例未覆盖"),
+    ("uc_subcase_failing", "UC 子用例失败"),
+    ("uc_subcase_missing", "UC 子用例未覆盖"),
+    ("uc_subcase_skipped", "UC 子用例跳过"),
+)
+
+
+def _failure_log(
+    *,
+    run_id: str,
+    exit_code: int,
+    report: Mapping[str, Any] | None,
+    context: Mapping[str, Any] | None,
+    partial_checks: Sequence[Mapping[str, Any]],
+    call_index: Mapping[int, Mapping[str, Any]],
+    fatal: str | None,
+    cleanup: Mapping[str, Any] | None,
+    coverage: Mapping[str, Any] | None,
+    coverage_error: str | None,
+) -> str:
+    lines = [f"# 验收失败日志 {run_id}", ""]
+    if report is not None:
+        environment = report.get("environment") or {}
+        source = report.get("runtime_source") or {}
+        digest = str(source.get("source_digest_sha256") or "")
+        lines += [
+            f"- 时间：{report.get('started_at')} — {report.get('finished_at')}",
+            f"- 目标：`{environment.get('base_url')}`（{environment.get('database')} / {environment.get('storage_backend')}；独立服务；端口 {environment.get('port')}）",
+            f"- 源码：HEAD `{source.get('git_head')}`，工作区脏={source.get('working_tree_dirty')}，摘要 `{digest[:16]}…`",
+        ]
+    elif context:
+        lines += [
+            f"- 时间：{context.get('started_at')}（中断，未正常结束）",
+            f"- 目标：`{context.get('base_url') or '未启动'}`（{context.get('database')} / {context.get('storage_backend')}；独立服务；端口 {context.get('port')}）",
+        ]
+    lines.append(f"- 退出码：{exit_code}")
+    if report is not None:
+        lines.append(f"- 摘要：{report.get('summary')}")
+    if fatal:
+        lines += ["", "## 致命错误", "", f"- {fatal}"]
+    checks = list(report.get("checks") or []) if report is not None else list(partial_checks)
+    failed = [check for check in checks if check.get("status") != PASS]
+    lines += ["", f"## 未通过检查（{len(failed)}）"]
+    if not failed:
+        lines.append("- 无未通过检查；失败来自缺口、清理或覆盖率采集。")
+    for check in failed:
+        _append_check_debug(lines, check, call_index)
+    if report is not None:
+        gaps = report.get("gaps") or {}
+        for key, label in _GAP_LABELS:
+            rows = gaps.get(key) or []
+            if rows:
+                lines += ["", f"## {label}（{len(rows)}）", ""]
+                _append_excerpts(lines, rows)
+        notes = report.get("notes") or []
+        if notes:
+            lines += ["", "## 备注", ""]
+            _append_excerpts(lines, [{"note": note} for note in notes])
+    if cleanup is not None:
+        lines += ["", "## 清理结果", "", f"- {json.dumps(cleanup, ensure_ascii=False)}"]
+    if coverage_error:
+        lines += ["", "## 覆盖率采集失败", "", f"- {coverage_error}"]
+    elif coverage:
+        artifacts = coverage.get("artifacts") or {}
+        lines += ["", "## 覆盖率（coverage 原生产物）", ""]
+        lines.append(f"- 行：{coverage.get('covered_lines')}/{coverage.get('total_lines')}（{coverage.get('line_percent')}%）；分支：{coverage.get('covered_branches')}/{coverage.get('total_branches')}（{coverage.get('branch_percent')}%）")
+        if artifacts.get("html"):
+            lines.append(f"- 目录：{Path(str(artifacts['html'])).parent.parent}")
     return "\n".join(lines) + "\n"
+
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -454,11 +528,19 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
 
     from app.devtools._support import validate_run_id
     run_id = validate_run_id(args.run_id or _run_id())
+    sandbox.run_id = run_id
     if not args.no_start_server and args.port == 8000:
         print("acceptance fatal: 拒绝在 8000 启动验收测试服务；请用独立 --port（如 8101/8107）", file=sys.stderr)
         return 2
     ACCEPTANCE_ROOT.mkdir(parents=True, exist_ok=True)
     started_at = _now()
+    sandbox.run_context = {
+        "started_at": started_at,
+        "environment": config.environment,
+        "database": config.database.database if config.database_url.startswith("postgresql+") else "sqlite",
+        "storage_backend": config.storage_backend,
+        "port": None if args.no_start_server else args.port,
+    }
     server: ServerHandle | None = None
     run: AcceptanceRun | None = None
     fatal: str | None = None
@@ -498,6 +580,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
         else:
             server = start_server(port=args.port, run_id=run_id, sandbox=sandbox)
             base_url = server.base_url
+        sandbox.run_context["base_url"] = base_url
         catalog = Catalog().load()
         manifest_payload = build_payload(catalog)
         if not manifest_payload["validation"]["ok"]:
@@ -658,22 +741,13 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             },
             "notes": run.notes,
         }
-        json_path = ACCEPTANCE_ROOT / f"acceptance-{run_id}.json"
-        md_path = ACCEPTANCE_ROOT / f"acceptance-{run_id}.md"
-        # 停服务后再标记停止状态并重写报告。
         if server is not None:
             server.stop()
-            report["cleanup"]["server_stopped"] = True
-        sandbox.report_paths = (json_path, md_path)
-        json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-        md_path.write_text(_markdown(report), encoding="utf-8")
         print(
-            f"acceptance: run_id={run_id} checks={check_counts} "
-            f"routes={routes['covered']}/{routes['total']} ac={ac['counts']} sc={sc['counts']} "
-            f"uc={uc['counts']} subuc={uc['subcase_counts']}"
+            (f"acceptance: run_id={run_id} checks={check_counts} "
+             f"routes={routes['covered']}/{routes['total']} ac={ac['counts']} sc={sc['counts']} "
+             f"uc={uc['counts']} subuc={uc['subcase_counts']}")
         )
-        print(f"report: {json_path}")
-        print(f"summary: {md_path}")
         full_pass = (
             check_counts.get(FAIL, 0) == 0
             and check_counts.get(SKIP, 0) == 0
@@ -689,10 +763,26 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             and not uc["skipped"]
             and manifest_payload["validation"]["ok"]
         )
+        if not full_pass:
+            sandbox.failure_state = {
+                "report": report,
+                "context": sandbox.run_context,
+                "fatal": None,
+                "partial_checks": [],
+                "call_index": _call_index(run.api.calls),
+            }
         return 0 if full_pass else 1
     except Exception as exc:  # noqa: BLE001 - 顶层只输出安全类型
         fatal = str(exc) if isinstance(exc, CheckFailure) else type(exc).__name__
         print(f"acceptance fatal: {fatal}", file=sys.stderr)
+        if sandbox is not None:
+            sandbox.failure_state = {
+                "report": None,
+                "context": sandbox.run_context,
+                "fatal": fatal,
+                "partial_checks": [check.as_dict() for check in run.rec.checks] if run is not None else [],
+                "call_index": _call_index(run.api.calls) if run is not None else {},
+            }
         return 2
     finally:
         if server is not None:
@@ -709,6 +799,7 @@ def main(argv: list[str] | None = None) -> int:
     sandbox = None
     collector = None
     result = 2
+    fatal_error: str | None = None
     actual_args = list(sys.argv[1:] if argv is None else argv)
     if actual_args and actual_args[0] == "--recover":
         if len(actual_args) != 2:
@@ -745,26 +836,23 @@ def main(argv: list[str] | None = None) -> int:
         sandbox._write_manifest("active")
         result = _run(argv, sandbox, config)
     except BaseException as exc:  # noqa: BLE001 - cleanup also handles interruption
-        print(f"acceptance fatal: {type(exc).__name__}", file=sys.stderr)
+        fatal_error = type(exc).__name__
+        print(f"acceptance fatal: {fatal_error}", file=sys.stderr)
+        result = 2
     finally:
         previous_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        cleanup: dict[str, Any] | None = None
+        measurement: dict[str, Any] | None = None
+        coverage_error: str | None = None
         if sandbox is not None:
             try:
                 process = getattr(sandbox, "process", None)
-                if process is not None and process.poll() is None:
+                if process is not None and process.poll() is None and sandbox.clock_file is not None:
                     from tests.acceptance_real.processes import stop_server
                     stop_server(process, sandbox.clock_file)
                 cleanup = sandbox.cleanup()
                 print("cleanup: " + json.dumps(cleanup, ensure_ascii=False))
-                paths = getattr(sandbox, "report_paths", None)
-                if paths:
-                    json_path, md_path = paths
-                    report = json.loads(json_path.read_text(encoding="utf-8"))
-                    report["cleanup"] = {**cleanup, "server_stopped": True}
-                    report["exit_code"] = 2 if cleanup["cleanup_failures"] else result
-                    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-                    md_path.write_text(_markdown(report), encoding="utf-8")
                 if cleanup["cleanup_failures"]:
                     result = 2
             except BaseException as exc:  # noqa: BLE001 - cleanup also handles interruption
@@ -776,26 +864,31 @@ def main(argv: list[str] | None = None) -> int:
                     server_started=sandbox is not None and sandbox.process is not None,
                     acceptance_exit_code=result,
                 )
-                print("code coverage: " + json.dumps(measurement, ensure_ascii=False))
-                paths = getattr(sandbox, "report_paths", None)
-                if paths:
-                    json_path, md_path = paths
-                    report = json.loads(json_path.read_text(encoding="utf-8"))
-                    report["code_coverage"] = measurement
-                    report["exit_code"] = result
-                    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-                    md_path.write_text(_markdown(report), encoding="utf-8")
+                print(_coverage_line(measurement))
             except Exception as exc:  # noqa: BLE001 - preserve cleanup success but fail missing measurement
-                print(f"code coverage failed: {type(exc).__name__}", file=sys.stderr)
+                coverage_error = type(exc).__name__
+                print(f"code coverage failed: {coverage_error}", file=sys.stderr)
                 result = 2
-                paths = getattr(sandbox, "report_paths", None)
-                if paths:
-                    json_path, md_path = paths
-                    report = json.loads(json_path.read_text(encoding="utf-8"))
-                    report["code_coverage_error"] = type(exc).__name__
-                    report["exit_code"] = result
-                    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-                    md_path.write_text(_markdown(report), encoding="utf-8")
+        if sandbox is not None and result != 0:
+            state = getattr(sandbox, "failure_state", None) or {}
+            run_id = getattr(sandbox, "run_id", None) or _run_id()
+            log_path = ACCEPTANCE_ROOT / f"acceptance-failure-{run_id}.log"
+            log_path.write_text(
+                _failure_log(
+                    run_id=run_id,
+                    exit_code=result,
+                    report=state.get("report"),
+                    context=state.get("context") or getattr(sandbox, "run_context", None),
+                    partial_checks=state.get("partial_checks") or [],
+                    call_index=state.get("call_index") or {},
+                    fatal=state.get("fatal") or fatal_error,
+                    cleanup=cleanup,
+                    coverage=measurement,
+                    coverage_error=coverage_error,
+                ),
+                encoding="utf-8",
+            )
+            print(f"failure log: {log_path}")
         signal.signal(signal.SIGTERM, previous)
         signal.signal(signal.SIGINT, previous_int)
     return result

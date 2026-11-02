@@ -58,10 +58,10 @@ async def _run(args: argparse.Namespace) -> int:
         await engine.dispose()
 
     print(
-        "objects: "
-        f"dry_run={result.dry_run} candidates={len(result.candidates)} "
-        f"deleted={len(result.deleted)} retained={len(result.retained)} "
-        f"errors={len(result.errors)}"
+        ("objects: "
+         f"dry_run={result.dry_run} candidates={len(result.candidates)} "
+         f"deleted={len(result.deleted)} retained={len(result.retained)} "
+         f"errors={len(result.errors)}")
     )
     return 0 if result.ok else 1
 

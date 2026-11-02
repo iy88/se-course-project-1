@@ -68,16 +68,6 @@ jobs:
           APP_ENV_FILE: .env.dev
         run: .venv/bin/python -m tests.acceptance_real.runner --port 8101
 
-      - name: Upload acceptance report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: acceptance-report
-          path: |
-            var/acceptance-real/acceptance-*.md
-            var/acceptance-real/acceptance-*.json
-          if-no-files-found: warn
-
   frontend-mobile:
     name: Mobile build and tests
     runs-on: ubuntu-24.04

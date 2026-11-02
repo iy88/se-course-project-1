@@ -418,8 +418,7 @@ def mint_fingerprint_token(
         "scope": "service-fingerprint",
         "run_id": run_id,
     }
-    token = jwt.encode(payload, config.jwt_secret, algorithm=config.jwt_algorithm)
-    return token if isinstance(token, str) else token.decode("utf-8")
+    return jwt.encode(payload, config.jwt_secret, algorithm=config.jwt_algorithm)
 
 
 def decode_fingerprint_token(config: DevConfig, token: str) -> dict[str, Any]:

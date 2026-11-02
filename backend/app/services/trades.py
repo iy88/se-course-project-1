@@ -34,7 +34,7 @@ def is_retryable_transaction_error(exc: DBAPIError) -> bool:
 
 def _is_pending_request_unique_conflict(exc: IntegrityError) -> bool:
     """精确识别同买方同商品待接受请求的条件唯一索引冲突。"""
-    orig = exc.orig if isinstance(exc, DBAPIError) else exc
+    orig = exc.orig
     sqlstate = _sqlstate(exc)
     message = str(orig)
     if sqlstate == "23505":

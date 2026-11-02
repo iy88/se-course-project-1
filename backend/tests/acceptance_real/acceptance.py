@@ -67,8 +67,8 @@ AGREEMENT_B = {
     "payment_timing": "交付后支付",
 }
 PNG_1X1 = bytes.fromhex(
-    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
-    "de0000000c4944415408d763f8cfc000000301010018dd8db00000000049454e44ae426082"
+    ("89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
+     "de0000000c4944415408d763f8cfc000000301010018dd8db00000000049454e44ae426082")
 )
 
 
@@ -729,7 +729,7 @@ class AcceptanceRun:
             me = self._dict(self._call("GET", "/api/v1/auth/me", expected=200, headers={"Authorization": f"Bearer {token}"}))
             self.rec.must_eq(int(me["id"]), account.id, "服务指纹 admin id")
             row = self._db_one("select id, email, role, display_name from app.users where id = :id", {"id": account.id})
-            self.rec.must(row is not None and int(row["id"]) == account.id, "指纹账号存在于 test 库")
+            self.rec.must(int(row["id"]) == account.id, "指纹账号存在于 test 库")
             self.rec.must_eq(str(row["email"]), account.email, "指纹账号 email")
             # WebSocket 未认证关闭码 4401；无效 token 不注册连接。
             import websockets
@@ -1109,8 +1109,6 @@ class AcceptanceRun:
                 "select id from app.category_aliases where category_id = :cid and name = :name and removed_at is null",
                 {"cid": self.categories[key]["id"], "name": old_name},
             )
-            if alias_row is None:
-                raise CheckFailure("旧主名别名未落库")
             self._call(
                 "DELETE",
                 f"/api/v1/categories/{self.categories[key]['id']}/aliases/{int(alias_row['id'])}",
@@ -1220,8 +1218,7 @@ class AcceptanceRun:
             ac=["US-02-AC-08", "US-08-AC-08", "US-08-AC-09"],
             sc=["SC-02-11", "SC-02-12"],
         ):
-            initial = self._list(self._call("GET", "/api/v1/prohibited-items", user="buyer", expected=200))
-            self.rec.must(isinstance(initial, list), "普通用户可读禁发范围")
+            self._list(self._call("GET", "/api/v1/prohibited-items", user="buyer", expected=200))
             created = self._dict(
                 self._call(
                     "POST",
@@ -2482,64 +2479,64 @@ class AcceptanceRun:
                 states_ok = winner_detail.get("status") == "in_progress" and loser_detail.get("status") == "closed"
                 lock_count = int(
                     self._db_one(
-                        "select count(*) as n from app.trades where product_id = :pid "
-                        "and status in ('in_progress','disputed','abnormal')",
+                        ("select count(*) as n from app.trades where product_id = :pid "
+                         "and status in ('in_progress','disputed','abnormal')"),
                         {"pid": int(self.products[product_key]["id"])},
                     )["n"]
                 )
                 winner_accept_audit = int(
                     self._db_one(
-                        "select count(*) as n from app.audit_events where event_type = 'trade.accept' "
-                        "and target_type = 'trade' and target_id = :tid",
+                        ("select count(*) as n from app.audit_events where event_type = 'trade.accept' "
+                         "and target_type = 'trade' and target_id = :tid"),
                         {"tid": str(winner["id"])},
                     )["n"]
                 )
                 loser_accept_audit = int(
                     self._db_one(
-                        "select count(*) as n from app.audit_events where event_type = 'trade.accept' "
-                        "and target_type = 'trade' and target_id = :tid",
+                        ("select count(*) as n from app.audit_events where event_type = 'trade.accept' "
+                         "and target_type = 'trade' and target_id = :tid"),
                         {"tid": str(loser["id"])},
                     )["n"]
                 )
                 winner_transitions = int(
                     self._db_one(
-                        "select count(*) as n from app.trade_transitions where trade_id = :tid "
-                        "and to_status = 'in_progress' and trigger = 'request_accepted'",
+                        ("select count(*) as n from app.trade_transitions where trade_id = :tid "
+                         "and to_status = 'in_progress' and trigger = 'request_accepted'"),
                         {"tid": int(winner["id"])},
                     )["n"]
                 )
                 loser_transitions = int(
                     self._db_one(
-                        "select count(*) as n from app.trade_transitions where trade_id = :tid "
-                        "and to_status = 'in_progress'",
+                        ("select count(*) as n from app.trade_transitions where trade_id = :tid "
+                         "and to_status = 'in_progress'"),
                         {"tid": int(loser["id"])},
                     )["n"]
                 )
                 loser_closed_transitions = int(
                     self._db_one(
-                        "select count(*) as n from app.trade_transitions where trade_id = :tid "
-                        "and to_status = 'closed' and trigger = 'product_closed'",
+                        ("select count(*) as n from app.trade_transitions where trade_id = :tid "
+                         "and to_status = 'closed' and trigger = 'product_closed'"),
                         {"tid": int(loser["id"])},
                     )["n"]
                 )
                 loser_accepted_notifications = int(
                     self._db_one(
-                        "select count(*) as n from app.notifications where user_id = :uid "
-                        "and type = 'request_accepted' and payload->>'trade_id' = :tid",
+                        ("select count(*) as n from app.notifications where user_id = :uid "
+                         "and type = 'request_accepted' and payload->>'trade_id' = :tid"),
                         {"uid": self._uid(str(loser["buyer"])), "tid": str(loser["id"])},
                     )["n"]
                 )
                 loser_closed_notifications = int(
                     self._db_one(
-                        "select count(*) as n from app.notifications where user_id = :uid "
-                        "and type = 'request_closed' and link_type = 'trade' and link_id = :tid",
+                        ("select count(*) as n from app.notifications where user_id = :uid "
+                         "and type = 'request_closed' and link_type = 'trade' and link_id = :tid"),
                         {"uid": self._uid(str(loser["buyer"])), "tid": int(loser["id"])},
                     )["n"]
                 )
                 winner_accepted_notifications = int(
                     self._db_one(
-                        "select count(*) as n from app.notifications where user_id = :uid "
-                        "and type = 'request_accepted' and payload->>'trade_id' = :tid",
+                        ("select count(*) as n from app.notifications where user_id = :uid "
+                         "and type = 'request_accepted' and payload->>'trade_id' = :tid"),
                         {"uid": self._uid(str(winner["buyer"])), "tid": str(winner["id"])},
                     )["n"]
                 )
@@ -2626,8 +2623,8 @@ class AcceptanceRun:
                 ]
                 pending_count = int(
                     self._db_one(
-                        "select count(*) as n from app.trades where product_id = :pid "
-                        "and buyer_id = :bid and status = 'pending_acceptance'",
+                        ("select count(*) as n from app.trades where product_id = :pid "
+                         "and buyer_id = :bid and status = 'pending_acceptance'"),
                         {
                             "pid": int(self.products[product_key]["id"]),
                             "bid": self._uid("buyer"),
@@ -2646,22 +2643,22 @@ class AcceptanceRun:
                 trade_id = ids[0] if len(ids) == 1 else -1
                 request_audit = int(
                     self._db_one(
-                        "select count(*) as n from app.audit_events where event_type = 'trade.request_create' "
-                        "and target_type = 'trade' and target_id = :tid",
+                        ("select count(*) as n from app.audit_events where event_type = 'trade.request_create' "
+                         "and target_type = 'trade' and target_id = :tid"),
                         {"tid": str(trade_id)},
                     )["n"]
                 )
                 request_transitions = int(
                     self._db_one(
-                        "select count(*) as n from app.trade_transitions where trade_id = :tid "
-                        "and to_status = 'pending_acceptance' and trigger = 'request_created'",
+                        ("select count(*) as n from app.trade_transitions where trade_id = :tid "
+                         "and to_status = 'pending_acceptance' and trigger = 'request_created'"),
                         {"tid": trade_id},
                     )["n"]
                 )
                 request_notifications = int(
                     self._db_one(
-                        "select count(*) as n from app.notifications where user_id = :uid "
-                        "and type = 'request_created' and payload->>'trade_id' = :tid",
+                        ("select count(*) as n from app.notifications where user_id = :uid "
+                         "and type = 'request_created' and payload->>'trade_id' = :tid"),
                         {"uid": self._uid("seller"), "tid": str(trade_id)},
                     )["n"]
                 )
@@ -2701,9 +2698,9 @@ class AcceptanceRun:
             )
             self.rec.must(
                 accept_all_ok and dup_all_ok,
-                "并发锁单/重复请求多轮："
-                f"accept_rounds={len(accept_rounds)} accept_ok={accept_all_ok} "
-                f"duplicate_rounds={len(dup_rounds)} duplicate_ok={dup_all_ok}",
+                ("并发锁单/重复请求多轮："
+                 f"accept_rounds={len(accept_rounds)} accept_ok={accept_all_ok} "
+                 f"duplicate_rounds={len(dup_rounds)} duplicate_ok={dup_all_ok}"),
             )
 
         with self.rec.step(
@@ -3285,8 +3282,6 @@ class AcceptanceRun:
             sc=["SC-05-09", "SC-06-03", "SC-06-08", "SC-09-01", "SC-09-02", "SC-09-03", "SC-09-05", "SC-09-06", "SC-09-07", "SC-09-08"],
             note="7 天阈值未改；仅测试服务进程注入 UTC offset",
         ):
-            if self.server is None:
-                raise CheckFailure("7 天超时验收需要 --start-server 受控时钟服务")
             self._timeout_race_regression()
             self._publish("P_TIMEOUT", "seller", f"超时转异常商品-{self.run_id}", price=6700, category_ids=[self.categories["main"]["id"]])
             self._approve("P_TIMEOUT")
@@ -4482,14 +4477,14 @@ class AcceptanceRun:
             )
             self.rec.must_eq(unread_after, unread_before, "管理读取不改变当事人未读")
             admin_read = self._db_one(
-                "select count(*) as n from app.conversation_reads "
-                "where conversation_id = :cid and user_id = :uid",
+                ("select count(*) as n from app.conversation_reads "
+                 "where conversation_id = :cid and user_id = :uid"),
                 {"cid": conversation_id, "uid": self._uid("admin2")},
             )
             self.rec.must_eq(int(admin_read["n"]), 0, "管理读取不写管理员已读记录")
             read_audit = self._db_one(
-                "select count(*) as n from app.audit_events where event_type = 'admin.case_conversation_read' "
-                "and target_type = 'conversation' and target_id = :cid",
+                ("select count(*) as n from app.audit_events where event_type = 'admin.case_conversation_read' "
+                 "and target_type = 'conversation' and target_id = :cid"),
                 {"cid": str(conversation_id)},
             )
             self.rec.must(int(read_audit["n"]) >= 1, "管理读取本身写审计")
@@ -4853,11 +4848,11 @@ class AcceptanceRun:
             self._call("GET", "/api/v1/admin/audit/events", user="outsider", expected=403)
             if self.config.database_url.startswith("postgresql+"):
                 privileges = self._db_one(
-                    "select has_table_privilege(current_user, 'app.audit_events', 'SELECT') as can_select, "
-                    "has_table_privilege(current_user, 'app.audit_events', 'INSERT') as can_insert, "
-                    "has_table_privilege(current_user, 'app.audit_events', 'UPDATE') as can_update, "
-                    "has_table_privilege(current_user, 'app.audit_events', 'DELETE') as can_delete, "
-                    "has_table_privilege(current_user, 'app.audit_events', 'TRUNCATE') as can_truncate"
+                    ("select has_table_privilege(current_user, 'app.audit_events', 'SELECT') as can_select, "
+                     "has_table_privilege(current_user, 'app.audit_events', 'INSERT') as can_insert, "
+                     "has_table_privilege(current_user, 'app.audit_events', 'UPDATE') as can_update, "
+                     "has_table_privilege(current_user, 'app.audit_events', 'DELETE') as can_delete, "
+                     "has_table_privilege(current_user, 'app.audit_events', 'TRUNCATE') as can_truncate")
                 )
                 self.rec.must_eq(privileges["can_select"], True, "app 可读审计")
                 self.rec.must_eq(privileges["can_insert"], True, "app 可插入审计")
@@ -4967,8 +4962,6 @@ class AcceptanceRun:
                     "name": str(self.audit_targets["alias_removed_by_name"]["name"]),
                 },
             )
-            if alias_added is None or alias_removed_by_name is None:
-                raise CheckFailure("标签别名审计目标未落库")
             alias_added_id = int(alias_added["id"])
             alias_removed_by_name_id = int(alias_removed_by_name["id"])
             alias_removed_by_id = int(self.audit_targets["alias_removed_by_id"])
@@ -4981,8 +4974,8 @@ class AcceptanceRun:
             notification_id = int(self.audit_targets["notification_read_id"])
 
             rows = self._db(
-                "select event_type, target_type, target_id, actor_id, before_json, after_json "
-                "from app.audit_events where created_at >= :started_at order by event_id",
+                ("select event_type, target_type, target_id, actor_id, before_json, after_json "
+                 "from app.audit_events where created_at >= :started_at order by event_id"),
                 {"started_at": self.started_at},
             )
 
@@ -5196,8 +5189,6 @@ class AcceptanceRun:
             counts = {}
             for table in ("users", "categories", "products", "trades", "reports", "disposal_cases", "audit_events", "stored_objects"):
                 row = self._db_one(f"select count(*) as n from app.{table}")
-                if row is None:
-                    raise CheckFailure(f"无法读取 {table} 计数")
                 counts[table] = int(row["n"])
             state_rows = self._db(
                 "select state, count(*) as n from app.stored_objects group by state order by state"

@@ -35,6 +35,7 @@ async def test_avatar_moderation(tmp_path, self_review):
             await db.commit()
             result = await submit_avatar(AvatarIn(key=key), user, db)
             case = await db.get(DisposalCase, result['case_id'])
+            assert case is not None
             await claim_case(case.id, admin, db)
             await db.refresh(case)
             duplicate = await submit_avatar(AvatarIn(key=key), user, db)
@@ -47,6 +48,7 @@ async def test_avatar_moderation(tmp_path, self_review):
             assert user.avatar_key is None and user.avatar_review_reason == '图片不合适'
             result = await submit_avatar(AvatarIn(key=key), user, db)
             case = await db.get(DisposalCase, result['case_id'])
+            assert case is not None
             await claim_case(case.id, admin, db)
             await db.refresh(case)
             await decide_avatar(case.id, DecisionIn(key=key, approved=True), admin, db)

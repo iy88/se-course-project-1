@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.1
-Version-Datetime: 2026-11-02T01:46:00+08:00
+Version: 0.2.2
+Version-Datetime: 2026-11-02T15:35:38+08:00
 -->
 
 # 开发与人工测试指南
@@ -127,7 +127,7 @@ chmod 600 backend/.env.dev backend/.env.prod
 (cd backend && .venv/bin/python -m tests.acceptance_real.runner --port 8107)
 ```
 
-runner 内置自动化 seed，每轮生成随机 schema、私有临时 dotenv、OSS prefix（或本地临时目录）与 Redis prefix，成功与失败路径均清理本轮全部资源，不删除共享数据。自动化身份仅由 runner 临时 seed 创建；持久化管理员由 `seed` 独立建立；普通测试角色经注册流程产生。生产配置不得意外用于开发验收，命令不会自动创建生产资源。上传租约签发即登记 staged，完成前及失败后禁止业务引用；租约有效期内不物理回收对象。全量结果、覆盖率与清理复验状态见[整体验收](整体验收.md)；浏览器人工流程要点同文件。
+runner 内置自动化 seed，每轮生成随机 schema、私有临时 dotenv、OSS prefix（或本地临时目录）与 Redis prefix，成功与失败路径均清理本轮全部资源，不删除共享数据。自动化身份仅由 runner 临时 seed 创建；持久化管理员由 `seed` 独立建立；普通测试角色经注册流程产生。生产配置不得意外用于开发验收，命令不会自动创建生产资源。上传租约签发即登记 staged，完成前及失败后禁止业务引用；租约有效期内不物理回收对象。全量结果、覆盖率与清理复验状态见[整体验收](整体验收.md)；浏览器人工流程要点同文件。测试通过时不保留测试报告；未通过时仅生成 `var/acceptance-real/acceptance-failure-<run_id>.log`（只含未通过项与调试信息），覆盖率产物为 `var/acceptance-real/code-coverage/<hash>/` 下的 coverage 原生 HTML／JSON／XML／TXT。
 
 ## 对象运维、举报证据与审计
 

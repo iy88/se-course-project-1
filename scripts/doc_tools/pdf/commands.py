@@ -93,8 +93,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         exporter.require_tools(exporting=True)
         plan = exporter.build_plan(selected)
         print(
-            f"Plan: {len(plan.documents)} PDFs, {len(plan.assets)} assets, "
-            f"{sum(len(items) for items in plan.records.values())} links",
+            (f"Plan: {len(plan.documents)} PDFs, {len(plan.assets)} assets, "
+             f"{sum(len(items) for items in plan.records.values())} links"),
             flush=True,
         )
         errors = exporter.export(plan, force=options.force)

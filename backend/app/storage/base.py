@@ -80,7 +80,7 @@ def namespace_for_key(key: str) -> str:
     return key.split("/", 1)[0]
 
 
-def validate_key(key: str) -> str:
+def validate_key(key: object) -> str:
     """校验逻辑 key：只允许受支持 namespace、安全路径段和图片扩展名。"""
     if not isinstance(key, str):
         raise StorageInvalidKey("非法文件 key")

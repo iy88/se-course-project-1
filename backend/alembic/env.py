@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 
-import app.models  # noqa: F401 - 注册全部模型到 metadata
+import app.models  # noqa: F401 - 注册全部模型到 metadata  # pyright: ignore[reportUnusedImport]
 from alembic import context
 from app.core.config import (
     load_migration_settings,

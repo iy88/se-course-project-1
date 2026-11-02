@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.43
-Version-Datetime: 2026-11-02T01:50:00+08:00
+Version: 0.1.44
+Version-Datetime: 2026-11-02T15:35:38+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -166,7 +166,7 @@ uv run python -m app.manage seed             # 持久化部署管理员及必要
 uv run python -m app.manage serve
 ```
 
-迁移、seed、runner 和 pytest 命令使用所选 dotenv 文件指定的后端。验收报告记录实际配置目标，不把一种存储后端的结果表述成另一种后端的验证。
+迁移、seed、runner 和 pytest 命令使用所选 dotenv 文件指定的后端。失败日志与覆盖率产物记录实际配置目标，不把一种存储后端的结果表述成另一种后端的验证。
 
 自动化与人工测试共享业务范围、角色和预期，但使用不同身份来源：自动化通过真实 HTTP 执行并清理本轮 seed；人工浏览器使用持久化初始化的管理员与注册用户。不要把自动化临时身份当作人工登录账号。
 
@@ -212,9 +212,9 @@ RUN_REAL_ACCEPTANCE=1 .venv/bin/python -m pytest -q
 .venv/bin/python -m tests.acceptance_real.runner --port 8107
 ```
 
-runner自行准备本轮seed和隔离资源，启动专用测试服务，并在成功或失败时清理本轮数据库、存储和 Redis 数据；共享数据不得删除。最终全量与故障注入的资源清理已复验，结果见开发验收文档。退出码非0或存在FAIL/SKIP/PARTIAL/UNCOVERED均须查看报告。当前清单计数和执行状态见[整体验收](docs/development/整体验收.md)；浏览器清单维持独立 NOT-RUN，不继承 API 状态。
+runner自行准备本轮seed和隔离资源，启动专用测试服务，并在成功或失败时清理本轮数据库、存储和 Redis 数据；共享数据不得删除。最终全量与故障注入的资源清理已复验，结果见开发验收文档。退出码非0或存在FAIL/SKIP/PARTIAL/UNCOVERED均须查看 `var/acceptance-real/acceptance-failure-<run_id>.log`；测试通过时不生成测试报告。当前清单计数和执行状态见[整体验收](docs/development/整体验收.md)；浏览器清单维持独立 NOT-RUN，不继承 API 状态。
 
-同一全量入口默认采集整个 `backend/app` 的代码行与分支覆盖率，并合并验收驱动和真实 API 子进程的数据。HTML、JSON、XML、文本报告保存在 `var/acceptance-real/code-coverage/`，具体路径和百分比写入本轮验收报告；代码覆盖率与路由、UC/US/SC 覆盖率分别记录。
+同一全量入口默认采集整个 `backend/app` 的代码行与分支覆盖率，并合并验收驱动和真实 API 子进程的数据。HTML、JSON、XML、文本报告保存在 `var/acceptance-real/code-coverage/<hash>/`（coverage 原生产物），运行时仅在控制台输出覆盖率数字，不再写入验收报告；代码覆盖率与路由、UC/US/SC 覆盖率分别记录。
 
 lint、类型检查、文档构建检查和前端构建仍保留为工程检查，不另维护单元/专项测试套件：
 

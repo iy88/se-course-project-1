@@ -145,7 +145,7 @@ def _new_password() -> str:
 
 
 def _validate_fingerprint(value: str) -> str:
-    if not isinstance(value, str) or len(value) < 16:
+    if len(value) < 16:
         raise SeedError("凭据文件缺少有效 seed 指纹；请人工核对，不自动重置")
     try:
         int(value, 16)

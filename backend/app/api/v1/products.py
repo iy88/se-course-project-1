@@ -379,11 +379,11 @@ async def edit_history(product_id: int, user: CurrentUser, db: DbSession) -> lis
             .order_by(col(Trade.created_at), col(Trade.id))
             .limit(1)
         )).first()
-        if first_trade is None or first_trade.created_at is None:
+        if first_trade is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "仅本人请求对应内容及之后变更有访问权")
         # 请求结束后仍可查看该商品后续变更，但不开放请求前历史（D-43）
         histories = [
-            h for h in histories if h.created_at is not None and h.created_at >= first_trade.created_at
+            h for h in histories if h.created_at >= first_trade.created_at
         ]
     return [ProductEditHistoryOut.model_validate(h) for h in histories]
 

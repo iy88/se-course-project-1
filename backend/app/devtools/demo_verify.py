@@ -73,10 +73,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
-            print(f"demo verify: checks={report.checks} ok={report.ok()} scenarios={summary.scenarios} "
-                  f"accounts={report.counts.get('accounts', 0)} products={report.counts.get('products', 0)} "
-                  f"trades={report.counts.get('trades', 0)} reports={report.counts.get('reports', 0)} "
-                  f"files={report.counts.get('files', 0)}")
+            print((f"demo verify: checks={report.checks} ok={report.ok()} scenarios={summary.scenarios} "
+                   f"accounts={report.counts.get('accounts', 0)} products={report.counts.get('products', 0)} "
+                   f"trades={report.counts.get('trades', 0)} reports={report.counts.get('reports', 0)} "
+                   f"files={report.counts.get('files', 0)}"))
             for error in report.errors:
                 print(f'demo verify error: {error}', file=sys.stderr)
         return 0 if report.ok() else 1

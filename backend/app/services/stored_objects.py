@@ -129,7 +129,7 @@ async def mark_committed(
     keys: Iterable[str],
     *,
     ref_type: str,
-    ref_id: int,
+    ref_id: object,
 ) -> int:
     """在业务事务内把 staged 对象转为 committed；不 commit。
 
@@ -214,14 +214,14 @@ async def referenced_keys(db: AsyncSession, keys: Iterable[str]) -> set[str]:
     for table in (Report.__tablename__, ReportSupplement.__tablename__):
         if dialect == "postgresql":
             statement = text(
-                f"SELECT DISTINCT value FROM {table}, "
-                f"jsonb_array_elements_text({table}.evidence_keys) AS value "
-                "WHERE value IN :keys"
+                (f"SELECT DISTINCT value FROM {table}, "
+                 f"jsonb_array_elements_text({table}.evidence_keys) AS value "
+                 "WHERE value IN :keys")
             )
         else:
             statement = text(
-                f"SELECT DISTINCT value FROM {table}, json_each({table}.evidence_keys) "
-                "WHERE value IN :keys"
+                (f"SELECT DISTINCT value FROM {table}, json_each({table}.evidence_keys) "
+                 "WHERE value IN :keys")
             )
         connection = await db.connection()
         result = await connection.execute(

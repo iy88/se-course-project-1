@@ -10,7 +10,7 @@ import hashlib
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, overload
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -100,6 +100,12 @@ class _Builder:
     # ------------------------------------------------------------------
     # 基础工具
     # ------------------------------------------------------------------
+    @overload
+    def at(self, days_ago: float) -> datetime: ...
+    @overload
+    def at(self, days_ago: None) -> None: ...
+    @overload
+    def at(self, days_ago: float | None) -> datetime | None: ...
     def at(self, days_ago: float | None) -> datetime | None:
         if days_ago is None:
             return None
@@ -518,7 +524,7 @@ class _Builder:
             reached = {transition.to_status for transition in transitions}
             if final.to_status not in reached:
                 transitions.append(final)
-        for index, transition in enumerate(transitions):
+        for transition in transitions:
             actor_id = self.user(transition.actor).id if transition.actor else None
             self.session.add(TradeTransition(
                 trade_id=trade.id,
@@ -584,6 +590,7 @@ class _Builder:
         return entry["key"]
 
     async def _case(self, spec: catalog.CaseSpec, *, subject_key: str | None = None, **links: int | None) -> DisposalCase:
+        subject = subject_key or spec.subject
         case = DisposalCase(
             case_type=spec.case_type,
             status=spec.status,
@@ -592,7 +599,7 @@ class _Builder:
             product_id=links.get("product_id"),
             report_id=links.get("report_id"),
             trade_id=links.get("trade_id"),
-            subject_user_id=self.user(subject_key or spec.subject).id if (subject_key or spec.subject) else None,
+            subject_user_id=self.user(subject).id if subject else None,
             title=spec.title,
             conclusion=spec.conclusion,
             conclusion_reason=spec.conclusion_reason,

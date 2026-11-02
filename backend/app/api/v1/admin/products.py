@@ -422,8 +422,8 @@ async def restore_product_display(
         [seller.id],
         "disposal",
         "商品公开访问限制已解除",
-        f"商品「{product.title}」的公开访问限制已由管理员解除，原因：{reason}。"
-        "商品原生命周期状态、交易锁单及冻结不变。",
+        (f"商品「{product.title}」的公开访问限制已由管理员解除，原因：{reason}。"
+         "商品原生命周期状态、交易锁单及冻结不变。"),
         link_type="product",
         link_id=product.id,
     )

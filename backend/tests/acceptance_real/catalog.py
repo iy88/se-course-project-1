@@ -222,12 +222,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"coverage: {output}")
     print(
-        "coverage: "
-        f"checks={payload['summary']['checks']} "
-        f"ac={payload['summary']['ac']} sc={payload['summary']['sc']} "
-        f"uc={payload['summary']['uc_main']} subuc={payload['summary']['uc_subcases']} "
-        f"manual={payload['summary']['manual_channel']} "
-        f"valid={payload['validation']['ok']}"
+        ("coverage: "
+         f"checks={payload['summary']['checks']} "
+         f"ac={payload['summary']['ac']} sc={payload['summary']['sc']} "
+         f"uc={payload['summary']['uc_main']} subuc={payload['summary']['uc_subcases']} "
+         f"manual={payload['summary']['manual_channel']} "
+         f"valid={payload['validation']['ok']}")
     )
     for error in payload["validation"]["errors"]:
         print(f"coverage error: {error}", file=sys.stderr)

@@ -79,8 +79,8 @@ class OutputChecks(ExporterBase):
                     path_part = urlsplit(record.rewritten).path
                     if not path_part.lower().endswith(".pdf"):
                         errors.append(
-                            f"{source}: Markdown link is not a .pdf target: "
-                            f"{record.rewritten}"
+                            (f"{source}: Markdown link is not a .pdf target: "
+                             f"{record.rewritten}")
                         )
                 else:
                     local_assets += 1

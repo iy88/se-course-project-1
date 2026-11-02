@@ -1,0 +1,27 @@
+{
+  "include": [
+    "backend",
+    "scripts"
+  ],
+  "extraPaths": [
+    "backend",
+    "scripts"
+  ],
+  "pythonVersion": "3.13",
+  "exclude": [
+    "**/.venv/**",
+    "**/node_modules/**",
+    "**/__pycache__/**",
+    "var/**"
+  ],
+  "reportImplicitStringConcatenation": "warning",
+  "reportUnusedImport": "warning",
+  "reportUnusedVariable": "warning",
+  "reportUnusedExpression": "warning",
+  "reportUnnecessaryComparison": "warning",
+  "reportUnnecessaryIsInstance": "warning",
+  "reportUnreachable": "warning",
+  "reportSelfClsParameterName": "warning",
+  "reportInvalidStringEscapeSequence": "warning",
+  "pythonPlatform": "All"
+}

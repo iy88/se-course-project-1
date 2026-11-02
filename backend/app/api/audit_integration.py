@@ -77,7 +77,7 @@ async def _record_failure(request: Request, status_code: int) -> None:
         return
     target_type = classified.get("target_type")
     target_id = classified.get("target_id")
-    if classified["event_type"] == audit_service.EVENT_AUTH_LOGIN_FAILED and actor_id is not None:
+    if classified["event_type"] == audit_service.EVENT_AUTH_LOGIN_FAILED:
         target_type = "user"
         target_id = str(actor_id)
     try:
@@ -89,7 +89,7 @@ async def _record_failure(request: Request, status_code: int) -> None:
             result=classified["result"],
             reason_code=classified["reason_code"],
             actor_id=actor_id,
-            actor_role=audit_service.current_actor_role() if actor_id is not None else "anonymous",
+            actor_role=audit_service.current_actor_role(),
         )
     except Exception as exc:  # noqa: BLE001 - 中间件不得改变原响应
         logger.warning("audit middleware failure write skipped: %s", type(exc).__name__)

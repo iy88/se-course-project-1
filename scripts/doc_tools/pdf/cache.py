@@ -115,8 +115,8 @@ class IncrementalExport(ExporterBase):
         copied = self.prepare_assets(plan)
         errors: list[str] = []
         started = time.monotonic()
-        print(f"Incremental export: {len(pending)} rebuild, {reused} reused, "
-              f"{copied} changed assets; {self.jobs} job(s) to {self.output}", flush=True)
+        print((f"Incremental export: {len(pending)} rebuild, {reused} reused, "
+               f"{copied} changed assets; {self.jobs} job(s) to {self.output}"), flush=True)
 
         def completed(source, destination):
             if _hash_file(source) != fingerprints[source]["source_sha256"]:
@@ -148,6 +148,6 @@ class IncrementalExport(ExporterBase):
                     except (ExportError, OSError) as error:
                         errors.append(str(error))
                         print(f"[{index}/{len(pending)}] FAILED {source}", flush=True)
-        print(f"Exported {len(pending) - len(errors)}/{len(pending)} PDFs; "
-              f"reused {reused}; {time.monotonic() - started:.1f}s", flush=True)
+        print((f"Exported {len(pending) - len(errors)}/{len(pending)} PDFs; "
+               f"reused {reused}; {time.monotonic() - started:.1f}s"), flush=True)
         return errors

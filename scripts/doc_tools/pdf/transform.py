@@ -97,8 +97,8 @@ class DocumentTransform(ExporterBase):
                 # robust inside a \section moving argument.
                 state.targets.add(anchor)
                 commands.append(
-                    f"\\phantomsection\\hypertarget{{{anchor}}}{{}}"
-                    f"\\label{{{anchor}}}"
+                    (f"\\phantomsection\\hypertarget{{{anchor}}}{{}}"
+                     f"\\label{{{anchor}}}")
                 )
         if commands:
             state.header_targets[id(node)] = "\n".join(commands)
@@ -304,8 +304,8 @@ class DocumentTransform(ExporterBase):
                     state.aliases.update(ids)
                     state.targets.update(anchors)
                     latex = "".join(
-                        f"\\phantomsection\\hypertarget{{{anchor}}}{{}}"
-                        f"\\label{{{anchor}}}"
+                        (f"\\phantomsection\\hypertarget{{{anchor}}}{{}}"
+                         f"\\label{{{anchor}}}")
                         for anchor in anchors
                     )
                     return {"t": kind, "c": ["latex", latex]}

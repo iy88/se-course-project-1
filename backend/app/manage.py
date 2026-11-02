@@ -66,7 +66,7 @@ def run_migrate(revision: str) -> int:
             raise ConfigurationError("SQLite本地初始化只支持head；PostgreSQL使用版本化迁移")
         from sqlalchemy.ext.asyncio import create_async_engine
 
-        import app.models  # noqa: F401 - register metadata
+        import app.models  # noqa: F401 - register metadata  # pyright: ignore[reportUnusedImport]
         from app.db.migrations import upgrade_additive_schema
         from app.db.session import Base
 
@@ -127,8 +127,8 @@ def run_seed(admin_email: str | None, admin_name: str, categories: list[str]) ->
         if password != getpass.getpass("Confirm administrator password: "):
             raise ConfigurationError("两次密码不一致")
         result = asyncio.run(initialize(settings, admin_email=email, password=password, admin_name=admin_name, categories=categories))
-    print(f"Initialization: admin_id={result.admin_id} admin_created={result.admin_created} "
-          f"categories_created={result.categories_created} categories_existing={result.categories_existing}")
+    print((f"Initialization: admin_id={result.admin_id} admin_created={result.admin_created} "
+           f"categories_created={result.categories_created} categories_existing={result.categories_existing}"))
     return 0
 
 

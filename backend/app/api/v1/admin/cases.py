@@ -192,24 +192,24 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
     # 附加上下文
     if case.product_id:
         product = await db.get(Product, case.product_id)
+        data["product"] = None
         if product:
             from app.storage.base import get_storage
 
             product_image_urls = [get_storage().public_url(i.file_key) for i in product.images]
-        data["product"] = {
-            "id": product.id,
-            "title": product.title,
-            "description": product.description,
-            "price_cents": product.price_cents,
-            "status": product.status,
-            "display_restricted": product.display_restricted,
-            "display_restricted_reason": product.display_restricted_reason,
-            "display_restricted_case_id": product.display_restricted_case_id,
-            "image_keys": [i.file_key for i in product.images],
-            "image_urls": product_image_urls,
-            "tag_names": [t.name for t in product.tags],
-        } if product else None
-        if product:
+            data["product"] = {
+                "id": product.id,
+                "title": product.title,
+                "description": product.description,
+                "price_cents": product.price_cents,
+                "status": product.status,
+                "display_restricted": product.display_restricted,
+                "display_restricted_reason": product.display_restricted_reason,
+                "display_restricted_case_id": product.display_restricted_case_id,
+                "image_keys": [i.file_key for i in product.images],
+                "image_urls": product_image_urls,
+                "tag_names": [t.name for t in product.tags],
+            }
             from sqlmodel import select as _select
 
             from app.models import ProductTagApplication
@@ -228,6 +228,7 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
         from app.models import Report, ReportSupplement
 
         report = await db.get(Report, case.report_id)
+        data["report"] = None
         if report:
             from app.storage.base import get_storage
 
@@ -238,29 +239,28 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
                 .where(col(ReportSupplement.report_id) == report.id)
                 .order_by(col(ReportSupplement.id))
             )).all()
-        data["report"] = {
-            "id": report.id,
-            "reporter_id": report.reporter_id,
-            "target_type": report.target_type,
-            "target_id": report.target_id,
-            "reason": report.reason,
-            "detail": report.detail,
-            "evidence_keys": report.evidence_keys,
-            "evidence_urls": report_evidence_urls,
-            "supplements": [
-                {
-                    "id": supplement.id,
-                    "content": supplement.content,
-                    "created_at": supplement.created_at.isoformat() if supplement.created_at else None,
-                    "evidence_urls": [storage.public_url(key) for key in supplement.evidence_keys],
-                }
-                for supplement in supplements
-            ],
-            "status": report.status,
-            "result_confirmed": report.result_confirmed,
-        } if report else None
-        # 举报目标内容（限必要范围展示）
-        if report:
+            data["report"] = {
+                "id": report.id,
+                "reporter_id": report.reporter_id,
+                "target_type": report.target_type,
+                "target_id": report.target_id,
+                "reason": report.reason,
+                "detail": report.detail,
+                "evidence_keys": report.evidence_keys,
+                "evidence_urls": report_evidence_urls,
+                "supplements": [
+                    {
+                        "id": supplement.id,
+                        "content": supplement.content,
+                        "created_at": supplement.created_at.isoformat() if supplement.created_at else None,
+                        "evidence_urls": [storage.public_url(key) for key in supplement.evidence_keys],
+                    }
+                    for supplement in supplements
+                ],
+                "status": report.status,
+                "result_confirmed": report.result_confirmed,
+            }
+            # 举报目标内容（限必要范围展示）
             from app.api.v1.admin.reports import target_snapshot
 
             data["report_target"] = await target_snapshot(db, report)

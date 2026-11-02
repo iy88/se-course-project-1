@@ -334,8 +334,8 @@ class OssStorage(StorageBackend):
                 delay = min(0.05 * (2**attempt), 0.5) if retry else 0
                 details = _error_details(exc)
                 logger.warning(
-                    'storage_%s_%s attempt=%s/%s attempt_ms=%.1f elapsed_ms=%.1f '
-                    'timeout_s=%s retryable=%s next_delay_s=%s status=%s code=%s request_id=%s details=%s',
+                    ('storage_%s_%s attempt=%s/%s attempt_ms=%.1f elapsed_ms=%.1f '
+                     'timeout_s=%s retryable=%s next_delay_s=%s status=%s code=%s request_id=%s details=%s'),
                     operation, 'retry' if retry else 'failed', attempt + 1, attempts,
                     (time.monotonic() - attempt_started) * 1000,
                     (time.monotonic() - started) * 1000, self.config.timeout_seconds,

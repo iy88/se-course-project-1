@@ -263,7 +263,7 @@ def pdf_replacement_glyphs(pdf: Path, pdftotext: str | None = None,
     )
     if result.returncode:
         raise ExportError(
-            f"{pdf}: pdftotext failed\n"
-            f"{result.stderr.decode(errors='replace')[-2000:]}"
+            (f"{pdf}: pdftotext failed\n"
+             f"{result.stderr.decode(errors='replace')[-2000:]}")
         )
     return result.stdout.decode("utf-8", errors="replace").count("\ufffd")

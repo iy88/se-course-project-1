@@ -1,4 +1,7 @@
-"""Measure application code in the acceptance driver and real API subprocess."""
+"""Measure application code in the acceptance driver and real API subprocess.
+
+只保留 coverage 原生产物（HTML/JSON/XML/TXT 与 .coverage 数据文件），不写自定义摘要。
+"""
 from __future__ import annotations
 
 import io
@@ -79,5 +82,4 @@ class CodeCoverage:
                 "text": "coverage.txt", "data": ".coverage",
             }.items()},
         }
-        (self.root / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
         return summary

@@ -89,8 +89,8 @@ def main():
             print(f"{'DELETE' if args.execute else 'WOULD_DELETE'} {path}", flush=True)
             if args.execute:
                 shutil.rmtree(path)
-        print(f"Retention {'executed' if args.execute else 'preview'}: "
-              f"releases={len(releases)}, backups={len(old_backups)}")
+        print((f"Retention {'executed' if args.execute else 'preview'}: "
+               f"releases={len(releases)}, backups={len(old_backups)}"))
 
 
 if __name__ == "__main__":

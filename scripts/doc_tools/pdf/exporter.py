@@ -135,8 +135,8 @@ class PdfExporter(FontSupport, DocumentTransform, IncrementalExport, OutputCheck
             raise ExportError(f"Executable not found: {command[0]}") from error
         except subprocess.TimeoutExpired as error:
             raise ExportError(
-                f"Timed out after {self.timeout if timeout is None else timeout}s: "
-                f"{' '.join(command[:3])}"
+                (f"Timed out after {self.timeout if timeout is None else timeout}s: "
+                 f"{' '.join(command[:3])}")
             ) from error
 
 

@@ -120,7 +120,8 @@ async def _verify_objects(session: AsyncSession, data: dict, report: Verificatio
         report.check(isinstance(entry, dict) and "kind" in entry and "id" in entry, f"对象结构不完整：{key}")
         if not isinstance(entry, dict):
             continue
-        model = models.get(entry.get("kind"))
+        kind = entry.get("kind")
+        model = models.get(kind) if isinstance(kind, str) else None
         report.check(model is not None, f"未知对象类型：{key}")
         if model is None:
             continue
@@ -268,7 +269,7 @@ async def _verify_products(session: AsyncSession, data: dict, report: Verificati
                 report.check(bool(apps[index].decision_reason), f"拒绝标签缺少原因：{spec.key}")
         if "课本" in [app.requested_name for app in spec.tag_apps]:
             alias = (await session.exec(
-                select(CategoryAlias).where(CategoryAlias.name == "课本", CategoryAlias.removed_at.is_(None))
+                select(CategoryAlias).where(CategoryAlias.name == "课本", col(CategoryAlias.removed_at).is_(None))
             )).first()
             report.check(alias is not None, "教材别名“课本”缺失")
 
@@ -415,7 +416,7 @@ async def _verify_trades(session: AsyncSession, data: dict, report: Verification
             for transition in transitions:
                 created = _at(transition.created_at)
                 report.check(created is not None, f"转移缺时间：{spec.key}")
-                report.check(previous is None or (created is not None and previous is not None and created >= previous),
+                report.check(previous is None or (created is not None and created >= previous),
                              f"转移时间倒序：{spec.key}")
                 previous = created
 
@@ -505,7 +506,8 @@ async def _verify_reports(session: AsyncSession, data: dict, report: Verificatio
             report.check(product is not None, f"举报商品目标缺失：{spec.key}")
             if spec.status == "handled" and spec.key == "report_product_handled" and product is not None:
                 report.check(product.display_restricted, f"处置后商品未受限：{spec.key}")
-                report.check(product.display_restricted_case_id == _id(data, spec.case.key), f"受限事项关联不符：{spec.key}")
+                report.check(spec.case is not None and product.display_restricted_case_id == _id(data, spec.case.key),
+                             f"受限事项关联不符：{spec.key}")
         elif spec.target_type == "comment":
             comment = await session.get(__import__("app.models", fromlist=["Comment"]).Comment, item.target_id)
             report.check(comment is not None, f"举报评论目标缺失：{spec.key}")
@@ -620,7 +622,8 @@ async def _verify_cross_invariants(session: AsyncSession, data: dict, report: Ve
     from app.models.user import AccountRestriction, User
 
     restricted_without_case = (await session.exec(
-        select(Product.id).where(Product.display_restricted.is_(True), Product.display_restricted_case_id.is_(None))
+        select(Product.id).where(col(Product.display_restricted).is_(True),
+                                 col(Product.display_restricted_case_id).is_(None))
     )).all()
     report.check(not restricted_without_case, "受限商品缺少关联事项")
     active_bans = (await session.exec(
@@ -636,12 +639,12 @@ async def _verify_cross_invariants(session: AsyncSession, data: dict, report: Ve
         )).first()
         report.check(active is not None, f"封禁用户缺少生效限制：{user.display_name}")
     locking = (await session.exec(
-        select(Trade.product_id).where(Trade.status.in_(["in_progress", "disputed", "abnormal"]))
+        select(Trade.product_id).where(col(Trade.status).in_(["in_progress", "disputed", "abnormal"]))
     )).all()
     report.check(len(locking) == len(set(locking)), "同一商品存在多笔锁单交易")
     for product in (await session.exec(select(Product).where(Product.status == "in_transaction"))).all():
         report.check(product.id in set(locking), "交易中商品缺少锁单交易")
-    for report_row in (await session.exec(select(Report).where(Report.status.in_(["handled", "unfounded"])))).all():
+    for report_row in (await session.exec(select(Report).where(col(Report.status).in_(["handled", "unfounded"])))).all():
         report.check(report_row.result_confirmed and report_row.closed_at is not None,
                      f"已结举报缺少确认或结案时间：{report_row.id}")
         report.check(report_row.public_result is not None if report_row.status == "handled" else report_row.public_result is None,
@@ -687,7 +690,7 @@ async def _verify_api_visibility(session: AsyncSession, data: dict, report: Veri
     admin = await session.get(User, _id(data, "account_admin"))
     admin2 = await session.get(User, _id(data, "account_admin2"))
     outsider = await session.get(User, _id(data, "account_outsider"))
-    if not all((buyer, admin, admin2, outsider)):
+    if buyer is None or admin is None or admin2 is None or outsider is None:
         report.check(False, "只读 API 核验缺少账号")
         return
     result = await search(session, buyer, keyword="山地车", category_ids=None, category_names=None,

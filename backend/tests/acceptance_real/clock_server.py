@@ -112,9 +112,9 @@ def main(argv: list[str] | None = None) -> int:
     from app.main import app
 
     print(
-        "acceptance clock server: "
-        f"env={settings.environment} "
-        f"clock_file={clock_file.name} patched={len(patched)}",
+        ("acceptance clock server: "
+         f"env={settings.environment} "
+         f"clock_file={clock_file.name} patched={len(patched)}"),
         flush=True,
     )
     server = uvicorn.Server(uvicorn.Config(

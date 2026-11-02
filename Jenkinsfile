@@ -177,6 +177,10 @@ PY
                         # 成功或失败后均删除本轮生成的基础配置。
                         trap 'rm -f .env.dev' EXIT
 
+                        # 清理上一轮构建残留的验收产物，只保留本轮失败日志与覆盖率原生产物。
+                        rm -rf ../var/acceptance-real/code-coverage
+                        rm -f ../var/acceptance-real/acceptance-failure-*.log
+
                         # 使用现有业务验收入口，由 runner 启动并清理隔离测试服务。
                         APP_ENV_FILE=.env.dev \
                             .venv/bin/python -m tests.acceptance_real.runner \
@@ -188,7 +192,8 @@ PY
             post {
                 always {
                     archiveArtifacts(
-                        artifacts: 'source/var/acceptance-real/acceptance-*.json,source/var/acceptance-real/acceptance-*.md',
+                        artifacts: 'source/var/acceptance-real/code-coverage/**,source/var/acceptance-real/acceptance-failure-*.log',
+                        fingerprint: true,
                         allowEmptyArchive: true
                     )
                 }

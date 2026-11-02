@@ -95,8 +95,8 @@ def inspect_status():
         alive(r) for r in state['services'].values()) else 1
 
 if len(sys.argv) != 2 or sys.argv[1] not in ('start', 'stop', 'restart', 'status', '_run'):
-    print('Usage: ./scripts/dev.sh {start|stop|restart|status}\n'
-          'start runs in the background; use stop to stop all managed services.')
+    print(('Usage: ./scripts/dev.sh {start|stop|restart|status}\n'
+           'start runs in the background; use stop to stop all managed services.'))
     sys.exit(0 if sys.argv[1:] in ([], ['--help']) else 2)
 action = sys.argv[1]
 if action == 'restart':
@@ -248,8 +248,8 @@ try:
     if not env_path.is_file():
         example = '.env.prod.example' if env_path.name == '.env.prod' else '.env.dev.example'
         raise RuntimeError(
-            f'{env_path} is missing. Copy backend/{example} manually '
-            'and fill the appropriate values; this script never creates or copies env files.'
+            (f'{env_path} is missing. Copy backend/{example} manually '
+             'and fill the appropriate values; this script never creates or copies env files.')
         )
     run(['uv', 'sync', '--frozen'], 'backend')
     for folder in ('frontend/admin', 'frontend/mobile'):
@@ -267,8 +267,8 @@ try:
     state['services']['Mobile'] = {'pid': mobile.pid, 'started': identity(mobile.pid)}
     state['phase'] = 'running'
     save_state()
-    print('\nStarting services:\nMobile: http://localhost:5173\nAdmin: http://localhost:5174'
-          '\nBackend: http://127.0.0.1:8000/docs\nUse ./scripts/dev.sh stop to stop all services.', flush=True)
+    print(('\nStarting services:\nMobile: http://localhost:5173\nAdmin: http://localhost:5174'
+           '\nBackend: http://127.0.0.1:8000/docs\nUse ./scripts/dev.sh stop to stop all services.'), flush=True)
     while True:
         if stop_path.exists() and stop_path.read_text() == str(os.getpid()):
             break

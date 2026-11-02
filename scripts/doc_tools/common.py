@@ -6,8 +6,8 @@ from datetime import datetime
 from pathlib import Path
 
 INCLUDE = re.compile(
-    r'<!-- spec-include: path="([^"]+)" level="([3-6])"(?: view="(acceptance)")? -->'
-    r'.*?<!-- /spec-include -->', re.DOTALL,
+    (r'<!-- spec-include: path="([^"]+)" level="([3-6])"(?: view="(acceptance)")? -->'
+     r'.*?<!-- /spec-include -->'), re.DOTALL,
 )
 META = re.compile(r"\A<!--\n.*?-->\s*", re.DOTALL)
 LINK = re.compile(r"(!?\[[^\]\n]*\]\()(<[^>\n]+>|[^)\n]+)(\))")

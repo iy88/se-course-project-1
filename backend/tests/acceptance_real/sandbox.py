@@ -51,6 +51,7 @@ class Sandbox:
         self.schema_created = False
         self.schema_pending = False
         self.process = None
+        self.clock_file: Path | None = None
         self.code_coverage: CodeCoverage | None = None
         self.active = False
         self.baseline = None
@@ -98,6 +99,7 @@ class Sandbox:
         obj.active = bool(data.get("active"))
         obj.baseline = data.get("baseline")
         obj.process = None
+        obj.clock_file = None
         obj.cleanup_failures = []
         obj.evidence = {}
         obj._migration = None
@@ -172,7 +174,7 @@ class Sandbox:
             await engine.dispose()
 
     async def _create_sqlite(self, url: str):
-        import app.models  # noqa: F401
+        import app.models  # noqa: F401  # pyright: ignore[reportUnusedImport]
         from app.db.session import Base
         engine = make_async_engine(url)
         try:

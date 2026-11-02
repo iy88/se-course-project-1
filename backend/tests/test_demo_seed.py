@@ -9,12 +9,13 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TypeVar
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.v1.admin.cases import case_detail, claim_case
@@ -163,8 +164,13 @@ def _session(url: str) -> tuple:
     return engine, factory
 
 
-async def _fresh(session: AsyncSession, model, object_id: int):
-    return await session.get(model, object_id, populate_existing=True)
+_T = TypeVar('_T')
+
+
+async def _fresh(session: AsyncSession, model: type[_T], object_id: int) -> _T:
+    obj = await session.get(model, object_id, populate_existing=True)
+    assert obj is not None, f'{model.__name__} {object_id} 不存在'
+    return obj
 
 
 def test_demo_seed_sqlite_local(tmp_path):
@@ -303,9 +309,9 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
             async with factory() as session:
                 initial = await verify(session, storage_base._storage, data, verify_api=False)
                 assert initial.ok(), initial.errors[:10]
-                async def user(key: str):
+                async def user(key: str) -> User:
                     return await _fresh(session, User, _id(data, f'account_{key}'))
-                async def obj(model, key: str):
+                async def obj(model: type[_T], key: str) -> _T:
                     return await _fresh(session, model, _id(data, key))
 
                 admin = await user('admin')
@@ -357,7 +363,7 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
                 ), seller2, session)
                 camera = await _fresh(session, Product, camera.id)
                 assert camera.status == 'pending_review'
-                records = (await session.exec(select(ReviewRecord).where(ReviewRecord.product_id == camera.id).order_by(ReviewRecord.id))).all()
+                records = (await session.exec(select(ReviewRecord).where(ReviewRecord.product_id == camera.id).order_by(col(ReviewRecord.id)))).all()
                 assert [item.result for item in records] == ['rejected', 'pending']
 
                 monitor = await obj(Product, 'product_monitor_resubmitted')
@@ -369,7 +375,7 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
                 ), seller2, session)
                 monitor = await _fresh(session, Product, monitor.id)
                 assert monitor.status == 'pending_review'
-                monitor_records = (await session.exec(select(ReviewRecord).where(ReviewRecord.product_id == monitor.id).order_by(ReviewRecord.id))).all()
+                monitor_records = (await session.exec(select(ReviewRecord).where(ReviewRecord.product_id == monitor.id).order_by(col(ReviewRecord.id)))).all()
                 assert [item.result for item in monitor_records] == ['rejected', 'withdrawn', 'pending']
 
                 # 3. 搜索别名、价格、受限商品隐藏与收藏。
@@ -471,10 +477,10 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
                 assert disputed.status == 'in_progress'
                 assert disputed.confirm_wait_started_at is None
                 current = (await session.exec(select(CompletionConfirmation).where(
-                    CompletionConfirmation.trade_id == disputed.id, CompletionConfirmation.is_current.is_(True)))).all()
+                    CompletionConfirmation.trade_id == disputed.id, col(CompletionConfirmation.is_current).is_(True)))).all()
                 assert current == []
                 old = (await session.exec(select(CompletionConfirmation).where(
-                    CompletionConfirmation.trade_id == disputed.id, CompletionConfirmation.is_current.is_(False)))).all()
+                    CompletionConfirmation.trade_id == disputed.id, col(CompletionConfirmation.is_current).is_(False)))).all()
                 assert old
 
                 # 10. 冻结解冻：剩余计时续算。
@@ -507,7 +513,7 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
                 abnormal = await _fresh(session, Trade, abnormal.id)
                 assert abnormal.status == 'in_progress'
                 confirmations = (await session.exec(select(CompletionConfirmation).where(
-                    CompletionConfirmation.trade_id == abnormal.id, CompletionConfirmation.is_current.is_(True)))).all()
+                    CompletionConfirmation.trade_id == abnormal.id, col(CompletionConfirmation.is_current).is_(True)))).all()
                 assert confirmations == []
                 await unfreeze(abnormal.id, UnfreezeIn(reason='状态恢复后解除冻结', case_id=_id(data, 'case_trade_abnormal')), admin, session)
                 assert not (await _fresh(session, Trade, abnormal.id)).frozen
@@ -580,8 +586,8 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
                 assert frozen_im.value.status_code == 403
                 normal = await obj(Conversation, 'conversation_normal')
                 trade_branch = await obj(Conversation, 'conversation_trade_compete_a')
-                normal_last = (await session.exec(select(Message).where(Message.conversation_id == normal.id).order_by(Message.id.desc()).limit(1))).first()
-                trade_last = (await session.exec(select(Message).where(Message.conversation_id == trade_branch.id).order_by(Message.id.desc()).limit(1))).first()
+                normal_last = (await session.exec(select(Message).where(Message.conversation_id == normal.id).order_by(col(Message.id).desc()).limit(1))).first()
+                trade_last = (await session.exec(select(Message).where(Message.conversation_id == trade_branch.id).order_by(col(Message.id).desc()).limit(1))).first()
                 await advance_read(normal.id, ReadAdvanceIn(last_displayed_message_id=normal_last.id), seller, session)
                 trade_read = (await session.exec(select(ConversationRead).where(
                     ConversationRead.conversation_id == trade_branch.id, ConversationRead.user_id == seller.id))).first()
@@ -592,7 +598,7 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
                 renamed = await update_category(digital.id, __import__('app.schemas.category', fromlist=['CategoryUpdateIn']).CategoryUpdateIn(name='数码与电子'), admin, session)
                 assert renamed.name == '数码与电子'
                 alias = (await session.exec(select(CategoryAlias).where(CategoryAlias.category_id == digital.id,
-                                                                       CategoryAlias.name == '数码电子', CategoryAlias.removed_at.is_(None)))).first()
+                                                                       CategoryAlias.name == '数码电子', col(CategoryAlias.removed_at).is_(None)))).first()
                 assert alias is not None
                 unused = await obj(Category, 'category_unused')
                 await delete_category(unused.id, admin, session)
@@ -628,8 +634,8 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
                 stats_data = await stats(admin, session, date_from=start, date_to=end)
                 expected = (await session.exec(select(Trade).where(
                     Trade.status == 'completed',
-                    Trade.finished_at >= datetime.combine(datetime.fromisoformat(start).date(), datetime.min.time(), tzinfo=UTC),
-                    Trade.finished_at <= now,
+                    col(Trade.finished_at) >= datetime.combine(datetime.fromisoformat(start).date(), datetime.min.time(), tzinfo=UTC),
+                    col(Trade.finished_at) <= now,
                 ))).all()
                 assert stats_data['range']['completed_trades'] == len(expected)
                 unfiltered = await stats(admin, session, date_from=None, date_to=None)
@@ -641,7 +647,7 @@ def test_demo_seed_lifecycle_transitions(tmp_path):
 
 
 def test_demo_seed_recovers_commit_with_lost_manifest_write(tmp_path):
-    env_file, url, storage_root, manifest = _write_env(tmp_path)
+    env_file, url, _storage_root, manifest = _write_env(tmp_path)
     _create_schema(url, existing=False)
     code = """
 import sys
