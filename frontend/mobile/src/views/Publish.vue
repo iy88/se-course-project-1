@@ -24,6 +24,15 @@
         <span>{{ submitError }}</span>
       </div>
 
+      <router-link v-if="isEdit" :to="`/products/${editId}/review-records`" class="scope-entry">
+        <span class="scope-entry__icon"><AppIcon name="doc" :size="19" /></span>
+        <span class="scope-entry__main">
+          <span class="scope-entry__title">审核记录</span>
+          <span class="scope-entry__sub">查看历次审核结论与不通过原因</span>
+        </span>
+        <AppIcon name="chevron-right" :size="16" class="scope-entry__arrow" />
+      </router-link>
+
       <button type="button" class="scope-entry" @click="showProhibited = true">
         <span class="scope-entry__icon"><AppIcon name="shield" :size="19" /></span>
         <span class="scope-entry__main">
