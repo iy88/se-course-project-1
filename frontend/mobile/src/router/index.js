@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useSession } from '../stores/session'
+import { resolveRefreshFailure } from './guard'
 
 const routes = [
   { path: '/auth/login', component: () => import('../views/AuthLogin.vue'), meta: { public: true } },
@@ -48,9 +49,16 @@ router.beforeEach(async (to) => {
   if (session.verifiedToken !== token) {
     try {
       await session.refreshUser()
-    } catch {
-      // 401 或管理员资格变化清理 token；网络等暂时性错误不应误删会话。
-      if (!localStorage.getItem('token')) return to.meta.public ? true : login
+    } catch (error) {
+      // 401 时 http 拦截器已清理 token，此处 hasToken=false → login，沿用既有会话失效流程。
+      // 离线/服务端暂时不可用且本地有缓存用户时放行已缓存的应用壳（由页面提示加载失败）；
+      // 403/404 等有响应的错误维持原行为，不渲染目标页。
+      const decision = resolveRefreshFailure(error, {
+        hasToken: Boolean(localStorage.getItem('token')),
+        hasCachedUser: Boolean(session.user),
+      })
+      if (decision === 'login') return to.meta.public ? true : login
+      if (decision === 'allow-shell') return true
       return false
     }
   }

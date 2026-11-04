@@ -17,7 +17,10 @@ http.interceptors.response.use(
   (resp) => resp.data,
   (error) => {
     const detail = error.response?.data?.detail
-    const message = typeof detail === 'string' ? detail : '请求失败，请稍后重试'
+    // 无响应说明离线或无法连接：提示检查网络，与有响应的业务错误详情区分。
+    let message = '请求失败，请稍后重试'
+    if (!error.response) message = '网络不可用，请检查连接后重试'
+    else if (typeof detail === 'string') message = detail
     const isLoginRequest = error.config?.url?.split('?')[0] === '/auth/login'
     if (error.response?.status === 401 && !isLoginRequest) {
       useSession().clear()
