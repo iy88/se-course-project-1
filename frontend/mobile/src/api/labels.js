@@ -41,6 +41,23 @@ export const reportStatusLabels = {
   handled: '已处置',
 }
 
+export const reviewResultLabels = {
+  pending: '待审核',
+  approved: '审核通过',
+  rejected: '审核未通过',
+  withdrawn: '已撤回',
+}
+
+/** 审核记录结论的展示色调；未知结论保持中性样式。 */
+export function reviewResultTone(result) {
+  return {
+    approved: 'pill--ok',
+    rejected: 'pill--danger',
+    pending: 'pill--warn',
+    withdrawn: '',
+  }[result] || ''
+}
+
 export function fen2yuan(cents) {
   return (cents / 100).toFixed(2)
 }

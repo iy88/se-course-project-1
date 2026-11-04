@@ -73,6 +73,19 @@
             </p>
           </div>
 
+          <router-link
+            v-if="isMine"
+            :to="`/products/${product.id}/review-records`"
+            class="review-entry"
+          >
+            <span class="review-entry__icon"><AppIcon name="doc" :size="18" /></span>
+            <span class="review-entry__main">
+              <span class="review-entry__title">审核记录</span>
+              <span class="review-entry__sub">查看历次审核结论与不通过原因</span>
+            </span>
+            <AppIcon name="chevron-right" :size="16" class="review-entry__arrow" />
+          </router-link>
+
           <button type="button" class="seller-row" @click="router.push(`/users/${product.seller_id}`)">
             <span class="avatar-text seller-row__avatar">{{ sellerInitial }}</span>
             <span class="seller-row__main">
@@ -498,6 +511,57 @@ watch(() => route.params.id, load)
 
 .reject-box p {
   margin: 0;
+}
+
+.review-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f7f9f7;
+  color: var(--ink);
+  text-align: left;
+}
+
+.review-entry:active {
+  border-color: var(--line-strong);
+}
+
+.review-entry__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.review-entry__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.review-entry__title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.review-entry__sub {
+  color: var(--ink-meta);
+  font-size: 11.5px;
+}
+
+.review-entry__arrow {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
 }
 
 .seller-row {

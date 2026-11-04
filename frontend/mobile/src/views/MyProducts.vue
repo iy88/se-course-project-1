@@ -41,6 +41,10 @@
           </div>
 
           <div class="listing-card__foot">
+            <router-link :to="`/products/${p.id}/review-records`" class="listing-card__link">
+              <AppIcon name="doc" :size="14" />
+              审核记录
+            </router-link>
             <router-link :to="`/products/${p.id}`" class="listing-card__link">
               查看详情
               <AppIcon name="chevron-right" :size="15" />
@@ -193,7 +197,9 @@ onActivated(load)
 
 .listing-card__foot {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-top: 9px;
   padding-top: 9px;
   border-top: 1px solid var(--line);
