@@ -84,13 +84,15 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { safePostLoginRedirect } from '../router/redirect'
 import { ElMessage } from 'element-plus'
 import http from '../api/http'
 import { useSession } from '../stores/session'
 import AppIcon from '../components/AppIcon.vue'
 
 const router = useRouter()
+const route = useRoute()
 const session = useSession()
 const form = reactive({ email: '', password: '' })
 const loading = ref(false)
@@ -100,12 +102,13 @@ async function submit() {
   loading.value = true
   try {
     const data = await http.post('/auth/login', form)
-    if (data.user.role !== 'admin') {
+    if (data.user.role !== 'admin' || data.user.status !== 'normal') {
       ElMessage.error('该账户不是平台管理员')
       return
     }
     session.setSession(data.access_token, data.user)
-    router.push('/cases')
+    const redirect = route.query.redirect
+    router.replace(safePostLoginRedirect(redirect))
   } catch {
     // 失败反馈由 http 响应拦截器统一提示，登录态与管理员校验保持不变。
   } finally {

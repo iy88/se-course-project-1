@@ -61,7 +61,8 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { safePostLoginRedirect } from '../router/redirect'
 import { showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import BrandMark from '../components/BrandMark.vue'
@@ -69,6 +70,7 @@ import http from '../api/http'
 import { useSession } from '../stores/session'
 
 const router = useRouter()
+const route = useRoute()
 const session = useSession()
 const form = reactive({ email: '', password: '' })
 const loading = ref(false)
@@ -79,7 +81,10 @@ async function submit() {
     const data = await http.post('/auth/login', form)
     session.setSession(data.access_token, data.user)
     showToast('登录成功')
-    router.replace('/home')
+    const redirect = route.query.redirect
+    router.replace(safePostLoginRedirect(redirect))
+  } catch {
+    // 错误提示由 HTTP 拦截器统一展示。
   } finally {
     loading.value = false
   }

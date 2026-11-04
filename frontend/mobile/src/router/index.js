@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { showDialog } from 'vant'
+import { useSession } from '../stores/session'
 
 const routes = [
   { path: '/auth/login', component: () => import('../views/AuthLogin.vue'), meta: { public: true } },
@@ -35,11 +35,26 @@ routes.push({ path: '/:pathMatch(.*)*', redirect: '/' })
 
 const router = createRouter({ history: createWebHistory(), routes })
 
-router.beforeEach((to) => {
-  if (!to.meta.public && !localStorage.getItem('token')) {
-    showDialog({ title: '请先登录', message: '访客仅可使用注册、登录和忘记密码入口' }).catch(() => {})
-    return '/auth/login'
+router.beforeEach(async (to) => {
+  const session = useSession()
+  const token = localStorage.getItem('token')
+  const login = { path: '/auth/login', query: { redirect: to.fullPath } }
+  if (!token) {
+    if (session.user) session.clear()
+    return to.meta.public ? true : login
   }
+
+  // 已保存的 token 不是已认证状态：先校验服务端身份，再渲染受保护页面。
+  if (session.verifiedToken !== token) {
+    try {
+      await session.refreshUser()
+    } catch {
+      // 401 或管理员资格变化清理 token；网络等暂时性错误不应误删会话。
+      if (!localStorage.getItem('token')) return to.meta.public ? true : login
+      return false
+    }
+  }
+  if (to.meta.public) return '/home'
   return true
 })
 

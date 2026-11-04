@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { showToast } from 'vant'
+import { useSession } from '../stores/session'
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -17,9 +18,12 @@ http.interceptors.response.use(
   (error) => {
     const detail = error.response?.data?.detail
     const message = typeof detail === 'string' ? detail : '请求失败，请稍后重试'
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      if (!location.pathname.startsWith('/auth')) location.href = '/auth/login'
+    const isLoginRequest = error.config?.url?.split('?')[0] === '/auth/login'
+    if (error.response?.status === 401 && !isLoginRequest) {
+      useSession().clear()
+      if (!location.pathname.startsWith('/auth')) {
+        location.href = '/auth/login'
+      }
     } else {
       showToast(message)
     }
