@@ -33,6 +33,7 @@
               <van-checkbox-group v-model="draftCategoryIds">
                 <van-checkbox v-for="c in categories" :key="c.id" :name="c.id" shape="square" class="category-check">
                   <span :class="{ 'text-disabled': c.status === 'disabled' }">{{ c.name }}</span>
+                  <span v-if="categoryAliasHint(c)" class="category-alias">{{ categoryAliasHint(c) }}</span>
                   <span v-if="c.status === 'disabled'" class="pill category-disabled">已停用</span>
                 </van-checkbox>
               </van-checkbox-group>
@@ -157,6 +158,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import BrandMark from '../components/BrandMark.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { categoryAliasHint } from '../api/categoryAlias'
 import http from '../api/http'
 import { fen2yuan, productStatusLabels } from '../api/labels'
 import { buildProductSearchParams, normalizeNameFilters } from '../api/searchParams'
@@ -398,18 +400,28 @@ onMounted(async () => {
 }
 
 .category-check {
+  align-items: flex-start;
   padding: 7px 0;
 }
 
 .category-check :deep(.van-checkbox__label) {
   display: inline-flex;
+  flex: 1;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   font-size: 14px;
 }
 
 .text-disabled {
   color: var(--ink-meta);
+}
+
+.category-alias {
+  color: var(--ink-meta);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
 }
 
 .category-disabled {
