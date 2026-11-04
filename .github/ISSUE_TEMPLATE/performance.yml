@@ -1,0 +1,61 @@
+name: 性能优化
+description: 记录可度量的构建、加载或运行时性能改进
+title: "[性能] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提供可复现的基线与验证方法；优化后的结果应当可比较，不用仅调整告警阈值代替优化。
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 优化范围
+      options:
+        - 管理端
+        - 用户端
+        - 后端
+        - CI / 构建 / 部署
+        - 跨模块
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: 当前问题与测量基线
+      description: 包含环境、复现步骤及当前指标（如大小、延迟、CPU、内存）
+      placeholder: |
+        分支/HEAD：
+        环境：
+        测量方法：
+        当前指标：
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: 优化目标与预期收益
+      description: 尽量填写可比较的目标，同时说明用户实际收益
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案与影响范围
+      description: 涉及组件、风险、明确不修改的部分
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      placeholder: |
+        - [ ] 优化前后在一致条件下测量并记录
+        - [ ] 相关测试、构建与 CI 通过
+        - [ ] 不发生功能或界面回归
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: 实施与验证结果（修复者填写）
+      description: 关联 PR、构建记录、对比数据及未覆盖的人工验证
