@@ -6,6 +6,7 @@ const routes = [
   { path: '/auth/login', component: () => import('../views/AuthLogin.vue'), meta: { public: true } },
   { path: '/auth/register', component: () => import('../views/AuthRegister.vue'), meta: { public: true } },
   { path: '/auth/forgot', component: () => import('../views/AuthForgot.vue'), meta: { public: true } },
+  { path: '/offline', component: () => import('../views/Offline.vue'), meta: { public: true, offline: true } },
   {
     path: '/',
     component: () => import('../views/Layout.vue'),
@@ -37,6 +38,8 @@ routes.push({ path: '/:pathMatch(.*)*', redirect: '/' })
 const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach(async (to) => {
+  // 离线兜底页不含业务数据，必须在任何 token 刷新前允许直接进入。
+  if (to.meta.offline) return true
   const session = useSession()
   const token = localStorage.getItem('token')
   const login = { path: '/auth/login', query: { redirect: to.fullPath } }
@@ -52,13 +55,17 @@ router.beforeEach(async (to) => {
     } catch (error) {
       // 401 时 http 拦截器已清理 token，此处 hasToken=false → login，沿用既有会话失效流程。
       // 离线/服务端暂时不可用且本地有缓存用户时放行已缓存的应用壳（由页面提示加载失败）；
-      // 403/404 等有响应的错误维持原行为，不渲染目标页。
+      // 403/404 及程序内部异常不会被误认成离线；没有缓存用户时显示公共离线页。
       const decision = resolveRefreshFailure(error, {
         hasToken: Boolean(localStorage.getItem('token')),
         hasCachedUser: Boolean(session.user),
       })
       if (decision === 'login') return to.meta.public ? true : login
       if (decision === 'allow-shell') return true
+      // 有 token 但没有缓存的用户时，展示不泄露业务数据的独立兜底页，而不是取消导航导致白屏。
+      if (decision === 'offline') {
+        return { path: '/offline', query: { redirect: to.fullPath } }
+      }
       return false
     }
   }
