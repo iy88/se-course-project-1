@@ -39,12 +39,13 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
+import { createReviewRecordsLoader } from '../api/reviewRecords'
 import { fmtTime, reviewResultLabels, reviewResultTone } from '../api/labels'
 
 const route = useRoute()
@@ -59,23 +60,23 @@ function reasonText(record) {
   return '本次审核未记录原因'
 }
 
-async function load() {
-  if (loading.value) return
-  loading.value = true
-  error.value = ''
-  try {
-    const data = await http.get(`/products/${route.params.id}/review-records`)
-    records.value = Array.isArray(data) ? data : []
-    loaded.value = true
-  } catch {
-    error.value = '审核记录加载失败，请稍后重试。'
-  } finally {
-    loading.value = false
-  }
+const loader = createReviewRecordsLoader(
+  (productId) => http.get(`/products/${productId}/review-records`),
+  (state) => {
+    if ('records' in state) records.value = state.records
+    if ('loaded' in state) loaded.value = state.loaded
+    if ('loading' in state) loading.value = state.loading
+    if ('error' in state) error.value = state.error
+  },
+)
+
+function load() {
+  return loader.load(route.params.id)
 }
 
 onMounted(load)
 watch(() => route.params.id, load)
+onUnmounted(loader.invalidate)
 </script>
 
 <style scoped>
