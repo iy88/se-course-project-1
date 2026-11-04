@@ -8,18 +8,18 @@ const homeSource = readFileSync(new URL('../src/views/Home.vue', import.meta.url
 test('分类别名作为同一标签的说明展示，不重复计为独立标签', () => {
   assert.equal(
     categoryAliasHint({ id: 7, name: '教材书籍', aliases: ['课本'] }),
-    '（别名：课本，同属本分类）',
+    '（课本，同属本分类）',
   )
   assert.equal(
     categoryAliasHint({ name: '数码产品', aliases: ['电子产品', '数码'] }),
-    '（别名：电子产品、数码，同属本分类）',
+    '（电子产品、数码，同属本分类）',
   )
   assert.equal(categoryAliasHint({ name: '教材书籍', aliases: [] }), '')
   assert.equal(categoryAliasHint({ name: '教材书籍' }), '')
   assert.equal(categoryAliasHint({ name: '教材书籍', aliases: '课本' }), '')
   assert.equal(
     categoryAliasHint({ name: '交通出行', aliases: [' 自行车 ', '', null, undefined] }),
-    '（别名：自行车，同属本分类）',
+    '（自行车，同属本分类）',
   )
   assert.equal(categoryAliasHint(null), '')
 })

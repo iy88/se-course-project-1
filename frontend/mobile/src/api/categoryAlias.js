@@ -9,5 +9,5 @@ export function categoryAliasHint(category) {
         .filter(Boolean)
     : []
   if (!aliases.length) return ''
-  return `（别名：${aliases.join('、')}，同属本分类）`
+  return `（${aliases.join('、')}，同属本分类）`
 }
