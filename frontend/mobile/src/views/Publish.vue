@@ -82,9 +82,21 @@
             <span>至少选择一个或申请新标签</span>
           </header>
           <van-checkbox-group v-model="selectedCategoryIds" direction="horizontal" class="tags">
-            <van-checkbox v-for="c in categories" :key="c.id" :name="c.id" shape="square">{{ c.name }}</van-checkbox>
+            <van-checkbox
+              v-for="c in categories"
+              :key="c.id"
+              :name="c.id"
+              shape="square"
+              :disabled="!isCategorySelectable(c, initialCategoryIds)"
+            >
+              <span :class="{ 'category-name--off': c.status === 'disabled' }">{{ c.name }}</span>
+              <span v-if="c.status === 'disabled'" class="category-disabled">已停用</span>
+            </van-checkbox>
           </van-checkbox-group>
           <div v-if="!categories.length" class="form-hint form-hint--pad">分类暂未加载，请刷新页面后重试。</div>
+          <p v-else-if="hasDisabledCategories" class="form-hint form-hint--pad">
+            已停用标签不能用于新发布或新增关联；编辑时仅保留原已有分类。
+          </p>
 
           <div class="form-fields form-fields--top">
             <van-field
@@ -146,7 +158,12 @@ import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
 import { uploadImage } from '../api/uploads'
-import { pendingTagApplications as readPendingTagApplications, resolveResubmitMode, withdrawalSelection } from '../api/productEdit'
+import {
+  isCategorySelectable,
+  pendingTagApplications as readPendingTagApplications,
+  resolveResubmitMode,
+  withdrawalSelection,
+} from '../api/productEdit'
 import { useSession } from '../stores/session'
 
 const route = useRoute()
@@ -160,6 +177,7 @@ const priceYuan = ref('')
 const fileList = ref([])
 const categories = ref([])
 const selectedCategoryIds = ref([])
+const initialCategoryIds = ref([])
 const newTagName = ref('')
 const prohibited = ref([])
 const showProhibited = ref(false)
@@ -168,6 +186,10 @@ const product = ref(null)
 const submitError = ref('')
 const withdrawTagIds = ref([])
 const pendingTagApplications = computed(() => readPendingTagApplications(product.value))
+// 停用标签只在编辑原商品时作为原已有分类保留；是否可选由 isCategorySelectable 按初始关联判断。
+const hasDisabledCategories = computed(() =>
+  categories.value.some((category) => category.status === 'disabled'),
+)
 
 // 仅交易冻结、账户未封禁时，编辑无关商品仍允许；新发布与上下架由服务端及按钮共同限制。
 const blocked = computed(() => {
@@ -289,6 +311,7 @@ async function loadEditProduct() {
     form.description = data.description
     priceYuan.value = (Number(data.price_cents || 0) / 100).toFixed(2)
     selectedCategoryIds.value = [...(data.tag_ids || [])]
+    initialCategoryIds.value = [...(data.tag_ids || [])]
     withdrawTagIds.value = []
     fileList.value = (data.image_urls || []).map((url, index) => ({
       url,
@@ -462,6 +485,20 @@ onMounted(async () => {
 
 .tags :deep(.van-checkbox__label) {
   font-size: 13.5px;
+}
+
+.category-name--off {
+  color: var(--ink-faint);
+}
+
+.category-disabled {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-meta);
+  font-size: 10.5px;
+  line-height: 1.5;
 }
 
 .edit-tag-hint {
