@@ -45,3 +45,8 @@ concurrency = ["thread", "greenlet"]
 [tool.coverage.report]
 precision = 2
 show_missing = true
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
