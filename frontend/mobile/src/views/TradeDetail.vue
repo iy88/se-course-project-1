@@ -162,7 +162,12 @@
             <van-button size="small" type="danger" :disabled="!canDecideCancel" @click="confirmCancel">对方已申请取消，点击同意</van-button>
           </template>
         </van-cell>
-        <van-cell v-else-if="trade.cancel_requested_by === session.user.id" title="取消申请" value="已发起，等待对方同意" />
+        <van-cell v-else-if="trade.cancel_requested_by === session.user.id" title="取消申请" label="已发起，等待对方同意">
+          <template #value>
+            <van-button size="small" plain :disabled="!canWithdrawCancel" :loading="withdrawingCancel" @click="withdrawCancel">撤回取消申请</van-button>
+          </template>
+        </van-cell>
+        <p v-if="trade.cancel_requested_by" class="hint">未同意前取消不生效，交易继续有效；申请人可撤回取消申请。</p>
         <div class="action-row">
           <van-button size="small" type="warning" plain :disabled="!canCancel" @click="cancel">发起取消</van-button>
           <van-button size="small" type="danger" plain :disabled="!canDispute" @click="dispute">发起争议</van-button>
@@ -313,6 +318,10 @@ const canConfirm = computed(
 )
 const canDecideAgreement = computed(() => !trade.value?.frozen && tradeWriteAllowed.value)
 const canDecideCancel = computed(() => !trade.value?.frozen && tradeWriteAllowed.value)
+const withdrawingCancel = ref(false)
+const canWithdrawCancel = computed(
+  () => interactive.value && trade.value?.cancel_requested_by === session.user?.id && !withdrawingCancel.value,
+)
 const canCancel = computed(
   () => interactive.value && !trade.value?.cancel_requested_by,
 )
@@ -523,6 +532,21 @@ async function cancel() {
     await load()
   } catch (err) {
     keepStateOnFailure('发起取消失败', err)
+  }
+}
+
+async function withdrawCancel() {
+  if (!canWithdrawCancel.value) return
+  withdrawingCancel.value = true
+  actionError.value = ''
+  try {
+    const data = await http.post(`/trades/${route.params.id}/cancel/withdraw`, {})
+    showToast(data.detail)
+    await load()
+  } catch (err) {
+    keepStateOnFailure('撤回取消申请失败', err)
+  } finally {
+    withdrawingCancel.value = false
   }
 }
 
