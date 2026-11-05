@@ -11,27 +11,23 @@
     <div class="popup-panel report-dialog">
       <h3>{{ title }}</h3>
       <p class="report-dialog__hint">填写举报原因；补充说明与截图证据可选，证据仅管理员可见。</p>
-      <van-field
+      <TextField :limit="500"
         v-model="reason"
         label="原因"
         type="textarea"
         rows="2"
-        maxlength="500"
-        show-word-limit
         required
         placeholder="请填写举报原因（必填）"
         :disabled="busy"
-      />
-      <van-field
+       />
+      <TextField :limit="2000"
         v-model="detail"
         label="补充说明"
         type="textarea"
         rows="3"
-        maxlength="2000"
-        show-word-limit
         placeholder="补充说明（可选，最多 2000 字）"
         :disabled="busy"
-      />
+       />
       <div class="report-dialog__evidence">
         <span class="report-dialog__label">截图证据（可选，最多 3 张）</span>
         <van-uploader
@@ -53,6 +49,7 @@
 </template>
 
 <script setup>
+import TextField from './TextField.vue'
 import { ref, watch } from 'vue'
 import { showToast } from 'vant'
 import http from '../api/http'

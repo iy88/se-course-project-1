@@ -1,11 +1,10 @@
 """用户侧处置沟通（C-13）：问询说明、处置申辩与管理员回复（BR-26/32/33）。"""
 
-from typing import Annotated
-
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel
 from sqlmodel import col, select
 
+from app.core.text import NonBlank2000
 from app.api.deps import CurrentUser, DbSession
 from app.models import DisposalCase, Trade
 from app.models.enums import (
@@ -21,7 +20,7 @@ router = APIRouter(prefix="/me/cases", tags=["my-cases"])
 
 
 class StatementIn(BaseModel):
-    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+    content: NonBlank2000
 
 
 async def _entitled_case(db, case_id: int, user_id: int) -> DisposalCase:

@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import ConfigurationError, Settings
 from app.core.security import hash_password
+from app.core.text import TextLimit
 from app.db.migrations import upgrade_additive_schema
 from app.db.session import Base
 from app.models import Category, CategoryAlias, User
@@ -44,12 +45,12 @@ async def initialize(settings: Settings, *, admin_email: str, password: str | No
                      admin_name: str = "管理员", categories: Sequence[str] = ()) -> InitializationResult:
     """独立事务：已有账户不提权、改密或解除限制；SQLite建表，PG先显式迁移。"""
     email = _email(admin_email)
-    name = admin_name.strip()
-    if not name or len(name) > 64:
-        raise ConfigurationError("管理员显示名称须为1至64个字符")
-    names = list(dict.fromkeys(value.strip() for value in categories))
-    if any(not value or len(value) > 64 for value in names):
-        raise ConfigurationError("分类名称须为1至64个字符")
+    try:
+        rule = TextLimit(64, required=True)
+        name = rule.validate(admin_name)
+        names = list(dict.fromkeys(rule.validate(value) for value in categories))
+    except ValueError as exc:
+        raise ConfigurationError(f"管理员显示名称或分类名称无效：{exc}") from None
     settings.prepare_runtime_paths()
     options: dict[str, Any] = {}
     if settings.database_url.startswith("postgresql+asyncpg:"):

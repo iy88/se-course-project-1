@@ -1,0 +1,12 @@
+[
+  {"text":"中文", "count":2},
+  {"text":"𠮷", "count":1},
+  {"text":"😀", "count":1},
+  {"text":"👨‍👩‍👧‍👦", "count":1},
+  {"text":"👍🏽", "count":1},
+  {"text":"🇨🇳", "count":1},
+  {"text":"é", "count":1},
+  {"text":"\r\n你好\r世界  ", "count":5, "normalized":"你好\n世界"},
+  {"text":"  \t\n", "count":0, "normalized":""},
+  {"text":"\u0085", "count":0, "normalized":""}
+]

@@ -1,6 +1,7 @@
 """分类标签 Pydantic 模型。"""
 
 from pydantic import BaseModel, Field
+from app.core.text import NonBlank64
 
 
 class CategoryOut(BaseModel):
@@ -11,13 +12,13 @@ class CategoryOut(BaseModel):
 
 
 class CategoryCreateIn(BaseModel):
-    name: str = Field(min_length=1, max_length=64)
+    name: NonBlank64
 
 
 class CategoryUpdateIn(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=64)
+    name: NonBlank64 | None = Field(default=None)
     status: str | None = None
 
 
 class CategoryAliasIn(BaseModel):
-    name: str = Field(min_length=1, max_length=64)
+    name: NonBlank64

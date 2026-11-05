@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlmodel import col, select
 
+from app.core.text import NonBlank500
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
     AccountRestriction,
@@ -114,18 +115,18 @@ async def admin_trade_view(db, trade_id: int) -> dict | None:
 
 
 class FreezeIn(BaseModel):
-    reason: str = Field(min_length=1, max_length=500)
+    reason: NonBlank500
     case_id: int | None = None
 
 
 class UnfreezeIn(BaseModel):
-    reason: str = Field(min_length=1, max_length=500)
+    reason: NonBlank500
     case_id: int | None = None  # 关联处置事项（依据）
 
 
 class AdjustIn(BaseModel):
     to_status: str
-    reason: str = Field(min_length=1, max_length=500)
+    reason: NonBlank500
     case_id: int | None = None  # 关联处置事项（依据）
 
 

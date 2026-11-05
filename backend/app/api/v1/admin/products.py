@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlmodel import and_, col, delete, func, select
 
+from app.core.text import NonBlank500, Text500
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
     AccountRestriction,
@@ -39,19 +40,19 @@ class TagDecisionIn(BaseModel):
     decision: str = Field(pattern="^(approve_new|map_alias|reject)$")
     category_id: int | None = None  # map_alias 时指向已有分类
     # 拒绝时必须说明原因；商品通过同时拒绝标签时逐申请可见。
-    reason: str | None = Field(default=None, max_length=500)
+    reason: Text500 | None = Field(default=None)
 
 
 class ReviewDecisionIn(BaseModel):
     result: str = Field(pattern="^(approved|rejected)$")
     # 商品级原因：不通过时必填；通过时可作为逐申请标签拒绝原因的 fallback。
-    reason: str | None = Field(default=None, max_length=500)
+    reason: Text500 | None = Field(default=None)
     tag_decisions: list[TagDecisionIn] = []
 
 
 class CategoryCorrectionIn(BaseModel):
     category_ids: list[int] = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=500)
+    reason: NonBlank500
 
 
 @router.get("")
@@ -135,7 +136,7 @@ async def list_products(
 
 class RestoreDisplayIn(BaseModel):
     case_id: int
-    reason: str = Field(min_length=1, max_length=500)
+    reason: NonBlank500
 
 
 def _clean_reason(value: str | None) -> str | None:

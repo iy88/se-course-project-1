@@ -2149,7 +2149,10 @@ class AcceptanceRun:
             )
             self._approve("P_COMMENT")
             product_id = int(self.products["P_COMMENT"]["id"])
-            long_comment = "评论正文" * 4096
+            # 2000 grapheme boundary includes compound emoji; 2001 is rejected before writes.
+            self._call("POST", f"/api/v1/products/{product_id}/comments", user="outsider",
+                       expected=422, json_body={"content": "评" * 2001})
+            long_comment = "👨‍👩‍👧‍👦" * 2000
             first = self._dict(
                 self._call(
                     "POST",
@@ -2161,7 +2164,7 @@ class AcceptanceRun:
             )
             self.comments["first"] = int(first["id"])
             saved=self._list(self._call("GET",f"/api/v1/products/{product_id}/comments",user="outsider"))
-            self.rec.must(next(row["content"] for row in saved if row["id"]==first["id"])==long_comment,"16384字评论完整存储并读回，超过旧500/2000字限制")
+            self.rec.must(next(row["content"] for row in saved if row["id"]==first["id"])==long_comment,"2000个组合表情完整存储并读回，字素簇计数不被码点限制拒绝")
             if self.config.settings.kv_backend == "redis":
                 # 证明服务进程确实使用 Redis KV，而不是 MemoryKV 兜底：
                 # 外部把该用户频控计数置高，真实 HTTP 评论应立刻按 Redis 值返回 429。

@@ -72,17 +72,17 @@
       </div>
 
       <div v-if="conversation && !conversation.archived" class="chat-input-bar">
-        <van-field
+        <TextField :limit="2000"
           v-model="draft"
           :placeholder="sendBlockReason || '输入消息…'"
           :disabled="!!sendBlockReason"
-          @keydown.enter.prevent="send"
-        />
+          @keydown.enter="onEnter"
+         />
         <van-button
           type="primary"
           size="small"
           :loading="sending"
-          :disabled="!!sendBlockReason"
+          :disabled="!!sendBlockReason || !!textError(draft, 2000)"
           aria-label="发送消息"
           @click="send"
         >
@@ -95,6 +95,8 @@
 </template>
 
 <script setup>
+import { textError } from '../api/text'
+import TextField from '../components/TextField.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
@@ -171,9 +173,15 @@ function scrollToBottom() {
   messagesEl.value?.scrollTo({ top: messagesEl.value.scrollHeight })
 }
 
+function onEnter(event) {
+  if (event.isComposing) return
+  event.preventDefault()
+  send()
+}
+
 async function send() {
   const content = draft.value.trim()
-  if (!content || sendBlockReason.value) return
+  if (!content || sendBlockReason.value || textError(content, 2000)) return
   sending.value = true
   try {
     await http.post(`/conversations/${route.params.id}/messages`, { content })

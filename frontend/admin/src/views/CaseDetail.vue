@@ -146,7 +146,7 @@
                 <p class="hint">
                   仅解除由本事项产生的公开展示限制；不解除交易冻结，也不把商品自动重新上架。其他账户封禁或其他处置限制不受影响。
                 </p>
-                <el-input
+                <TextInput :limit="500"
                   v-model="restoreReason"
                   type="textarea"
                   placeholder="解除依据（必填，留据并通知卖方）"
@@ -298,7 +298,7 @@
             <template v-if="detail.case_type === 'avatar_review'">
               <el-image v-if="detail.avatar?.url" :src="detail.avatar.url" :preview-src-list="[detail.avatar.url]" preview-teleported style="width:160px;height:160px;border-radius:16px" fit="cover" />
               <el-form v-if="canAct" label-position="top">
-                <el-form-item label="审核原因"><el-input v-model="avatarReason" type="textarea" maxlength="500" placeholder="拒绝时填写原因"  :autosize="{ minRows: 3, maxRows: 8 }"/></el-form-item>
+                <el-form-item label="审核原因"><TextInput :limit="500" v-model="avatarReason" type="textarea" placeholder="拒绝时填写原因"  :autosize="{ minRows: 3, maxRows: 8 }" /></el-form-item>
                 <el-button type="primary" :disabled="avatarBusy" @click="submitAvatarDecision(true)">通过</el-button>
                 <el-button type="danger" :disabled="avatarBusy" @click="submitAvatarDecision(false)">拒绝</el-button>
               </el-form>
@@ -315,15 +315,13 @@
                     <el-radio value="map_alias">映射为已有分类别名</el-radio>
                     <el-radio value="reject">拒绝</el-radio>
                   </el-radio-group>
-                  <el-input
+                  <TextInput :limit="500"
                     v-if="tagDecisions[app.id] === 'reject'"
                     v-model="tagReasons[app.id]"
                     type="textarea"
-                    :maxlength="500"
-                    show-word-limit
                     placeholder="说明拒绝该标签申请的原因"
                     aria-label="标签申请拒绝原因"
-                   :autosize="{ minRows: 3, maxRows: 8 }"/>
+                   :autosize="{ minRows: 3, maxRows: 8 }" />
                   <el-select
                     v-if="tagDecisions[app.id] === 'map_alias'"
                     v-model="aliasTargets[app.id]"
@@ -340,7 +338,7 @@
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item v-if="reviewForm.result === 'rejected'" label="拒绝原因（不通过须记录理由）">
-                  <el-input v-model="reviewForm.reason" type="textarea"  :autosize="{ minRows: 3, maxRows: 8 }"/>
+                  <TextInput :limit="500" v-model="reviewForm.reason" type="textarea"  :autosize="{ minRows: 3, maxRows: 8 }" />
                 </el-form-item>
                 <el-button
                   type="primary"
@@ -365,14 +363,14 @@
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item label="结论理由">
-                  <el-input v-model="reportForm.reason" type="textarea"  :autosize="{ minRows: 3, maxRows: 8 }"/>
+                  <TextInput :limit="500" v-model="reportForm.reason" type="textarea"  :autosize="{ minRows: 3, maxRows: 8 }" />
                 </el-form-item>
                 <el-form-item v-if="reportForm.outcome === 'handled'" label="匿名公开结果说明">
-                  <el-input
+                  <TextInput :limit="500"
                     v-model="reportForm.public_summary"
                     type="textarea"
                     placeholder="将展示在被处置内容的原入口（BR-25）"
-                   :autosize="{ minRows: 3, maxRows: 8 }"/>
+                   :autosize="{ minRows: 3, maxRows: 8 }" />
                 </el-form-item>
                 <template v-if="reportForm.outcome === 'handled'">
                   <el-form-item label="处置动作">
@@ -382,7 +380,7 @@
                     <el-checkbox v-model="reportForm.actions.ban_user">封禁违规账户</el-checkbox>
                   </el-form-item>
                   <el-form-item v-if="reportForm.actions.ban_user" label="封禁理由">
-                    <el-input v-model="reportForm.actions.ban_reason" />
+                    <TextInput :limit="500" v-model="reportForm.actions.ban_reason"  />
                   </el-form-item>
                 </template>
                 <el-button type="danger" :disabled="!canAct" @click="submitReportDecision">
@@ -421,7 +419,7 @@
                   {{ u.display_name || '用户' }}（#{{ u.id }}）
                 </el-tag>
               </div>
-              <el-input v-model="inquiryText" type="textarea" placeholder="说明需要回应的范围"  :autosize="{ minRows: 3, maxRows: 8 }"/>
+              <TextInput :limit="2000" v-model="inquiryText" type="textarea" placeholder="说明需要回应的范围"  :autosize="{ minRows: 3, maxRows: 8 }" />
               <el-button class="message-submit" @click="sendInquiry">
                 <el-icon><AppIcon name="send" /></el-icon>
                 发送问询
@@ -437,7 +435,7 @@
                   {{ u.display_name || '用户' }}（#{{ u.id }}）
                 </el-tag>
               </div>
-              <el-input v-model="replyText" type="textarea" placeholder="在沟通单回复说明/结论"  :autosize="{ minRows: 3, maxRows: 8 }"/>
+              <TextInput :limit="2000" v-model="replyText" type="textarea" placeholder="在沟通单回复说明/结论"  :autosize="{ minRows: 3, maxRows: 8 }" />
               <el-button class="message-submit" @click="sendReply">
                 <el-icon><AppIcon name="send" /></el-icon>
                 发送回复
@@ -446,24 +444,22 @@
               <div v-if="showDisposeForm" class="case-composer dispose-composer">
               <h3>办结事项</h3>
               <p>记录处置结论后事项归档；已办结事项仍可作为后续交易处置的依据</p>
-              <el-input
+              <TextInput :limit="200"
                 v-model="disposeForm.conclusion"
                 placeholder="处置结论（必填，如：异常已处理，交易维持完成）"
-                :maxlength="200"
-                show-word-limit
-              />
-              <el-input
+               />
+              <TextInput :limit="500"
                 v-model="disposeForm.reason"
                 type="textarea"
                 placeholder="结论理由（留据，参与方查看事项时可见）"
                 :autosize="{ minRows: 2, maxRows: 6 }"
-              />
-              <el-input
+               />
+              <TextInput :limit="500"
                 v-model="disposeForm.basis"
                 type="textarea"
                 placeholder="处置依据（可选，如调整记录、沟通情况）"
                 :autosize="{ minRows: 2, maxRows: 6 }"
-              />
+               />
               <el-button class="message-submit" type="danger" :disabled="actionBusy" @click="submitDispose">
                 办结事项
               </el-button>
@@ -477,6 +473,7 @@
 </template>
 
 <script setup>
+import TextInput from '../components/TextInput.vue'
 import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

@@ -214,12 +214,12 @@
           当前已有完成确认。变更生效会清空双方当前确认并结束旧计时，需对方同意；不同意则原约定、确认和计时都保留。
         </p>
         <div class="popup-fields">
-          <van-field v-model="agreementForm.delivery_time" label="交付时间" placeholder="如：周六上午十点" />
-          <van-field v-model="agreementForm.delivery_location" label="交付地点" placeholder="文字地点" />
-          <van-field v-model="agreementForm.delivery_method" label="交付方式" placeholder="如：当面交付" />
+          <TextField :limit="200" v-model="agreementForm.delivery_time" label="交付时间" placeholder="如：周六上午十点"  />
+          <TextField :limit="200" v-model="agreementForm.delivery_location" label="交付地点" placeholder="文字地点"  />
+          <TextField :limit="200" v-model="agreementForm.delivery_method" label="交付方式" placeholder="如：当面交付"  />
           <van-field v-model="agreementAmountYuan" label="约定金额(元)" type="number" />
-          <van-field v-model="agreementForm.payment_method" label="支付方式" placeholder="如：微信转账" />
-          <van-field v-model="agreementForm.payment_timing" label="支付时点" placeholder="如：当面付清" />
+          <TextField :limit="100" v-model="agreementForm.payment_method" label="支付方式" placeholder="如：微信转账"  />
+          <TextField :limit="200" v-model="agreementForm.payment_timing" label="支付时点" placeholder="如：当面付清"  />
         </div>
         <van-button type="primary" block style="margin-top: 14px" :disabled="!canWrite" @click="proposeAgreement">发送提案</van-button>
       </div>
@@ -229,7 +229,7 @@
       <div class="popup-panel">
         <h3>评价本笔交易（1—5 分）</h3>
         <van-rate v-model="reviewForm.rating" />
-        <van-field v-model="reviewForm.content" type="textarea" rows="2" placeholder="文字评价（可选）" style="margin-top: 10px" />
+        <TextField :limit="1000" v-model="reviewForm.content" type="textarea" rows="2" placeholder="文字评价（可选）" style="margin-top: 10px"  />
         <van-button type="primary" block style="margin-top: 12px" :disabled="trade?.my_reviewed || !canWrite" @click="submitReview">
           {{ trade?.my_reviewed ? '已评价' : '提交评价' }}
         </van-button>
@@ -240,6 +240,7 @@
 </template>
 
 <script setup>
+import TextField from '../components/TextField.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { showConfirmDialog, showDialog, showToast } from 'vant'

@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.text import grapheme_count
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.models import Conversation, ConversationRead, Message, Product, Trade, User
 from app.models.enums import ConversationType
@@ -185,7 +186,7 @@ async def send_message(conversation_id: int, body: MessageIn, user: CurrentUser,
     content = body.content.strip()
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "消息内容不能为空")
-    if len(content) > MAX_MESSAGE_LENGTH:
+    if grapheme_count(content) > MAX_MESSAGE_LENGTH:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"消息最长 {MAX_MESSAGE_LENGTH} 字")
     if conversation.archived:
         raise HTTPException(status.HTTP_409_CONFLICT, "该交易分支已归档，可转入普通私聊继续沟通")

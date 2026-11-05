@@ -49,13 +49,13 @@
             <span>必填</span>
           </header>
           <div class="form-fields">
-            <van-field
+            <TextField :limit="120"
               v-model="form.title"
               label="标题"
               placeholder="商品标题"
               :rules="[{ required: true, message: '请输入标题' }]"
-            />
-            <van-field
+             />
+            <TextField :limit="5000"
               v-model="form.description"
               label="描述"
               type="textarea"
@@ -63,7 +63,7 @@
               autosize
               placeholder="描述商品状况、成色与附件"
               :rules="[{ required: true, message: '请输入描述' }]"
-            />
+             />
             <van-field
               v-model="priceYuan"
               label="价格(元)"
@@ -108,12 +108,12 @@
           </p>
 
           <div class="form-fields form-fields--top">
-            <van-field
+            <TextField :limit="64"
               v-if="!isEdit"
               v-model="newTagName"
               label="申请新标签"
               placeholder="没有合适的？申请新标签（随审核生效）"
-            />
+             />
             <p v-else class="edit-tag-hint">编辑只能调整已有标签；需要新标签时请在审核未通过后重新提交申请。</p>
           </div>
         </section>
@@ -159,6 +159,7 @@
 </template>
 
 <script setup>
+import TextField from '../components/TextField.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'

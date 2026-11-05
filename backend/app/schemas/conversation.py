@@ -1,6 +1,7 @@
 """IM 相关 Pydantic 模型。"""
 
 from pydantic import BaseModel, Field
+from app.core.text import NonBlank2000
 
 
 class NormalConversationCreateIn(BaseModel):
@@ -8,7 +9,7 @@ class NormalConversationCreateIn(BaseModel):
 
 
 class MessageIn(BaseModel):
-    content: str = Field(min_length=1, max_length=2000)
+    content: NonBlank2000
 
 
 class ReadAdvanceIn(BaseModel):

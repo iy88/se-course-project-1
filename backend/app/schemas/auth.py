@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.core.text import NonBlank64
 from app.models.enums import AccountStatus, UserRole
 
 
@@ -32,7 +33,7 @@ class UserBrief(BaseModel):
 
 class RegisterIn(BaseModel):
     email: EmailStr
-    display_name: str = Field(min_length=1, max_length=64)
+    display_name: NonBlank64
     password: str = Field(min_length=6, max_length=72)
     code: str = Field(pattern=r"^\d{6}$")  # 注册邮箱验证码（D-47）
 
@@ -86,7 +87,7 @@ class ChangeEmailIn(BaseModel):
 
 
 class ProfileUpdateIn(BaseModel):
-    display_name: str = Field(min_length=1, max_length=64)
+    display_name: NonBlank64
 
     @field_validator("display_name")
     @classmethod

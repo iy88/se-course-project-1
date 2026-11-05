@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import col, select
 
+from app.core.text import Text500
 from app.api.deps import CurrentAdmin, CurrentUser, DbSession
 from app.models import DisposalCase, User
 from app.models.enums import CaseStatus, CaseType
@@ -18,7 +19,7 @@ class AvatarIn(BaseModel):
 class DecisionIn(BaseModel):
     key: str
     approved: bool
-    reason: str = Field(default='', max_length=500)
+    reason: Text500 = Field(default='')
 
 @router.post('/auth/avatar')
 async def submit_avatar(body: AvatarIn, user: CurrentUser, db: DbSession):

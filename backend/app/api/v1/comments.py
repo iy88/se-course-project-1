@@ -3,10 +3,11 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.text import NonBlank2000
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.core.config import get_settings
 from app.kv.base import get_kv
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/products/{product_id}/comments", tags=["comments"])
 
 
 class CommentIn(BaseModel):
-    content: str = Field(min_length=1)
+    content: NonBlank2000
     reply_to_comment_id: int | None = None
 
 

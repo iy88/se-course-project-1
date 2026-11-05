@@ -115,11 +115,11 @@
             <span>回复 {{ replyTarget.author_name }}</span>
             <van-button size="mini" plain :disabled="commentSubmitting" @click="replyTarget = null">取消回复</van-button>
           </div>
-          <van-field ref="commentInput" v-model="commentDraft" type="textarea" rows="2" autosize label="评论内容"
-            placeholder="输入商品咨询内容" :disabled="!canComment || commentSubmitting" />
+          <TextField :limit="2000" ref="commentInput" v-model="commentDraft" type="textarea" rows="2" autosize label="评论内容"
+            placeholder="输入商品咨询内容" :disabled="!canComment || commentSubmitting"  />
           <p v-if="!canComment" class="hint">{{ session.banned ? '账号已封禁，暂不能发表评论或回复。' : '当前商品不可新增评论或回复，历史评论仍按访问权限保留。' }}</p>
           <van-button native-type="submit" size="small" type="primary" :loading="commentSubmitting"
-            :disabled="!canComment || !commentDraft.trim() || commentSubmitting">{{ replyTarget ? '发表回复' : '发表评论' }}</van-button>
+            :disabled="!canComment || !commentDraft.trim() || commentSubmitting || !!textError(commentDraft, 2000)">{{ replyTarget ? '发表回复' : '发表评论' }}</van-button>
           <p v-if="commentError" role="alert" class="comment-compose__error">{{ commentError }}</p>
         </form>
         <div v-if="commentsLoadError" class="comment-compose" role="alert">
@@ -224,6 +224,8 @@
 </template>
 
 <script setup>
+import { textError } from '../api/text'
+import TextField from '../components/TextField.vue'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showConfirmDialog, showDialog, showToast } from 'vant'
@@ -356,7 +358,7 @@ function startReply(comment) {
 
 async function submitComment() {
   const content = commentDraft.value.trim()
-  if (!canComment.value || commentSubmitting.value || !content) return
+  if (!canComment.value || commentSubmitting.value || !content || textError(content, 2000)) return
   const productId = String(route.params.id)
   const body = { content }
   if (replyTarget.value) body.reply_to_comment_id = replyTarget.value.id

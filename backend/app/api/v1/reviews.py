@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlmodel import col, select
 
+from app.core.text import Text1000
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.models import Trade, TradeReview, User
 from app.models.enums import TradeStatus
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/trades", tags=["reviews"])
 
 class ReviewCreateIn(BaseModel):
     rating: int = Field(ge=1, le=5)
-    content: str = Field(default="", max_length=1000)
+    content: Text1000 = Field(default="")
 
 
 @router.post("/{trade_id}/review", status_code=201)

@@ -37,11 +37,11 @@
         <van-cell title="用户 ID" :value="String(session.user?.id)" />
         <van-cell title="邮箱" :value="session.user?.email" />
         <div class="form-fields">
-          <van-field v-model="displayName" label="显示名称" placeholder="修改显示名称">
+          <TextField :limit="64" v-model="displayName" label="显示名称" placeholder="修改显示名称">
             <template #button>
               <van-button size="small" type="primary" @click="updateName">保存</van-button>
             </template>
-          </van-field>
+          </TextField>
         </div>
       </section>
 
@@ -135,6 +135,7 @@
 </template>
 
 <script setup>
+import TextField from '../components/TextField.vue'
 import { reactive, ref } from 'vue'
 import { showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'

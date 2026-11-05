@@ -1,11 +1,10 @@
 """举报（C-12/BR-25）：提交、补充说明、我的举报与我收到的举报。"""
 
-from typing import Annotated
-
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field
 from sqlmodel import col, or_, select
 
+from app.core.text import NonBlank2000, NonBlank500, Text2000
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.api.upload_keys import validate_upload_keys
 from app.models import (
@@ -27,21 +26,16 @@ from app.services import stored_objects
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-# 先去空白再校验长度：全空白输入不能作为有效理由/补充内容写入。
-_NonBlank500 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
-_NonBlank2000 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
-
-
 class ReportCreateIn(BaseModel):
     target_type: str = Field(pattern="^(product|comment|message|review|user)$")
     target_id: int
-    reason: _NonBlank500
-    detail: str | None = Field(default=None, max_length=2000)
+    reason: NonBlank500
+    detail: Text2000 | None = Field(default=None)
     evidence_keys: list[str] = []
 
 
 class SupplementIn(BaseModel):
-    content: _NonBlank2000
+    content: NonBlank2000
     evidence_keys: list[str] = []
 
 

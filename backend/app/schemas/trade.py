@@ -1,35 +1,36 @@
 """交易相关 Pydantic 模型。"""
 
 from pydantic import BaseModel, Field
+from app.core.text import NonBlank100, NonBlank1000, NonBlank200, Text200, Text500
 
 
 class RequestCreateIn(BaseModel):
     product_id: int
-    note: str | None = Field(default=None, max_length=500)
+    note: Text500 | None = Field(default=None)
 
 
 class RejectIn(BaseModel):
-    reason: str | None = Field(default=None, max_length=200)
+    reason: Text200 | None = Field(default=None)
 
 
 class AgreementProposeIn(BaseModel):
     """约定要素（4.15）：交付时间/文字地点/方式 + 约定金额/支付方式/支付时点。"""
 
-    delivery_time: str = Field(min_length=1, max_length=200)
-    delivery_location: str = Field(min_length=1, max_length=200)
-    delivery_method: str = Field(min_length=1, max_length=200)
+    delivery_time: NonBlank200
+    delivery_location: NonBlank200
+    delivery_method: NonBlank200
     amount_cents: int = Field(ge=0, le=100_000_000)
-    payment_method: str = Field(min_length=1, max_length=100)
-    payment_timing: str = Field(min_length=1, max_length=200)
+    payment_method: NonBlank100
+    payment_timing: NonBlank200
 
 
 class ConfirmationIn(BaseModel):
-    note: str | None = Field(default=None, max_length=500)
+    note: Text500 | None = Field(default=None)
 
 
 class DisputeIn(BaseModel):
-    description: str = Field(min_length=1, max_length=1000)
+    description: NonBlank1000
 
 
 class CancelIn(BaseModel):
-    reason: str | None = Field(default=None, max_length=200)
+    reason: Text200 | None = Field(default=None)

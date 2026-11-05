@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlmodel import and_, col, func, select
 
+from app.core.text import NonBlank500, Text500
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import (
     Comment,
@@ -30,14 +31,14 @@ class ReportActionsIn(BaseModel):
     restrict_display: bool = False
     freeze_trade: bool = False
     ban_user: bool = False
-    ban_reason: str | None = Field(default=None, max_length=500)
+    ban_reason: Text500 | None = Field(default=None)
 
 
 class ReportDecisionIn(BaseModel):
     outcome: str = Field(pattern="^(unfounded|handled)$")  # 无法认定/不予处理 或 认定违规并处置
-    reason: str = Field(min_length=1, max_length=500)
-    public_summary: str | None = Field(default=None, max_length=500)  # 匿名公开的结果说明
-    basis: str | None = Field(default=None, max_length=500)
+    reason: NonBlank500
+    public_summary: Text500 | None = Field(default=None)  # 匿名公开的结果说明
+    basis: Text500 | None = Field(default=None)
     actions: ReportActionsIn = ReportActionsIn()
 
 

@@ -58,16 +58,14 @@
             </div>
 
             <div v-if="supplement.reportId === r.id" class="report-card__editor">
-              <van-field
+              <TextField :limit="2000"
                 v-model="supplement.content"
                 type="textarea"
                 label="补充内容"
                 :rows="3"
-                maxlength="2000"
-                show-word-limit
                 :disabled="supplement.submitting"
-                placeholder="补充说明或证据（必填，最多 2000 字）"
-              />
+                placeholder="补充说明或证据（必填，最多 2000 个字符）"
+               />
               <div class="report-card__evidence">
                 <span class="report-card__label">截图证据（可选，最多 3 张）</span>
                 <van-uploader
@@ -165,6 +163,8 @@
 </template>
 
 <script setup>
+import { textError } from '../api/text'
+import TextField from '../components/TextField.vue'
 import { onMounted, reactive, ref, watch } from 'vue'
 import { showImagePreview, showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
@@ -302,8 +302,8 @@ async function submitSupplement() {
     supplement.error = '请填写补充内容后再提交。'
     return
   }
-  if (content.length > 2000) {
-    supplement.error = '补充内容最多 2000 字。'
+  if (textError(content, 2000)) {
+    supplement.error = textError(content, 2000)
     return
   }
   const reportId = supplement.reportId

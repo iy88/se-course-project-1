@@ -19,6 +19,7 @@ dependencies = [
     "sqlmodel>=0.0.48",
     "pillow>=13.0.0",
     "tzdata>=2026.6 ; sys_platform == 'win32'",
+    "regex==2026.4.4",
 ]
 
 [dependency-groups]
