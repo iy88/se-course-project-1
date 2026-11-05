@@ -35,6 +35,7 @@
             <span v-if="trade.frozen" class="pill pill--danger trade-status-gap">冻结中</span>
           </template>
         </van-cell>
+        <van-cell title="商品编辑历史" is-link value="查看变更" @click="$router.push(`/products/${trade.product_id}/edit-history`)" />
         <van-cell title="我的身份" :value="trade.my_role === 'buyer' ? '买方' : '卖方'" />
         <van-cell title="对方" :value="peerName" />
         <van-cell title="交易沟通分支" is-link value="进入分支" @click="$router.push(`/conversations/${trade.conversation_id}`)" />
