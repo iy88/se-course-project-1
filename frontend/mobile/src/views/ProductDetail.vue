@@ -110,6 +110,22 @@
           <span class="detail-section__hint">{{ comments.length }} 条</span>
         </header>
 
+        <form ref="commentComposer" class="comment-compose" @submit.prevent="submitComment">
+          <div v-if="replyTarget" class="comment-compose__target">
+            <span>回复 {{ replyTarget.author_name }}</span>
+            <van-button size="mini" plain :disabled="commentSubmitting" @click="replyTarget = null">取消回复</van-button>
+          </div>
+          <van-field ref="commentInput" v-model="commentDraft" type="textarea" rows="2" autosize label="评论内容"
+            placeholder="输入商品咨询内容" :disabled="!canComment || commentSubmitting" />
+          <p v-if="!canComment" class="hint">{{ session.banned ? '账号已封禁，暂不能发表评论或回复。' : '当前商品不可新增评论或回复，历史评论仍按访问权限保留。' }}</p>
+          <van-button native-type="submit" size="small" type="primary" :loading="commentSubmitting"
+            :disabled="!canComment || !commentDraft.trim() || commentSubmitting">{{ replyTarget ? '发表回复' : '发表评论' }}</van-button>
+          <p v-if="commentError" role="alert" class="comment-compose__error">{{ commentError }}</p>
+        </form>
+        <div v-if="commentsLoadError" class="comment-compose" role="alert">
+          <p>{{ commentsLoadError }}</p>
+          <van-button size="small" plain @click="refreshComments()">重新读取评论</van-button>
+        </div>
         <div v-if="comments.length" class="comment-list">
           <article v-for="c in comments" :key="c.id" class="comment">
             <span class="avatar-text comment__avatar">{{ initialOf(c.author_name) }}</span>
@@ -121,6 +137,8 @@
               </div>
               <p class="comment__content" :class="{ 'comment__content--deleted': c.deleted }">{{ c.content }}</p>
               <p v-if="c.report_result" class="comment__result">核查结果：{{ c.report_result }}</p>
+              <van-button v-if="canComment && isMine && !c.deleted && c.author_id !== product.seller_id"
+                size="mini" plain type="primary" :disabled="commentSubmitting" @click="startReply(c)">回复</van-button>
               <van-button
                 v-if="c.author_id === session.user.id && !c.deleted && !session.banned"
                 size="mini"
@@ -145,7 +163,7 @@
           </article>
         </div>
 
-        <EmptyState v-else icon="comment" title="暂无评论" />
+        <EmptyState v-else-if="!commentsLoadError" icon="comment" title="暂无评论" />
       </section>
     </div>
 
@@ -206,7 +224,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showConfirmDialog, showDialog, showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
@@ -222,6 +240,16 @@ const router = useRouter()
 const session = useSession()
 const product = ref(null)
 const comments = ref([])
+const commentDraft = ref('')
+const commentComposer = ref(null)
+const commentInput = ref(null)
+const replyTarget = ref(null)
+const commentSubmitting = ref(false)
+const commentError = ref('')
+const commentsLoadError = ref('')
+const canComment = computed(() => !!session.user && !session.banned &&
+  !!product.value && !product.value.display_restricted &&
+  ['listed', 'in_transaction'].includes(product.value.status))
 const isFavored = ref(false)
 const sellerName = ref('')
 const loading = ref(true)
@@ -295,13 +323,72 @@ async function load() {
     .get(`/users/${product.value.seller_id}/profile`)
     .then((data) => data.display_name)
     .catch(() => `用户#${product.value.seller_id}`)
-  comments.value = await http.get(`/products/${route.params.id}/comments`).catch(() => [])
+  await refreshComments()
   const favors = await http.get('/favorites').catch(() => [])
   isFavored.value = favors.some((f) => f.product_id === Number(route.params.id) && f.valid)
   loading.value = false
 }
 
 const isSellerReply = (c) => c.reply_to_comment_id !== null && c.author_id === product.value.seller_id
+
+async function refreshComments(productId = String(route.params.id)) {
+  try {
+    const data = await http.get(`/products/${productId}/comments`)
+    if (String(route.params.id) !== productId) return
+    comments.value = data
+    commentsLoadError.value = ''
+  } catch {
+    if (String(route.params.id) === productId) {
+      commentsLoadError.value = '评论列表读取失败，请重新读取；已成功发表的内容无需重复提交。'
+    }
+  }
+}
+
+function startReply(comment) {
+  if (!canComment.value || !isMine.value || commentSubmitting.value || comment.deleted || comment.author_id === product.value.seller_id) return
+  replyTarget.value = comment
+  commentError.value = ''
+  nextTick(() => {
+    commentComposer.value?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    commentInput.value?.focus()
+  })
+}
+
+async function submitComment() {
+  const content = commentDraft.value.trim()
+  if (!canComment.value || commentSubmitting.value || !content) return
+  const productId = String(route.params.id)
+  const body = { content }
+  if (replyTarget.value) body.reply_to_comment_id = replyTarget.value.id
+  commentSubmitting.value = true
+  commentError.value = ''
+  try {
+    await http.post(`/products/${productId}/comments`, body)
+    if (String(route.params.id) !== productId) return
+    commentDraft.value = ''
+    replyTarget.value = null
+    showToast('已发表')
+    await refreshComments(productId)
+  } catch (err) {
+    if (String(route.params.id) !== productId) return
+    const detail = err?.response?.data?.detail
+    commentError.value = typeof detail === 'string' ? detail : '发表失败，请稍后重试；输入内容已保留。'
+    const status = err?.response?.status
+    if (status === 403) session.refreshUser().catch(() => {})
+    if (status === 409) {
+      // 同步商品最新资格，保留草稿；网络失败时不覆盖已有商品。
+      const latest = await http.get(`/products/${productId}`).catch(() => null)
+      if (latest && String(route.params.id) === productId) product.value = latest
+    }
+    if (status === 404) {
+      await refreshComments(productId)
+      if (String(route.params.id) === productId && replyTarget.value &&
+          !comments.value.some(c => c.id === replyTarget.value.id && !c.deleted)) replyTarget.value = null
+    }
+  } finally {
+    commentSubmitting.value = false
+  }
+}
 
 async function toggleFavorite() {
   if (isFavored.value) {
@@ -408,7 +495,14 @@ function reportComment(comment) {
 }
 
 onMounted(load)
-watch(() => route.params.id, load)
+watch(() => route.params.id, () => {
+  commentDraft.value = ''
+  replyTarget.value = null
+  commentError.value = ''
+  commentsLoadError.value = ''
+  comments.value = []
+  load()
+})
 </script>
 
 <style scoped>
@@ -766,6 +860,20 @@ watch(() => route.params.id, load)
   }
 }
 
+.comment-compose {
+  padding: 12px 16px;
+}
+.comment-compose__target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.comment-compose__error {
+  color: var(--danger, #a43b36);
+  overflow-wrap: anywhere;
+}
 .comment__report {
   margin-top: 4px;
   margin-left: 8px;
