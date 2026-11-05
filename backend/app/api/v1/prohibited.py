@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import col, select
 
+from app.core.text import NonBlank500, NonBlank64
 from app.api.deps import CurrentAdmin, CurrentUser, DbSession
 from app.services import audit as audit_service
 
@@ -11,8 +12,8 @@ router = APIRouter(prefix="/prohibited-items", tags=["prohibited-items"])
 
 
 class ProhibitedItemIn(BaseModel):
-    group_name: str = Field(min_length=1, max_length=64)
-    content: str = Field(min_length=1, max_length=500)
+    group_name: NonBlank64
+    content: NonBlank500
     sort: int = 0
 
 

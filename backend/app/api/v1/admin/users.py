@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlmodel import and_, col, func, or_, select
 
+from app.core.text import NonBlank500
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import AccountRestriction, User
 from app.models.enums import AccountStatus, CaseType
@@ -15,11 +16,11 @@ router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
 
 class BanIn(BaseModel):
-    reason: str = Field(min_length=1, max_length=500)
+    reason: NonBlank500
 
 
 class UnbanIn(BaseModel):
-    lift_reason: str = Field(min_length=1, max_length=500)
+    lift_reason: NonBlank500
 
 
 @router.get("")

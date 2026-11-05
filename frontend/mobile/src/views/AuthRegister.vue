@@ -43,7 +43,7 @@
               </template>
             </van-field>
 
-            <van-field
+            <TextField :limit="64"
               v-model="form.display_name"
               label="显示名称"
               placeholder="其他用户可见的名称"
@@ -52,7 +52,7 @@
               <template #left-icon>
                 <AppIcon name="user" :size="18" />
               </template>
-            </van-field>
+            </TextField>
 
             <van-field
               v-model="form.password"
@@ -97,6 +97,7 @@
 </template>
 
 <script setup>
+import TextField from '../components/TextField.vue'
 import { reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'

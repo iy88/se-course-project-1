@@ -34,14 +34,14 @@ class Report(Base, table=True):
     reporter_id: int = Field(sa_column=Column(ForeignKey("users.id"), index=True, nullable=False))
     target_type: str = Field(sa_column=Column(String(16), nullable=False))  # product/comment/message/review/user
     target_id: int = Field(sa_column=Column(BigInteger, index=True, nullable=False))
-    reason: str = Field(sa_column=Column(String(500), nullable=False))  # 必填原因
+    reason: str = Field(sa_column=Column(Text, nullable=False))  # 必填原因
     detail: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 补充说明（可选）
     evidence_keys: list = Field(default_factory=list, sa_column=Column(JSONType, default=list, nullable=False))  # 截图等证据（可选）
     status: str = Field(default=ReportStatus.PENDING.value, sa_column=Column(String(16), default=ReportStatus.PENDING.value, index=True, nullable=False))
     # 结果经管理员确认后公开；确认前不可见（BR-25）
     result_confirmed: bool = Field(default=False, sa_column=Column(Boolean, default=False, nullable=False))
-    public_result: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
-    result_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    public_result: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    result_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     closed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
     updated_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False))
@@ -82,10 +82,10 @@ class DisposalCase(Base, table=True):
 
     avatar_key: str | None = Field(default=None, sa_column=Column(String(512), nullable=True))
 
-    title: str = Field(sa_column=Column(String(200), nullable=False))  # 展示用摘要
-    conclusion: str | None = Field(default=None, sa_column=Column(String(200), nullable=True))  # 处置结论
-    conclusion_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
-    basis: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))  # 处置/调整依据
+    title: str = Field(sa_column=Column(Text, nullable=False))  # 展示用摘要
+    conclusion: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 处置结论
+    conclusion_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    basis: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 处置/调整依据
     disposed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
@@ -118,8 +118,8 @@ class Notification(Base, table=True):
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
     user_id: int = Field(sa_column=Column(ForeignKey("users.id"), index=True, nullable=False))
     type: str = Field(sa_column=Column(String(32), nullable=False))
-    title: str = Field(sa_column=Column(String(200), nullable=False))
-    content: str = Field(default='', sa_column=Column(String(500), default="", nullable=False))
+    title: str = Field(sa_column=Column(Text, nullable=False))
+    content: str = Field(default='', sa_column=Column(Text, default="", nullable=False))
     # 关联入口（前端据此跳转）：如 product/trade/conversation/case/report
     link_type: str | None = Field(default=None, sa_column=Column(String(32), nullable=True))
     link_id: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))

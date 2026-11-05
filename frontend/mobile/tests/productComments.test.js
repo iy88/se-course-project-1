@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { textError } from '../src/api/text.js'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { ref, computed, reactive, nextTick } from 'vue'
@@ -8,7 +9,7 @@ function setup(post = async () => ({}), get = async () => []) {
     .split('<script setup>')[1].split('</script>')[0].replace(/^import .*$/gm, '')
   const session = reactive({ user: { id: 1 }, banned: false, refreshUser() {} })
   const route = reactive({ params: { id: '11' } })
-  const deps = { ref, computed, nextTick, watch() {}, onMounted() {}, useRoute: () => route, useRouter: () => ({}), useSession: () => session, http: { post, get }, showToast() {} }
+  const deps = { textError, ref, computed, nextTick, watch() {}, onMounted() {}, useRoute: () => route, useRouter: () => ({}), useSession: () => session, http: { post, get }, showToast() {} }
   const page = new Function(...Object.keys(deps), `${source}\nreturn { product, comments, commentDraft, replyTarget, commentError, commentsLoadError, canComment, startReply, submitComment };`)(...Object.values(deps))
   page.product.value = { status: 'listed', seller_id: 2 }
   return { page, session, route }

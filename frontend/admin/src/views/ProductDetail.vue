@@ -107,12 +107,12 @@
               </el-select>
             </el-form-item>
             <el-form-item label="依据说明">
-              <el-input
+              <TextInput :limit="500"
                 v-model="reason"
                 type="textarea"
                 placeholder="纠正原因（必填，将通知卖方并留痕）"
                 :autosize="{ minRows: 3, maxRows: 8 }"
-              />
+               />
             </el-form-item>
             <el-form-item>
               <el-button type="primary" :loading="submitting" @click="submitCorrection">执行纠正</el-button>
@@ -126,6 +126,7 @@
 </template>
 
 <script setup>
+import TextInput from '../components/TextInput.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'

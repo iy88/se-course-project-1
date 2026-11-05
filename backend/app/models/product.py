@@ -32,14 +32,14 @@ class Product(Base, table=True):
 
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
     seller_id: int = Field(sa_column=Column(ForeignKey("users.id"), index=True, nullable=False))
-    title: str = Field(sa_column=Column(String(120), nullable=False))
+    title: str = Field(sa_column=Column(Text, nullable=False))
     description: str = Field(sa_column=Column(Text, nullable=False))
     price_cents: int = Field(sa_column=Column(BigInteger, nullable=False))  # 标价（分）
     status: str = Field(default=ProductStatus.PENDING_REVIEW.value, sa_column=Column(String(24), default=ProductStatus.PENDING_REVIEW.value, index=True, nullable=False))
 
     # 展示限制（违规撤销公开访问，TR-09/10）：与生命周期状态分开（4.10）
     display_restricted: bool = Field(default=False, sa_column=Column(Boolean, default=False, nullable=False))
-    display_restricted_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    display_restricted_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     display_restricted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     display_restricted_case_id: int | None = Field(default=None, sa_column=Column(
         ForeignKey(
@@ -49,7 +49,7 @@ class Product(Base, table=True):
     ))
 
     # 待审核/未通过的最新说明（历史结论看 review_records）
-    reject_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    reject_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
     updated_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False))
@@ -89,12 +89,12 @@ class ProductTagApplication(Base, table=True):
 
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
     product_id: int = Field(sa_column=Column(ForeignKey("products.id"), index=True, nullable=False))
-    requested_name: str = Field(sa_column=Column(String(64), nullable=False))
+    requested_name: str = Field(sa_column=Column(Text, nullable=False))
     # pending / approved_new / approved_alias / rejected / withdrawn
     status: str = Field(default='pending', sa_column=Column(String(24), default="pending", nullable=False))
     resolved_category_id: int | None = Field(default=None, sa_column=Column(ForeignKey("categories.id"), nullable=True))
     # 管理员对本次申请的业务说明；仅在拒绝时要求非空。历史记录可空，不回填。
-    decision_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    decision_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     decided_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
@@ -110,7 +110,7 @@ class ProductEditHistory(Base, table=True):
     edit_type: str = Field(default='edit', sa_column=Column(String(24), default="edit", nullable=False))  # edit / category_correction
     before_json: dict = Field(sa_column=Column(JSONType, nullable=False))
     after_json: dict = Field(sa_column=Column(JSONType, nullable=False))
-    reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
 
@@ -124,7 +124,7 @@ class ReviewRecord(Base, table=True):
     content_json: dict = Field(sa_column=Column(JSONType, nullable=False))  # 当次被审核内容
     reviewer_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))
     result: str = Field(default=ReviewResult.PENDING.value, sa_column=Column(String(16), default=ReviewResult.PENDING.value, nullable=False))
-    reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))  # 不通过原因（含退回补充）
+    reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 不通过原因（含退回补充）
     reviewed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     case_id: int | None = Field(default=None, sa_column=Column(ForeignKey("disposal_cases.id"), nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
@@ -155,7 +155,7 @@ class Comment(Base, table=True):
     reply_to_user_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))
     deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     deleted_by_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))
-    delete_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    delete_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
 
@@ -168,8 +168,8 @@ class ProhibitedItem(Base, table=True):
     __tablename__ = cast(Any, "prohibited_items")
 
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
-    group_name: str = Field(sa_column=Column(String(64), nullable=False))  # 类别（如“危险品与管制物品”）
-    content: str = Field(sa_column=Column(String(500), nullable=False))  # 细目
+    group_name: str = Field(sa_column=Column(Text, nullable=False))  # 类别（如“危险品与管制物品”）
+    content: str = Field(sa_column=Column(Text, nullable=False))  # 细目
     sort: int = Field(default=0, sa_column=Column(Integer, default=0, nullable=False))
     updated_by_id: int = Field(sa_column=Column(ForeignKey("users.id"), nullable=False))
     updated_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False))

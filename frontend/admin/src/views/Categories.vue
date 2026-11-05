@@ -12,12 +12,12 @@
       <div class="filter-bar">
         <div class="filter-group">
           <span class="filter-label">新标签</span>
-          <el-input
+          <TextInput :limit="64"
             v-model="newName"
             placeholder="输入新标签名称"
             class="filter-input"
             @keyup.enter="create"
-          />
+           />
           <el-button type="primary" :loading="creating" @click="create">
             <el-icon><AppIcon name="plus" /></el-icon>
             创建公共标签
@@ -103,6 +103,7 @@
 </template>
 
 <script setup>
+import TextInput from '../components/TextInput.vue'
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api/http'

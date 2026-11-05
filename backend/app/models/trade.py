@@ -54,8 +54,8 @@ class Trade(Base, table=True):
     buyer_id: int = Field(sa_column=Column(ForeignKey("users.id"), index=True, nullable=False))
     seller_id: int = Field(sa_column=Column(ForeignKey("users.id"), index=True, nullable=False))
     status: str = Field(default=TradeStatus.PENDING_ACCEPTANCE.value, sa_column=Column(String(24), default=TradeStatus.PENDING_ACCEPTANCE.value, index=True, nullable=False))
-    request_note: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))  # 请求留言（可选）
-    close_reason: str | None = Field(default=None, sa_column=Column(String(200), nullable=True))  # 拒绝/撤回/关闭原因
+    request_note: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 请求留言（可选）
+    close_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 拒绝/撤回/关闭原因
 
     product_snapshot_json: dict | None = Field(default=None, sa_column=Column(JSONType, nullable=True))  # 接受时的商品交易时内容（BR-30）
 
@@ -81,7 +81,7 @@ class Trade(Base, table=True):
 
     # 冻结：管理处置导致的进度暂停标记（BR-33），与生命周期状态分开
     frozen: bool = Field(default=False, sa_column=Column(Boolean, default=False, nullable=False))
-    frozen_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    frozen_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     frozen_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     frozen_by_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))
     frozen_case_id: int | None = Field(default=None, sa_column=Column(
@@ -110,12 +110,12 @@ class TradeAgreement(Base, table=True):
     , nullable=False))
     round_no: int = Field(default=1, sa_column=Column(Integer, default=1, nullable=False))  # 首次=1；每次变更递增
     proposer_id: int = Field(sa_column=Column(ForeignKey("users.id"), nullable=False))
-    delivery_time: str = Field(sa_column=Column(String(200), nullable=False))
-    delivery_location: str = Field(sa_column=Column(String(200), nullable=False))  # 文字地点
-    delivery_method: str = Field(sa_column=Column(String(200), nullable=False))
+    delivery_time: str = Field(sa_column=Column(Text, nullable=False))
+    delivery_location: str = Field(sa_column=Column(Text, nullable=False))  # 文字地点
+    delivery_method: str = Field(sa_column=Column(Text, nullable=False))
     amount_cents: int = Field(sa_column=Column(BigInteger, nullable=False))  # 约定金额（分），可不同于标价
-    payment_method: str = Field(sa_column=Column(String(100), nullable=False))
-    payment_timing: str = Field(sa_column=Column(String(200), nullable=False))
+    payment_method: str = Field(sa_column=Column(Text, nullable=False))
+    payment_timing: str = Field(sa_column=Column(Text, nullable=False))
     status: str = Field(default=AgreementStatus.PROPOSED.value, sa_column=Column(String(16), default=AgreementStatus.PROPOSED.value, nullable=False))
     proposed_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
     decided_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
@@ -135,7 +135,7 @@ class TradeTransition(Base, table=True):
     actor_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))  # 系统触发为空
     actor_role: str = Field(default='system', sa_column=Column(String(16), default="system", nullable=False))  # buyer/seller/admin/system
     trigger: str = Field(sa_column=Column(String(64), nullable=False))  # 事件标识
-    reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     basis_case_id: int | None = Field(default=None, sa_column=Column(ForeignKey("disposal_cases.id"), nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
@@ -161,7 +161,7 @@ class CompletionConfirmation(Base, table=True):
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
     trade_id: int = Field(sa_column=Column(ForeignKey("trades.id"), index=True, nullable=False))
     confirmer_id: int = Field(sa_column=Column(ForeignKey("users.id"), nullable=False))
-    note: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))  # 可选说明
+    note: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 可选说明
     is_current: bool = Field(default=True, sa_column=Column(Boolean, default=True, nullable=False))
     confirmed_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
@@ -183,5 +183,5 @@ class TradeReview(Base, table=True):
     # 管理员处理违规评价：逻辑删除并留理由（BR-24）
     deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     deleted_by_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))
-    delete_reason: str | None = Field(default=None, sa_column=Column(String(500), nullable=True))
+    delete_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

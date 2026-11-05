@@ -4,17 +4,18 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.text import NonBlank120, NonBlank5000, Text64
 from app.models.enums import ProductStatus
 
 
 class TagIn(BaseModel):
     category_id: int | None = None  # 已有标签
-    new_name: str | None = Field(default=None, max_length=64)  # 或申请新标签
+    new_name: Text64 | None = Field(default=None)  # 或申请新标签
 
 
 class ProductCreateIn(BaseModel):
-    title: str = Field(min_length=1, max_length=120)
-    description: str = Field(min_length=1, max_length=5000)
+    title: NonBlank120
+    description: NonBlank5000
     price_cents: int = Field(ge=0, le=100_000_000)
     image_keys: list[str] = Field(min_length=1)
     tags: list[TagIn]  # 至少一个已有标签或一个新标签申请（BR-12）
@@ -23,8 +24,8 @@ class ProductCreateIn(BaseModel):
 class ProductUpdateIn(BaseModel):
     """信息微调（BR-11）：允许状态下编辑不二审；交易中禁改（由服务层拒绝）。"""
 
-    title: str | None = Field(default=None, min_length=1, max_length=120)
-    description: str | None = Field(default=None, min_length=1, max_length=5000)
+    title: NonBlank120 | None = Field(default=None)
+    description: NonBlank5000 | None = Field(default=None)
     price_cents: int | None = Field(default=None, ge=0, le=100_000_000)
     image_keys: list[str] | None = None
     category_ids: list[int] | None = None  # 仅允许在已有标签间调整；新标签须重新走审核

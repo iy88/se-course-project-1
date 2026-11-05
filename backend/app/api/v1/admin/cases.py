@@ -1,11 +1,10 @@
 """管理事项（C-13/BR-34）：共享池、认领、详情、问询、沟通与结论。"""
 
-from typing import Annotated
-
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field
 from sqlmodel import and_, col, func, select, update
 
+from app.core.text import NonBlank200, NonBlank2000, Text500
 from app.api.deps import CurrentAdmin, DbSession
 from app.models import DisposalCase, Product, Report, User
 from app.models.enums import CaseStatus, CaseType, ReportStatus
@@ -22,18 +21,18 @@ class ClaimOut(BaseModel):
 
 
 class CaseMessageIn(BaseModel):
-    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+    content: NonBlank2000
 
 
 class InquiryIn(BaseModel):
     # 需要本人说明的内容范围；先去空白再校验，全空白不得写入沟通单。
-    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+    content: NonBlank2000
 
 
 class DisposeIn(BaseModel):
-    conclusion: str = Field(min_length=1, max_length=200)
-    reason: str | None = Field(default=None, max_length=500)
-    basis: str | None = Field(default=None, max_length=500)
+    conclusion: NonBlank200
+    reason: Text500 | None = Field(default=None)
+    basis: Text500 | None = Field(default=None)
 
 
 async def _case_or_404(db, case_id: int) -> DisposalCase:

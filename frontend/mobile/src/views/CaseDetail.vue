@@ -51,17 +51,15 @@
           <h2>{{ editor.kind === 'statement' ? '提交说明' : '提交申辩' }}</h2>
         </header>
 
-        <van-field
+        <TextField :limit="2000"
           v-model="editor.content"
           type="textarea"
           :label="editor.kind === 'statement' ? '说明内容' : '申辩内容'"
           :rows="4"
-          :maxlength="2000"
-          show-word-limit
           :disabled="editor.submitting"
-          placeholder="请填写内容（必填，最多 2000 字）"
+          placeholder="请填写内容（必填，最多 2000 个字符）"
           class="case-editor__field"
-        />
+         />
 
         <p v-if="editor.error" class="case-editor__error">{{ editor.error }}</p>
 
@@ -71,7 +69,7 @@
             size="small"
             type="primary"
             :loading="editor.submitting"
-            :disabled="editor.submitting || !editor.content.trim()"
+            :disabled="editor.submitting || !editor.content.trim() || !!textError(editor.content, 2000)"
             @click="submitEditor"
           >
             提交
@@ -91,6 +89,8 @@
 </template>
 
 <script setup>
+import { textError } from '../api/text'
+import TextField from '../components/TextField.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
@@ -177,8 +177,8 @@ async function submitEditor() {
     editor.error = '请填写内容后再提交。'
     return
   }
-  if (content.length > 2000) {
-    editor.error = '内容最多 2000 字。'
+  if (textError(content, 2000)) {
+    editor.error = textError(content, 2000)
     return
   }
   const kind = editor.kind

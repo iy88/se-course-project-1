@@ -66,10 +66,10 @@
       <el-form label-position="top">
         <div class="form-grid">
           <el-form-item label="类别（如：危险品与管制物品）" class="span-2">
-            <el-input v-model="form.group_name" placeholder="按类别归组展示" />
+            <TextInput :limit="64" v-model="form.group_name" placeholder="按类别归组展示"  />
           </el-form-item>
           <el-form-item label="细目" class="span-2">
-            <el-input v-model="form.content" type="textarea" placeholder="具体禁发内容说明"  :autosize="{ minRows: 3, maxRows: 8 }"/>
+            <TextInput :limit="500" v-model="form.content" type="textarea" placeholder="具体禁发内容说明"  :autosize="{ minRows: 3, maxRows: 8 }" />
           </el-form-item>
           <el-form-item label="排序">
             <el-input-number v-model="form.sort" :min="0" :controls="false" class="sort-input" />
@@ -85,6 +85,7 @@
 </template>
 
 <script setup>
+import TextInput from '../components/TextInput.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../api/http'
