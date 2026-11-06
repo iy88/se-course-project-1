@@ -30,3 +30,6 @@ dist/
 .vscode/
 
 .vite
+
+# Rust load driver
+/loadtest/target/
