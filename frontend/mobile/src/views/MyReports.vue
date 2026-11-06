@@ -186,7 +186,7 @@ const supplement = reactive({ reportId: null, content: '', error: '', submitting
 
 function previewEvidence(urls, index) {
   if (!urls?.length) return
-  showImagePreview({ images: urls, startPosition: index || 0 })
+  showImagePreview({ images: urls, startPosition: index || 0, closeable: true })
 }
 const supplementFiles = ref([])
 const evidenceUploads = createEvidenceUploads(uploadImage)
