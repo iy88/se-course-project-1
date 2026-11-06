@@ -111,16 +111,14 @@ const session = useSession()
 const form = reactive({ email: '', code: '', display_name: '', password: '', password2: '' })
 const loading = ref(false)
 const sending = ref(false)
-const codeSentTo = ref('')
 
 const emailValid = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
 
-// 目标邮箱变化后旧验证码不再可用，清空已输入值和发送状态。
+// 目标邮箱变化后已输入的验证码不再对应当前邮箱，清空输入；验证结果以服务端为准。
 watch(
   () => form.email,
   () => {
     form.code = ''
-    codeSentTo.value = ''
   },
 )
 
@@ -129,7 +127,6 @@ async function sendCode() {
   sending.value = true
   try {
     await http.post('/auth/register/send-code', { email: form.email })
-    codeSentTo.value = form.email
     showToast('验证码已发送，请查收邮箱')
   } finally {
     sending.value = false
@@ -138,7 +135,7 @@ async function sendCode() {
 
 async function submit() {
   if (!form.code || !/^\d{6}$/.test(form.code)) return showToast('请输入 6 位邮箱验证码')
-  if (codeSentTo.value !== form.email) return showToast('请先向当前注册邮箱获取验证码')
+  // 验证码是否有效只由服务端判定：发码请求超时/网络异常时仍允许提交已收到的验证码。
   loading.value = true
   try {
     const data = await http.post('/auth/register', {
