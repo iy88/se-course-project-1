@@ -138,135 +138,134 @@ print("Backend dependency imports passed.")
             }
         }
 
-        // TEMPORARY: tests passed in build 35; restore after first split rollout.
-//         stage('Realtime Integration - PostgreSQL + Redis + Taskiq') {
-//             steps {
-//                 dir('source/backend') {
-//                     // Missing credentials fail this stage explicitly; there is no
-//                     // silent skip that could let a release pass without the gate.
-//                     withCredentials([
-//                         string(credentialsId: 'realtime-ci-pg-admin-url', variable: 'CI_REALTIME_PG_ADMIN_URL')
-//                     ]) {
-//                         sh '''
-//                             set -eu
-//                             command -v redis-server
-//                             redis-server --version
-//                             export CI_REALTIME_APPROVED=1
-//                             export CI_REALTIME_REDIS_MANAGED=1
-//                             unset CI_REALTIME_REDIS_URL
-//                             .venv/bin/python -m tests.integration_real.runner
-//                         '''
-//                     }
-//                 }
-//             }
-//         }
-//
-//         stage('Backend Unit Tests') {
-//             steps {
-//                 dir('source/backend') {
-//                     sh '.venv/bin/python -m tests.run_unit'
-//                 }
-//             }
-//         }
-//
-//         stage('Rust Load Driver Checks') {
-//             steps {
-//                 dir('source/loadtest') {
-//                     sh '''
-//                         set -eu
-//                         command -v cargo
-//                         cargo test --locked
-//                         cargo clippy --locked --all-targets -- -D warnings
-//                     '''
-//                 }
-//             }
-//         }
-//
-//         stage('Deployment Script Tests') {
-//             steps {
-//                 dir('source') {
-//                     sh '''
-//                         set -eu
-//                         PROJECT1_REQUIRE_NGINX=1 backend/.venv/bin/python -m pytest -q scripts/deploy/tests scripts/tests
-//                     '''
-//                 }
-//             }
-//         }
-//
-//         stage('Backend Acceptance - SQLite Local') {
-//             steps {
-//                 dir('source/backend') {
-//                     sh '''
-//                         set -eu
-//                         umask 077
-//
-//                         # 当前任务每次重新检出 source，测试配置只在此工作区生成。
-//                         # 如果已有配置则拒绝覆盖。
-//                         if [ -e .env.dev ] || [ -L .env.dev ]; then
-//                             echo 'Refusing to overwrite existing backend/.env.dev'
-//                             exit 1
-//                         fi
-//
-//                         .venv/bin/python - <<'PY'
-// from pathlib import Path
-// import os
-// import secrets
-//
-// backend = Path.cwd()
-// root = backend.parent
-// local_root = root / "var" / "ci-local-base"
-// local_root.mkdir(parents=True, exist_ok=True)
-//
-// values = {
-//     "APP_NAME": "Project1 CI",
-//     "ENVIRONMENT": "test",
-//     "DATABASE_URL": "sqlite+aiosqlite:///" + str(local_root / "test.db"),
-//     "DATABASE_SCHEMA": "app",
-//     "DB_AUTO_CREATE": "false",
-//     "AUDIT_TRUSTED_PROXIES": "none",
-//     "STORAGE_LOCAL_ROOT": str(local_root / "storage"),
-//     "JWT_SECRET": secrets.token_urlsafe(48),
-//     "JWT_ALGORITHM": "HS256",
-//     "FILE_URL_SECRET": secrets.token_urlsafe(48),
-//     "SMTP_SECURITY": "ssl",
-// }
-//
-// # 原验收入口要求使用 backend/.env.dev。
-// # 邮件捕获及每轮隔离资源由 runner 生成，不填写生产凭据。
-// with open(".env.dev", "x", encoding="utf-8") as handle:
-//     for key, value in values.items():
-//         handle.write(f"{key}='{value}'\\n")
-//
-// os.chmod(".env.dev", 0o600)
-// print("Private SQLite/local CI configuration created.")
-// PY
-//
-//                         # 成功或失败后均删除本轮生成的基础配置。
-//                         trap 'rm -f .env.dev' EXIT
-//
-//                         # 清理上一轮构建残留的验收产物，只保留本轮失败日志与覆盖率原生产物。
-//                         rm -rf ../var/acceptance-real/code-coverage
-//                         rm -f ../var/acceptance-real/acceptance-failure-*.log
-//
-//                         # 使用现有业务验收入口，由 runner 启动并清理隔离测试服务。
-//                         APP_ENV_FILE=.env.dev \
-//                             .venv/bin/python -m tests.acceptance_real.runner \
-//                             --port 8101
-//                     '''
-//                 }
-//             }
-//
-//             post {
-//                 always {
-//                     archiveArtifacts(
-//                         artifacts: 'source/var/acceptance-real/code-coverage/**,source/var/acceptance-real/acceptance-failure-*.log',
-//                         fingerprint: true,
-//                         allowEmptyArchive: true
-//                     )
-//                 }
-//             }
-//         }
-//
+        stage('Realtime Integration - PostgreSQL + Redis + Taskiq') {
+            steps {
+                dir('source/backend') {
+                    // Missing credentials fail this stage explicitly; there is no
+                    // silent skip that could let a release pass without the gate.
+                    withCredentials([
+                        string(credentialsId: 'realtime-ci-pg-admin-url', variable: 'CI_REALTIME_PG_ADMIN_URL')
+                    ]) {
+                        sh '''
+                            set -eu
+                            command -v redis-server
+                            redis-server --version
+                            export CI_REALTIME_APPROVED=1
+                            export CI_REALTIME_REDIS_MANAGED=1
+                            unset CI_REALTIME_REDIS_URL
+                            .venv/bin/python -m tests.integration_real.runner
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Backend Unit Tests') {
+            steps {
+                dir('source/backend') {
+                    sh '.venv/bin/python -m tests.run_unit'
+                }
+            }
+        }
+
+        stage('Rust Load Driver Checks') {
+            steps {
+                dir('source/loadtest') {
+                    sh '''
+                        set -eu
+                        command -v cargo
+                        cargo test --locked
+                        cargo clippy --locked --all-targets -- -D warnings
+                    '''
+                }
+            }
+        }
+
+        stage('Deployment Script Tests') {
+            steps {
+                dir('source') {
+                    sh '''
+                        set -eu
+                        PROJECT1_REQUIRE_NGINX=1 backend/.venv/bin/python -m pytest -q scripts/deploy/tests scripts/tests
+                    '''
+                }
+            }
+        }
+
+        stage('Backend Acceptance - SQLite Local') {
+            steps {
+                dir('source/backend') {
+                    sh '''
+                        set -eu
+                        umask 077
+
+                        # 当前任务每次重新检出 source，测试配置只在此工作区生成。
+                        # 如果已有配置则拒绝覆盖。
+                        if [ -e .env.dev ] || [ -L .env.dev ]; then
+                            echo 'Refusing to overwrite existing backend/.env.dev'
+                            exit 1
+                        fi
+
+                        .venv/bin/python - <<'PY'
+from pathlib import Path
+import os
+import secrets
+
+backend = Path.cwd()
+root = backend.parent
+local_root = root / "var" / "ci-local-base"
+local_root.mkdir(parents=True, exist_ok=True)
+
+values = {
+    "APP_NAME": "Project1 CI",
+    "ENVIRONMENT": "test",
+    "DATABASE_URL": "sqlite+aiosqlite:///" + str(local_root / "test.db"),
+    "DATABASE_SCHEMA": "app",
+    "DB_AUTO_CREATE": "false",
+    "AUDIT_TRUSTED_PROXIES": "none",
+    "STORAGE_LOCAL_ROOT": str(local_root / "storage"),
+    "JWT_SECRET": secrets.token_urlsafe(48),
+    "JWT_ALGORITHM": "HS256",
+    "FILE_URL_SECRET": secrets.token_urlsafe(48),
+    "SMTP_SECURITY": "ssl",
+}
+
+# 原验收入口要求使用 backend/.env.dev。
+# 邮件捕获及每轮隔离资源由 runner 生成，不填写生产凭据。
+with open(".env.dev", "x", encoding="utf-8") as handle:
+    for key, value in values.items():
+        handle.write(f"{key}='{value}'\\n")
+
+os.chmod(".env.dev", 0o600)
+print("Private SQLite/local CI configuration created.")
+PY
+
+                        # 成功或失败后均删除本轮生成的基础配置。
+                        trap 'rm -f .env.dev' EXIT
+
+                        # 清理上一轮构建残留的验收产物，只保留本轮失败日志与覆盖率原生产物。
+                        rm -rf ../var/acceptance-real/code-coverage
+                        rm -f ../var/acceptance-real/acceptance-failure-*.log
+
+                        # 使用现有业务验收入口，由 runner 启动并清理隔离测试服务。
+                        APP_ENV_FILE=.env.dev \
+                            .venv/bin/python -m tests.acceptance_real.runner \
+                            --port 8101
+                    '''
+                }
+            }
+
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'source/var/acceptance-real/code-coverage/**,source/var/acceptance-real/acceptance-failure-*.log',
+                        fingerprint: true,
+                        allowEmptyArchive: true
+                    )
+                }
+            }
+        }
+
         stage('Install Mobile Dependencies') {
             steps {
                 dir('source/frontend/mobile') {
@@ -303,8 +302,7 @@ print("Backend dependency imports passed.")
                     sh '''
                         set -eu
 
-                        # TEMPORARY: passed in build 35; restore after first split rollout.
-                        # npm test
+                        npm test
                         PROJECT1_FRONTEND_CONFIG=public npm run build
 
                         test -s dist/index.html
@@ -321,8 +319,7 @@ print("Backend dependency imports passed.")
                     sh '''
                         set -eu
 
-                        # TEMPORARY: passed in build 35; restore after first split rollout.
-                        # npm test
+                        npm test
                         PROJECT1_FRONTEND_CONFIG=public npm run build
 
                         test -s dist/index.html
