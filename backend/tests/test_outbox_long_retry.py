@@ -19,7 +19,7 @@ class _Session:
     def begin(self):
         return self
 
-    async def execute(self, statement):
+    async def exec(self, statement):
         self.updates.append(statement.compile().params)
 
 
