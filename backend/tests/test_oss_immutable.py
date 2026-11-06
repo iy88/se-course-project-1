@@ -1,6 +1,6 @@
 """Offline checks for immutable OSS writes; no external services are contacted."""
 import pytest
-from app.storage.base import StorageAlreadyExists, StoragePermissionDenied
+from app.storage.base import StorageAlreadyExists, StoragePermissionDenied, StorageUnavailable
 from app.storage.oss import OssConfig, OssStorage, _V2Bucket
 
 
@@ -73,3 +73,28 @@ def test_exists_distinguishes_expected_missing_from_permission_failure(caplog, s
             storage.exists('product/test/image.jpg')
         assert 'status=403 code=AccessDenied' in caplog.text
         assert 'private-target' not in caplog.text
+
+
+@pytest.mark.parametrize('recover', [True, False])
+def test_wrapped_response_timeout_retries_with_bound(monkeypatch, caplog, recover):
+    from alibabacloud_oss_v2.exceptions import OperationError, ResponseError
+    from requests.exceptions import ReadTimeout
+    monkeypatch.setattr('app.storage.oss.time.sleep', lambda _: None)
+    storage = OssStorage(OssConfig(region='region', endpoint='https://example.com',
+        media_bucket='media', evidence_bucket='evidence', access_key_id='test-id',
+        access_key_secret='test-secret', max_retries=2))
+    calls = 0
+    def read():
+        nonlocal calls
+        calls += 1
+        if recover and calls == 2:
+            return b'confirmed'
+        raise OperationError(name='GetObject', error=ResponseError(error=ReadTimeout('private-url-and-secret')))
+    if recover:
+        assert storage._run('get', read) == b'confirmed'
+        assert calls == 2
+    else:
+        with pytest.raises(StorageUnavailable):
+            storage._run('get', read)
+        assert calls == 3
+    assert 'private-url-and-secret' not in caplog.text

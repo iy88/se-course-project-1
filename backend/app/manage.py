@@ -54,6 +54,13 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--manifest", default=None, help="private demo manifest path")
     verify.add_argument("--skip-api", action="store_true", help="skip read-only API visibility checks")
     verify.add_argument("--json", action="store_true", help="print JSON summary")
+    load = sub.add_parser("load-seed", help="bulk persistent dev/test performance fixtures")
+    load.add_argument("--env-file", default=".env.dev")
+    load.add_argument("--manifest", default=None)
+    load.add_argument("--users", type=int, default=100)
+    load.add_argument("--products", type=int, default=10000)
+    load.add_argument("--upload-workers", type=int, default=16)
+    load.add_argument("--verify-only", action="store_true")
     return parser
 
 
@@ -141,6 +148,16 @@ def main(argv: list[str] | None = None) -> int:
             return run_serve()
         if args.command == "seed":
             return run_seed(args.admin_email, args.admin_name, args.category)
+        if args.command == "load-seed":
+            from app.devtools.load_seed import main as run_load_seed
+
+            load_args = ["--env-file", args.env_file, "--users", str(args.users),
+                         "--products", str(args.products), "--upload-workers", str(args.upload_workers)]
+            if args.manifest is not None:
+                load_args.extend(["--manifest", args.manifest])
+            if args.verify_only:
+                load_args.append("--verify-only")
+            return run_load_seed(load_args)
         if args.command == "demo-seed":
             from app.devtools.demo_seed import main as run_demo_seed
 
