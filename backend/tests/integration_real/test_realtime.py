@@ -235,7 +235,7 @@ async def test_dispatcher_does_not_hold_sql_during_publish_and_leases_take_over(
     claimed = await first._claim()
     assert len(claimed) == 1
     async with get_sessionmaker()() as db, db.begin():
-        await db.execute(
+        await db.exec(
             update(RealtimeEvent)
             .where(RealtimeEvent.event_id == claimed[0].event_id)
             .values(lease_expires_at=datetime.now(UTC) - timedelta(seconds=1))
@@ -615,7 +615,7 @@ async def test_outbox_admission_rolls_back_business_and_recovers(monkeypatch):
 
     # Recover the backlog and clear the process cache: new business passes again.
     async with get_sessionmaker()() as db, db.begin():
-        await db.execute(delete(RealtimeEvent))
+        await db.exec(delete(RealtimeEvent))
     admission.clear_admission_cache()
     email2 = f"recovered-{secrets.token_hex(4)}@integration.invalid"
     async with get_sessionmaker()() as db, db.begin():

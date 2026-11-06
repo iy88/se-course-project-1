@@ -30,7 +30,7 @@ def _parse_date(value: str | None, end_of_day: bool = False):
         dt = datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "日期格式应为 YYYY-MM-DD，例如 2026-11-01",
         )
     if end_of_day:

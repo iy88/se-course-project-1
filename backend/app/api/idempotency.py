@@ -79,9 +79,9 @@ class IdempotencyGuard:
             self._lock = _SQLITE_LOCK
         else:
             # Transaction-scoped: released automatically by commit/rollback.
-            await self.db.execute(
+            await self.db.exec(
                 text("SELECT pg_advisory_xact_lock(hashtextextended(:scope, 0))"),
-                {"scope": f"idempotency:{self.user_id}:{self.operation}:{self.key}"},
+                params={"scope": f"idempotency:{self.user_id}:{self.operation}:{self.key}"},
             )
         try:
             await self._load()
@@ -160,7 +160,7 @@ async def cleanup_expired(batch_size: int = 1000, *, max_batches: int = 10) -> i
             ).all()
             if not ids:
                 break
-            await db.execute(delete(IdempotencyRecord).where(IdempotencyRecord.id.in_(ids)))
+            await db.exec(delete(IdempotencyRecord).where(IdempotencyRecord.id.in_(ids)))
             deleted += len(ids)
         if len(ids) < max(1, batch_size):
             break

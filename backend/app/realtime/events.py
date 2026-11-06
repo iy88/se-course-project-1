@@ -348,7 +348,7 @@ async def advance_retention(db: AsyncSession, *, now: datetime | None = None) ->
     cutoff = (now or datetime.now(UTC)) - timedelta(hours=settings.realtime_event_retention_hours)
     dialect = db.bind.dialect.name if db.bind is not None else ""
     if dialect == "postgresql":
-        await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('realtime:retention', 0))"))
+        await db.exec(text("SELECT pg_advisory_xact_lock(hashtextextended('realtime:retention', 0))"))
 
     users = [
         int(uid) for uid in (

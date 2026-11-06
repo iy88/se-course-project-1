@@ -53,7 +53,7 @@ def token_for(user: User) -> str:
 async def clean_realtime_tables() -> None:
     async with session() as db, db.begin():
         for model in (RealtimeEvent, UserEventCounter, RealtimeRetention, IdempotencyRecord, ServiceHeartbeat):
-            await db.execute(delete(model))
+            await db.exec(delete(model))
 
 
 async def count_rows(model) -> int:

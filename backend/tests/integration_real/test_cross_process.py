@@ -233,7 +233,7 @@ async def test_api_ws_worker_scheduler_cross_process_two_devices_and_ack(tmp_pat
             await asyncio.wait_for(second.recv(), timeout=10)
             await second.close()
         exc = closed.value
-        code = getattr(exc, "code", None) or getattr(getattr(exc, "rcvd", None), "code", None)
+        code = getattr(getattr(exc, "rcvd", None), "code", None)
         assert code == 4401, f"unexpected close: {exc!r}"
     finally:
         for ws in sockets:

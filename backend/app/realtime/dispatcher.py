@@ -115,7 +115,7 @@ class OutboxService:
             return
         now = datetime.now(UTC)
         async with get_sessionmaker()() as db, db.begin():
-            await db.execute(
+            await db.exec(
                 update(RealtimeEvent)
                 .where(
                     col(RealtimeEvent.event_id).in_([event.event_id for event in events]),
@@ -149,7 +149,7 @@ class OutboxService:
                 terminal = int(event.attempts) >= self.settings.outbox_max_attempts
                 if not terminal:
                     retryable.append(event)
-                await db.execute(
+                await db.exec(
                     update(RealtimeEvent)
                     .where(
                         RealtimeEvent.event_id == event.event_id,

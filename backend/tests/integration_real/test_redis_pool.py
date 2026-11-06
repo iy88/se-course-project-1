@@ -22,23 +22,23 @@ async def test_pool_full_waits_bounded_then_recovers_and_cancel_does_not_leak():
         socket_timeout=1,
     )
     try:
-        first = await pool.get_connection("PING")
+        first = await pool.get_connection()
         started = asyncio.get_running_loop().time()
         with pytest.raises(RedisConnectionError):
-            await pool.get_connection("PING")
+            await pool.get_connection()
         assert asyncio.get_running_loop().time() - started >= 0.15
         await pool.release(first)
-        recovered = await pool.get_connection("PING")
+        recovered = await pool.get_connection()
         await pool.release(recovered)
 
-        held = await pool.get_connection("PING")
-        waiting = asyncio.create_task(pool.get_connection("PING"))
+        held = await pool.get_connection()
+        waiting = asyncio.create_task(pool.get_connection())
         await asyncio.sleep(0.05)
         waiting.cancel()
         with pytest.raises((asyncio.CancelledError, RedisConnectionError)):
             await waiting
         await pool.release(held)
-        after_cancel = await pool.get_connection("PING")
+        after_cancel = await pool.get_connection()
         await pool.release(after_cancel)
     finally:
         await pool.disconnect()
