@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import ipaddress
+import math
 import os
 import re
 from email.utils import parseaddr
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from dotenv import dotenv_values
 from dotenv.parser import parse_stream
@@ -46,6 +47,17 @@ def validate_storage_key_prefix(value: str) -> str:
     if not prefix or any(not re.fullmatch(r'[A-Za-z0-9_-]+', part) for part in prefix.split('/')):
         raise ValueError('invalid storage key prefix')
     return prefix + '/'
+
+
+def parse_release_id(text: str) -> str:
+    for line in text.splitlines():
+        key, _, value = line.partition('=')
+        if key.strip() == 'release_id':
+            candidate = value.strip()
+            if re.fullmatch(r'[0-9a-f]{40}-[0-9]+', candidate):
+                return candidate
+            return 'invalid'
+    return 'invalid'
 
 
 def is_placeholder_secret(value: str | None, *, min_length: int = 1) -> bool:
@@ -117,8 +129,20 @@ class DotenvOnlySettings(BaseSettings):
 
 class Settings(DotenvOnlySettings):
     app_name: str
+    # Runtime role. ``combined`` keeps the legacy single-process entry point; the
+    # split roles own only their layer and never start another role's scanners.
+    # ``jobs`` is the transitional all-in-one jobs process. New split releases
+    # use the native Taskiq ``worker`` and ``scheduler`` roles, which each own a
+    # process-level SQL/Redis lifecycle and never share pools across forks.
+    app_role: Literal['combined', 'api', 'ws', 'jobs', 'worker', 'scheduler'] = 'combined'
     api_host: str = Field(default='127.0.0.1', min_length=1)
     api_port: int = Field(default=8000, ge=1, le=65535)
+    ws_host: str = Field(default='127.0.0.1', min_length=1)
+    ws_port: int = Field(default=8002, ge=1, le=65535)
+    jobs_host: str = Field(default='127.0.0.1', min_length=1)
+    jobs_port: int = Field(default=8003, ge=1, le=65535)
+    api_workers: int = 1
+    ws_workers: int = 1
     environment: Literal['dev', 'test', 'prod']
     database_url: str
     db_auto_create: bool
@@ -126,6 +150,124 @@ class Settings(DotenvOnlySettings):
     audit_trusted_proxies: str
     redis_url: str = ''
     redis_key_prefix: str = ''
+
+    # SQL pool/timeout budget, expressed per process role. Inherited environment
+    # variables never override these values; only the selected dotenv does.
+    api_db_pool_size: int = 8
+    api_db_max_overflow: int = 0
+    ws_db_pool_size: int = 2
+    ws_db_max_overflow: int = 0
+    jobs_db_pool_size: int = 4
+    jobs_db_max_overflow: int = 0
+    db_pool_timeout_seconds: float = 1.0
+    db_pre_ping: bool = True
+    db_recycle_seconds: int = 1800
+    db_lock_timeout_ms: int = 500
+    db_statement_timeout_ms: int = 2000
+    db_idle_in_transaction_timeout_ms: int = 10000
+    db_connection_budget: int = 0  # 0 disables the configured-budget check
+
+    # Redis control pool and stream reader are separate budgets. Blocking XREAD
+    # must not consume the ticket/verification/counter connections.
+    redis_control_max_connections_api: int = 16
+    redis_control_max_connections_ws: int = 8
+    redis_control_max_connections_jobs: int = 8
+    redis_control_max_connections_combined: int = 16
+    redis_connection_budget: int = 0
+    redis_connect_timeout_seconds: float = 1.0
+    redis_socket_timeout_seconds: float = 2.0
+    # Bounded acquisition for control/publish pools. The dedicated XREAD
+    # connection has its own pool and never shares these slots.
+    redis_control_pool_timeout_seconds: float = 1.0
+    redis_publish_max_connections: int = 2
+    redis_publish_pool_timeout_seconds: float = 1.0
+    redis_reader_pool_timeout_seconds: float = 1.0
+    redis_stream_block_ms: int = 5000
+    redis_stream_socket_timeout_seconds: float = 10.0
+
+    # Durable realtime delivery. The Redis stream is an accelerator only; the
+    # PostgreSQL event table is the source of truth for replay and compensation.
+    realtime_protocol_version: int = 2
+    realtime_stream_name: str = 'realtime:v1:events'
+    realtime_stream_maxlen: int = 50000
+    realtime_payload_max_bytes: int = 16384
+    realtime_event_retention_hours: int = 72
+    realtime_replay_batch_size: int = 200
+    realtime_replay_max_events: int = 5000
+    realtime_pending_degraded_threshold: int = 10000
+    realtime_admission_enabled: bool = True
+    # Soft admission budget. The cache window and in-flight transactions mean
+    # this is not an exact global hard cap; keep deployment headroom above it.
+    realtime_outbox_max_pending: int = 20000
+    realtime_outbox_max_age_seconds: int = 3600
+    realtime_outbox_admission_cache_seconds: float = 1.0  # 0 = always query
+    realtime_outbox_retry_after_seconds: int = 30
+    outbox_batch_size: int = 100
+    # The periodic Taskiq sweep and the retry middleware own retry timing.
+    # ``next_retry_at`` remains a schema/manual-recovery field and is no longer
+    # consulted by claim; this interval is the bounded re-scan backstop.
+    outbox_poll_interval_ms: int = 1000
+    outbox_lease_seconds: int = 30
+    outbox_max_attempts: int = 8
+    outbox_max_batches_per_run: int = 5
+    outbox_run_time_budget_seconds: float = 10.0
+    retention_batch_limit: int = 2000
+    idempotency_ttl_hours: int = 24
+    idempotency_cleanup_batch_size: int = 1000
+
+    # Background jobs use the official Taskiq RedisStreamBroker. The task
+    # stream/group is deliberately separate from the realtime broadcast stream:
+    # WS gateways keep independent XREAD cursors, while only task workers join
+    # this consumer group.
+    taskiq_queue_name: str = 'jobs:v1:taskiq'
+    taskiq_consumer_group: str = 'jobs:v1:workers'
+    taskiq_retry_prefix: str = 'jobs:v1:retry'
+    taskiq_worker_processes: int = 2
+    taskiq_max_async_tasks: int = 16
+    taskiq_max_prefetch: int = 8
+    taskiq_broker_max_connections: int = 4
+    taskiq_schedule_max_connections: int = 2
+    taskiq_heartbeat_max_connections: int = 1
+    taskiq_xread_block_ms: int = 5000
+    taskiq_xread_count: int = 8
+    taskiq_reclaim_idle_ms: int = 300000
+    taskiq_unacknowledged_batch_size: int = 8
+    taskiq_unacknowledged_lock_timeout_seconds: float = 30.0
+    taskiq_retry_max_retries: int = 3
+    taskiq_retry_delay_seconds: float = 2.0
+    taskiq_retry_max_delay_seconds: int = 60
+    taskiq_retry_jitter: bool = True
+    taskiq_retry_exponent: bool = True
+    taskiq_shutdown_timeout_seconds: int = 20
+    taskiq_task_timeout_seconds: float = 60.0
+    taskiq_outbox_interval_seconds: int = 1
+    taskiq_retention_interval_seconds: int = 300
+    taskiq_idempotency_cleanup_interval_seconds: int = 900
+    taskiq_scheduler_update_interval_seconds: int = 5
+    taskiq_scheduler_loop_interval_seconds: int = 1
+    taskiq_scheduler_send_timeout_seconds: float = 10.0
+    taskiq_scheduler_heartbeat_ttl_seconds: int = 30
+    taskiq_probe_timeout_seconds: float = 20.0
+    taskiq_probe_ttl_seconds: int = 120
+    # Test/integration may append modules; production keeps only app.jobs.tasks.
+    taskiq_extra_task_modules: str = ''
+
+    ws_ticket_ttl_seconds: int = 30
+    allow_query_token: bool = False
+    allowed_origins: str = ''
+    allow_missing_origin: bool = False
+    ws_heartbeat_seconds: int = 20
+    ws_heartbeat_timeout_seconds: int = 60
+    ws_send_timeout_seconds: float = 5.0
+    ws_queue_max_messages: int = 128
+    ws_queue_max_bytes: int = 524288
+    ws_max_frame_bytes: int = 32768
+    ws_max_connections_per_user: int = 5
+    ws_max_connections_per_ip: int = 50
+    ws_handshake_rate_limit: int = 30
+    ws_handshake_rate_window_seconds: int = 60
+    ws_reconcile_seconds: int = 1
+    graceful_shutdown_seconds: int = 20
     storage_key_prefix: str = ''
     storage_operation_journal: Path | None = None
     storage_local_root: Path | None = None
@@ -164,6 +306,137 @@ class Settings(DotenvOnlySettings):
         return 'redis' if self.redis_url.strip() else 'memory'
 
     @property
+    def is_split(self) -> bool:
+        return self.app_role != 'combined'
+
+    @property
+    def db_pool(self) -> tuple[int, int]:
+        if self.app_role == 'scheduler':
+            # The scheduler uses Redis only (schedule source + heartbeat); it
+            # must not pretend to own a SQL pool it never creates.
+            return (0, 0)
+        return {
+            'combined': (self.api_db_pool_size, self.api_db_max_overflow),
+            'api': (self.api_db_pool_size, self.api_db_max_overflow),
+            'ws': (self.ws_db_pool_size, self.ws_db_max_overflow),
+            'jobs': (self.jobs_db_pool_size, self.jobs_db_max_overflow),
+            'worker': (self.jobs_db_pool_size, self.jobs_db_max_overflow),
+        }[self.app_role]
+
+    @property
+    def redis_control_limit(self) -> int:
+        if self.app_role == 'scheduler':
+            return 1  # readiness CLI control probe; zero means unbounded in redis-py
+        return {
+            'combined': self.redis_control_max_connections_combined,
+            'api': self.redis_control_max_connections_api,
+            'ws': self.redis_control_max_connections_ws,
+            'jobs': self.redis_control_max_connections_jobs,
+            'worker': self.redis_control_max_connections_jobs,
+        }[self.app_role]
+
+    @property
+    def ws_effective_queue_capacity(self) -> int:
+        """Conservative message-slot bound for one AnyIO stream.
+
+        Any legal frame is at most ``WS_MAX_FRAME_BYTES``. Limiting the number
+        of buffered frames to ``WS_QUEUE_MAX_BYTES // WS_MAX_FRAME_BYTES``
+        therefore guarantees the byte budget without a custom weighted queue.
+        The writer may additionally hold one dequeued frame while it awaits the
+        socket; that +1 in-flight frame is the documented memory margin.
+        """
+        by_bytes = self.ws_queue_max_bytes // self.ws_max_frame_bytes
+        return max(1, min(self.ws_queue_max_messages, by_bytes))
+
+    @property
+    def taskiq_modules(self) -> list[str]:
+        modules = ['app.jobs.tasks']
+        modules.extend(part.strip() for part in self.taskiq_extra_task_modules.split(',') if part.strip())
+        return modules
+
+    @property
+    def origin_allowlist(self) -> frozenset[str]:
+        return frozenset(part.strip().rstrip('/') for part in self.allowed_origins.split(',') if part.strip())
+
+    @property
+    def release_id(self) -> str:
+        """Deployment metadata parsed from release.txt, never inherited env."""
+        for candidate in (PROJECT_ROOT / 'release.txt', BACKEND_ROOT.parent / 'release.txt'):
+            try:
+                text = candidate.read_text(encoding='utf-8')
+            except (OSError, UnicodeError):
+                continue
+            return parse_release_id(text)
+        return 'dev'
+
+    def sql_connection_budget(self) -> int:
+        """Configured steady-state SQL connections for this role/machine."""
+        if self.app_role == 'combined':
+            return (self.api_db_pool_size + self.api_db_max_overflow)
+        if self.app_role == 'api':
+            return (self.api_db_pool_size + self.api_db_max_overflow) * max(self.api_workers, 1)
+        if self.app_role == 'ws':
+            return (self.ws_db_pool_size + self.ws_db_max_overflow) * max(self.ws_workers, 1)
+        if self.app_role == 'worker':
+            # Each Taskiq worker process creates its own engine; never share a
+            # pool across fork/loop boundaries.
+            return (self.jobs_db_pool_size + self.jobs_db_max_overflow) * max(self.taskiq_worker_processes, 1)
+        if self.app_role == 'scheduler':
+            return 0
+        return self.jobs_db_pool_size + self.jobs_db_max_overflow
+
+    def split_sql_budget(self) -> int:
+        return ((self.api_db_pool_size + self.api_db_max_overflow) * max(self.api_workers, 1) +
+                (self.ws_db_pool_size + self.ws_db_max_overflow) * max(self.ws_workers, 1) +
+                (self.jobs_db_pool_size + self.jobs_db_max_overflow) * max(self.taskiq_worker_processes, 1))
+
+    def _worker_redis_budget(self) -> int:
+        return max(self.taskiq_worker_processes, 1) * (
+            self.redis_control_max_connections_jobs
+            + self.redis_publish_max_connections
+            + self.taskiq_broker_max_connections
+            + self.taskiq_schedule_max_connections
+            # Probe outcomes and terminal-failure records each use at most
+            # one short-lived connection per concurrently executing task.
+            + self.taskiq_max_async_tasks
+        )
+
+    def _scheduler_redis_budget(self) -> int:
+        return (self.taskiq_broker_max_connections +
+                self.taskiq_schedule_max_connections +
+                self.taskiq_heartbeat_max_connections + 1)
+
+    def redis_connection_budget_all(self) -> int:
+        return (self.redis_control_max_connections_api * max(self.api_workers, 1) +
+                (self.redis_control_max_connections_ws + 1) * max(self.ws_workers, 1) +
+                self._worker_redis_budget() + self._scheduler_redis_budget())
+
+    def redis_connection_budget_total(self) -> int:
+        # Count every process-owned pool, not only the control pool: the
+        # dispatcher writer pool, each WS blocking reader, every Taskiq broker
+        # and retry-schedule pool and the scheduler heartbeat connection all
+        # count against Redis maxclients.
+        api = self.redis_control_max_connections_api * max(self.api_workers, 1)
+        ws = (self.redis_control_max_connections_ws + 1) * max(self.ws_workers, 1)
+        jobs = (self.redis_control_max_connections_jobs + self.redis_publish_max_connections +
+                self.taskiq_broker_max_connections + self.taskiq_schedule_max_connections +
+                self.taskiq_heartbeat_max_connections + self.taskiq_max_async_tasks)
+        if self.app_role == 'combined':
+            return (self.redis_control_max_connections_combined + self.redis_publish_max_connections +
+                    self.taskiq_heartbeat_max_connections + 1 + self.taskiq_max_async_tasks)
+        if self.app_role == 'api':
+            return api
+        if self.app_role == 'ws':
+            return ws
+        if self.app_role == 'worker':
+            return self._worker_redis_budget()
+        if self.app_role == 'scheduler':
+            return self._scheduler_redis_budget()
+        if self.app_role == 'jobs':
+            return jobs
+        return api + ws + self._worker_redis_budget() + self._scheduler_redis_budget()
+
+    @property
     def storage_backend(self) -> Literal['local', 'oss']:
         fields = ('oss_region', 'oss_endpoint', 'oss_media_bucket', 'oss_evidence_bucket',
                   'oss_access_key_id', 'oss_access_key_secret')
@@ -194,12 +467,108 @@ class Settings(DotenvOnlySettings):
     @field_validator('oss_timeout_seconds', 'jwt_expire_days', 'file_url_expire_seconds', 'upload_lease_expire_seconds',
                      'comment_rate_limit_count', 'comment_rate_limit_seconds',
                      'trade_confirm_timeout_days', 'timeout_scan_interval_seconds',
-                     'verification_code_ttl_seconds', 'verification_send_interval_seconds', 'smtp_timeout_seconds')
+                     'verification_code_ttl_seconds', 'verification_send_interval_seconds', 'smtp_timeout_seconds',
+                     'api_workers', 'ws_workers', 'api_db_pool_size', 'ws_db_pool_size', 'jobs_db_pool_size',
+                     'db_recycle_seconds', 'db_lock_timeout_ms', 'db_statement_timeout_ms',
+                     'db_idle_in_transaction_timeout_ms',
+                     'redis_control_max_connections_api', 'redis_control_max_connections_ws',
+                     'redis_control_max_connections_jobs', 'redis_control_max_connections_combined',
+                     'redis_publish_max_connections', 'redis_stream_block_ms',
+                     'realtime_protocol_version', 'realtime_stream_maxlen', 'realtime_payload_max_bytes',
+                     'realtime_event_retention_hours', 'realtime_replay_batch_size', 'realtime_replay_max_events',
+                     'realtime_pending_degraded_threshold', 'realtime_outbox_max_pending',
+                     'realtime_outbox_max_age_seconds', 'realtime_outbox_retry_after_seconds',
+                     'outbox_batch_size', 'outbox_poll_interval_ms', 'outbox_lease_seconds',
+                     'outbox_max_attempts', 'outbox_max_batches_per_run',
+                     'retention_batch_limit', 'idempotency_ttl_hours', 'idempotency_cleanup_batch_size',
+                     'taskiq_worker_processes', 'taskiq_max_async_tasks', 'taskiq_max_prefetch',
+                     'taskiq_broker_max_connections', 'taskiq_schedule_max_connections',
+                     'taskiq_heartbeat_max_connections', 'taskiq_xread_block_ms', 'taskiq_xread_count',
+                     'taskiq_reclaim_idle_ms', 'taskiq_unacknowledged_batch_size',
+                     'taskiq_retry_max_retries', 'taskiq_retry_max_delay_seconds',
+                     'taskiq_shutdown_timeout_seconds', 'taskiq_outbox_interval_seconds',
+                     'taskiq_retention_interval_seconds', 'taskiq_idempotency_cleanup_interval_seconds',
+                     'taskiq_scheduler_update_interval_seconds', 'taskiq_scheduler_loop_interval_seconds',
+                     'taskiq_scheduler_heartbeat_ttl_seconds', 'taskiq_probe_ttl_seconds',
+                     'ws_ticket_ttl_seconds', 'ws_heartbeat_seconds', 'ws_heartbeat_timeout_seconds',
+                     'ws_queue_max_messages', 'ws_queue_max_bytes', 'ws_max_frame_bytes',
+                     'ws_max_connections_per_user', 'ws_max_connections_per_ip',
+                     'ws_handshake_rate_limit', 'ws_handshake_rate_window_seconds',
+                     'ws_reconcile_seconds', 'graceful_shutdown_seconds')
     @classmethod
     def validate_positive(cls, value: int) -> int:
         if value <= 0:
             raise ValueError('must be positive')
         return value
+
+    @field_validator('db_pool_timeout_seconds', 'redis_connect_timeout_seconds', 'redis_socket_timeout_seconds',
+                     'redis_control_pool_timeout_seconds', 'redis_publish_pool_timeout_seconds',
+                     'redis_reader_pool_timeout_seconds', 'redis_stream_socket_timeout_seconds',
+                     'ws_send_timeout_seconds', 'outbox_run_time_budget_seconds',
+                     'taskiq_unacknowledged_lock_timeout_seconds', 'taskiq_retry_delay_seconds',
+                     'taskiq_task_timeout_seconds', 'taskiq_scheduler_send_timeout_seconds',
+                     'taskiq_probe_timeout_seconds')
+    @classmethod
+    def validate_positive_float(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError('must be a finite positive number')
+        return value
+
+    @field_validator('api_db_max_overflow', 'ws_db_max_overflow', 'jobs_db_max_overflow',
+                     'db_connection_budget', 'redis_connection_budget')
+    @classmethod
+    def validate_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError('must be non-negative')
+        return value
+
+    @field_validator('realtime_outbox_admission_cache_seconds')
+    @classmethod
+    def validate_non_negative_float(cls, value: float) -> float:
+        if not math.isfinite(value) or value < 0:
+            raise ValueError('must be a finite non-negative number')
+        return value
+
+    @field_validator('realtime_outbox_max_pending', 'realtime_outbox_max_age_seconds', 'realtime_outbox_retry_after_seconds')
+    @classmethod
+    def validate_outbox_budget(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError('must be positive')
+        return value
+
+    @field_validator('allowed_origins')
+    @classmethod
+    def validate_allowed_origins(cls, value: str) -> str:
+        parts = [part.strip().rstrip('/') for part in value.split(',') if part.strip()]
+        for part in parts:
+            parsed = urlsplit(part)
+            if part == '*' or parsed.scheme not in {'http', 'https'} or not parsed.netloc or parsed.path not in {'', '/'}:
+                raise ValueError('ALLOWED_ORIGINS must be explicit http(s) origins')
+        return ','.join(parts)
+
+    @field_validator('realtime_stream_name')
+    @classmethod
+    def validate_stream_name(cls, value: str) -> str:
+        if not re.fullmatch(r'[A-Za-z0-9:._-]{1,128}', value):
+            raise ValueError('invalid realtime stream name')
+        return value
+
+    @field_validator('taskiq_queue_name', 'taskiq_consumer_group', 'taskiq_retry_prefix')
+    @classmethod
+    def validate_taskiq_names(cls, value: str) -> str:
+        if not re.fullmatch(r'[A-Za-z0-9:._-]{1,128}', value):
+            raise ValueError('invalid Taskiq Redis namespace')
+        return value
+
+    @field_validator('taskiq_extra_task_modules')
+    @classmethod
+    def validate_taskiq_modules(cls, value: str) -> str:
+        modules = [part.strip() for part in value.split(',') if part.strip()]
+        for module in modules:
+            if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.]*', module):
+                raise ValueError('invalid Taskiq task module')
+        return ','.join(modules)
+
 
     @field_validator('oss_max_retries')
     @classmethod
@@ -274,8 +643,73 @@ class Settings(DotenvOnlySettings):
                 redis = urlsplit(self.redis_url)
                 if redis.scheme not in {'redis', 'rediss'} or not redis.hostname:
                     errors.append('REDIS_URL must be a valid Redis URL')
+                else:
+                    # redis-py lets URL query parameters override explicit
+                    # budget/timeout/retry kwargs. Reject those conflicts so the
+                    # dotenv budget is authoritative; TLS parameters stay usable.
+                    forbidden = {
+                        'max_connections', 'timeout', 'socket_timeout', 'socket_connect_timeout',
+                        'retry', 'retry_on_timeout', 'health_check_interval', 'decode_responses',
+                        'connection_pool_class', 'protocol',
+                    }
+                    conflicts = sorted({key.lower() for key, _ in parse_qsl(redis.query)} & forbidden)
+                    if conflicts:
+                        errors.append('REDIS_URL query overrides explicit budget parameters: ' + ', '.join(conflicts))
             except ValueError:
                 errors.append('REDIS_URL must be a valid Redis URL')
+        # Shared state is mandatory whenever more than one process owns
+        # realtime delivery. Silently falling back to per-process memory would
+        # make tickets, rate limits and connection limits unreliable.
+        if (self.is_production or self.is_split) and self.kv_backend != 'redis':
+            errors.append('shared REDIS_URL/REDIS_KEY_PREFIX is required for production or split roles')
+        if self.is_production:
+            if not self.origin_allowlist:
+                errors.append('ALLOWED_ORIGINS is required in prod')
+            if self.allow_query_token:
+                errors.append('ALLOW_QUERY_TOKEN must be false in prod')
+        if self.db_connection_budget:
+            budget = self.split_sql_budget() if self.is_split else self.sql_connection_budget()
+            if budget > self.db_connection_budget:
+                errors.append(f'SQL connection budget exceeded: {budget} > {self.db_connection_budget}')
+        redis_budget = self.redis_connection_budget_all() if self.is_split else self.redis_connection_budget_total()
+        if self.redis_connection_budget and redis_budget > self.redis_connection_budget:
+            errors.append(f'Redis connection budget exceeded: {redis_budget} > {self.redis_connection_budget}')
+        if self.ws_heartbeat_timeout_seconds <= self.ws_heartbeat_seconds:
+            errors.append('WS_HEARTBEAT_TIMEOUT_SECONDS must exceed WS_HEARTBEAT_SECONDS')
+        if self.realtime_outbox_max_pending < self.realtime_pending_degraded_threshold:
+            errors.append('REALTIME_OUTBOX_MAX_PENDING must be >= REALTIME_PENDING_DEGRADED_THRESHOLD')
+        if self.redis_stream_socket_timeout_seconds * 1000 <= self.redis_stream_block_ms:
+            errors.append('REDIS_STREAM_SOCKET_TIMEOUT_SECONDS must exceed the XREAD block')
+        if self.ws_max_frame_bytes <= self.realtime_payload_max_bytes:
+            errors.append('WS_MAX_FRAME_BYTES must exceed REALTIME_PAYLOAD_MAX_BYTES to include the envelope')
+        if self.ws_queue_max_bytes < self.ws_max_frame_bytes:
+            errors.append('WS_QUEUE_MAX_BYTES must be at least WS_MAX_FRAME_BYTES (one frame slot)')
+        if self.outbox_max_attempts < self.taskiq_retry_max_retries + 1:
+            errors.append('OUTBOX_MAX_ATTEMPTS must be at least TASKIQ_RETRY_MAX_RETRIES + 1')
+        if self.taskiq_retry_max_delay_seconds < self.taskiq_retry_delay_seconds:
+            errors.append('TASKIQ_RETRY_MAX_DELAY_SECONDS must be >= TASKIQ_RETRY_DELAY_SECONDS')
+        if self.taskiq_scheduler_heartbeat_ttl_seconds <= self.taskiq_scheduler_update_interval_seconds:
+            errors.append('TASKIQ_SCHEDULER_HEARTBEAT_TTL_SECONDS must exceed the schedule update interval')
+        if self.environment != 'test':
+            if self.taskiq_task_timeout_seconds <= self.taskiq_xread_block_ms / 1000.0:
+                errors.append('TASKIQ_TASK_TIMEOUT_SECONDS must exceed the broker XREAD block budget')
+            if self.taskiq_max_prefetch > self.taskiq_max_async_tasks:
+                errors.append('TASKIQ_MAX_PREFETCH must not exceed TASKIQ_MAX_ASYNC_TASKS')
+        # XREAD/XAUTOCLAIM deliver whole batches into the pending list before
+        # execution slots are available. Do not steal still-running/prefetched
+        # tasks merely because their timeout equals the claim idle threshold.
+        # Fault-injection tests deliberately use tiny idle thresholds.
+        claim_budget_ms = 1000 * self.taskiq_task_timeout_seconds * (
+            1 + math.ceil((self.taskiq_xread_count + self.taskiq_unacknowledged_batch_size
+                           + self.taskiq_max_prefetch) / self.taskiq_max_async_tasks)
+        )
+        if self.environment != 'test' and self.taskiq_reclaim_idle_ms <= claim_budget_ms:
+            errors.append('TASKIQ_RECLAIM_IDLE_MS must exceed the task timeout and prefetched batch execution budget')
+        # Split roles in dev/test still need explicit origins for the WS role;
+        # localhost-only defaults are not guessed here.
+        if (self.is_split and not self.is_production and self.app_role == 'ws'
+                and not self.origin_allowlist and not self.allow_missing_origin):
+            errors.append('ALLOWED_ORIGINS or ALLOW_MISSING_ORIGIN is required for the ws role')
         if self.storage_backend == 'local' and self.storage_local_root is None:
             errors.append('STORAGE_LOCAL_ROOT is required for local storage')
         if self.storage_backend == 'oss':
@@ -359,9 +793,31 @@ def get_settings() -> Settings:
     return settings
 
 
+_ROLE_OVERRIDE: str | None = None
+
+
+def set_runtime_role(role: str | None) -> None:
+    """Select a process role without changing business configuration.
+
+    ``APP_RUNTIME_ROLE`` (or the CLI) is the runtime selector, analogous to
+    ``APP_ENV_FILE``: it lets all split systemd units share one dotenv while the
+    business values still come only from the selected file.
+    """
+    global _ROLE_OVERRIDE
+    if role is not None and role not in {'combined', 'api', 'ws', 'jobs', 'worker', 'scheduler'}:
+        raise ConfigurationError('invalid runtime role')
+    _ROLE_OVERRIDE = role
+    get_settings.cache_clear()
+
+
 def load_settings(env_file: str | Path | None = None, *, for_acceptance: bool = False) -> Settings:
     path = resolve_env_file(env_file)
     settings = _load_base_settings(Settings, path)
+    effective_role = _ROLE_OVERRIDE or os.environ.get('APP_RUNTIME_ROLE', '').strip() or settings.app_role
+    if effective_role not in {'combined', 'api', 'ws', 'jobs', 'worker', 'scheduler'}:
+        raise ConfigurationError('invalid runtime role')
+    if effective_role != settings.app_role:
+        settings = settings.model_copy(update={'app_role': effective_role})
     if for_acceptance and (path != DEFAULT_ENV_FILE.resolve() or settings.environment not in {'dev', 'test'} or settings.mail_backend != 'smtp'):
         raise ConfigurationError('acceptance base configuration requires the default development environment')
     settings.validate_for_runtime(path, skip_smtp=for_acceptance)

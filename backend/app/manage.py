@@ -16,8 +16,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import getpass
+import json
 import logging
+import os
 import re
 import sys
 import traceback
@@ -28,6 +31,7 @@ from app.core.config import (
     ConfigurationError,
     load_migration_settings,
     load_settings,
+    set_runtime_role,
     validate_migration_context,
 )
 
@@ -41,7 +45,20 @@ def _parser() -> argparse.ArgumentParser:
     migrate = sub.add_parser("migrate", help="apply versioned PostgreSQL migrations")
     migrate.add_argument("--revision", default="head", help="target revision (default: head)")
 
-    sub.add_parser("serve", help="run the API server using API_HOST/API_PORT from the selected dotenv")
+    sub.add_parser("serve", help="run the role selected by APP_RUNTIME_ROLE (default combined)")
+    sub.add_parser("serve-api", help="run only the HTTP API role")
+    sub.add_parser("serve-ws", help="run only the WebSocket gateway role")
+    sub.add_parser("serve-jobs", help="run the transitional all-in-one Taskiq jobs process")
+    sub.add_parser("taskiq-worker", help="run the native Taskiq worker with dotenv budgets")
+    sub.add_parser("taskiq-scheduler", help="run the single native Taskiq scheduler with dotenv schedules")
+    probe = sub.add_parser("taskiq-probe", help="enqueue a real task and wait for worker execution")
+    probe.add_argument("--timeout", type=float, default=None)
+    health = sub.add_parser("health", help="probe role readiness without starting the service")
+    health.add_argument("--role", choices=("combined", "api", "ws", "jobs", "worker", "scheduler"), required=True)
+    health.add_argument("--no-probe", action="store_true", help="worker: skip the live task-execution probe")
+    retry = sub.add_parser("realtime-retry", help="requeue failed/expired realtime outbox events")
+    retry.add_argument("--event-id", default=None, help="only requeue this event id")
+    retry.add_argument("--max-age-hours", type=int, default=24)
     seed = sub.add_parser("seed", help="persist initial administrator and optional reference categories")
     seed.add_argument("--admin-email", default=None, help="administrator email; prompted if omitted")
     seed.add_argument("--admin-name", default="管理员", help="display name for a new administrator")
@@ -111,13 +128,202 @@ def run_migrate(revision: str) -> int:
     return 0
 
 
-def run_serve() -> int:
+def _activate_role(role: str | None) -> None:
+    if role is None:
+        return
+    # Child uvicorn workers re-import app.main; an environment selector is the
+    # only value a forked/spawned process reliably inherits. It selects a role,
+    # never a business configuration value.
+    os.environ["APP_RUNTIME_ROLE"] = role
+    set_runtime_role(role)
+
+
+def run_serve(role: str | None = None) -> int:
+    _activate_role(role)
     settings = load_settings()
     settings.validate_for_runtime()
+    effective = settings.app_role
     import uvicorn
 
-    uvicorn.run("app.main:app", host=settings.api_host, port=settings.api_port, log_level="info")
+    common = {
+        "log_level": "info",
+        "timeout_graceful_shutdown": settings.graceful_shutdown_seconds,
+    }
+    if effective == "combined":
+        # The shared dotenv may carry split worker counts; combined always runs
+        # exactly one process so no second scanner/dispatcher is started.
+        uvicorn.run("app.main:app", host=settings.api_host, port=settings.api_port, workers=1, **common)
+    elif effective == "api":
+        uvicorn.run("app.main:app", host=settings.api_host, port=settings.api_port,
+                    workers=settings.api_workers, **common)
+    elif effective == "ws":
+        uvicorn.run("app.main:app", host=settings.ws_host, port=settings.ws_port,
+                    workers=settings.ws_workers, ws="websockets", **common)
+    else:
+        from app.runtime import create_app
+
+        uvicorn.run(create_app("jobs"), host=settings.jobs_host, port=settings.jobs_port, workers=1, **common)
     return 0
+
+
+def run_taskiq_worker() -> int:
+    """Start the official Taskiq worker; all budgets come from the dotenv."""
+    _activate_role("worker")
+    settings = load_settings()
+    settings.validate_for_runtime()
+    from taskiq.acks import AcknowledgeType
+    from taskiq.cli.worker.args import WorkerArgs
+    from taskiq.cli.worker.run import run_worker
+
+    args = WorkerArgs(
+        broker="app.jobs.broker:broker",
+        modules=list(settings.taskiq_modules),
+        app_dir=None,
+        workers=settings.taskiq_worker_processes,
+        max_async_tasks=settings.taskiq_max_async_tasks,
+        max_prefetch=settings.taskiq_max_prefetch,
+        ack_type=AcknowledgeType.WHEN_EXECUTED,
+        shutdown_timeout=settings.taskiq_shutdown_timeout_seconds,
+        wait_tasks_timeout=settings.taskiq_shutdown_timeout_seconds,
+        hardkill_count=3,
+    )
+    return int(run_worker(args) or 0)
+
+
+def run_taskiq_scheduler() -> int:
+    """Start exactly one official Taskiq scheduler in this process."""
+    _activate_role("scheduler")
+    settings = load_settings()
+    settings.validate_for_runtime()
+    import signal
+
+    from taskiq.cli.scheduler.args import SchedulerArgs
+    from taskiq.cli.scheduler.run import run_scheduler
+
+    args = SchedulerArgs(
+        scheduler="app.jobs.broker:scheduler",
+        modules=list(settings.taskiq_modules),
+        update_interval=settings.taskiq_scheduler_update_interval_seconds,
+        loop_interval=settings.taskiq_scheduler_loop_interval_seconds,
+        send_timeout=settings.taskiq_scheduler_send_timeout_seconds,
+    )
+
+    async def managed() -> None:
+        # The official runner owns scheduling; this wrapper only translates
+        # SIGTERM/SIGINT into cancellation so its own shutdown hooks run.
+        task = asyncio.create_task(run_scheduler(args), name="taskiq-scheduler")
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            with contextlib.suppress(NotImplementedError):
+                loop.add_signal_handler(sig, stop.set)
+        stopper = asyncio.create_task(stop.wait(), name="taskiq-scheduler-stop")
+        try:
+            done, _ = await asyncio.wait({task, stopper}, return_when=asyncio.FIRST_COMPLETED)
+            if task not in done:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+        finally:
+            stopper.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await stopper
+
+    asyncio.run(managed())
+    return 0
+
+
+def run_taskiq_probe(timeout: float | None) -> int:
+    _activate_role("worker")
+    settings = load_settings()
+    settings.validate_for_runtime()
+    from app.jobs.probe import run_probe
+
+    try:
+        result = asyncio.run(run_probe(settings, timeout=timeout))
+    except Exception as exc:  # noqa: BLE001 - CLI reports a stable category
+        print(json.dumps({"status": "failed", "category": type(exc).__name__}), file=sys.stderr)
+        return 1
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def run_realtime_retry(event_id: str | None, max_age_hours: int) -> int:
+    _activate_role(None)
+    settings = load_settings()
+    settings.validate_for_runtime()
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+    from sqlmodel import col
+
+    from app.db.session import dispose_engine, get_sessionmaker
+    from app.models.realtime import RealtimeEvent
+
+    async def retry() -> int:
+        cutoff = datetime.now(UTC) - timedelta(hours=max(1, max_age_hours))
+        conditions = [
+            col(RealtimeEvent.delivered_at).is_(None),
+            (col(RealtimeEvent.lease_expires_at).is_(None) |
+             (col(RealtimeEvent.lease_expires_at) < datetime.now(UTC))),
+            col(RealtimeEvent.created_at) >= cutoff,
+        ]
+        if event_id:
+            conditions.append(col(RealtimeEvent.event_id) == event_id)
+        try:
+            async with get_sessionmaker()() as db, db.begin():
+                result = await db.execute(
+                    update(RealtimeEvent)
+                    .where(*conditions)
+                    .values(next_retry_at=datetime.now(UTC), lease_owner=None,
+                            lease_expires_at=None, dead_at=None, attempts=0, last_error=None)
+                )
+                count = int(result.rowcount or 0)
+        finally:
+            await dispose_engine()
+        print(f"realtime outbox requeued: {count}")
+        return 0
+
+    return asyncio.run(retry())
+
+
+def run_health(role: str, *, no_probe: bool = False) -> int:
+    _activate_role(role)
+    settings = load_settings()
+    settings.validate_for_runtime()
+    import asyncio
+
+    from app.realtime.health import readiness
+
+    async def probe() -> tuple[dict, bool]:
+        from app.db.session import dispose_engine
+
+        try:
+            task_probe: dict = {}
+            if role == "worker" and not no_probe:
+                # A heartbeat alone is not consumption evidence: enqueue a real
+                # task and wait for a worker process to execute it. This also
+                # bootstraps the first success row on a freshly started worker.
+                from app.jobs.probe import run_probe
+
+                try:
+                    task_probe = await run_probe(settings)
+                except Exception as exc:  # noqa: BLE001 - stable category only
+                    task_probe = {"status": "failed", "category": type(exc).__name__}
+            payload, ok = await readiness(settings)
+            if task_probe:
+                payload["checks"]["task_probe"] = task_probe
+                if task_probe.get("status") != "ok":
+                    ok = False
+                    payload["status"] = "not_ready"
+            return payload, ok
+        finally:
+            await dispose_engine()
+
+    payload, ok = asyncio.run(probe())
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 0 if ok else 1
 
 
 def run_seed(admin_email: str | None, admin_name: str, categories: list[str]) -> int:
@@ -134,8 +340,8 @@ def run_seed(admin_email: str | None, admin_name: str, categories: list[str]) ->
         if password != getpass.getpass("Confirm administrator password: "):
             raise ConfigurationError("两次密码不一致")
         result = asyncio.run(initialize(settings, admin_email=email, password=password, admin_name=admin_name, categories=categories))
-    print((f"Initialization: admin_id={result.admin_id} admin_created={result.admin_created} "
-           f"categories_created={result.categories_created} categories_existing={result.categories_existing}"))
+    print(f"Initialization: admin_id={result.admin_id} admin_created={result.admin_created} "
+           f"categories_created={result.categories_created} categories_existing={result.categories_existing}")
     return 0
 
 
@@ -146,6 +352,22 @@ def main(argv: list[str] | None = None) -> int:
             return run_migrate(args.revision)
         if args.command == "serve":
             return run_serve()
+        if args.command == "serve-api":
+            return run_serve("api")
+        if args.command == "serve-ws":
+            return run_serve("ws")
+        if args.command == "serve-jobs":
+            return run_serve("jobs")
+        if args.command == "taskiq-worker":
+            return run_taskiq_worker()
+        if args.command == "taskiq-scheduler":
+            return run_taskiq_scheduler()
+        if args.command == "taskiq-probe":
+            return run_taskiq_probe(args.timeout)
+        if args.command == "health":
+            return run_health(args.role, no_probe=args.no_probe)
+        if args.command == "realtime-retry":
+            return run_realtime_retry(args.event_id, args.max_age_hours)
         if args.command == "seed":
             return run_seed(args.admin_email, args.admin_name, args.category)
         if args.command == "load-seed":

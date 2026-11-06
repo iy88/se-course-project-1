@@ -1,11 +1,13 @@
 """SQLAlchemy 异步引擎与会话。
 
-引擎/会话工厂延迟到首次使用才读取配置，避免仅导入模块就加载环境文件；
-自动化验收通过临时 dotenv 选择独立 schema 或 SQLite 文件。
+引擎/会话工厂延迟到首次使用才读取配置。每个进程创建自己的引擎，退出时由
+生命周期入口显式 ``dispose_engine``；fork 后不能复用父进程连接。连接池大小、
+等待与 PostgreSQL 语句/锁超时按当前角色取自所选 dotenv。
 """
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -19,6 +21,7 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import get_settings
+from app.observability import install_sql_observers
 
 # 命名约定使循环外键、唯一约束和索引在所有方言下都有确定名称。
 NAMING_CONVENTION = {
@@ -38,15 +41,40 @@ _engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
+def _engine_options(settings) -> dict[str, Any]:
+    options: dict[str, Any] = {"echo": False, "future": True}
+    if not settings.database_url.startswith("postgresql+asyncpg:"):
+        return options
+    pool_size, max_overflow = settings.db_pool
+    options.update(
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_timeout=settings.db_pool_timeout_seconds,
+        pool_pre_ping=settings.db_pre_ping,
+        pool_recycle=settings.db_recycle_seconds,
+    )
+    options["connect_args"] = {
+        "server_settings": {
+            "search_path": f'"{settings.database_schema}"',
+            "application_name": f"campus-{settings.app_role}",
+            # Millisecond budgets are enforced by PostgreSQL on this connection.
+            # Lock/statement timeouts protect the pool from stuck requests;
+            # idle-in-transaction prevents a forgotten transaction holding rows.
+            "lock_timeout": str(settings.db_lock_timeout_ms),
+            "statement_timeout": str(settings.db_statement_timeout_ms),
+            "idle_in_transaction_session_timeout": str(settings.db_idle_in_transaction_timeout_ms),
+        }
+    }
+    return options
+
+
 def get_engine() -> AsyncEngine:
     """返回进程级异步引擎（首次访问才读取配置）。"""
     global _engine
     if _engine is None:
         settings = get_settings()
-        options: dict[str, Any] = {}
-        if settings.database_url.startswith("postgresql+asyncpg:"):
-            options["connect_args"] = {"server_settings": {"search_path": f'"{settings.database_schema}"'}}
-        _engine = create_async_engine(settings.database_url, echo=False, future=True, **options)
+        _engine = create_async_engine(settings.database_url, **_engine_options(settings))
+        install_sql_observers(_engine)
     return _engine
 
 
@@ -55,6 +83,21 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     if _sessionmaker is None:
         _sessionmaker = async_sessionmaker(get_engine(), expire_on_commit=False, class_=AsyncSession)
     return _sessionmaker
+
+
+async def dispose_engine() -> None:
+    """Close this process's pool; idempotent for shutdown and test isolation."""
+    global _engine, _sessionmaker
+    engine = _engine
+    _engine = None
+    _sessionmaker = None
+    if engine is not None:
+        await engine.dispose()
+    # Admission cache is keyed by engine identity; never let a disposed test
+    # engine's snapshot leak into the next engine/session.
+    from app.realtime.admission import clear_admission_cache
+
+    clear_admission_cache()
 
 
 class _LazyEngine:
@@ -74,5 +117,15 @@ SessionLocal = _LazySessionFactory()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    started = time.perf_counter()
     async with get_sessionmaker()() as session:
-        yield session
+        # Keep checkout lazy: unauthenticated WS/HTTP paths must not consume a
+        # scarce DB connection. The first SQL statement records an approximate
+        # checkout wait; session hold covers the whole dependency scope.
+        from app.observability import counters, mark_db_request_start
+
+        mark_db_request_start()
+        try:
+            yield session
+        finally:
+            counters.observe("db.session_hold_ms", (time.perf_counter() - started) * 1000)
