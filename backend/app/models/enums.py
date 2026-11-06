@@ -142,6 +142,7 @@ class NotificationType(StrEnum):
     CONFIRM_PROGRESS = "confirm_progress"  # 单方完成确认（→另一方）
     TRADE_COMPLETED = "trade_completed"
     CANCEL_REQUESTED = "cancel_requested"  # 取消申请待确认
+    CANCEL_REJECTED = "cancel_rejected"  # 取消申请被对方拒绝
     TRADE_TERMINATED = "trade_terminated"
     PRODUCT_EDITED = "product_edited"  # 商品编辑（→未结束请求/交易买方）
     TRADE_FROZEN = "trade_frozen"  # 冻结/管理调整（→双方）

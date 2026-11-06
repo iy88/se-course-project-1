@@ -157,9 +157,16 @@
         <header class="trade-section__head">
           <h2>取消与争议</h2>
         </header>
-        <van-cell v-if="trade.cancel_requested_by && trade.cancel_requested_by !== session.user.id" title="取消申请">
+        <van-cell
+          v-if="trade.cancel_requested_by && trade.cancel_requested_by !== session.user.id"
+          title="取消申请"
+          label="对方已申请取消"
+        >
           <template #value>
-            <van-button size="small" type="danger" :disabled="!canDecideCancel" @click="confirmCancel">对方已申请取消，点击同意</van-button>
+            <div class="cancel-actions">
+              <van-button size="small" type="danger" :disabled="!canDecideCancel" @click="confirmCancel">同意取消</van-button>
+              <van-button size="small" plain :disabled="!canRejectCancel" :loading="rejectingCancel" @click="rejectCancel">拒绝取消</van-button>
+            </div>
           </template>
         </van-cell>
         <van-cell v-else-if="trade.cancel_requested_by === session.user.id" title="取消申请" label="已发起，等待对方同意">
@@ -167,7 +174,7 @@
             <van-button size="small" plain :disabled="!canWithdrawCancel" :loading="withdrawingCancel" @click="withdrawCancel">撤回取消申请</van-button>
           </template>
         </van-cell>
-        <p v-if="trade.cancel_requested_by" class="hint">未同意前取消不生效，交易继续有效；申请人可撤回取消申请。</p>
+        <p v-if="trade.cancel_requested_by" class="hint">未同意前取消不生效，交易继续有效；对方可同意或拒绝，申请人可撤回取消申请。</p>
         <div class="action-row">
           <van-button size="small" type="warning" plain :disabled="!canCancel" @click="cancel">发起取消</van-button>
           <van-button size="small" type="danger" plain :disabled="!canDispute" @click="dispute">发起争议</van-button>
@@ -321,6 +328,13 @@ const canDecideCancel = computed(() => !trade.value?.frozen && tradeWriteAllowed
 const withdrawingCancel = ref(false)
 const canWithdrawCancel = computed(
   () => interactive.value && trade.value?.cancel_requested_by === session.user?.id && !withdrawingCancel.value,
+)
+const rejectingCancel = ref(false)
+const canRejectCancel = computed(
+  () => interactive.value
+    && !!trade.value?.cancel_requested_by
+    && trade.value.cancel_requested_by !== session.user?.id
+    && !rejectingCancel.value,
 )
 const canCancel = computed(
   () => interactive.value && !trade.value?.cancel_requested_by,
@@ -550,6 +564,27 @@ async function withdrawCancel() {
   }
 }
 
+async function rejectCancel() {
+  if (!canRejectCancel.value) return
+  try {
+    await showConfirmDialog({ title: '拒绝取消', message: '拒绝后取消申请结束，交易继续有效。' })
+  } catch {
+    return
+  }
+  if (!canRejectCancel.value) return
+  rejectingCancel.value = true
+  actionError.value = ''
+  try {
+    const data = await http.post(`/trades/${route.params.id}/cancel/reject`, {})
+    showToast(data.detail)
+    await load()
+  } catch (err) {
+    keepStateOnFailure('拒绝取消申请失败', err)
+  } finally {
+    rejectingCancel.value = false
+  }
+}
+
 async function confirmCancel() {
   if (!canDecideCancel.value) return
   try {
@@ -679,6 +714,13 @@ watch(() => route.params.id, () => {
 
 .trade-status-gap {
   margin-left: 6px;
+}
+
+.cancel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .action-row {
