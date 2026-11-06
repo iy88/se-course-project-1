@@ -703,6 +703,10 @@ class AcceptanceRun:
         ):
             health = self._call("GET", "/api/health", expected=200)
             self.rec.must_eq(self._dict(health).get("status"), "ok", "health")
+            live = self._dict(self._call("GET", "/health/live", expected=200))
+            self.rec.must_eq(live.get("status"), "ok", "health live")
+            ready = self._dict(self._call("GET", "/health/ready", expected=200))
+            self.rec.must(ready.get("status") in {"ready", "degraded"}, "health ready")
             openapi_response = self._call("GET", "/openapi.json", expected=200)
             self.openapi = self._dict(openapi_response)
             self.route_index.__init__(self.openapi)  # 用最终运行 OpenAPI 重建
@@ -726,8 +730,18 @@ class AcceptanceRun:
                 raise CheckFailure("缺少 seed 凭据")
             account = admin.accounts["admin"]
             token = mint_fingerprint_token(self.config, user_id=account.id, role=account.role, run_id=self.run_id)
-            me = self._dict(self._call("GET", "/api/v1/auth/me", expected=200, headers={"Authorization": f"Bearer {token}"}))
+            auth = {"Authorization": f"Bearer {token}"}
+            me = self._dict(self._call("GET", "/api/v1/auth/me", expected=200, headers=auth))
             self.rec.must_eq(int(me["id"]), account.id, "服务指纹 admin id")
+            watermark = self._dict(self._call("GET", "/api/v1/realtime/watermark",
+                                              expected=200, headers=auth))
+            self.rec.must(int(watermark["high_seq"]) >= 0, "realtime watermark")
+            ticket = self._dict(self._call("POST", "/api/v1/realtime/ticket", expected=200,
+                                           headers=auth, json_body={"since": 0}))
+            self.rec.must(bool(ticket.get("ticket")), "realtime ticket")
+            replay = self._dict(self._call("GET", "/api/v1/realtime/events", expected=200,
+                                           headers=auth, params={"after_seq": 0, "limit": 10}))
+            self.rec.must("events" in replay and "high_seq" in replay, "realtime replay page")
             row = self._db_one("select id, email, role, display_name from app.users where id = :id", {"id": account.id})
             self.rec.must(int(row["id"]) == account.id, "指纹账号存在于 test 库")
             self.rec.must_eq(str(row["email"]), account.email, "指纹账号 email")
