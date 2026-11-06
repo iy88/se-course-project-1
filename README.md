@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.44
-Version-Datetime: 2026-11-02T15:35:38+08:00
+Version: 0.1.45
+Version-Datetime: 2026-11-06T19:32:01+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -22,6 +22,8 @@ ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQL
 人工演示使用 `(cd backend && .venv/bin/python -m app.manage demo-seed --env-file .env.dev)`，向所选环境持久添加演示账号、图片和业务记录，沿用配置的数据库 schema 与存储资源。先对同一环境执行 `migrate`；seed 后可用 `(cd backend && .venv/bin/python -m app.manage demo-verify --env-file .env.dev)` 只读校验记录、文件、场景覆盖与权限，不修改演示状态。共享场景目录、账号清单、现场起点、验证命令与 US／UC／SC 演示步骤见 [Demo seed](docs/development/demo-seed.md)。
 
 ## 项目运行与配置
+
+性能压测使用独立 `load-seed` 准备真实数据库与 OSS 图片，Rust 驱动在 `loadtest/` 中通过真实 HTTP/WebSocket 执行 100 用户稳态负载、业务竞态，以及单接口/混合业务容量探测。清库、播种、运行参数、指标口径与本地记录见[真实负载压测](docs/development/load-testing.md)。
 
 ### 环境与目录
 
