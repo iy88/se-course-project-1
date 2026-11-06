@@ -14,6 +14,7 @@ from app.api.v1 import (
     notifications,
     products,
     prohibited,
+    realtime,
     reports,
     reviews,
     trades,
@@ -38,4 +39,5 @@ api_router.include_router(reviews.reviews_router)
 api_router.include_router(reports.router)
 api_router.include_router(my_cases.router)
 api_router.include_router(notifications.router)
+api_router.include_router(realtime.router)
 api_router.include_router(admin_router)

@@ -3,12 +3,13 @@
 from datetime import UTC, datetime
 from typing import Annotated, cast
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
 from sqlalchemy.engine import CursorResult
 from sqlmodel import col, delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from app.api import idempotency as idempotency_service
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.api.upload_keys import validate_upload_keys
 from app.models import (
@@ -238,55 +239,74 @@ async def _resolve_tags_for_submit(
 
 
 @router.post("", response_model=ProductOut)
-async def publish_product(body: ProductCreateIn, user: CurrentUser, db: DbSession) -> ProductOut:
-    """发布：进入待审核并进入共享待处理池（BR-10、BR-34）；冻结禁发（D-50）。"""
-    ensure_can_write(user)
-    if await permissions.has_active_frozen_trade(db, user.id):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "存在有效交易冻结，暂不能发布商品")
-    await _validate_image_keys(db, body.image_keys, user.id)
-    product = Product(
-        seller_id=user.id,
-        title=body.title.strip(),
-        description=body.description.strip(),
-        price_cents=body.price_cents,
-        status=ProductStatus.PENDING_REVIEW.value,
-    )
-    db.add(product)
-    await db.flush()
-    category_ids, applications = await _resolve_tags_for_submit(db, product, body.tags)
-    for cid in category_ids:
-        db.add(ProductTag(product_id=product.id, category_id=cid))
-    db.add_all(applications)
-    for sort, key in enumerate(body.image_keys):
-        db.add(ProductImage(product_id=product.id, file_key=key, sort=sort))
-    try:
-        await stored_objects.mark_committed(
-            db, body.image_keys, ref_type="product", ref_id=product.id
+async def publish_product(
+    body: ProductCreateIn,
+    user: CurrentUser,
+    db: DbSession,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> ProductOut:
+    """发布：进入待审核并进入共享待处理池（BR-10、BR-34）；冻结禁发（D-50）。
+
+    可选 Idempotency-Key 与商品、审核、审计和事件同事务；未传时行为不变。
+    """
+    key = idempotency_service.parse_key(idempotency_key)
+    async with idempotency_service.guard(db, user.id, "product.publish", key, body.model_dump()) as idem:
+        if idem.replay is not None:
+            product_id = int((idem.replay.response or {}).get("product_id", 0))
+            product = await db.get(Product, product_id) if product_id else None
+            if product is None:
+                raise HTTPException(status.HTTP_409_CONFLICT, "幂等结果对应的商品已不存在")
+            return await _out(db, product, user, include_pending_count=True)
+        ensure_can_write(user)
+        if await permissions.has_active_frozen_trade(db, user.id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "存在有效交易冻结，暂不能发布商品")
+        await _validate_image_keys(db, body.image_keys, user.id)
+        product = Product(
+            seller_id=user.id,
+            title=body.title.strip(),
+            description=body.description.strip(),
+            price_cents=body.price_cents,
+            status=ProductStatus.PENDING_REVIEW.value,
         )
-    except stored_objects.StoredObjectUnavailable:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "图片已被回收，请重新上传"
-        ) from None
-    # 当次审核内容快照 + 审核事项进入共享池
-    content = await _snapshot_content(db, product)
-    case = await case_service.create_case(
-        db,
-        case_type=CaseType.PRODUCT_REVIEW,
-        title=f"商品审核：{product.title}",
-        subject_user_id=user.id,
-        product_id=product.id,
-    )
-    db.add(ReviewRecord(product_id=product.id, content_json=content, case_id=case.id))
-    await audit_service.record_event(
-        db,
-        audit_service.EVENT_PRODUCT_PUBLISH,
-        target_type="product",
-        target_id=product.id,
-        after={"status": product.status, "price_cents": product.price_cents, "case_id": case.id},
-    )
-    await db.commit()
-    await db.refresh(product)
-    return await _out(db, product, user, include_pending_count=True)
+        db.add(product)
+        await db.flush()
+        category_ids, applications = await _resolve_tags_for_submit(db, product, body.tags)
+        for cid in category_ids:
+            db.add(ProductTag(product_id=product.id, category_id=cid))
+        db.add_all(applications)
+        for sort, key_name in enumerate(body.image_keys):
+            db.add(ProductImage(product_id=product.id, file_key=key_name, sort=sort))
+        try:
+            await stored_objects.mark_committed(
+                db, body.image_keys, ref_type="product", ref_id=product.id
+            )
+        except stored_objects.StoredObjectUnavailable:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "图片已被回收，请重新上传"
+            ) from None
+        # 当次审核内容快照 + 审核事项进入共享池
+        content = await _snapshot_content(db, product)
+        case = await case_service.create_case(
+            db,
+            case_type=CaseType.PRODUCT_REVIEW,
+            title=f"商品审核：{product.title}",
+            subject_user_id=user.id,
+            product_id=product.id,
+        )
+        db.add(ReviewRecord(product_id=product.id, content_json=content, case_id=case.id))
+        await audit_service.record_event(
+            db,
+            audit_service.EVENT_PRODUCT_PUBLISH,
+            target_type="product",
+            target_id=product.id,
+            after={"status": product.status, "price_cents": product.price_cents, "case_id": case.id},
+        )
+        await db.flush()
+        await db.refresh(product)
+        result = await _out(db, product, user, include_pending_count=True)
+        await idem.complete(status_code=200, response={"product_id": product.id})
+        await db.commit()
+        return result
 
 
 @router.get("/search", response_model=ProductSearchOut)
