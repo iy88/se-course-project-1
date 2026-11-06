@@ -67,6 +67,7 @@ EVENT_TRADE_COMPLETION_CONFIRM: Final = "trade.completion_confirm"
 EVENT_TRADE_CANCEL_REQUEST: Final = "trade.cancel_request"
 EVENT_TRADE_CANCEL_CONFIRM: Final = "trade.cancel_confirm"
 EVENT_TRADE_CANCEL_WITHDRAW: Final = "trade.cancel_withdraw"
+EVENT_TRADE_CANCEL_REJECT: Final = "trade.cancel_reject"
 EVENT_TRADE_DISPUTE_CREATE: Final = "trade.dispute_create"
 EVENT_TRADE_DISPUTE_RESOLVE: Final = "trade.dispute_resolve"
 

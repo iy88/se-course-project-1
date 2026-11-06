@@ -849,6 +849,40 @@ async def withdraw_cancel(trade_id: int, user: CurrentUser, db: DbSession) -> di
     return {"detail": "已撤回取消申请"}
 
 
+@router.post("/{trade_id}/cancel/reject")
+async def reject_cancel(trade_id: int, user: CurrentUser, db: DbSession) -> dict:
+    """拒绝对方取消申请：只结束申请，不改变交易状态（BR-06、US-05-AC-06）。"""
+    ensure_can_write(user)
+    trade = await _party_trade(db, trade_id, user.id)
+    if trade.status not in (TradeStatus.IN_PROGRESS.value, TradeStatus.DISPUTED.value):
+        raise HTTPException(status.HTTP_409_CONFLICT, "当前交易状态不能处理取消申请")
+    await _ensure_not_frozen(trade)
+    await _ensure_trade_actors_eligible(db, trade)
+    if not trade.cancel_requested_by_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "当前没有待确认的取消申请")
+    if trade.cancel_requested_by_id == user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能拒绝本人发起的取消申请")
+    applicant_id = trade.cancel_requested_by_id
+    before_status = trade.status
+    trade.cancel_requested_by_id = None
+    trade.cancel_requested_at = None
+    await notify(
+        db, [applicant_id], "cancel_rejected", "取消申请已被拒绝",
+        "对方不同意取消，取消申请已结束，交易继续有效。",
+        link_type="trade", link_id=trade.id,
+    )
+    await audit_service.record_event(
+        db,
+        audit_service.EVENT_TRADE_CANCEL_REJECT,
+        target_type="trade",
+        target_id=trade.id,
+        before={"status": before_status, "cancel_requested": True},
+        after={"status": trade.status, "cancel_requested": False},
+    )
+    await db.commit()
+    return {"detail": "已拒绝取消申请，交易继续"}
+
+
 # ---------------- 争议（BR-07、TR-16/19） ----------------
 
 
