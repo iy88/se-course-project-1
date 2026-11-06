@@ -68,6 +68,17 @@ jobs:
           APP_ENV_FILE: .env.dev
         run: .venv/bin/python -m tests.acceptance_real.runner --port 8101
 
+      - name: Run isolated backend unit tests
+        run: .venv/bin/python -m tests.run_unit
+
+      - name: Install Nginx syntax validator
+        run: sudo apt-get update && sudo apt-get install -y nginx
+
+      - name: Deployment activation and preflight tests
+        env:
+          PROJECT1_REQUIRE_NGINX: "1"
+        run: .venv/bin/python -m pytest -q ../scripts/deploy/tests ../scripts/tests
+
   frontend-mobile:
     name: Mobile build and tests
     runs-on: ubuntu-24.04
@@ -130,3 +141,78 @@ jobs:
 
       - name: Verify build output
         run: test -s dist/index.html
+
+  realtime-integration:
+    name: Realtime integration (real PostgreSQL + Redis)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+
+      - name: Sync backend dependencies
+        run: uv sync --locked --managed-python --python 3.13
+
+      - name: Install dedicated Redis server for restart gate
+        # Use the official repository: the distribution package may predate
+        # Redis 8.2, which supplies the required XACKDEL ACKED primitive.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lsb-release curl gpg
+          curl -fsSL https://packages.redis.io/gpg -o /tmp/project1-redis-signing-key
+          sudo gpg --dearmor --batch --yes -o /usr/share/keyrings/redis-archive-keyring.gpg /tmp/project1-redis-signing-key
+          sudo chmod 644 /usr/share/keyrings/redis-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+          sudo apt-get update
+          sudo apt-get install -y redis-server redis-tools
+          redis-server --version
+
+      - name: Run strict realtime integration gate
+        env:
+          CI_REALTIME_APPROVED: "1"
+          CI_REALTIME_PG_ADMIN_URL: postgresql+asyncpg://postgres:ci-only-password@127.0.0.1:5432/postgres
+          CI_REALTIME_REDIS_MANAGED: "1"
+        run: .venv/bin/python -m tests.integration_real.runner
+
+
+  loadtest-rust:
+    name: Load driver tests and clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: loadtest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: loadtest
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Run clippy
+        run: cargo clippy --locked --all-targets -- -D warnings

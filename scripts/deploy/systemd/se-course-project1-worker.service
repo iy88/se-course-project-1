@@ -1,0 +1,38 @@
+# Split Taskiq worker role. Task counts/concurrency/prefetch/ack/retry budgets
+# come from the shared dotenv; systemd does not repeat them as CLI arguments.
+[Unit]
+Description=CampusMarket Taskiq worker
+After=network-online.target redis-server.service
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/srv/se-course-project1/current/backend
+Environment=APP_ENV_FILE=.env.prod
+Environment=APP_RUNTIME_ROLE=worker
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/srv/se-course-project1/current/backend/.venv/bin/python -m app.manage taskiq-worker
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=45
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/srv/se-course-project1/current/backend
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
