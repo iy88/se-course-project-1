@@ -21,6 +21,13 @@ from app.models.product import (
     ProhibitedItem,
     ReviewRecord,
 )
+from app.models.realtime import (
+    IdempotencyRecord,
+    RealtimeEvent,
+    RealtimeRetention,
+    ServiceHeartbeat,
+    UserEventCounter,
+)
 from app.models.stored_object import StoredObject
 from app.models.trade import (
     CompletionConfirmation,
@@ -43,6 +50,7 @@ __all__ = [
     "DisposalCase",
     "DisposalMessage",
     "Favorite",
+    "IdempotencyRecord",
     "Message",
     "Notification",
     "Product",
@@ -51,9 +59,12 @@ __all__ = [
     "ProductTag",
     "ProductTagApplication",
     "ProhibitedItem",
+    "RealtimeEvent",
+    "RealtimeRetention",
     "Report",
     "ReportSupplement",
     "ReviewRecord",
+    "ServiceHeartbeat",
     "StoredObject",
     "Trade",
     "TradeAgreement",
@@ -61,6 +72,7 @@ __all__ = [
     "TradeTransition",
     "UploadLease",
     "User",
+    "UserEventCounter",
 ]
 
 from app.models.upload_lease import UploadLease

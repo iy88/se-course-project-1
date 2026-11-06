@@ -15,6 +15,12 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dotenv import dotenv_values, set_key
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
+
 from app.core.config import load_migration_settings, validate_migration_context
 from app.core.private_files import protect_private, require_private
 from app.devtools._support import (
@@ -26,11 +32,6 @@ from app.devtools._support import (
     make_async_engine,
     write_private_json,
 )
-from dotenv import dotenv_values, set_key
-from sqlalchemy import text
-from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import NullPool
 
 _PATTERN = re.compile(r"^acceptance_[0-9a-f]{32}$")
 
@@ -230,7 +231,13 @@ class Sandbox:
                            "STORAGE_LOCAL_ROOT": str(self.root / "storage"),
                            "STORAGE_OPERATION_JOURNAL": str(self.root / "storage-journal.jsonl"),
                            "JWT_SECRET": self._jwt_secret, "FILE_URL_SECRET": self._file_secret,
-                           "TIMEOUT_SCAN_INTERVAL_SECONDS": "2"})
+                           "TIMEOUT_SCAN_INTERVAL_SECONDS": "2",
+                           # The existing acceptance client still uses the
+                           # legacy query-token frame contract; this explicit
+                           # test-only transition keeps that suite meaningful.
+                           "ALLOW_QUERY_TOKEN": "true",
+                           "ALLOW_MISSING_ORIGIN": "true",
+                           "ALLOWED_ORIGINS": "http://localhost:5173"})
             if self.base.settings.kv_backend == "redis":
                 values["REDIS_KEY_PREFIX"] = self.name + ":"
             if self.base.database_url.startswith("sqlite+"):

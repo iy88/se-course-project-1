@@ -60,7 +60,7 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import { useSession } from '../stores/session'
-import { connectWS, closeWS } from '../api/ws'
+import { connectWS } from '../api/ws'
 import http from '../api/http'
 
 const session = useSession()
@@ -82,19 +82,34 @@ async function refreshBadges() {
   }
 }
 
-function onWSMessage(data) {
+async function onWSMessage(data) {
+  if (data.type === 'resync_required') {
+    await refreshBadges()
+    return
+  }
   if (data.type === 'notification') {
     session.unreadNotifications += 1
   } else if (data.type === 'message') {
-    session.unreadMessages += 1
+    // The sender's other devices receive the event; only peers raise unread.
+    if (data.sender_id !== session.user?.id) session.unreadMessages += 1
   }
 }
 
+async function onResync() {
+  await refreshBadges()
+}
+
+let unwireWS = null
+
 onMounted(() => {
   refreshBadges()
-  connectWS(onWSMessage)
+  unwireWS = connectWS(onWSMessage)
+  window.addEventListener('realtime:resync', onResync)
 })
-onUnmounted(() => closeWS())
+onUnmounted(() => {
+  unwireWS?.()
+  window.removeEventListener('realtime:resync', onResync)
+})
 
 defineExpose({ refreshBadges })
 </script>

@@ -6,7 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import Conversation, Message
 from app.models.enums import ConversationType, MessageKind
-from app.ws.manager import manager
+from app.realtime.events import emit_events
 
 
 async def get_or_create_normal_conversation(db: AsyncSession, user_a: int, user_b: int) -> Conversation:
@@ -51,7 +51,11 @@ async def send_system_message(db: AsyncSession, conversation_id: int, content: s
 async def send_text_message(
     db: AsyncSession, conversation: Conversation, sender_id: int, content: str
 ) -> Message:
-    """保存文字消息并推送给会话其他成员。"""
+    """保存文字消息，并在同一事务内为双方写入 durable event。
+
+    同时通知发送者本人的其他设备，避免多设备状态不一致；发送消息的 HTTP
+    请求不等待任何 socket。调用方（API）负责与审计一起提交或整体回滚。
+    """
     message = Message(conversation_id=conversation.id, sender_id=sender_id, kind=MessageKind.TEXT.value, content=content)
     db.add(message)
     await db.flush()
@@ -65,7 +69,14 @@ async def send_text_message(
         "created_at": message.created_at.isoformat() if message.created_at else None,
     }
     member_ids = [conversation.user_low_id, conversation.user_high_id]
-    await manager.push_to_users([uid for uid in member_ids if uid != sender_id], payload)
+    await emit_events(
+        db,
+        member_ids,
+        event_type="im.message",
+        payload=payload,
+        entity_type="conversation",
+        entity_id=conversation.id,
+    )
     return message
 
 

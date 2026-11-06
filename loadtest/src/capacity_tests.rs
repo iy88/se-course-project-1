@@ -51,6 +51,23 @@ fn mixed_400_fits_default_budget_but_unbounded_inputs_are_rejected() {
 }
 
 #[test]
+fn default_start_tracks_half_the_ceiling_and_refinement_rates_are_integer() {
+    let mut args = Args::parse_from(["test", "--mode", "capacity"]);
+    assert_eq!(start_rate(&args), 200.);
+    args.capacity.capacity_max_rate = 800.;
+    assert_eq!(start_rate(&args), 400.);
+    args.capacity.capacity_max_rate = 801.;
+    assert_eq!(start_rate(&args), 401.);
+    args.capacity.capacity_start_rate = 25.;
+    assert_eq!(start_rate(&args), 25.);
+    args.capacity.capacity_start_rate = 25.5;
+    assert!(validate(&args).is_err());
+    args.capacity.capacity_start_rate = 25.;
+    args.capacity.capacity_resolution = 0.5;
+    assert!(validate(&args).is_err());
+}
+
+#[test]
 fn explicit_error_budget_is_reflected_in_operation_verdict() {
     let mut args = Args::parse_from(["test", "--mode", "capacity"]);
     let mut metrics = json!({"search":{"samples":20,"errors":1,"p95_ms":100.,"threshold_ms":3000.,"enough_samples":true}});
@@ -305,6 +322,10 @@ async fn controller_finds_failure_bracket_and_validates_lower_rate() {
             .any(|s| s["kind"] == "validation" && s["passed"] == true)
     );
     assert_eq!(report["long_validation"], false);
+    assert_eq!(report["refinement_strategy"], "integer_binary_search");
+    assert!(report["stages"].as_array().unwrap().iter().all(|stage| {
+        stage["target_rate"].as_f64().unwrap().fract() == 0.
+    }));
 }
 
 #[tokio::test]

@@ -20,6 +20,9 @@ dependencies = [
     "pillow>=13.0.0",
     "tzdata>=2026.6 ; sys_platform == 'win32'",
     "regex==2026.4.4",
+    "taskiq>=0.13.0",
+    "taskiq-redis>=1.2.4",
+    "anyio>=4.15.1",
 ]
 
 [dependency-groups]

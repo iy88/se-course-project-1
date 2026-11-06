@@ -1,89 +1,116 @@
-"""WS 入口：token 鉴权接入，客户端保活 ping。"""
+"""WS entrypoint: one-time ticket, Origin, auth expiry and gateway handoff.
 
+The WebSocket handshake never holds a SQL connection while the socket lives.
+The ticket is consumed atomically before any replay work; the ticket value is
+the only credential in the WSS URL. Legacy ``?token=`` is an explicit opt-in
+transition and is rejected by default in production.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import logging
 import re
 
 from fastapi import WebSocket
-from sqlalchemy.exc import SQLAlchemyError
 from starlette.websockets import WebSocketDisconnect, WebSocketDisconnected
 
-from app.api.deps import DbSession
+from app.core.config import get_settings
 from app.core.security import decode_access_token
+from app.db.session import get_sessionmaker
+from app.kv.base import KVError
 from app.models import User
-from app.ws.manager import manager
+from app.realtime.gateway import CLOSE_AUTH, CLOSE_FORBIDDEN, Gateway, get_gateway
+from app.realtime.tickets import (
+    consume_ticket,
+    origin_allowed,
+    ticket_expiry_from_payload,
+)
 
-# 与 JWT 签发保持一致：sub 是正整数的十进制字符串，不接受旧式 uid 或其他类型。
+logger = logging.getLogger(__name__)
+
 _USER_ID_RE = re.compile(r"[1-9][0-9]*")
-_AUTH_CLOSE_CODE = 4401
 _MAX_USER_ID = 2**63 - 1
 
 
 async def _reject(websocket: WebSocket, code: int) -> None:
-    """先完成握手再以业务关闭码拒绝，避免客户端只能看到 403/1006 而无法停止重试。"""
+    """First accept the handshake so clients observe a business close code."""
     try:
         await websocket.accept()
-    except (WebSocketDisconnect, WebSocketDisconnected, OSError):  # pragma: no cover - 客户端可能已断开
+    except (WebSocketDisconnect, WebSocketDisconnected, OSError):
         return
-    try:
+    with contextlib.suppress(Exception):
         await websocket.close(code=code)
-    except (WebSocketDisconnect, WebSocketDisconnected, OSError):  # pragma: no cover - 关闭阶段同样可能已断开
-        pass
 
 
-def _parse_user_id(token: str) -> int | None:
+def _parse_legacy_token(token: str) -> tuple[int, int] | None:
     payload = decode_access_token(token)
     if not payload:
         return None
     sub = payload.get("sub")
-    # 当前签发固定为 str(user_id)；缺失、数字类型、符号、小数及非数字均拒绝。
-    if not isinstance(sub, str) or _USER_ID_RE.fullmatch(sub) is None:
-        return None
-    # 避免超长数字触发 Python 的 int 转换限制或 SQLite BIGINT 溢出。
-    if len(sub) > 19:
+    if not isinstance(sub, str) or _USER_ID_RE.fullmatch(sub) is None or len(sub) > 19:
         return None
     user_id = int(sub)
     if user_id > _MAX_USER_ID:
         return None
-    return user_id
+    return user_id, ticket_expiry_from_payload(payload)
 
 
-async def ws_endpoint(websocket: WebSocket, db: DbSession) -> None:
-    token = websocket.query_params.get("token", "")
-    user_id = _parse_user_id(token)
-    if user_id is None:
-        await _reject(websocket, _AUTH_CLOSE_CODE)
-        return
-
-    authenticated_user_id: int | None = None
-    db_failed = False
+async def _legacy_user_exists(user_id: int) -> bool:
     try:
-        user = await db.get(User, user_id)
-        if user is not None:
-            # 只保留纯 int；关闭会话后不再读取可能已过期的 ORM 实例。
-            authenticated_user_id = int(user.id)
-    except (SQLAlchemyError, OSError):
-        db_failed = True
-    finally:
-        # 身份校验结束立即归还连接池：WS 长连接不能占用 SQL 连接，
-        # 否则 pool_size 较小时会阻塞普通 HTTP 请求。依赖退出时的再次 close 是幂等的。
-        await db.close()
+        async with get_sessionmaker()() as db:
+            return await db.get(User, user_id) is not None
+    except Exception as exc:  # noqa: BLE001 - auth failure is fail-closed
+        logger.warning("ws legacy auth database check failed: %s", type(exc).__name__)
+        return False
 
-    if db_failed:
-        # 资格查询失败按服务端错误关闭，不注册在线连接。
-        await _reject(websocket, 1011)
-        return
-    if authenticated_user_id is None:
-        await _reject(websocket, _AUTH_CLOSE_CODE)
+
+async def ws_endpoint(websocket: WebSocket) -> None:
+    settings = get_settings()
+    origin = websocket.headers.get("origin")
+    if not origin_allowed(origin):
+        await _reject(websocket, CLOSE_FORBIDDEN)
         return
 
-    # 封禁用户仍可建立只读推送连接，接收本人通知与处置沟通；写权限由 HTTP 接口校验。
-    await manager.connect(authenticated_user_id, websocket)
-    try:
-        while True:
-            msg = await websocket.receive_json()
-            if isinstance(msg, dict) and msg.get("type") == "ping":
-                await websocket.send_json({"type": "pong"})
-    except (WebSocketDisconnect, WebSocketDisconnected, OSError, ValueError):
-        # 客户端断开、连接状态失效或帧无法解析时结束该连接；不影响其他在线连接。
-        pass
-    finally:
-        manager.disconnect(authenticated_user_id, websocket)
+    ticket_value = websocket.query_params.get("ticket", "")
+    legacy_value = websocket.query_params.get("token", "")
+    user_id: int | None = None
+    since = 0
+    auth_expires_at = 0
+    legacy = False
+
+    if ticket_value:
+        try:
+            ticket = await consume_ticket(ticket_value)
+        except KVError:
+            # Ticket storage is security-critical: no shared state means no auth.
+            logger.warning("ws ticket store unavailable")
+            await _reject(websocket, 1011)
+            return
+        if ticket is None:
+            await _reject(websocket, CLOSE_AUTH)
+            return
+        user_id = ticket.user_id
+        since = ticket.since
+        auth_expires_at = ticket.auth_expires_at
+    elif legacy_value and settings.allow_query_token and not settings.is_production:
+        parsed = _parse_legacy_token(legacy_value)
+        if parsed is None or not await _legacy_user_exists(parsed[0]):
+            await _reject(websocket, CLOSE_AUTH)
+            return
+        user_id, auth_expires_at = parsed
+        legacy = True
+    else:
+        await _reject(websocket, CLOSE_AUTH)
+        return
+
+    gateway: Gateway = get_gateway()
+    client = websocket.client
+    await gateway.serve(
+        websocket,
+        user_id=int(user_id),
+        since=since,
+        auth_expires_at=auth_expires_at,
+        ip=client.host if client else None,
+        legacy=legacy,
+    )

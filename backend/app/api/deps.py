@@ -1,5 +1,6 @@
 """依赖注入：当前用户、管理员、封禁校验。"""
 
+from contextvars import ContextVar
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -13,6 +14,11 @@ from app.models.enums import AccountStatus, UserRole
 from app.services import audit as audit_service
 
 bearer_scheme = HTTPBearer(auto_error=False)
+_TOKEN_EXPIRES_AT: ContextVar[int] = ContextVar("token_expires_at", default=0)
+
+
+def current_token_expires_at() -> int:
+    return _TOKEN_EXPIRES_AT.get()
 
 
 async def get_audit_db(
@@ -39,6 +45,10 @@ async def get_optional_user(
     payload = decode_access_token(credentials.credentials)
     if not payload:
         return None
+    try:
+        _TOKEN_EXPIRES_AT.set(int(payload.get("exp", 0)))
+    except (TypeError, ValueError):
+        _TOKEN_EXPIRES_AT.set(0)
     user = await db.get(User, int(payload["sub"]))
     if user is not None:
         # 审计上下文：成功事件与失败/拒绝事件都按已解析主体归属。

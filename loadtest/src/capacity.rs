@@ -1,6 +1,7 @@
 //! Open-loop arrivals. Single means one application HTTP operation; mixed means
 //! one complete business scenario. Never reports mixed scenario/s as HTTP RPS.
 mod stage;
+mod search;
 use crate::{
     config::{Args, CapacityCase, SingleOperation},
     http::Driver,
@@ -21,10 +22,14 @@ pub(crate) fn validate(args: &Args) -> Result<()> {
         c.capacity_start_rate.is_finite()
             && c.capacity_max_rate.is_finite()
             && c.capacity_resolution.is_finite()
-            && c.capacity_start_rate > 0.
+            && c.capacity_start_rate >= 0.
+            && c.capacity_start_rate.fract() == 0.
+            && c.capacity_max_rate >= 1.
+            && c.capacity_max_rate.fract() == 0.
             && c.capacity_max_rate >= c.capacity_start_rate
             && c.capacity_max_rate <= 100000.
             && c.capacity_resolution > 0.
+            && c.capacity_resolution.fract() == 0.
             && c.capacity_stage_seconds > 0
             && c.capacity_stage_seconds <= 3600
             && c.capacity_validation_seconds >= c.capacity_stage_seconds
@@ -46,6 +51,14 @@ pub(crate) fn validate(args: &Args) -> Result<()> {
         "stage exceeds arrival budget; adjust capacity-max-arrivals, rate or duration"
     );
     Ok(())
+}
+
+fn start_rate(args: &Args) -> f64 {
+    if args.capacity.capacity_start_rate == 0. {
+        (args.capacity.capacity_max_rate as u32).div_ceil(2) as f64
+    } else {
+        args.capacity.capacity_start_rate
+    }
 }
 
 #[derive(Default)]
@@ -190,7 +203,7 @@ pub(crate) async fn run(d: &Driver, args: &Args) -> Result<Value> {
     let mut passing = vec![];
     let mut upper = None;
     let mut stop_reason = "configured_ceiling_reached";
-    let mut rate = c.capacity_start_rate;
+    let mut rate = start_rate(args);
     loop {
         let report = stage(
             d,
@@ -227,10 +240,8 @@ pub(crate) async fn run(d: &Driver, args: &Args) -> Result<Value> {
     if let Some(mut high) = upper {
         let mut low = passing.last().copied().unwrap_or(0.);
         for _ in 0..c.capacity_refinements {
-            if high - low <= c.capacity_resolution {
-                break;
-            }
-            let mid = (low + high) / 2.;
+            let Some(mid) = search::midpoint(low as u32, high as u32, c.capacity_resolution as u32) else { break; };
+            let mid = mid as f64;
             let report = stage(
                 d,
                 args,
@@ -299,17 +310,18 @@ pub(crate) async fn run(d: &Driver, args: &Args) -> Result<Value> {
         stop_reason = "validation_failed_trying_lower_observed_rate";
         if service_failed {
             upper = Some(upper.map_or(candidate, |u| u.min(candidate)));
-            let low = passing
+            passing.retain(|rate| *rate < candidate);
+            let mut low = passing
                 .iter()
                 .rev()
                 .copied()
                 .find(|r| *r < candidate)
                 .unwrap_or(0.);
-            if candidate - low > c.capacity_resolution
-                && validation_refinements < c.capacity_refinements
-            {
+            while validation_refinements < c.capacity_refinements {
+                let high = upper.expect("validation failure establishes an upper bound");
+                let Some(mid) = search::midpoint(low as u32, high as u32, c.capacity_resolution as u32) else { break; };
                 validation_refinements += 1;
-                let mid = (low + candidate) / 2.;
+                let mid = mid as f64;
                 let refined = stage(
                     d,
                     args,
@@ -325,8 +337,13 @@ pub(crate) async fn run(d: &Driver, args: &Args) -> Result<Value> {
                 .await?;
                 if refined["passed"] == true {
                     passing.push(mid);
+                    low = mid;
                 } else if refined["outcome"] == "service_failed" {
                     upper = Some(upper.unwrap().min(mid));
+                } else {
+                    stop_reason = "inconclusive_refinement_after_validation";
+                    reports.push(refined);
+                    break;
                 }
                 reports.push(refined);
             }
@@ -342,7 +359,7 @@ pub(crate) async fn run(d: &Driver, args: &Args) -> Result<Value> {
         .collect::<Vec<_>>();
     quarantined.sort_unstable();
     let report = json!({"format_version":1,"mode":"capacity","case":c.capacity_case,"single_operation":if c.capacity_case==CapacityCase::Single {Some(c.single_operation)} else {None},
-        "parameters":args,"passed":validated.is_some(),"highest_validated_rate":validated,"first_observed_failing_rate":upper,
+        "parameters":args,"effective_start_rate":start_rate(args),"refinement_strategy":"integer_binary_search","passed":validated.is_some(),"highest_validated_rate":validated,"first_observed_failing_rate":upper,
         "boundary_bracketed":latency_limit.is_some(),"configured_ceiling_reached":passing.contains(&c.capacity_max_rate),"stop_reason":stop_reason,
         "conclusion":if validated.is_none() {"no_rate_validated"} else if latency_limit.is_some() {"observed_capacity_bracket"} else {"validated_lower_bound_only_upper_limit_unknown"},
         "rate_unit":if c.capacity_case==CapacityCase::Single {"HTTP RPS"} else {"business scenarios/s; actual HTTP RPS reported separately"},

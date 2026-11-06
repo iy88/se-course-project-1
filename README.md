@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.45
-Version-Datetime: 2026-11-06T19:32:01+08:00
+Version: 0.1.46
+Version-Datetime: 2026-11-07T00:04:56+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -15,7 +15,7 @@ Version-Datetime: 2026-11-06T19:32:01+08:00
 
 ## 开发设计与接入计划
 
-测试与浏览器复核按同一份 UC/US/SC 清单、角色和预期执行；HTTP 自动化与浏览器是不同执行通道，结果分别记录。数据库、存储与 KV 后端由选定 dotenv 文件明确配置，同一测试和 seed 命令适用，不使用 `--profile`。自动化 seed、数据库、存储及 Redis 资源按本轮隔离；浏览器人工登录使用部署初始化保留的管理员及单独注册的测试用户，不依赖自动化临时身份。业务 SMTP 真实收件箱投递验收、多实例广播和备份恢复演练仍未验证；生产发布由流水线执行并经健康检查，见[部署说明](docs/development/部署说明.md)。测试流程与当前验收状态见[整体验收](docs/development/整体验收.md)。
+测试与浏览器复核按同一份 UC/US/SC 清单、角色和预期执行；HTTP 自动化与浏览器是不同执行通道，结果分别记录。数据库、存储与 KV 后端由选定 dotenv 文件明确配置，同一测试和 seed 命令适用，不使用 `--profile`。自动化 seed、数据库、存储及 Redis 资源按本轮隔离；浏览器人工登录使用部署初始化保留的管理员及单独注册的测试用户，不依赖自动化临时身份。业务 SMTP 真实收件箱投递验收、生产多实例/现场 split 演练和备份恢复演练仍未验证；issue #36 的 Redis/WS/数据库/Web 分层实现状态见[实时分层实施记录](docs/development/realtime-layers-implementation.md)，生产发布由流水线执行并经分角色健康检查，见[部署说明](docs/development/部署说明.md)。测试流程与当前验收状态见[整体验收](docs/development/整体验收.md)。
 
 ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQLAlchemy基础设施。图片使用OSS Python SDK V2的短期上传租约：前端直传，后端核对SHA256、元信息、大小与真实图片后确认引用；本地存储使用相同租约API。后端与前端依赖版本分别由 `backend/uv.lock` 和各前端 `package-lock.json` 锁定。
 
@@ -117,7 +117,17 @@ AUDIT_TRUSTED_PROXIES=none
 
 | 配置 | 说明 |
 |---|---|
-| `API_HOST` / `API_PORT` | `app.manage serve` 从所选 dotenv 读取的监听地址与端口；默认 `127.0.0.1:8000`，生产示例使用 `8001`；不提供命令行覆盖 |
+| `API_HOST` / `API_PORT` | combined/api 从所选 dotenv 读取的监听地址与端口；默认 `127.0.0.1:8000`，生产示例使用 `8001`；不提供命令行覆盖 |
+| `WS_HOST` / `WS_PORT` | split WS 角色监听地址；默认 `127.0.0.1:8002` |
+| `JOBS_HOST` / `JOBS_PORT` | 旧 3 角色 jobs 过渡入口的本机健康检查地址；默认 `127.0.0.1:8003`，不承接业务 API |
+| `TASKIQ_*` / `OUTBOX_MAX_ATTEMPTS` | Taskiq worker/scheduler 的进程数、并发、prefetch、reclaim、retry、interval、timeout 与 Redis 池预算；全部由 dotenv 构建 |
+| `APP_RUNTIME_ROLE` | 运行角色选择器 `combined/api/ws/worker/scheduler`（`jobs` 为旧入口），由 systemd 或 `serve-*`/`taskiq-*` 命令设置；不是业务配置 |
+| `ALLOWED_ORIGINS` / `ALLOW_MISSING_ORIGIN` | WS Origin 白名单；生产必须显式列 HTTPS origin，缺 Origin 默认拒绝；仅可信非浏览器压测可临时允许缺失 |
+| `ALLOW_QUERY_TOKEN` | 过渡开关：仅 dev/test 可为 true 接受旧 `?token=`；生产必须 false，客户端使用一次性 ticket |
+| `API_DB_POOL_SIZE` / `WS_DB_POOL_SIZE` / `JOBS_DB_POOL_SIZE` 等 | 分角色 SQL 池、等待/超时与总连接预算；配置了 `DB_CONNECTION_BUDGET` 时启动校验 |
+| `REDIS_CONTROL_MAX_CONNECTIONS_*` / `REDIS_CONNECTION_BUDGET` | Redis 控制池预算；控制/发布/reader 均有界获取，阻塞 XREAD 使用每 WS 进程独立连接 |
+| `REALTIME_OUTBOX_MAX_PENDING` / `MAX_AGE_SECONDS` / `ADMISSION_CACHE_SECONDS` | PostgreSQL outbox 软准入阈值与短缓存；超限返回 503/Retry-After，缓存 0 表示每次 COUNT |
+| `REALTIME_*` / `OUTBOX_*` / `WS_*` | stream 长度、payload/保留/回放、claim lease/退避、ticket/心跳/队列/连接数限制；起始值见配置示例 |
 | `APP_ENV_FILE` | 唯一文件选择器；默认 `backend/.env.dev`，显式指向 `.env.prod` 才运行生产 |
 | `REDIS_URL` / `REDIS_KEY_PREFIX` | 配置URL时使用Redis且必须有非空前缀；两项均省略时使用内存KV |
 | `ENVIRONMENT` | 必填：`dev`/`test`/`prod`；生产拒绝占位密钥及自动建表 |
@@ -165,8 +175,17 @@ cd backend
 uv sync --locked
 uv run python -m app.manage migrate          # 显式执行数据库迁移
 uv run python -m app.manage seed             # 持久化部署管理员及必要参考数据；密码交互输入
-uv run python -m app.manage serve
+uv run python -m app.manage serve            # combined：单进程兼容入口
+# split（生产）：四个独立进程/服务，共用同一 dotenv 与 release
+uv run python -m app.manage serve-api
+uv run python -m app.manage serve-ws
+uv run python -m app.manage taskiq-worker
+uv run python -m app.manage taskiq-scheduler
+# 旧 3 角色/本地全任务过渡入口
+APP_RUNTIME_ROLE=jobs uv run python -m app.manage serve-jobs
 ```
+
+split 的 API/WS/worker/scheduler 各自初始化 engine、Redis、broker 与任务；不要用 `serve` 启动多个 combined worker，也不要在同一环境启动两个 scheduler。worker/scheduler 无 HTTP，使用 `app.manage health --role worker|scheduler` 做受控 readiness（worker 会真实入队 probe）。移动端先通过认证 HTTP `POST /api/v1/realtime/ticket` 获取 30 秒一次性 ticket，再连接同源 `/ws?ticket=...`；事件按 `user_seq` 连续应用并 ACK，断开后按游标补拉，超期收到 `resync_required` 后刷新业务快照。
 
 迁移、seed、runner 和 pytest 命令使用所选 dotenv 文件指定的后端。失败日志与覆盖率产物记录实际配置目标，不把一种存储后端的结果表述成另一种后端的验证。
 
@@ -252,7 +271,7 @@ Jenkins 等独立构建环境可显式选择公开配置模式，无需后端 Py
 
 局域网手机访问时，可使用 `npm run dev -- --host 0.0.0.0 --strictPort`，手机访问开发机IP的5173端口；代理仍由开发机连接本机后端。普通局域网HTTP可用于页面联调，但不等于已满足PWA安装条件。
 
-当前运行方案面向单进程部署：WebSocket连接管理在进程内；KV按所选配置使用 Redis 或进程内 memory。PostgreSQL、私有 OSS 双桶、环境隔离与审计已纳入统一验收与发布流水线，发布流程见[部署说明](docs/development/部署说明.md)。业务 SMTP 真实投递验收、多实例广播及备份恢复演练仍未验证，不因自动化通过或部署完成视为人工验收完成。
+运行方案同时保留 combined 单进程与 api/ws/worker/scheduler split（旧 3 角色 jobs 仅作回退过渡）：split 要求共享 Redis，生产缺 Redis 启动失败；WS 使用每 gateway 独立 Redis stream cursor + PostgreSQL 周期回放/补偿，ticket/连接限额/频控跨进程共享；Taskiq worker/scheduler 使用与广播 stream 分离的任务 stream/group，ACK 为执行后确认，失败重试由官方 SmartRetry 与 schedule source 管理。每进程独立 SQL/Redis 池，按角色与 worker 进程数预算校验。PostgreSQL、私有 OSS 双桶、环境隔离与审计仍纳入统一验收与发布流水线；生产 split 首次切换需维护窗口，发布/回退见[部署说明](docs/development/部署说明.md)，实现与证据边界见[实施记录](docs/development/realtime-layers-implementation.md)。业务 SMTP 真实投递、真实生产 OSS、浏览器人工验收、400 混合压测及现场 systemd/Nginx 演练仍未验证，不因自动化通过或部署完成视为人工验收完成。
 
 ## 成员分工
 

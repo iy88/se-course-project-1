@@ -19,6 +19,14 @@ pipeline {
         nodejs 'node-latest'
     }
 
+    parameters {
+        choice(
+            name: 'DEPLOY_MODE',
+            choices: ['split', 'combined'],
+            description: 'Default split: install all prerequisites before merging/enabling webhooks. combined is an explicit maintenance/rollback choice and requires matching Nginx routing.'
+        )
+    }
+
     options {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
@@ -29,6 +37,7 @@ pipeline {
     environment {
         UV_CACHE_DIR = "${WORKSPACE}/.cache/uv"
         NPM_CONFIG_CACHE = "${WORKSPACE}/.cache/npm"
+        DEPLOY_MODE = "${params.DEPLOY_MODE}"
     }
 
     stages {
@@ -118,9 +127,66 @@ import fastapi
 import uvicorn
 import sqlalchemy
 import asyncpg
+import taskiq
+import taskiq_redis
+import anyio
 
 print("Backend dependency imports passed.")
 '
+                    '''
+                }
+            }
+        }
+
+        stage('Realtime Integration - PostgreSQL + Redis + Taskiq') {
+            steps {
+                dir('source/backend') {
+                    // Missing credentials fail this stage explicitly; there is no
+                    // silent skip that could let a release pass without the gate.
+                    withCredentials([
+                        string(credentialsId: 'realtime-ci-pg-admin-url', variable: 'CI_REALTIME_PG_ADMIN_URL')
+                    ]) {
+                        sh '''
+                            set -eu
+                            command -v redis-server
+                            redis-server --version
+                            export CI_REALTIME_APPROVED=1
+                            export CI_REALTIME_REDIS_MANAGED=1
+                            unset CI_REALTIME_REDIS_URL
+                            .venv/bin/python -m tests.integration_real.runner
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Backend Unit Tests') {
+            steps {
+                dir('source/backend') {
+                    sh '.venv/bin/python -m tests.run_unit'
+                }
+            }
+        }
+
+        stage('Rust Load Driver Checks') {
+            steps {
+                dir('source/loadtest') {
+                    sh '''
+                        set -eu
+                        command -v cargo
+                        cargo test --locked
+                        cargo clippy --locked --all-targets -- -D warnings
+                    '''
+                }
+            }
+        }
+
+        stage('Deployment Script Tests') {
+            steps {
+                dir('source') {
+                    sh '''
+                        set -eu
+                        PROJECT1_REQUIRE_NGINX=1 backend/.venv/bin/python -m pytest -q scripts/deploy/tests scripts/tests
                     '''
                 }
             }
@@ -236,6 +302,7 @@ PY
                     sh '''
                         set -eu
 
+                        npm test
                         PROJECT1_FRONTEND_CONFIG=public npm run build
 
                         test -s dist/index.html
@@ -252,6 +319,7 @@ PY
                     sh '''
                         set -eu
 
+                        npm test
                         PROJECT1_FRONTEND_CONFIG=public npm run build
 
                         test -s dist/index.html
@@ -308,6 +376,20 @@ PY
                         tar -C frontend/admin/dist \
                             -czf "${OUTPUT_DIR}/admin-${RELEASE_ID}.tar.gz" .
 
+                        # Fixed-purpose deployment assets (systemd/nginx/sudoers,
+                        # preflight and activation) travel with the release.
+                        # Stage both deployment assets and the dotenv migration
+                        # helper; its parent lookup works in release/deploy/.
+                        DEPLOY_BUNDLE="${OUTPUT_DIR}/deploy-bundle"
+                        mkdir -p "${DEPLOY_BUNDLE}"
+                        git archive --format=tar HEAD \
+                            scripts/deploy scripts/migrate_runtime_env.py | \
+                            tar -x -C "${DEPLOY_BUNDLE}" --strip-components=1
+                        mv "${DEPLOY_BUNDLE}/migrate_runtime_env.py" "${DEPLOY_BUNDLE}/deploy/"
+                        tar -C "${DEPLOY_BUNDLE}" \
+                            -czf "${OUTPUT_DIR}/deploy-${RELEASE_ID}.tar.gz" deploy
+                        rm -rf "${DEPLOY_BUNDLE}"
+
                         printf 'revision=%s\\nbuild_number=%s\\nrelease_id=%s\\n' \
                             "${REVISION}" \
                             "${BUILD_NUMBER}" \
@@ -321,6 +403,7 @@ PY
                                 "backend-${RELEASE_ID}.tar.gz" \
                                 "mobile-${RELEASE_ID}.tar.gz" \
                                 "admin-${RELEASE_ID}.tar.gz" \
+                                "deploy-${RELEASE_ID}.tar.gz" \
                                 release.txt \
                                 > SHA256SUMS
 
@@ -332,7 +415,7 @@ PY
                 }
 
                 archiveArtifacts(
-                    artifacts: 'release-artifacts/*',
+                    artifacts: 'release-artifacts/*,source/scripts/deploy/**',
                     fingerprint: true,
                     allowEmptyArchive: false
                 )
@@ -390,6 +473,7 @@ PY
                             "${OUTPUT_DIR}/backend-${RELEASE_ID}.tar.gz" \
                             "${OUTPUT_DIR}/mobile-${RELEASE_ID}.tar.gz" \
                             "${OUTPUT_DIR}/admin-${RELEASE_ID}.tar.gz" \
+                            "${OUTPUT_DIR}/deploy-${RELEASE_ID}.tar.gz" \
                             "${OUTPUT_DIR}/release.txt" \
                             "${OUTPUT_DIR}/SHA256SUMS" \
                             "deploy@192.168.3.221:${REMOTE_DIR}/"
@@ -427,10 +511,12 @@ PY
                             -o ServerAliveInterval=15 \
                             -o ServerAliveCountMax=2 \
                             deploy@192.168.3.221 \
-                            bash -s -- "${RELEASE_ID}" <<'REMOTE'
+                            bash -s -- "${RELEASE_ID}" "${DEPLOY_MODE}" <<'REMOTE'
 set -euo pipefail
 
 release_id="$1"
+mode="$2"
+case "$mode" in combined|split) ;; *) echo "Invalid deploy mode: $mode"; exit 1 ;; esac
 release_dir="/srv/se-course-project1/releases/$release_id"
 shared_config=/srv/se-course-project1/shared/.env.prod
 
@@ -452,6 +538,15 @@ tar -xzf "backend-${release_id}.tar.gz"
 mkdir mobile admin
 tar -xzf "mobile-${release_id}.tar.gz" -C mobile
 tar -xzf "admin-${release_id}.tar.gz" -C admin
+tar -xzf "deploy-${release_id}.tar.gz"
+
+test -f deploy/activate.py
+test -f deploy/preflight.py
+test -f deploy/systemd/se-course-project1-api.service
+test -f deploy/systemd/se-course-project1-ws.service
+test -f deploy/systemd/se-course-project1-worker.service
+test -f deploy/systemd/se-course-project1-scheduler.service
+test -f deploy/nginx/se-course-project1-split.conf
 
 test -f backend/app/main.py
 test -s mobile/index.html
@@ -496,6 +591,12 @@ if settings.storage_backend != "oss":
 
 print("Production application and migration configuration checks passed.")
 PY
+
+# Strict production preflight: all roles, budgets, DB/Redis connectivity.
+APP_ENV_FILE=.env.prod .venv/bin/python ../deploy/preflight.py --mode "$mode" --connect
+if [ "$mode" = split ]; then
+    APP_ENV_FILE=.env.prod .venv/bin/python ../deploy/preflight.py --mode combined --connect
+fi
 
 printf 'prepared_at=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     > "$release_dir/PREPARED"
@@ -675,219 +776,37 @@ REMOTE
             }
         }
 
+
         stage('Activate Production Release') {
             steps {
                 sshagent(credentials: ['production-deploy-ssh']) {
                     sh '''
                         set -eu
-
-                        test -n "${PRODUCTION_BACKUP_DIR:-}"
-
                         OUTPUT_DIR="${WORKSPACE}/release-artifacts"
                         RELEASE_ID="$(sed -n 's/^release_id=//p' "${OUTPUT_DIR}/release.txt")"
-
-                        printf '%s\\n' "${RELEASE_ID}" |
-                            grep -Eq '^[0-9a-f]{40}-[0-9]+$'
-
-                        ssh \
-                            -p 22 \
-                            -o BatchMode=yes \
-                            -o StrictHostKeyChecking=yes \
-                            -o HostKeyAlgorithms=ssh-ed25519 \
-                            -o ConnectTimeout=10 \
-                            -o ServerAliveInterval=15 \
-                            -o ServerAliveCountMax=2 \
+                        printf '%s\n' "${RELEASE_ID}" | grep -Eq '^[0-9a-f]{40}-[0-9]+$'
+                        test -n "${PRODUCTION_BACKUP_DIR:-}"
+                        printf '%s\n' "${PRODUCTION_BACKUP_DIR}" | grep -Eq '^/var/backups/se-course-project1/predeploy-[A-Za-z0-9-]+$'
+                        case "${DEPLOY_MODE}" in combined|split) ;; *) exit 1 ;; esac
+                        ssh -p 22 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+                            -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=10 \
+                            -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
                             deploy@192.168.3.221 \
-                            bash -s -- \
-                            "${RELEASE_ID}" \
-                            "${PRODUCTION_BACKUP_DIR}" <<'REMOTE'
+                            bash -s -- "${RELEASE_ID}" "${PRODUCTION_BACKUP_DIR}" "${DEPLOY_MODE}" <<'REMOTE'
 set -euo pipefail
-umask 077
-
 release_id="$1"
 backup_dir="$2"
+mode="$3"
+[[ "$release_id" =~ ^[0-9a-f]{40}-[0-9]+$ ]]
+[[ "$backup_dir" =~ ^/var/backups/se-course-project1/predeploy-[A-Za-z0-9-]+$ ]]
+case "$mode" in combined|split) ;; *) exit 1 ;; esac
 
-deploy_root=/srv/se-course-project1
-release_dir="$deploy_root/releases/$release_id"
-current="$deploy_root/current"
-service=se-course-project1-backend.service
-
-test -s "$release_dir/PREPARED"
-test -s "$release_dir/MIGRATED"
-test -x "$release_dir/backend/.venv/bin/python"
-test -s "$release_dir/mobile/index.html"
-test -s "$release_dir/admin/index.html"
-
-# 确认迁移标记属于本次发布及本次备份。
-grep -Fxq "release_id=$release_id" "$release_dir/MIGRATED"
-grep -Fxq "backup_dir=$backup_dir" "$release_dir/MIGRATED"
-
-# 防止多个激活操作同时修改 current。
-exec 9>"$deploy_root/.activation.lock"
-flock -n 9 || {
-    echo 'Another release activation is running.'
-    exit 1
-}
-
-# 当前已经有手动验证通过的版本，因此必须保留可回退目标。
-test -L "$current"
-previous="$(readlink -f "$current")"
-
-previous_id="${previous##*/}"
-[[ "$previous_id" =~ ^[0-9a-f]{40}-[0-9]+$ ]]
-test "$previous" = "$deploy_root/releases/$previous_id"
-test -x "$previous/backend/.venv/bin/python"
-
-if [ "$previous" = "$release_dir" ]; then
-    echo 'Target release is already current; refusing duplicate activation.'
-    exit 1
-fi
-
-# 在各自 release/backend 内读取配置，所有监听参数来自 .env.prod。
-listener() (
-    cd "$1/backend"
-
-    APP_ENV_FILE=.env.prod .venv/bin/python - <<'PY'
-from app.core.config import load_settings
-
-settings = load_settings()
-if settings.api_host != "127.0.0.1":
-    raise RuntimeError("Expected loopback API host")
-
-print(f"{settings.api_host}:{settings.api_port}")
-PY
-)
-
-old_listener="$(listener "$previous")"
-new_listener="$(listener "$release_dir")"
-
-# Nginx upstream 当前固定指向 127.0.0.1:8001。
-# 监听地址变化需要单独更新 Nginx，不能只重启应用。
-if [ "$old_listener" != "$new_listener" ]; then
-    echo 'API listener changed; update Nginx upstream before activation.'
-    exit 1
-fi
-
-if [ "$new_listener" != "127.0.0.1:8001" ]; then
-    echo 'API listener does not match the configured Nginx upstream.'
-    exit 1
-fi
-
-# 临时目录与 current 位于同一文件系统，mv -T 原子替换软链接。
-switch_dir="$(mktemp -d "$deploy_root/.activate-XXXXXXXX")"
-switched=0
-committed=0
-
-switch_to() {
-    ln -s -- "$1" "$switch_dir/next"
-    mv -Tf -- "$switch_dir/next" "$current"
-}
-
-# 除了检查 HTTP，还确认 systemd 主进程运行在目标 release。
-check_health() (
-    cd "$1/backend"
-
-    APP_ENV_FILE=.env.prod .venv/bin/python - "$1" <<'PY'
-import json
-import subprocess
-import sys
-import time
-from pathlib import Path
-from urllib.request import ProxyHandler, build_opener
-
-from app.core.config import load_settings
-
-expected_backend = (Path(sys.argv[1]) / "backend").resolve()
-settings = load_settings()
-url = f"http://{settings.api_host}:{settings.api_port}/api/health"
-opener = build_opener(ProxyHandler({}))
-
-for attempt in range(30):
-    try:
-        result = subprocess.run(
-            [
-                "/usr/bin/systemctl", "show",
-                "se-course-project1-backend.service",
-                "--property=MainPID", "--value",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        pid = int(result.stdout.strip())
-        if pid <= 0:
-            raise RuntimeError("Service has no main process")
-
-        process_backend = Path(f"/proc/{pid}/cwd").resolve(strict=True)
-        if process_backend != expected_backend:
-            raise RuntimeError("Service is running a different release")
-
-        with opener.open(url, timeout=2) as response:
-            body = json.load(response)
-            if response.status != 200 or body.get("status") != "ok":
-                raise RuntimeError("Unexpected health response")
-
-        print("Backend process and HTTP health checks passed.")
-        print("Health URL:", url)
-        sys.exit(0)
-    except Exception:
-        time.sleep(1)
-
-print("Backend process or HTTP health check failed.", file=sys.stderr)
-sys.exit(1)
-PY
-)
-
-finish() {
-    result=$?
-    trap - EXIT HUP INT TERM
-
-    if [ "$switched" -eq 1 ] && [ "$committed" -ne 1 ]; then
-        echo '=== Activation failed; restore previous code release ==='
-
-        if switch_to "$previous" &&
-           sudo -n /usr/bin/systemctl restart "$service" &&
-           check_health "$previous"; then
-            echo "ROLLBACK_COMPLETE=$previous"
-        else
-            echo 'ROLLBACK_FAILED: inspect the production service immediately.'
-        fi
-
-        # 发布失败，即使回退成功，也不能让 Jenkins 标记为成功。
-        result=1
-    fi
-
-    rm -f -- "$switch_dir/next"
-    rmdir -- "$switch_dir" || true
-    exit "$result"
-}
-
-trap finish EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
-printf 'Previous release: %s\\n' "$previous"
-printf 'Target release: %s\\n' "$release_dir"
-
-# 先设置标记，确保切换命令异常退出时也尝试恢复旧链接。
-switched=1
-switch_to "$release_dir"
-
-sudo -n /usr/bin/systemctl restart "$service"
-check_health "$release_dir"
-
-{
-    printf 'release_id=%s\\n' "$release_id"
-    printf 'previous_release=%s\\n' "$previous"
-    printf 'backup_dir=%s\\n' "$backup_dir"
-    printf 'activated_at=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-} > "$release_dir/ACTIVATED"
-
-committed=1
-
-echo "ACTIVATION_COMPLETE=$release_dir"
+# Run this release's reviewed activator as deploy. Only exact service actions
+# inside it use sudo; no root-owned executable runs project Python code.
+cd "/srv/se-course-project1/releases/$release_id/backend"
+APP_ENV_FILE=.env.prod .venv/bin/python ../deploy/activate.py \
+    --sudo --verify-process \
+    --release-id "$release_id" --backup-dir "$backup_dir" --mode "$mode"
 REMOTE
                     '''
                 }

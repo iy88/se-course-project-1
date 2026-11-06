@@ -7,10 +7,10 @@ from pydantic import BaseModel
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.text import NonBlank2000
 from app.api.deps import CurrentUser, DbSession, ensure_can_write
 from app.core.config import get_settings
-from app.kv.base import get_kv
+from app.core.text import NonBlank2000
+from app.kv.base import KVError, get_kv
 from app.models import Comment, Product, Report, User
 from app.models.enums import ProductStatus, ReportStatus
 from app.services import audit as audit_service
@@ -95,7 +95,10 @@ async def add_comment(product_id: int, body: CommentIn, user: CurrentUser, db: D
     product = await _check_product_commentable(db, product_id)
     kv = get_kv()
     rate_key = f"comment-rate:{user.id}"
-    count = await kv.incr_with_ttl(rate_key, settings.comment_rate_limit_seconds)
+    try:
+        count = await kv.incr_with_ttl(rate_key, settings.comment_rate_limit_seconds)
+    except KVError:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "评论频率控制暂不可用，请稍后重试") from None
     if count > settings.comment_rate_limit_count:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "评论过于频繁，请稍后再试")
 

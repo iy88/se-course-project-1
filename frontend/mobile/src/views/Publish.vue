@@ -283,13 +283,23 @@ async function submit() {
     if (!isEdit.value) {
       const tags = selectedCategoryIds.value.map((id) => ({ category_id: id }))
       if (newTagName.value.trim()) tags.push({ new_name: newTagName.value.trim() })
-      const data = await http.post('/products', { ...payload, tags })
+      const idempotencyKey = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      const data = await http.post('/products', { ...payload, tags }, {
+        headers: { 'Idempotency-Key': idempotencyKey },
+      })
       showToast('已提交，等待审核')
       router.replace(`/products/${data.id}`)
       return
     }
     if (resubmitMode.value) {
-      await http.post(`/products/${editId.value}/resubmit`, payload)
+      const resubmitKey = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      await http.post(`/products/${editId.value}/resubmit`, payload, {
+        headers: { 'Idempotency-Key': resubmitKey },
+      })
       showToast('已重新提交审核')
     } else {
       const withdrawal = withdrawalSelection(withdrawTagIds.value, pendingTagApplications.value)

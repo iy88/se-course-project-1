@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.2
-Version-Datetime: 2026-11-02T15:35:38+08:00
+Version: 0.2.3
+Version-Datetime: 2026-11-07T00:04:56+08:00
 -->
 
 # 开发与人工测试指南
@@ -59,7 +59,29 @@ chmod 600 backend/.env.dev backend/.env.prod
 
 首次启动前先 `migrate`、`seed`。脚本每次 `uv sync --frozen`；仅当前端 Vite 不存在时 `npm ci`，前端锁文件变化需先停服手动 `npm ci`。启动等待约 5 秒后可能仅提示 preparing，用 status／日志观察，不重复 start；status 是进程检查，停止时返回 1 不等于异常。日志 `var/log/dev-services.log`，状态 `var/run/dev-services.json`。托管入口不管理单独启动的服务，不要两套并行。后端代码修改经 `restart` 加载；修改 dotenv 后需 stop/start，前端由 Vite 热更新，改代理或依赖需重启 Vite。运行后检查 `/api/health` 与实际页面。
 
-手动模式：后端 `APP_ENV_FILE=.env.dev .venv/bin/python -m app.manage serve`（监听地址与端口读自 dotenv，可参数覆盖）；两前端分别 `npm run dev -- --strictPort`。
+手动模式：后端 `APP_ENV_FILE=.env.dev .venv/bin/python -m app.manage serve`（combined 单进程；监听地址与端口读自 dotenv，不提供命令行覆盖）；两前端分别 `npm run dev -- --strictPort`。
+
+### 分层角色与实时协议
+
+issue #36 最终生产可拆成 api/ws/worker/scheduler（旧 3 角色 jobs 仅作回退过渡）。`dev.sh` 仍只托管 combined 单进程；本地要验证 split 时分别启动四个终端（共用同一 `.env.dev`，角色用环境选择器；worker/scheduler 使用本机共享 Redis）：
+
+```bash
+APP_RUNTIME_ROLE=api       .venv/bin/python -m app.manage serve-api
+APP_RUNTIME_ROLE=ws        .venv/bin/python -m app.manage serve-ws
+APP_RUNTIME_ROLE=worker    .venv/bin/python -m app.manage taskiq-worker
+APP_RUNTIME_ROLE=scheduler .venv/bin/python -m app.manage taskiq-scheduler
+APP_ENV_FILE=.env.dev .venv/bin/python -m app.manage health --role worker
+APP_ENV_FILE=.env.dev .venv/bin/python -m app.manage health --role scheduler
+```
+
+split 必须有共享 Redis 与显式 `ALLOWED_ORIGINS`；`ALLOW_QUERY_TOKEN` 仅是非生产过渡。worker readiness 会真实入队 probe，scheduler readiness 读 Redis 调度心跳；两者无 HTTP 端口。移动端先 `POST /api/v1/realtime/ticket` 再连 `/ws?ticket=...`；事件按 `user_seq` 连续应用并 ACK，断线补拉，超期 resync。连接预算按 `API/WS/JOBS_DB_POOL_SIZE`、`TASKIQ_WORKER_PROCESSES` 与 `REDIS_CONTROL_MAX_CONNECTIONS_*`/`TASKIQ_BROKER_MAX_CONNECTIONS` 计算，设置 `DB_CONNECTION_BUDGET`/`REDIS_CONNECTION_BUDGET` 后启动即校验。真实 PostgreSQL+Redis 门禁：
+
+```bash
+(cd backend && CI_REALTIME_APPROVED=1 CI_REALTIME_PG_ADMIN_URL=... CI_REALTIME_REDIS_URL=... .venv/bin/python -m tests.integration_real.runner)
+backend/.venv/bin/python -m pytest -q scripts/deploy/tests
+```
+
+缺少 CI 前置条件时 runner 失败，不 skip；普通离线 pytest 不加载该真实入口。部署/回退与一次性管理员步骤见[部署说明](部署说明.md)和[实时分层实施记录](realtime-layers-implementation.md)。
 
 ## 重置测试数据
 

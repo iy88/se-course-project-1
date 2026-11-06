@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.6
-Version-Datetime: 2026-11-01T18:58:33+08:00
+Version: 0.2.7
+Version-Datetime: 2026-11-07T00:04:56+08:00
 -->
 
 # 文档构建
@@ -76,6 +76,18 @@ python3 scripts/cli.py check
 
 运行 `python3 scripts/cli.py check` 核对生成文档、本地链接与锚点。独立文档工具单元测试已收敛移除；业务验收仅由后端 UC/US/SC 全量入口执行，并与人工浏览器验收共用业务范围、角色和预期。该入口使用所选 dotenv 文件明确指定的后端，不设置 `--profile`。文档构建、渲染和导出命令保留。
 
+## 部署与实时集成入口
+
+`scripts/deploy/` 保存系统服务模板、Nginx split 模板、受限 sudoers、preflight 与固定用途激活脚本；安装与首次 split 维护窗口见 `scripts/deploy/README.md`。这些系统资产需要管理员安装，不在本机自动安装。
+
+```bash
+(cd backend && CI_REALTIME_APPROVED=1 CI_REALTIME_PG_ADMIN_URL=... CI_REALTIME_REDIS_URL=... .venv/bin/python -m tests.integration_real.runner)
+backend/.venv/bin/python -m pytest -q scripts/deploy/tests
+backend/.venv/bin/python scripts/deploy/preflight.py --role all --connect
+```
+
+真实集成 runner 拒绝缺少 CI 配置的调用，使用随机 schema/角色/Redis 前缀并在 finally 清理自有资源；不执行 FLUSHDB/FLUSHALL，不接触生产。
+
 ## PDF 导出
 
 `python3 scripts/cli.py pdf` 使用 Pandoc 与 XeLaTeX 将 `docs/` 下全部 Markdown 导出到 `docs-pdf/`，保持原有目录层级并把扩展名改为 `.pdf`。主说明书 `docs/需求规格说明书.md` 对应 `docs-pdf/需求规格说明书.pdf`。依赖 Pandoc、XeLaTeX 及 macOS 中文字体；默认中文使用 `PingFang SC`（苹方）、西文使用 `Times New Roman`、代码使用 `Fira Code`，脚本通过 `fc-match` 精确匹配字体家族并解析实际字体文件、TTC集合索引及粗体／斜体变体，使用fontspec的 `Path` 和 `FontIndex` 显式加载；不依赖XeLaTeX按字体名查找，也不接受其他家族的静默替代。字体路径在每次导出时解析，无需修改系统字体配置。
@@ -102,3 +114,17 @@ python3 scripts/cli.py pdf --force --only docs/requirements/01-项目概述.md
 首次/升级结构先显式迁移；前端锁文件变化先停止服务并分别npm ci。详细配置、初始化与测试入口见[开发与人工测试指南](../docs/development/guidance.md)，不要同时使用一键和手动方案。
 
 Windows 使用 `dev.ps1` 或 `dev.bat`，支持同一组 start／stop／restart／status 命令。全新 PostgreSQL 资源使用 `init_database.ps1 --env-file .env.dev`（CMD 使用同名 BAT）；用户名与密码均交互输入。Linux／macOS 使用 `bash scripts/init_database.sh --env-file .env.dev`，可从任意目录通过脚本绝对路径调用；入口优先使用后端虚拟环境，否则使用 `uv run --frozen`。跨平台也可用后端虚拟环境 Python 执行 `init_database.py`，详见[开发与人工测试指南](../docs/development/guidance.md)。
+
+## 升级现有运行配置（保留注释）
+
+从仓库根执行，默认预览 `backend/.env.dev` 和 `.env.prod`：
+
+```bash
+backend/.venv/bin/python scripts/migrate_runtime_env.py \
+  --prod-origins https://mobile.example.test,https://admin.example.test
+# 检查新增键后执行同一命令并增加 --apply
+```
+
+`--env-file <path>` 可重复指定；生产缺少 `ALLOWED_ORIGINS` 时必须传入真实 HTTPS 来源，不猜测公网域名。脚本只追加缺少的新运行参数，原有内容（包括注释、引号、换行和值）逐字节保留；重复执行不会追加第二份。现有参数优先，不覆盖密钥、数据库/Redis/OSS 目标或已有自定义预算。迁移保留 API/WS 默认 1 worker；split 压测时再明确配置并验证候选数量，角色由启动命令或 systemd 选择。
+
+`--apply` 先把原文件完整备份至 `var/env-backups/`（目录 0700、文件 0600），再以 0600 原子替换单个配置文件。备份同样含密钥，不提交；输出仅列新增键名与备份位置。配置语法错误、重复键、符号链接或并发编辑会拒绝覆盖。此命令不迁移数据库、不重启服务、不执行生产操作。
