@@ -1,6 +1,7 @@
 """交易全流程 API（FR-05/06/09；BR-01—09、4.15）：请求、锁单、约定、确认、取消、争议。"""
 
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -276,7 +277,11 @@ async def create_request(body: RequestCreateIn, user: CurrentUser, db: DbSession
 
 
 @router.get("/mine")
-async def my_trades(user: CurrentUser, db: DbSession, role: str = Query(default="all", pattern="^(all|buyer|seller)$")) -> list[dict]:
+async def my_trades(
+    user: CurrentUser, db: DbSession,
+    role: str = Query(default="all", pattern="^(all|buyer|seller)$"),
+    product_id: Annotated[int | None, Query(gt=0)] = None,
+) -> list[dict]:
     """我的交易：覆盖买卖双方身份全部请求和交易（FR-12）。"""
     query = select(Trade).order_by(col(Trade.id).desc())
     if role == "buyer":
@@ -285,6 +290,9 @@ async def my_trades(user: CurrentUser, db: DbSession, role: str = Query(default=
         query = query.where(col(Trade.seller_id) == user.id)
     else:
         query = query.where((col(Trade.buyer_id) == user.id) | (col(Trade.seller_id) == user.id))
+    if product_id is not None:
+        # 商品条件叠加在本人身份范围内；不可通过修改商品 ID 扩大访问权。
+        query = query.where(col(Trade.product_id) == product_id)
     result = await db.exec(query)
     trades = list(result)
     return [await _trade_out(db, t, user) for t in trades]

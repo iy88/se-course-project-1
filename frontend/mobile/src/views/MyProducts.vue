@@ -18,7 +18,7 @@
 
           <div class="listing-card__meta">
             <span class="price price--sm"><span class="price__symbol">￥</span>{{ fen2yuan(p.price_cents) }}</span>
-            <span v-if="p.pending_request_count" class="pill pill--warn">待接受请求 {{ p.pending_request_count }}</span>
+            <router-link v-if="p.pending_request_count" :to="productTradesLink(p.id)" class="pill pill--warn">待接受请求 {{ p.pending_request_count }}</router-link>
           </div>
 
           <p v-if="p.reject_reason" class="listing-card__reject">原因：{{ p.reject_reason }}</p>
@@ -42,6 +42,7 @@
 
           <div class="listing-card__foot">
             <router-link :to="`/products/${p.id}/edit-history`" class="listing-card__link">编辑历史</router-link>
+            <router-link :to="productTradesLink(p.id)" class="listing-card__link">关联请求／交易</router-link>
             <router-link :to="`/products/${p.id}/review-records`" class="listing-card__link">
               <AppIcon name="doc" :size="14" />
               审核记录
@@ -75,6 +76,7 @@ import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
 import { fen2yuan, productStatusLabels } from '../api/labels'
 import { useSession } from '../stores/session'
+import { productTradesLink } from '../api/myTrades'
 
 const router = useRouter()
 const session = useSession()
@@ -198,6 +200,7 @@ onActivated(load)
 
 .listing-card__foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
