@@ -385,7 +385,21 @@ async def edit_history(product_id: int, user: CurrentUser, db: DbSession) -> lis
         histories = [
             h for h in histories if h.created_at >= first_trade.created_at
         ]
-    return [ProductEditHistoryOut.model_validate(h) for h in histories]
+    # 在原有资格与时间范围过滤后，才为可见快照签发图片地址。
+    editor_ids = {h.editor_id for h in histories}
+    names = {}
+    if editor_ids:
+        rows = await db.exec(select(col(User.id), col(User.display_name)).where(col(User.id).in_(editor_ids)))
+        names = dict(rows.all())
+    storage = get_storage()
+    output = []
+    for history in histories:
+        item = ProductEditHistoryOut.model_validate(history)
+        item.editor_name = names.get(history.editor_id, '')
+        item.before_image_urls = [storage.public_url(key) for key in history.before_json.get('images', [])]
+        item.after_image_urls = [storage.public_url(key) for key in history.after_json.get('images', [])]
+        output.append(item)
+    return output
 
 
 @router.get("/{product_id}/review-records", response_model=list[ReviewRecordOut])

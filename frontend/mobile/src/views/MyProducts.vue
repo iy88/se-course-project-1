@@ -41,6 +41,7 @@
           </div>
 
           <div class="listing-card__foot">
+            <router-link :to="`/products/${p.id}/edit-history`" class="listing-card__link">编辑历史</router-link>
             <router-link :to="`/products/${p.id}/review-records`" class="listing-card__link">
               <AppIcon name="doc" :size="14" />
               审核记录

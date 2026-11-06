@@ -16,9 +16,9 @@
       </div>
 
       <div v-else-if="trades.length" class="trade-list">
-        <router-link v-for="t in trades" :key="t.id" :to="`/trades/${t.id}`" class="surface trade-card">
+        <article v-for="t in trades" :key="t.id" class="surface trade-card">
           <div class="trade-card__head">
-            <h3 class="trade-card__title">{{ t.product_title }}</h3>
+            <h3 class="trade-card__title"><router-link :to="`/trades/${t.id}`">{{ t.product_title }}</router-link></h3>
             <span class="pill" :class="t.frozen ? 'pill--danger' : statusTone(t.status)">
               {{ tradeStatusLabels[t.status] }}
             </span>
@@ -31,10 +31,11 @@
           </div>
           <p v-if="t.close_reason" class="trade-card__reason">{{ t.close_reason }}</p>
           <div class="trade-card__foot">
-            <span class="trade-card__link">查看交易详情</span>
+            <router-link :to="`/trades/${t.id}`" class="trade-card__link">查看交易详情</router-link>
+            <router-link :to="`/products/${t.product_id}/edit-history`" class="trade-card__link">编辑历史</router-link>
             <AppIcon name="chevron-right" :size="16" class="trade-card__arrow" />
           </div>
-        </router-link>
+        </article>
       </div>
 
       <EmptyState

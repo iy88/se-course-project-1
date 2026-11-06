@@ -109,6 +109,9 @@ class ProductEditHistoryOut(BaseModel):
     id: int
     editor_id: int
     edit_type: str
+    editor_name: str = ''
+    before_image_urls: list[str] = Field(default_factory=list)
+    after_image_urls: list[str] = Field(default_factory=list)
     before_json: dict
     after_json: dict
     reason: str | None
