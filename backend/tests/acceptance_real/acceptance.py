@@ -2884,7 +2884,7 @@ class AcceptanceRun:
 
         with self.rec.step(
             "TRADE-05",
-            "取消：首约前买方直接取消；约定后双方同意；取消申请撤回",
+            "取消：首约前买方直接取消；约定后双方同意；取消申请撤回与拒绝",
             ac=["US-05-AC-06"],
             sc=["SC-05-10", "SC-06-06"],
         ):
@@ -2951,6 +2951,44 @@ class AcceptanceRun:
             self._confirm("T_CANCEL_WITHDRAW", "buyer")
             self._confirm("T_CANCEL_WITHDRAW", "seller")
             self.rec.must_eq(self._trade_detail("T_CANCEL_WITHDRAW", "buyer").get("status"), "completed", "撤回后可正常完成")
+
+            # 取消申请被对方拒绝：只结束申请，交易保持进行中。
+            self._publish("P_CANCEL_REJECT", "seller", f"取消拒绝商品-{self.run_id}", price=6450, category_ids=[self.categories["main"]["id"]])
+            self._approve("P_CANCEL_REJECT")
+            self._request_trade("T_CANCEL_REJECT", "buyer", "P_CANCEL_REJECT")
+            self._accept("T_CANCEL_REJECT")
+            agreement = self._propose("T_CANCEL_REJECT", "buyer", AGREEMENT_B)
+            self._agree("T_CANCEL_REJECT", agreement, "seller")
+            self._call(
+                "POST",
+                f"/api/v1/trades/{self.trades['T_CANCEL_REJECT']['id']}/cancel",
+                user="seller",
+                expected=200,
+                json_body={"reason": "申请取消后由对方拒绝"},
+            )
+            pending = self._trade_detail("T_CANCEL_REJECT", "buyer")
+            self.rec.must_eq(int(pending["cancel_requested_by"] or 0), self._uid("seller"), "拒绝前取消申请人为卖方")
+            self._call(
+                "POST",
+                f"/api/v1/trades/{self.trades['T_CANCEL_REJECT']['id']}/cancel/reject",
+                user="seller",
+                expected=400,
+            )
+            self._call(
+                "POST",
+                f"/api/v1/trades/{self.trades['T_CANCEL_REJECT']['id']}/cancel/reject",
+                user="buyer",
+                expected=200,
+            )
+            rejected = self._trade_detail("T_CANCEL_REJECT", "buyer")
+            self.rec.must_eq(rejected.get("status"), "in_progress", "对方拒绝取消后交易仍进行中")
+            self.rec.must_eq(rejected.get("cancel_requested_by"), None, "拒绝后取消申请结束")
+            self._call(
+                "POST",
+                f"/api/v1/trades/{self.trades['T_CANCEL_REJECT']['id']}/cancel/reject",
+                user="buyer",
+                expected=409,
+            )
 
         with self.rec.step(
             "TRADE-06",
