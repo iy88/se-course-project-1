@@ -81,7 +81,7 @@
           </header>
           <div class="upload-wrap">
             <van-uploader v-model="fileList" :max-count="6" />
-            <p class="form-hint">建议上传清晰实拍图，图片比例会按原图保留。</p>
+            <p class="form-hint">建议上传清晰实拍图，图片比例会按原图保留。最多 6 张，单张不超过 10 MiB，支持 JPG/PNG/WebP/GIF。</p>
           </div>
         </section>
 
@@ -168,6 +168,7 @@ import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
 import { uploadImage } from '../api/uploads'
+import { uploadErrorMessage } from '../api/uploadErrors'
 import {
   isCategorySelectable,
   pendingTagApplications as readPendingTagApplications,
@@ -252,7 +253,8 @@ async function uploadAll() {
       keys.push(key)
     } catch (error) {
       file.status = 'failed'
-      file.message = '上传失败，请重试'
+      // 展示具体原因（空文件/超过 10 MiB/类型不支持/服务端拒绝等），便于用户自行修正。
+      file.message = uploadErrorMessage(error)
       throw error
     }
   }
