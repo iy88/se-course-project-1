@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-11-06T22:35:00+08:00
+Version: 0.1.1
+Version-Datetime: 2026-11-07T01:34:48+08:00
 -->
 
 # 部署资产（需管理员安装，不由 Jenkins 自动安装）
@@ -61,18 +61,13 @@ nginx -t && systemctl reload nginx
 
 系统 unit 设置 `APP_RUNTIME_ROLE`，与共享 `.env.prod` 中的业务配置分离；四个 split 角色读取同一 release 与同一 dotenv。`/usr/local/sbin` 中脚本以 root 所有，`deploy` 直接运行激活脚本；脚本只能对 sudoers 中逐条列出的固定 unit/action 调用 `sudo -n`，不获得任意 `systemctl`、shell 或 release Python 的 root 执行权。`--systemctl`/`--health-command` 仅为测试钩子，生产调用不使用。
 
-## 首次 combined → split 维护窗口
+## 新环境与日常发布
 
-首次切换不是零停机发布。建议维护窗口内按以下顺序执行，失败即停：
+从零准备生产基础设施、Jenkins 依赖及凭据、配置四角色、手动发布和开放 Webhook 的完整顺序见[部署说明](../../docs/development/部署说明.md#从零部署)。新环境直接采用 API/WS/worker/scheduler，不要求先运行 combined；安装但不启动兼容 backend unit，供激活器在没有旧记录时执行停止检查。
 
-1. 备份 PostgreSQL 与 Redis，记录 `current`、服务集合、ACTIVATED 和 Nginx 配置。
-2. 安装/核对 unit、固定用途 sudo 与 preflight；确认 8001/8002 未被旧进程占用，Redis ACL/AOF/maxmemory/noeviction 与 worker/scheduler 连接预算已满足。
-3. 发布包完成 `PREPARED`、`MIGRATED` 后，由 deploy 运行激活脚本；脚本在锁内识别旧 ACTIVATED 服务集合，**完整停止旧 combined 或旧 3 角色（jobs/ws/api）**，原子切换 `current`，启动 scheduler→worker→ws→api，并对 API/WS 做 HTTP readiness、对 worker 做真实 task probe、对 scheduler 做 Redis 调度心跳，同时校验 systemd MainPID cwd=当前 release；旧 combined 回退走旧 `/api/health`。
-4. 服务健康后，再把 Nginx 的 `/ws` upstream 切到 8002；先用真实 ticket 验证 `WS → 持久事件` 与 ACK，再开放用户流量。
-5. 失败时脚本停止新角色、恢复上一 `current` 与旧服务集合；保留 `ACTIVATION_FAILED`、现场日志与旧 `current`；不自动回滚 PostgreSQL/Redis。**Nginx 不由脚本修改**，管理员必须人工恢复旧 `/ws` upstream/停用新路由。
-6. ACTIVATED 记录 `mode=`、`roles=`、`services=`、`protocol=`、`previous_release=`、`previous_mode=`、`previous_services=`、`previous_protocol=`。回退只切代码/服务/路由；重新升级时客户端需 resync/版本水位。
+发布流程保留 PostgreSQL/Redis 备份、迁移版本核对、PREPARED/MIGRATED 标记和真实 readiness。管理员单独维护 Nginx，服务就绪后加载 `/api/ → 8001`、`/ws → 8002` 路由并验证公网双向通信。日常升级成套停止旧服务、切换 current、启动四角色，不宣称零停机；scheduler 必须单实例。
 
-后续 split 升级同样成套停止/切换/启动；两个 scheduler 绝不能同时运行。在实现双端口 upstream 与 release fencing 之前，不宣称滚动零停机。
+激活失败时尝试恢复上一 release 及服务集合；没有旧版本的新环境无旧 release 可恢复。数据库、Redis 和 Nginx 不自动回滚。保留失败日志与标记，按备份及配置单独恢复，不伪造发布标记或覆盖已有 release 目录。
 
 ## 验证
 
@@ -85,6 +80,6 @@ python3 scripts/deploy/preflight.py --mode split --connect  # 在生产 release 
 
 `activate.py --dry-run` 只打印命令，不切换 symlink、不启停服务；现场演练先在隔离测试机验证，不能以测试替身结果宣称生产已通过。
 
-首次合并前先暂停 webhook 并准备服务、sudoers、Redis8.2+测试二进制及CI专用PG；Jenkins默认split，combined仅显式维护/回退选择。Jenkins agent需nginx语法校验器和Rust1.95+/Clippy。首次split成功后由管理员enable四角色、disable旧backend的开机自启；回退combined时同步恢复Nginx与开机自启。
+启用 webhook 前先准备服务、sudoers、Redis8.2+测试二进制及CI专用PG，并完成手动完整发布；Jenkins默认split，combined仅显式维护/回退选择。Jenkins agent需nginx语法校验器和Rust1.95+/Clippy。部署成功后由管理员enable四角色、disable旧backend的开机自启；回退combined时同步恢复Nginx与开机自启。
 
-当前PR仍保留旧SQLite业务验收门禁，迁移到真实PG/Redis四角色业务验收尚未完成；可靠性专项不等价完整业务验收，不能删除旧门禁后宣称迁移完成。配置迁移工具随deploy包携带，发布后以backend/.venv/bin/python deploy/migrate_runtime_env.py显式指定shared dotenv及shared私有备份目录运行，不自动迁移配置或重启生产。
+流水线保留SQLite业务验收门禁，迁移到真实PG/Redis四角色业务验收尚未完成；可靠性专项不等价完整业务验收，不能删除旧门禁后宣称迁移完成。配置迁移工具随deploy包携带，发布后以backend/.venv/bin/python deploy/migrate_runtime_env.py显式指定shared dotenv及shared私有备份目录运行，不自动迁移配置或重启生产。
