@@ -20,6 +20,7 @@ export const useSession = defineStore('session', () => {
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(userData))
     user.value = userData
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:session-changed'))
   }
 
   function updateUser(userData) {
@@ -57,6 +58,7 @@ export const useSession = defineStore('session', () => {
     user.value = null
     unreadNotifications.value = 0
     unreadMessages.value = 0
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('app:session-cleared'))
   }
 
   return {

@@ -106,7 +106,7 @@ import EmptyState from '../components/EmptyState.vue'
 import ReportDialog from '../components/ReportDialog.vue'
 import http from '../api/http'
 import { fmtTime } from '../api/labels'
-import { connectWS, closeWS } from '../api/ws'
+import { connectWS } from '../api/ws'
 import { useSession } from '../stores/session'
 
 const route = useRoute()
@@ -127,6 +127,8 @@ function reportMessage(message) {
   reportOpen.value = true
 }
 let readTimer = null
+let pendingSend = null
+let unwireWS = null
 
 const title = ref('会话')
 
@@ -182,9 +184,22 @@ function onEnter(event) {
 async function send() {
   const content = draft.value.trim()
   if (!content || sendBlockReason.value || textError(content, 2000)) return
+  // Reuse the key across retries of the same draft: a committed message whose
+  // response was lost must not be inserted twice.
+  if (!pendingSend || pendingSend.content !== content) {
+    pendingSend = {
+      content,
+      key: (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    }
+  }
   sending.value = true
   try {
-    await http.post(`/conversations/${route.params.id}/messages`, { content })
+    await http.post(`/conversations/${route.params.id}/messages`, { content }, {
+      headers: { 'Idempotency-Key': pendingSend.key },
+    })
+    pendingSend = null
     draft.value = ''
     await load()
   } finally {
@@ -198,19 +213,29 @@ async function toNormal() {
   router.replace(`/conversations/${data.id}`)
 }
 
-function onWS(data) {
-  if (data.type === 'message' && data.conversation_id === Number(route.params.id)) {
-    load()
+async function onWS(data) {
+  if (data.type === 'resync_required') {
+    await load()
+    return
   }
+  if (data.type === 'message' && data.conversation_id === Number(route.params.id)) {
+    await load()
+  }
+}
+
+async function onResync() {
+  await load()
 }
 
 onMounted(() => {
   load()
-  connectWS(onWS)
+  unwireWS = connectWS(onWS)
+  window.addEventListener('realtime:resync', onResync)
   readTimer = setInterval(markRead, 8000)
 })
 onUnmounted(() => {
-  closeWS()
+  unwireWS?.()
+  window.removeEventListener('realtime:resync', onResync)
   clearInterval(readTimer)
 })
 </script>
