@@ -17,4 +17,5 @@ test('网络/超时等无法解释的底层错误回退为通用提示', () => {
   assert.equal(uploadErrorMessage(new Error('Network Error')), '上传失败，请重试')
   assert.equal(uploadErrorMessage(new Error('timeout of 15000ms exceeded')), '上传失败，请重试')
   assert.equal(uploadErrorMessage(undefined), '上传失败，请重试')
+  assert.equal(uploadErrorMessage(undefined, '请求失败，请稍后重试'), '请求失败，请稍后重试')
 })

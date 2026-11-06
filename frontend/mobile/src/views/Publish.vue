@@ -304,7 +304,8 @@ async function submit() {
     router.replace(`/products/${editId.value}`)
   } catch (err) {
     // 保留当前表单、图片与撤回勾选，不把失败写成成功或跳转。
-    submitError.value = `保存失败：${serverDetail(err)}。已保留当前表单与撤回选择，未显示成功。`
+    // 上传/保存失败时优先展示具体原因（大小、类型、空文件或服务端 detail），避免横幅与缩略图提示不一致。
+    submitError.value = `保存失败：${uploadErrorMessage(err, '请求失败，请稍后重试')}。已保留当前表单与撤回选择，未显示成功。`
   } finally {
     loading.value = false
   }
