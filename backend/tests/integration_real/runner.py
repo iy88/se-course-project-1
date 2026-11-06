@@ -376,11 +376,14 @@ def main(argv: list[str] | None = None) -> int:
         cleanup_errors: list[str] = []
         if setup_error is not None:
             print(f"realtime integration refused: resource setup failed: {type(setup_error).__name__}", file=sys.stderr)
-        cleanup_errors.extend(_stop_managed_redis(redis_control, redis_state))
         try:
             cleanup_errors.extend(asyncio.run(_cleanup_redis(args.redis_url, f"ci-rt:{suffix}:")))
         except Exception as exc:  # noqa: BLE001
             cleanup_errors.append(f"redis runner: {type(exc).__name__}")
+        finally:
+            # Key cleanup needs the server alive. Always stop the owned server,
+            # including when key cleanup failed, and retain both error results.
+            cleanup_errors.extend(_stop_managed_redis(redis_control, redis_state))
         try:
             cleanup_errors.extend(asyncio.run(_cleanup(args, schema_ident, roles)))
         except Exception as exc:  # noqa: BLE001
