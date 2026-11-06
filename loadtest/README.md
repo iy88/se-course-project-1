@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-11-06T19:32:01+08:00
+Version: 0.1.1
+Version-Datetime: 2026-11-07T00:04:56+08:00
 -->
 
 # Rust 真实接口压测
@@ -50,10 +50,21 @@ cargo build --release --locked
   --output ../var/load/capacity-mixed.json
 ```
 
-默认每档5秒预热+30秒采样；通过后翻倍升压，首次业务指标失败后在区间内最多细测3次，再对候选强度持续验证300秒。最高强度仍通过时只给已验证下界，不宣称测到了系统上限。在途上限、调度丢弃、数据池耗尽和样本不足均为不确定结果，不当作服务端容量边界。
+默认从配置上限的一半开始（向上取整，`--capacity-start-rate` 可显式覆盖），每档5秒预热+30秒采样；通过后翻倍升压。首次业务指标失败后采用整数二分：取通过/失败边界之间的整数中点，直到相邻整数（默认 resolution=1）或达到细测预算（默认12次），再对候选强度持续验证300秒。最高强度仍通过时只给已验证下界，不宣称测到了系统上限。在途上限、调度丢弃、数据池耗尽和样本不足均为不确定结果，不当作服务端容量边界。
 
 单接口支持home/search/detail/publish/im。单接口发布复用该用户已播种的图片，只发一次POST /products，后端自身的OSS验证仍在接口耗时内；混合发布包含上传全流程，交易保持完整步骤依赖。mixed沿用30%首页、25%搜索、25%详情、5%发布、5%交易、10%IM；不使用think-ms节流，每项任务由预定时间发起。详情池与交易池分开，未完成/失败交易的商品不复用。
 
 报告包含目标/实际发送/窗口内完成速率、排空时间、延迟/错误、调度延迟、跳过和在途上限次数、积压曲线。每档完整样本另存到输出旁的独立stages目录，汇总报告引用其路径。`--monitor-pid <本机后端PID>`可加入本机后端CPU/RSS采样；发压进程默认采样。数据库只读监控见开发文档。
 
 保护与判定：默认最多2048个在途场景；SLA/错误预算明确失败时停止新增任务，按实际采样时长计算速率，并保留drain样本。单接口同时报告“预定到达→完成”的P95，混合业务完整流程延迟另列。达到配置最高强度并不等于已测得上限；未完成300秒持续验证的候选不会作为长期通过档位。
+
+
+## 实时协议 v2（issue #36）
+
+驱动启动时为每个虚拟用户请求 `POST /api/v1/realtime/ticket`（Bearer JWT，先读持久高水位并使用 `since=high_seq`），再用一次性 ticket 连接 `/ws`，等待 `hello`/`replay_complete` 后开始；事件 envelope 的 `payload` 保留旧 `message` 字段，驱动在业务匹配后发送 `user_seq/event_id` ACK，并用连续 user_seq 游标去重。目标后端必须支持 ticket 且 `protocol_version >= 2`；旧后端会在准备阶段明确失败，不回退 query token。同机 100 用户压测需显式提高 `WS_HANDSHAKE_RATE_LIMIT`（默认 30/IP/min）与 `WS_MAX_CONNECTIONS_PER_IP`（默认 50），并只在隔离环境设置 `ALLOW_MISSING_ORIGIN=true`。非浏览器驱动需让目标环境显式允许其 Origin，或仅在隔离测试中设置 `ALLOW_MISSING_ORIGIN=true`，生产不得放宽来源。本轮未重新执行 100 用户/400 混合场景，历史单 worker 数据不能作为 split 容量结论。
+
+直连独立角色时可传 `--base-url http://127.0.0.1:8000 --ws-base-url http://127.0.0.1:8002`；登录、水位和 ticket 仍走 API，WebSocket 直连指定 WS origin，Origin 仍为 API origin。经过同一 Nginx origin 时不需要此参数。只接受不含凭据、路径、query 的 HTTP(S) origin。
+
+提高上限时，例如 `--capacity-max-rate 800` 默认从400开始；下一轮1600则从800开始。start/max/resolution 均要求整数（start=0表示自动）；失败上界内继续二分，不越过该失败档继续加压。每个 case 的结论与持续验证分别保存。
+
+上限超过400时也需显式提高采样保护预算。例如800可使用 `--capacity-max-rate 800 --capacity-max-arrivals 1000000 --capacity-max-samples 3000000`；该预算包含每档预热和300秒验证，混合业务一条场景产生多条HTTP/送达/场景样本。达到保护预算仅代表本次发压不完整，不能据此宣称服务上限。

@@ -27,7 +27,8 @@ pub(crate) struct CapacityArgs {
     #[arg(long, value_enum, default_value_t=SingleOperation::Search)]
     pub(crate) single_operation: SingleOperation,
     /// HTTP requests/s for single, scenario starts/s for mixed.
-    #[arg(long, default_value_t = 25.)]
+    /// 0 (default) starts at half the configured ceiling, rounded up to an integer.
+    #[arg(long, default_value_t = 0.)]
     pub(crate) capacity_start_rate: f64,
     #[arg(long, default_value_t = 400.)]
     pub(crate) capacity_max_rate: f64,
@@ -37,9 +38,9 @@ pub(crate) struct CapacityArgs {
     pub(crate) capacity_warmup_seconds: u64,
     #[arg(long, default_value_t = 300)]
     pub(crate) capacity_validation_seconds: u64,
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 12)]
     pub(crate) capacity_refinements: usize,
-    #[arg(long, default_value_t = 5.)]
+    #[arg(long, default_value_t = 1.)]
     pub(crate) capacity_resolution: f64,
     #[arg(long, default_value_t = 2048)]
     pub(crate) capacity_max_in_flight: usize,
@@ -70,6 +71,9 @@ pub(crate) struct Args {
     /// Origin only, e.g. http://127.0.0.1:8000 (no /api suffix)
     #[arg(long, default_value = "http://127.0.0.1:8000")]
     pub(crate) base_url: String,
+    /// Optional separate WS service HTTP origin; tickets still come from base-url.
+    #[arg(long)]
+    pub(crate) ws_base_url: Option<String>,
     #[arg(long, default_value = "../var/load/manifest.json")]
     pub(crate) manifest: PathBuf,
     #[arg(long, default_value = "../var/load/report.json")]

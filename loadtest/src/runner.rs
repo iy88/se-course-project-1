@@ -38,6 +38,19 @@ pub(crate) async fn run(args: &Args) -> Result<bool> {
             && url.path() == "/",
         "base-url must be an HTTP origin"
     );
+    let ws_origin = args.ws_base_url.as_deref().unwrap_or(&args.base_url);
+    let ws_url = reqwest::Url::parse(ws_origin)?;
+    ensure!(
+        matches!(ws_url.scheme(), "http" | "https")
+            && ws_url.host_str().is_some()
+            && ws_url.username().is_empty()
+            && ws_url.password().is_none()
+            && ws_url.query().is_none()
+            && ws_url.fragment().is_none()
+            && ws_url.path() == "/",
+        "ws-base-url must be an HTTP origin"
+    );
+    let ws_origin = ws_origin.trim_end_matches('/');
     let metadata = std::fs::symlink_metadata(&args.manifest).context("manifest unreadable")?;
     ensure!(
         metadata.is_file() && !metadata.file_type().is_symlink(),
@@ -138,7 +151,7 @@ pub(crate) async fn run(args: &Args) -> Result<bool> {
                 && (args.capacity.capacity_case == crate::config::CapacityCase::Mixed
                     || args.capacity.single_operation == crate::config::SingleOperation::Im)
     }) {
-        sockets.push(socket(&origin, token, u, pending.clone(), tx.clone()).await?);
+        sockets.push(socket(&origin, ws_origin, token, u, pending.clone(), tx.clone()).await?);
     }
     if args.mode == Mode::Race {
         println!(
