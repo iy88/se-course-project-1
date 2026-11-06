@@ -252,12 +252,13 @@ def _is_retryable(exc: Exception) -> bool:
     if isinstance(status, int):
         return status in _RETRYABLE_STATUS or status >= 500
     try:
-        from alibabacloud_oss_v2.exceptions import RequestError
-        if isinstance(exc, RequestError):
+        from alibabacloud_oss_v2.exceptions import RequestError, ResponseError
+        if isinstance(exc, (RequestError, ResponseError)):
             return True
     except ImportError:
         pass
-    return isinstance(exc, (ConnectionError, TimeoutError))
+    from requests.exceptions import ConnectionError as RequestsConnectionError, Timeout
+    return isinstance(exc, (ConnectionError, TimeoutError, RequestsConnectionError, Timeout))
 
 
 def _translate_error(exc: Exception) -> StorageError:
