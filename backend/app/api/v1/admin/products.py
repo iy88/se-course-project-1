@@ -452,13 +452,17 @@ async def correct_category(product_id: int, body: CategoryCorrectionIn, admin: C
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
+    before = await product_service.load_product_tags(db, product.id)
+    retained_ids = {tag.id for tag in before}
     categories = []
-    for cid in set(body.category_ids):
+    for cid in sorted(set(body.category_ids)):
         category = await db.get(Category, cid)
         if not category or category.deleted_at is not None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"分类不存在：{cid}")
+        # 停用分类只可作为“保留原关联”出现在纠正结果中，不能用作新增关联（4.16、US-13-AC-04）。
+        if category.status != "active" and category.id not in retained_ids:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"所选标签已停用：{category.name}")
         categories.append(category)
-    before = await product_service.load_product_tags(db, product.id)
     before_names = [t.name for t in before]
     await db.exec(delete(ProductTag).where(col(ProductTag.product_id) == product.id))
     for category in categories:

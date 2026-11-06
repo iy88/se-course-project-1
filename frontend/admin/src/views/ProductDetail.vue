@@ -103,8 +103,16 @@
                 :loading="categoriesLoading"
                 class="full-control"
               >
-                <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+                <el-option
+                  v-for="c in selectableCategories"
+                  :key="c.id"
+                  :label="categoryOptionLabel(c)"
+                  :value="c.id"
+                />
               </el-select>
+              <p class="muted-text correction-hint">
+                已停用分类不可用于新增关联；仅保留原商品已有关联（可取消）。
+              </p>
             </el-form-item>
             <el-form-item label="依据说明">
               <TextInput :limit="500"
@@ -133,6 +141,10 @@ import { ElMessage } from 'element-plus'
 import http from '../api/http'
 import { fmtTime as fmt } from '../api/time'
 import AppIcon from '../components/AppIcon.vue'
+import {
+  categoryOptionLabel,
+  selectableCategoryOptions,
+} from '../../../shared/categorySelection.mjs'
 
 const route = useRoute()
 const productId = Number(route.params.id)
@@ -140,6 +152,8 @@ const productId = Number(route.params.id)
 const product = ref(null)
 const categories = ref([])
 const categoryIds = ref([])
+// 纠正前商品原有分类：用于判断停用分类是否属于“保留原关联”而非新增关联。
+const initialCategoryIds = ref([])
 const reason = ref('')
 const loading = ref(false)
 const categoriesLoading = ref(false)
@@ -148,6 +162,7 @@ const loadError = ref('')
 const activeIndex = ref(0)
 
 const activeImage = computed(() => product.value?.image_urls?.[activeIndex.value] || null)
+const selectableCategories = computed(() => selectableCategoryOptions(categories.value, initialCategoryIds.value))
 
 const serverDetail = (err) => (typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : '请求失败')
 
@@ -173,6 +188,7 @@ async function load() {
   try {
     const data = await http.get(`/products/${productId}`)
     product.value = data
+    initialCategoryIds.value = [...(data.tag_ids || [])]
     categoryIds.value = [...(data.tag_ids || [])]
     activeIndex.value = 0
   } catch (err) {
@@ -196,6 +212,10 @@ async function loadCategories() {
 async function submitCorrection() {
   if (!categoryIds.value.length || !reason.value.trim()) {
     return ElMessage.warning('请选择纠正后的分类并填写纠正原因')
+  }
+  const allowedIds = new Set(selectableCategories.value.map((c) => Number(c.id)))
+  if (categoryIds.value.some((id) => !allowedIds.has(Number(id)))) {
+    return ElMessage.warning('所选分类包含不可新增的已停用分类，请调整后重试')
   }
   submitting.value = true
   try {
@@ -355,6 +375,11 @@ onMounted(() => {
 .full-control {
   width: 100%;
 }
+.correction-hint {
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
 .correction-form {
   max-width: 100%;
 }
