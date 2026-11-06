@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-11-06T19:32:01+08:00
+Version: 0.1.1
+Version-Datetime: 2026-11-07T00:04:56+08:00
 -->
 
 # 真实负载压测与独立播种
@@ -67,7 +67,7 @@ manifest 以私有原子写入记录目标指纹、规模、tag、账号和 ID�
 
 ## 负载与指标口径
 
-每个虚拟用户持有自己的登录会话与接收 WebSocket。启动时逐个真实登录，并验证返回 ID；全部连接完成鉴权 ping/pong 后统一开始。用户数必须等于清单 cohort 数，避免部分在线导致私聊接收方缺失。登录耗时单独记录在 `login_ms`，不属于稳态并发登录测试。
+每个虚拟用户持有自己的登录会话与接收 WebSocket。启动时逐个真实登录，并验证返回 ID。issue #36 起驱动使用协议 v2：先 `POST /api/v1/realtime/ticket`（Bearer JWT，`since=0`）取得一次性 ticket，再连接 `WS_PATH?ticket=...`，等待服务端 `hello` 与 `replay_complete`（期间可能收到 `event`）；事件 envelope 的 `payload` 保持旧 `message` 字段，驱动在业务匹配后发送 `user_seq/event_id` ACK，并按 event_id 去重。旧后端没有 ticket 端点或 `protocol_version<2` 时驱动准备阶段明确失败，不回退 query token；旧驱动也不能连接默认关闭 query token 的新后端。非浏览器驱动需在目标环境显式配置 `ALLOWED_ORIGINS`（推荐）或仅供测试的 `ALLOW_MISSING_ORIGIN=true`，生产不得放宽为任意来源。同机 100 用户的握手默认 `WS_HANDSHAKE_RATE_LIMIT=30/IP/min` 会先触发限流，压测须显式提高该值与 `WS_MAX_CONNECTIONS_PER_IP`；应用按 TCP 直连地址计数，不信任客户端伪造的 X-Forwarded-For，反向代理后的真实来源需由受控代理链另行确认。用户数必须等于清单 cohort 数，避免部分在线导致私聊接收方缺失。登录耗时单独记录在 `login_ms`，不属于稳态并发登录测试。
 
 采用闭环用户：每个用户持续操作，场景结束后默认思考 1000 ms；20 槽循环按用户索引错开，配比为首页 30%、带分类/分页的搜索 25%、商品详情 25%、发布 5%、交易完整推进 5%、IM 10%。这是场景配比，交易有多个 HTTP 请求，实际请求配比由报告各项样本数给出；闭环模型在变慢时实际请求率会下降，不能据此宣称达到固定 RPS 的容量或消除 coordinated omission。调整 `--think-ms` 与用户数探索更高负载时应另存报告。
 
@@ -263,6 +263,12 @@ mixed首先完成100场景/秒的300秒验证：约150总HTTP RPS，其中应用
 
 Web瓶颈证据：实际日志只出现1个server process；高强度失败时该进程CPU报告值约102%—103%，而机器有18逻辑CPU，故整机CPU仍可能很空闲。数据库应用角色采样最多5个active连接、未采到锁等待，曾有15个idle-in-transaction连接；当前SQLAlchemy池为默认5+10，连接占用/排队与数据库CPU满载是不同概念。现有证据支持优先检查单Web worker的Python处理/事件循环排队，但未测完整SQL耗时、连接池等待和数据库IO，尚不能证明唯一根因。
 
-当前WS连接注册表位于进程内存，没有跨worker分发；直接增加worker会使HTTP发送与接收WS落到不同进程而漏掉实时推送。因此多核对照应先支持跨进程广播，并核算各worker独立连接池的总连接数，再做1/2/4 worker同负载对照，不直接把workers调大宣告容量提升。
+上述 2026-11-06 记录仍是 issue #34 的单 worker 基线（当时 WS 注册表在进程内）；本轮 issue #36 已实现 Redis stream + PostgreSQL 回放/补偿的跨进程 WS，并加入 ticket/ACK/队列预算，但**没有重跑** 100 用户或 400 混合场景。多 worker/多角色容量、跨进程广播、连接预算和重连风暴仍需按新拓扑重新测量，不能把本文历史数据当作 split 结果。
 
 测试结束后停止本轮后端和只读监控，保留数据、日志和报告。只读核对当前10,000商品listed、14,231 pending_review；交易14,225 completed、10 closed、5 terminated，无pending/in_progress/disputed/abnormal，无同商品重复锁单；原有2个staged对象仍保留。Rust受控回归13项通过、Clippy -D warnings与release构建通过；只读监控回归2项通过。真实全量功能验收没有因本次容量测试而重新宣称通过。capacity退出0表示至少一个候选通过持续验证，允许更高档位失败；应读取highest_validated_rate及各stage，不能用退出0宣称400档通过。
+
+## 后续容量探测控制器
+
+默认起点为上限的一半（向上取整）；例如800从400开始，1600从800开始。显式 `--capacity-start-rate` 仍可用于重现历史实验。refine 改为整数二分，默认分辨率1、预算12次；首次服务失败后只在已观测通过/失败边界内部取整中点，保护丢弃、样本不足等不作为服务失败上界。高档300秒验证失败后的细测也使用整数中点。短档二分与300秒持续通过是不同证据，不宣称一个短档的整数边界就是物理或长期容量极限。
+
+当前开发工作目录为 `project1`；先前独立 worktree 的代码、日志、构建产物和临时记录已同步。现有 `.env.dev/.env.prod` 用保留原文的脚本追加新配置，生产文件不参与本地压测。本轮直接选择 `backend/.env.dev`，发压期间临时调整进程数及本机连接限制，结束恢复测试前参数。
