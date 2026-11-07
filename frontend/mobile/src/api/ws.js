@@ -33,7 +33,6 @@ let reconnectAttempts = 0
 let epoch = 0
 let stopped = true
 let lastFrameAt = 0
-let replaying = null
 let connecting = false
 let frameChain = Promise.resolve()
 const state = createState()
@@ -98,8 +97,10 @@ function sessionTokenChanged() {
 }
 
 async function dispatch(frame) {
+  const myEpoch = epoch
   let applied = true
   for (const handler of [...listeners]) {
+    if (myEpoch !== epoch || sessionTokenChanged()) return false
     try {
       await handler?.(frame)
     } catch {
@@ -216,12 +217,12 @@ function startTimers(ws, myEpoch) {
   }, 5000)
 }
 
-async function applyFrame(frame) {
+async function applyFrame(frame, fromReplay = false) {
   const myEpoch = epoch
   const result = await applySequenced(state, frame, async (payload) => {
     // Dispatch and await the business application before commit/ACK.
     const applied = await dispatch(payload)
-    if (myEpoch !== epoch) throw new Error('stale realtime epoch')
+    if (myEpoch !== epoch || sessionTokenChanged()) throw new Error('stale realtime session')
     if (!applied) throw new Error('realtime handler rejected event')
   })
   if (myEpoch !== epoch) return false
@@ -235,7 +236,8 @@ async function applyFrame(frame) {
     return true
   }
   if (result.kind === 'gap') {
-    await replay(result.expected)
+    if (fromReplay) throw new Error('non-contiguous realtime replay')
+    await replay(myEpoch)
     return true
   }
   if (result.kind === 'resync') {
@@ -245,34 +247,26 @@ async function applyFrame(frame) {
   return true
 }
 
-async function replay(expectedSeq) {
-  if (replaying) return replaying
-  replaying = (async () => {
-    let after = Math.max(0, state.lastSeq)
-    for (let page = 0; page < 20; page += 1) {
-      let data
-      try {
-        data = await http.get('/realtime/events', { params: { after_seq: after, limit: 200 } })
-      } catch {
-        scheduleReconnect(epoch)
-        return
-      }
-      if (data.resync_required) {
-        handleResync({ high_seq: data.high_seq, low_seq: data.low_seq, reason: 'cursor_expired' })
-        return
-      }
-      for (const frame of data.events || []) {
-        await applyFrame(frame)
-      }
-      const last = (data.events || []).length ? Number(data.events[data.events.length - 1].user_seq) : after
-      after = Math.max(after, last)
-      if (!data.has_more) return
+async function replay(myEpoch) {
+  // The socket's frame chain serializes replay. A failed request propagates
+  // to that chain so the current socket closes before reconnecting.
+  for (let page = 0; page < 20; page += 1) {
+    if (myEpoch !== epoch || sessionTokenChanged()) return
+    const data = await http.get('/realtime/events', { params: { after_seq: state.lastSeq, limit: 200 } })
+    if (myEpoch !== epoch || sessionTokenChanged()) return
+    if (data.resync_required) {
+      await handleResync({ high_seq: data.high_seq, low_seq: data.low_seq, reason: 'cursor_expired' })
+      return
     }
-    handleResync({ high_seq: after, reason: 'replay_too_large' })
-  })().finally(() => {
-    replaying = null
-  })
-  return replaying
+    for (const frame of data.events || []) {
+      if (myEpoch !== epoch || sessionTokenChanged()) return
+      await applyFrame(frame, true)
+    }
+    if (!data.has_more) return
+  }
+  if (myEpoch === epoch && !sessionTokenChanged()) {
+    await handleResync({ high_seq: state.lastSeq, reason: 'replay_too_large' })
+  }
 }
 
 async function handleResync(frame) {
@@ -286,15 +280,11 @@ async function handleResync(frame) {
     low_seq: frame.low_seq,
     high_seq: frame.high_seq,
   })
-  if (myEpoch !== epoch) return
+  if (myEpoch !== epoch || sessionTokenChanged()) return
   if (!applied) {
     // Snapshot failure: do not advance. Reconnect from the last durable cursor
     // after a bounded jittered delay, rather than a tight resync loop.
-    dispose()
-    stopped = false
-    sessionToken = currentToken()
-    if (sessionToken) scheduleReconnect(epoch, reconnectDelay(reconnectAttempts))
-    return
+    throw new Error('Unable to apply realtime snapshot')
   }
   try {
     window.dispatchEvent(new CustomEvent('realtime:resync', { detail: frame }))
@@ -371,6 +361,7 @@ async function openSocket(myEpoch) {
   try {
     ticket = await http.post('/realtime/ticket', { since: state.lastSeq })
   } catch (error) {
+    if (myEpoch !== epoch || stopped) return
     connecting = false
     const status = error?.response?.status
     if (status === 404 || status === 405 || status === 422) {
@@ -383,14 +374,11 @@ async function openSocket(myEpoch) {
     scheduleReconnect(myEpoch)
     return
   }
+  if (stopped || myEpoch !== epoch) return
   if (Number(ticket?.protocol_version) < 2) {
     connecting = false
     stopped = true
     dispatch({ type: 'protocol_incompatible', required_version: 2 })
-    return
-  }
-  if (stopped || myEpoch !== epoch) {
-    connecting = false
     return
   }
   if (sessionTokenChanged()) {
@@ -443,7 +431,9 @@ async function openSocket(myEpoch) {
   }
   ws.onclose = (event) => {
     if (myEpoch !== epoch || ws !== socket) return
+    epoch += 1
     socket = null
+    frameChain = Promise.resolve()
     clearTimers()
     if (shouldStopForAuth(event?.code)) {
       // A fresh login is required; reconnecting with the same token is useless.
@@ -451,7 +441,7 @@ async function openSocket(myEpoch) {
       return
     }
     if (stopped) return
-    scheduleReconnect(myEpoch)
+    scheduleReconnect(epoch)
   }
   ws.onerror = () => {
     /* onclose performs the single reconnect decision */
@@ -503,7 +493,6 @@ export function closeWS(handler = null) {
 export function resetWS() {
   listeners.clear()
   dispose({ resetCursor: true })
-  if (replaying) replaying = null
 }
 
 if (typeof window !== 'undefined') {
