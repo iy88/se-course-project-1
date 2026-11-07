@@ -1,4 +1,4 @@
-/** 商品检索参数（D-45 / contracts ROUND2 16）：数组使用 repeat-key，避免 FastAPI list[int] 收到 [] 形式。 */
+/** Product search parameters (D-45 / contracts ROUND2 16): arrays use repeat-key so FastAPI list[int] never receives the [] form. */
 
 export function normalizeNameFilters(value) {
   if (Array.isArray(value)) {
@@ -26,7 +26,7 @@ export function buildProductSearchParams({
     if (id === null || id === undefined || id === '') continue
     params.append('category_ids', String(id))
   }
-  // 未知/已移除名称仍原样交给服务端，按无匹配处理；不在前端静默丢弃成“全部商品”。
+  // Unknown/removed names are still sent to the server and treated as no match; do not silently drop them on the frontend as "all products".
   for (const name of categoryNames || []) {
     const trimmed = String(name).trim()
     if (trimmed) params.append('category_names', trimmed)

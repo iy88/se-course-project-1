@@ -50,7 +50,7 @@ async function load(earlier) {
   if (loading.value) return
   const current = ++version
   loading.value = true; error.value = ''
-  // 刷新或授权失败时不继续显示已失效的敏感历史。
+  // Do not keep showing stale sensitive history after a refresh or authorization failure.
   if (!earlier) { messages.value = []; conversation.value = null; opened.value = false }
   const prevHeight = earlier ? scrollEl.value?.scrollHeight || 0 : 0
   try {
@@ -62,12 +62,12 @@ async function load(earlier) {
     messages.value = [...new Map(combined.map(m => [m.id, m])).values()].sort((a,b) => a.id-b.id)
     conversation.value = data.conversation; targetMessageId.value = data.scope.target_message_id; hasMore.value = data.has_more; cursor.value = data.next_before_id; opened.value = true
     if (earlier) {
-      // 前置加载后保持视口停留在原消息位置。
+      // Keep the viewport anchored to the original message after prepending older messages.
       await nextTick()
       const el = scrollEl.value
       if (el) el.scrollTop = el.scrollHeight - prevHeight
     } else {
-      // 首次读取定位到最新消息。
+      // On first load, position at the latest message.
       await scrollToBottom()
     }
   } catch (e) {

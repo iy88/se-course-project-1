@@ -195,7 +195,7 @@ const nameFilterChips = computed(() =>
     const matched = categories.value.find(
       (c) => c.name === raw || (Array.isArray(c.aliases) && c.aliases.includes(raw)),
     )
-    // 只展示服务端当前主名；已移除/未知名称保留原文，交由服务端按无匹配处理，不静默转全量。
+    // Show only the server's current primary name; removed/unknown names keep their original text and are passed to the server as no-match, never silently widened to all products.
     return { raw, label: matched ? matched.name : raw, known: !!matched }
   }),
 )
@@ -315,7 +315,7 @@ onMounted(async () => {
   try {
     categories.value = await http.get('/categories')
   } catch {
-    /* 分类加载失败不阻塞在售列表；已保存的名称筛选仍会原样交给服务端。 */
+    /* Category load failure does not block the on-sale list; saved name filters are still passed to the server unchanged. */
   }
 })
 </script>

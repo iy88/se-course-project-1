@@ -1,14 +1,14 @@
-/** 交易处置事项上下文的前端预检规则；最终权限由服务端校验。 */
+/** Frontend preflight rules for trade-disposition case context; final authorization is validated by the server. */
 
 const USABLE_CASE_STATUSES = new Set(['processing', 'disposed'])
 const TRADE_CONTEXT_EXCLUDED_TYPES = new Set(['product_review'])
 
-/** 商品审核事项不能作为后续私人交易访问、冻结或状态调整的上下文。 */
+/** Product-review cases cannot serve as context for later private-trade access, freezing, or status changes. */
 export function isTradeContextCaseType(caseRow) {
   return Boolean(caseRow) && !TRADE_CONTEXT_EXCLUDED_TYPES.has(caseRow.case_type)
 }
 
-/** 只有本人认领的处理中/已处置事项可用于交易上下文；已处置不表示后续合法解冻/调整一定不可用。 */
+/** Only processing/disposed cases claimed by the current admin may serve as trade context; disposed does not mean later legitimate unfreezing/adjustments are necessarily unavailable. */
 export function isOwnedUsableCase(caseRow, adminId) {
   if (!caseRow || !adminId) return false
   if (!isTradeContextCaseType(caseRow)) return false
@@ -24,17 +24,20 @@ export function ownedUsableCases(caseRows, adminId) {
     })
 }
 
-/** 事项须至少带有一个业务关联对象，避免“任意本人事项”成为通用交易许可。 */
+/** A case must have at least one business-linked object so that "any case owned by me" cannot become a blanket trade permit. */
 export function caseHasContext(caseRow) {
   if (!caseRow) return false
   return Boolean(caseRow.trade_id || caseRow.product_id || caseRow.report_id || caseRow.subject_user_id)
 }
 
 /**
- * 事项是否可能作为该交易的上下文：
- * - 商品审核事项不能作为私人交易上下文，即使与本交易商品相同；
- * - 直接关联交易时必须一致，不能因相同商品等间接关系绕过；
- * - 无直接交易关联时，举报/账户关联可交由服务端进一步核验。
+ * Whether a case could serve as context for this trade:
+ * - Product-review cases cannot serve as private-trade context, even when they
+ *   involve the same product as the trade;
+ * - A directly linked trade must match, and indirect relations such as the same
+ *   product cannot bypass this check;
+ * - Without a direct trade link, report/account associations may be further
+ *   verified by the server.
  */
 export function caseCanContextTrade(caseRow, tradeId) {
   if (!caseHasContext(caseRow) || !tradeId) return false

@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-// 全量样式覆盖模板组件及函数式 API（showConfirmDialog、showToast 等）。
-// 按需样式已在 vite.config.js 关闭，避免懒加载样式晚于本文件注入后覆盖。
+// The full stylesheet covers template components and functional APIs (showConfirmDialog, showToast, etc.).
+// On-demand styles are disabled in vite.config.js so lazy-loaded styles cannot inject later and override this file.
 import 'vant/lib/index.css'
 import App from './App.vue'
 import router from './router'
@@ -13,7 +13,7 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 
-// 每次进入业务页面重新读取账户限制，避免只在登录时读取 has_frozen_trade。
+// Re-read account restrictions on every business page entry instead of reading has_frozen_trade only at login.
 const session = useSession(pinia)
 router.afterEach((to) => {
   if (!to.meta.public && localStorage.getItem('token')) {

@@ -1,6 +1,6 @@
-/** 分类别名展示：主名与别名指向同一分类标签，不把别名当作可重复勾选的独立标签（US-13-AC-07、D-45）。 */
+/** Category alias display: the primary name and aliases refer to the same category tag; aliases are not separately checkable tags (US-13-AC-07, D-45). */
 
-/** 分类下拉项的别名说明；别名不能单独计为一个标签，选择该项即按同一分类筛选。 */
+/** Alias hint for a category dropdown item; aliases do not count as separate tags, and selecting the item filters by the same category. */
 export function categoryAliasHint(category) {
   const aliases = Array.isArray(category?.aliases)
     ? category.aliases

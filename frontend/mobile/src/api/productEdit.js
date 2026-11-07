@@ -1,12 +1,12 @@
-/** 商品编辑中的卖方待审核标签申请（contracts ROUND2 13 / R11）。 */
+/** Seller's pending tag applications in product editing (contracts ROUND2 13 / R11). */
 
 import { isCategorySelectable } from '../../../shared/categorySelection.mjs'
 
-/** 停用标签不可用于新发布或新增关联；编辑已有商品时仅保留原先已关联的停用标签（4.16、US-13-AC-04）。
- * 规则与管理端分类纠正共用 `shared/categorySelection.mjs`，此处重新导出以保持既有导入路径。 */
+/** Disabled tags cannot be used for new publishes or new associations; when editing an existing product only previously associated disabled tags are retained (4.16, US-13-AC-04).
+ * The rule is shared with admin category correction via `shared/categorySelection.mjs`, re-exported here to keep existing import paths. */
 export { isCategorySelectable }
 
-/** 仅采用服务端返回的本人待审核申请；其他浏览者返回空数组时不得自行推测或补造 ID。 */
+/** Use only the current user's pending applications returned by the server; when other viewers get an empty array, never infer or fabricate IDs. */
 export function pendingTagApplications(product) {
   const applications = product?.pending_tag_applications
   if (!Array.isArray(applications)) return []
@@ -20,14 +20,14 @@ export function pendingTagApplications(product) {
   )
 }
 
-/** 只依据服务端 can_resubmit 判断重提；撤回待审核标签申请不能变成重新发布或新造草稿。 */
+/** Determine resubmission only from the server's can_resubmit; withdrawing a pending tag application must not become a republish or create a new draft. */
 export function resolveResubmitMode(product) {
   if (!product) return false
   if (product.can_resubmit === true) return true
   return product.can_resubmit === undefined && product.status === 'rejected'
 }
 
-/** 过滤出仍属于当前待审核申请的撤回选择，并单独报告已失效选择，避免静默提交旧 ID。 */
+/** Filter withdrawal selections that still belong to current pending applications and report stale selections separately, avoiding silent submission of old IDs. */
 export function withdrawalSelection(selectedIds, applications) {
   const allowed = new Set((applications || []).map((application) => Number(application.id)))
   const ids = [...new Set((selectedIds || []).map((id) => Number(id)).filter(Number.isInteger))]

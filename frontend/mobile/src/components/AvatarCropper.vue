@@ -85,7 +85,7 @@ function drag(event) {
       offsetX *= ratio
       offsetY *= ratio
       zoom.value = nextZoom
-      // 到达边界时重设基准，反向捏合立即响应。
+      // Reset the baseline at the boundary so an immediate reverse pinch responds.
       if (requested !== nextZoom) pinchStart = { distance, zoom: nextZoom }
     }
   } else {

@@ -199,7 +199,7 @@ function openTodo(t) {
 }
 
 async function open(n) {
-  // 仅打开具体通知才已读（4.17）；已读不改变待办，待办在返回本页时重新读取。
+  // Only opening a specific notification marks it read (4.17); marking read does not change todos, which are re-read when returning to this page.
   if (!n.is_read) {
     try {
       await http.post(`/notifications/${n.id}/read`)
@@ -220,7 +220,7 @@ async function open(n) {
 let firstActivated = false
 onMounted(loadAll)
 onActivated(() => {
-  // keep-alive 首次激活紧接 onMounted，避免首屏重复请求；之后返回本页重新读取待办与通知。
+  // keep-alive's first activation immediately follows onMounted, so skip it to avoid a duplicate first-screen request; later returns re-read todos and notifications.
   if (firstActivated) loadAll()
   else firstActivated = true
 })

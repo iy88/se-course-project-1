@@ -197,19 +197,19 @@ const product = ref(null)
 const submitError = ref('')
 const withdrawTagIds = ref([])
 const pendingTagApplications = computed(() => readPendingTagApplications(product.value))
-// 停用标签只在编辑原商品时作为原已有分类保留；是否可选由 isCategorySelectable 按初始关联判断。
+// Disabled tags are retained only as previously existing categories when editing the original product; selectability is determined by isCategorySelectable against the initial associations.
 const hasDisabledCategories = computed(() =>
   categories.value.some((category) => category.status === 'disabled'),
 )
 
-// 仅交易冻结、账户未封禁时，编辑无关商品仍允许；新发布与上下架由服务端及按钮共同限制。
+// When only a trade is frozen and the account is not banned, editing unrelated products is still allowed; new publishes and listing/unlisting are jointly restricted by the server and buttons.
 const blocked = computed(() => {
   if (session.banned) return true
   if (!isEdit.value) return session.hasFrozenTrade
   return product.value?.display_restricted === true || product.value?.status === 'in_transaction'
 })
 
-// 只按服务端 can_resubmit 判断重提；撤回待审核标签申请仍走普通 PATCH，不借 query 变成重新发布。
+// Determine resubmission only from the server's can_resubmit; withdrawing a pending tag application still uses a normal PATCH and must not become a republish via a query parameter.
 const resubmitMode = computed(() => isEdit.value && resolveResubmitMode(product.value))
 
 const submitText = computed(() => {
@@ -253,7 +253,7 @@ async function uploadAll() {
       keys.push(key)
     } catch (error) {
       file.status = 'failed'
-      // 展示具体原因（空文件/超过 10 MiB/类型不支持/服务端拒绝等），便于用户自行修正。
+      // Show the specific reason (empty file / over 10 MiB / unsupported type / server rejection, etc.) so the user can correct it.
       file.message = uploadErrorMessage(error)
       throw error
     }
@@ -313,8 +313,8 @@ async function submit() {
     }
     router.replace(`/products/${editId.value}`)
   } catch (err) {
-    // 保留当前表单、图片与撤回勾选，不把失败写成成功或跳转。
-    // 上传/保存失败时优先展示具体原因（大小、类型、空文件或服务端 detail），避免横幅与缩略图提示不一致。
+    // Keep the current form, images, and withdrawal selections; never record a failure as success or navigate away.
+    // On upload/save failure prefer the specific reason (size, type, empty file, or server detail) so the banner and thumbnail hints stay consistent.
     submitError.value = `保存失败：${uploadErrorMessage(err, '请求失败，请稍后重试')}。已保留当前表单与撤回选择，未显示成功。`
   } finally {
     loading.value = false
@@ -347,7 +347,7 @@ async function loadEditProduct() {
 }
 
 onMounted(async () => {
-  // 账户限制由路由切换统一刷新；此处不再重复请求 /auth/me。
+  // Account restrictions are refreshed by route transitions; do not request /auth/me again here.
   try {
     categories.value = await http.get('/categories')
   } catch (err) {

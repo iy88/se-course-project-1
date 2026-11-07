@@ -326,8 +326,8 @@ const hasCurrentConfirmation = computed(
 )
 
 const canWrite = computed(() => session.user?.status !== 'banned')
-// BR-33/D-50：has_frozen_trade 是用户级交易资格；任一交易冻结时，所有交易推进写操作都不可用。
-// 收藏、既往评价、其他举报、第三方普通私聊及无关商品合规编辑仍按各自规则处理。
+// BR-33/D-50: has_frozen_trade is a user-level trade eligibility; when any trade is frozen, write operations that advance any trade are unavailable.
+// Favorites, past reviews, unrelated reports, ordinary third-party private chat, and compliant edits of unrelated products still follow their own rules.
 const tradeWriteAllowed = computed(() => canWrite.value && !session.hasFrozenTrade)
 const requestActionAllowed = computed(
   () => trade.value?.status === 'pending_acceptance' && !trade.value?.frozen && tradeWriteAllowed.value,
@@ -395,10 +395,10 @@ const serverDetail = (err) =>
   typeof err?.response?.data?.detail === 'string' ? err.response.data.detail : '请求失败，请稍后重试'
 
 function keepStateOnFailure(prefix, err) {
-  // 不用失败响应改写本页状态；保留当前交易与表单，由用户重新读取或重试。
+  // Do not rewrite page state from a failed response; keep the current trade and form so the user can reload or retry.
   actionError.value = `${prefix}：${serverDetail(err)}。已保留当前页面与表单状态，未显示成功。`
   if (err?.response?.status === 403) {
-    // 冻结/封禁或身份变化可能由服务端先拒绝；刷新用户级资格，及时收起不可用动作。
+    // A freeze/ban or identity change may be rejected first by the server; refresh user-level eligibility to promptly hide unavailable actions.
     session.refreshUser().catch(() => {})
   }
 }
@@ -667,7 +667,7 @@ async function submitReview() {
     showReview.value = false
     await load()
   } catch (err) {
-    // 评价不受交易冻结影响，但封禁仍禁写；失败时保留弹层中的评分与文字。
+    // Reviews are unaffected by a trade freeze, but bans still block writes; on failure keep the rating and text in the dialog.
     keepStateOnFailure('评价提交失败', err)
   }
 }

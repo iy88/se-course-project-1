@@ -202,7 +202,7 @@ async function removeAlias(row, alias) {
   } catch {
     return
   }
-  // 列表仅返回别名名称；按名称移除后必须重新读取，避免旧别名继续显示或被识别。
+  // The list returns alias names only; after removing by name we must reload so removed aliases no longer display or resolve.
   try {
     await http.delete(`/categories/${row.id}/aliases/by-name?name=${encodeURIComponent(alias)}`)
     ElMessage.success('别名已移除')
@@ -226,7 +226,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-/* 极长标签名兜底：限制在列宽内，超长时由 el-tag 内容省略，title 提供全名。 */
+/* Fallback for extremely long tag names: constrain to the column width; el-tag truncates overflow and title provides the full name. */
 .name-tag {
   max-width: 100%;
 }

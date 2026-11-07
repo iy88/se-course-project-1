@@ -168,7 +168,7 @@ async function load() {
 
 function markRead() {
   if (!active) return
-  // 打开并展示消息时推进该会话已读（BR-18）
+  // Mark the conversation read when messages are opened and displayed (BR-18)
   const last = messages.value[messages.value.length - 1]
   if (last) {
     http.post(`/conversations/${conversationId}/read`, { last_displayed_message_id: last.id }).catch(() => {})

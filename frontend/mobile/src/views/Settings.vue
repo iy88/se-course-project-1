@@ -223,7 +223,7 @@ async function sendCode(target) {
     if (!emailState.acceptNewCodeSend(request)) return
     showToast('验证码已发送，请查收新邮箱')
   } catch {
-    // 共享 http 拦截器已统一提示请求失败
+    // The shared HTTP interceptor has already shown the request failure
   } finally {
     sending.value = ''
   }
@@ -249,7 +249,7 @@ async function changeEmail() {
     emailState.reset()
     showToast('邮箱已更换，用户 ID 不变')
   } catch {
-    // 共享 http 拦截器已统一提示请求失败
+    // The shared HTTP interceptor has already shown the request failure
   } finally {
     changingEmail.value = false
   }

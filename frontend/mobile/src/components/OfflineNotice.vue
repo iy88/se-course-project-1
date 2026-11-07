@@ -11,7 +11,7 @@ import AppIcon from './AppIcon.vue'
 
 const offline = ref(false)
 
-// 以 navigator.onLine 为准同步离线条状态；初始化即调用，避免首帧误报在线。
+// Sync the offline bar state from navigator.onLine; call it during initialization to avoid a first-frame false "online" report.
 function sync() {
   offline.value = typeof navigator !== 'undefined' && navigator.onLine === false
 }
@@ -31,7 +31,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 固定在底部导航上方，避免遮挡 van-tabbar；宽度与页面内容一致。 */
+/* Fixed above the bottom navigation so it does not cover van-tabbar; width matches the page content. */
 .offline-notice {
   position: fixed;
   left: 50%;

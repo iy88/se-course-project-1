@@ -84,7 +84,7 @@ async function submit() {
     const redirect = route.query.redirect
     router.replace(safePostLoginRedirect(redirect))
   } catch {
-    // 错误提示由 HTTP 拦截器统一展示。
+    // Error messages are shown by the HTTP interceptor.
   } finally {
     loading.value = false
   }

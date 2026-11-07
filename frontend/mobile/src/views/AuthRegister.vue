@@ -114,7 +114,7 @@ const sending = ref(false)
 
 const emailValid = () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
 
-// 目标邮箱变化后已输入的验证码不再对应当前邮箱，清空输入；验证结果以服务端为准。
+// After the target email changes, an entered verification code no longer matches it, so clear the input; the server remains authoritative for verification results.
 watch(
   () => form.email,
   () => {
@@ -135,7 +135,7 @@ async function sendCode() {
 
 async function submit() {
   if (!form.code || !/^\d{6}$/.test(form.code)) return showToast('请输入 6 位邮箱验证码')
-  // 验证码是否有效只由服务端判定：发码请求超时/网络异常时仍允许提交已收到的验证码。
+  // Whether the code is valid is decided only by the server: if sending the code times out or the network fails, the user may still submit a code already received.
   loading.value = true
   try {
     const data = await http.post('/auth/register', {
@@ -144,7 +144,7 @@ async function submit() {
       display_name: form.display_name,
       password: form.password,
     })
-    // 仅在服务端验证并创建账户成功后建立登录会话；失败不进入账户。
+    // Create the login session only after the server verifies the code and creates the account; on failure do not enter the account.
     session.setSession(data.access_token, data.user)
     showToast('注册成功')
     router.replace('/home')

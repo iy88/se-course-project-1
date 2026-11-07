@@ -1,11 +1,12 @@
 /**
- * 时间展示工具：后端存储/返回的是 UTC。
+ * Time display utility: the backend stores and returns UTC.
  *
- * SQLite 中 DateTime 列存的是不带时区的 UTC 时间，接口 isoformat() 也可能
- * 省略 Z。浏览器若把 "YYYY-MM-DDTHH:mm:ss" 当作本地时间，会按浏览器所在
- * 时区产生偏移。这里统一把无偏移的日期时间按 UTC 解析，再固定按北京
- * 时间（Asia/Shanghai）展示；显式带 Z / ±HH:MM 的字符串保留其真实偏移，
- * 不重复加 8 小时。
+ * SQLite DateTime columns hold UTC without a timezone, and isoformat() may omit
+ * the Z suffix. If the browser treats "YYYY-MM-DDTHH:mm:ss" as local time, it
+ * shifts by the browser's timezone. Here, offset-less timestamps are always
+ * parsed as UTC and then displayed in Beijing time (Asia/Shanghai); strings
+ * with an explicit Z / ±HH:MM offset keep their real offset and are not given
+ * an extra 8 hours.
  */
 
 const BEIJING_TIME_ZONE = 'Asia/Shanghai'
@@ -29,8 +30,8 @@ function parseUtcMillis(value) {
   const second = Number(secondText)
   const millisecond = Number((fractionText + '000').slice(0, 3))
 
-  // 用 UTC 字段校验墙上时间本身是否合法（如 2 月 30 日、25 点），
-  // 避免 Date 自动进位后把非法输入当成有效时间。
+  // Validate the wall-clock time itself using UTC fields (e.g. February 30 or
+  // hour 25) so Date's automatic rollover cannot turn invalid input into a valid time.
   const wallMillis = Date.UTC(year, month - 1, day, hour, minute, second, millisecond)
   const wall = new Date(wallMillis)
   if (
@@ -81,7 +82,7 @@ export function fmtTime(value) {
     if (part.type !== 'literal') parts[part.type] = part.value
   }
 
-  // 个别 ICU 版本在 hour12:false 下用 24:xx 表示午夜，统一成 00:xx。
+  // Some ICU versions render midnight as 24:xx with hour12:false; normalize it to 00:xx.
   const hour = pad2(parts.hour === '24' ? '00' : parts.hour)
   return `${parts.year}/${pad2(parts.month)}/${pad2(parts.day)} ${hour}:${pad2(parts.minute)}:${pad2(parts.second)}`
 }

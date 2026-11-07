@@ -126,7 +126,7 @@ async function withdraw(p) {
     const data = await http.post(`/products/${p.id}/withdraw-review`)
     showToast(data.detail || '已撤回审核并下架')
   } catch {
-    // 失败不改本地状态；重新读取服务端当前状态与认领结果。
+    // Failure does not change local state; re-read the server's current status and claim result.
   }
   await load()
 }

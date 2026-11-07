@@ -152,7 +152,7 @@ const productId = Number(route.params.id)
 const product = ref(null)
 const categories = ref([])
 const categoryIds = ref([])
-// 纠正前商品原有分类：用于判断停用分类是否属于“保留原关联”而非新增关联。
+// The product's original categories before correction: used to tell whether a disabled category is a retained original association rather than a new one.
 const initialCategoryIds = ref([])
 const reason = ref('')
 const loading = ref(false)

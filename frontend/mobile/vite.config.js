@@ -5,15 +5,15 @@ import { VantResolver } from '@vant/auto-import-resolver'
 import { VitePWA } from 'vite-plugin-pwa'
 import { frontendSettings } from '../config.mjs'
 
-// 移动端用户侧 PWA：可安装、离线壳缓存；业务数据始终走网络
+// Mobile user-side PWA: installable with offline app-shell caching; business data always goes over the network
 export default defineConfig({
-  // 依赖预构建缓存放在本项目根目录，避免随共享 node_modules 被清理
+  // Keep the dependency prebundle cache in this project's root so it is not removed with the shared node_modules
   cacheDir: '.vite',
   plugins: [
     vue(),
-    // 全量样式已由 main.js 的 vant/lib/index.css 统一引入；关闭按需样式副作用，
-    // 避免路由懒加载时晚注入的 vant/es/*.css 打乱层叠顺序（如 .van-popup--center
-    // 覆盖函数式对话框 .van-dialog 的宽度）。
+    // The full stylesheet is imported centrally by main.js via vant/lib/index.css; on-demand style side effects are disabled
+    // so late-injected vant/es/*.css from lazy route loading cannot disturb cascade order (e.g. .van-popup--center
+    // overriding the width of the functional dialog .van-dialog).
     Components({ resolvers: [VantResolver({ importStyle: false })] }),
     VitePWA({
       registerType: 'autoUpdate',

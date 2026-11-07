@@ -1,13 +1,16 @@
 /**
- * 分类可选择性（4.16、US-13-AC-04）。
+ * Category selectability (4.16, US-13-AC-04).
  *
- * - 停用分类不可用于新发布或新增关联；
- * - 已有商品编辑/分类纠正时，仅保留原先已关联的停用分类，并仍可取消该关联。
+ * - Disabled categories cannot be used for new publishes or new associations;
+ * - When editing an existing product/correcting categories, only previously
+ *   associated disabled categories are retained, and that association can
+ *   still be removed.
  *
- * 移动端发布/编辑与管理端分类纠正共用本模块，避免两处规则漂移。
+ * Mobile publishing/editing and admin category correction share this module to
+ * keep the rule from drifting between the two.
  */
 
-/** 判断某分类在当前上下文是否可选；initialCategoryIds 为对象当前已关联的分类 ID。 */
+/** Whether a category is selectable in the current context; initialCategoryIds are the IDs currently associated with the object. */
 export function isCategorySelectable(category, initialCategoryIds = []) {
   if (!category) return false
   if (category.status !== 'disabled') return true
@@ -15,13 +18,13 @@ export function isCategorySelectable(category, initialCategoryIds = []) {
   return initial.has(Number(category.id))
 }
 
-/** 停用分类仍可展示时标注状态，避免被误认为可新增。 */
+/** Mark the status when a disabled category is still displayed, so it is not mistaken for one that can be added. */
 export function categoryOptionLabel(category) {
   if (!category) return ''
   return category.status === 'disabled' ? `${category.name}（已停用）` : category.name
 }
 
-/** 管理端纠正的可选项：启用分类 + 当前商品已关联的停用分类。 */
+/** Options for admin correction: enabled categories plus disabled categories already associated with the current product. */
 export function selectableCategoryOptions(categories, initialCategoryIds = []) {
   return (categories || []).filter((category) => isCategorySelectable(category, initialCategoryIds))
 }

@@ -740,7 +740,7 @@ async function restoreDisplay() {
     restoreReason.value = ''
     await load()
   } catch (err) {
-    // 失败时保留当前事项、商品与已填依据，由管理员处理后重试；不显示成功。
+    // On failure keep the current case, product, and entered basis so the admin can retry; do not show success.
     actionError.value = `解除展示限制失败：${serverDetail(err)}；未显示成功，已保留当前输入。`
   } finally {
     restoreLoading.value = false
@@ -860,12 +860,12 @@ async function submitAvatarDecision(approved) {
 
 .detail-side {
   position: sticky;
-  /* 滚动容器是 .main（顶栏在其外部），top 相对它解析即可；右栏内部滚动保证底部操作可达 */
+  /* The scroll container is .main (the top bar is outside it), so top resolves against it; internal scrolling in the right column keeps the bottom actions reachable. */
   top: 16px;
   max-height: calc(100vh - 64px - 16px - 34px);
   overflow-y: auto;
   padding-right: 2px;
-  /* 可见的细滚动条，提示右栏内容可滚动 */
+  /* Visible thin scrollbar hinting that the right column can scroll. */
   scrollbar-width: thin;
   scrollbar-color: #b7c6be transparent;
 }

@@ -1,4 +1,4 @@
-/** 业务文案映射：状态/枚举到中文展示。 */
+/** Business copy mappings: statuses/enums to Chinese display text. */
 
 export const productStatusLabels = {
   pending_review: '待审核',
@@ -48,7 +48,7 @@ export const reviewResultLabels = {
   withdrawn: '已撤回',
 }
 
-/** 审核记录结论的展示色调；未知结论保持中性样式。 */
+/** Display tone for review-record results; unknown results keep the neutral style. */
 export function reviewResultTone(result) {
   return {
     approved: 'pill--ok',
@@ -83,8 +83,8 @@ function parseUtcMillis(value) {
   const second = Number(secondText)
   const millisecond = Number((fractionText + '000').slice(0, 3))
 
-  // 用 UTC 字段校验墙上时间本身是否合法（如 2 月 30 日、25 点），
-  // 避免 Date 自动进位后把非法输入当成有效时间。
+  // Validate the wall-clock time itself using UTC fields (e.g. February 30 or
+  // hour 25) so Date's automatic rollover cannot turn invalid input into a valid time.
   const wallMillis = Date.UTC(year, month - 1, day, hour, minute, second, millisecond)
   const wall = new Date(wallMillis)
   if (
@@ -135,12 +135,12 @@ export function fmtTime(value) {
     if (part.type !== 'literal') parts[part.type] = part.value
   }
 
-  // 个别 ICU 版本在 hour12:false 下用 24:xx 表示午夜，统一成 00:xx。
+  // Some ICU versions render midnight as 24:xx with hour12:false; normalize it to 00:xx.
   const hour = pad2(parts.hour === '24' ? '00' : parts.hour)
   return `${parts.year}/${pad2(parts.month)}/${pad2(parts.day)} ${hour}:${pad2(parts.minute)}:${pad2(parts.second)}`
 }
 
-/** 将服务端剩余秒数转为静态文案；页面不自行按自然时间倒数（D-51）。 */
+/** Convert the server's remaining seconds into static text; pages do not run a natural-time countdown themselves (D-51). */
 export function fmtDuration(seconds) {
   const total = Number(seconds)
   if (!Number.isFinite(total) || total < 0) return ''
@@ -152,7 +152,7 @@ export function fmtDuration(seconds) {
   return `${minutes} 分`
 }
 
-/** 待办入口映射；只允许既有业务对象，不新增任务类型（D-53）。 */
+/** To-do entry mapping; only existing business objects are allowed, no new task types (D-53). */
 export function todoPath(item) {
   if (!item) return ''
   if (item.link_type === 'trade') return `/trades/${item.link_id}`
@@ -168,7 +168,7 @@ export const todoKindLabels = {
   completion_confirm: '完成确认待处理',
   dispute_resolution: '争议解决待确认',
   inquiry_pending: '管理问询待说明',
-  // 兼容旧服务端仍可能返回的历史 kind，不改变展示含义。
+  // Legacy kinds a previous server may still return; display meaning is unchanged.
   request_decision: '请求待处理',
   agreement_change: '约定变更待确认',
   completion_pending: '完成确认待回应',

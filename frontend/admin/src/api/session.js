@@ -4,7 +4,7 @@ export function storedAdminUser() {
   return useSession().user
 }
 
-/** 读取服务端当前管理员资料；并发调用由 session 合并。 */
+/** Read the current admin profile from the server; concurrent calls are merged by the session store. */
 export async function ensureAdminUser() {
   try {
     return await useSession().refreshUser()

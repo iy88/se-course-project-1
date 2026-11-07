@@ -378,7 +378,7 @@ async function submitComment() {
     const status = err?.response?.status
     if (status === 403) session.refreshUser().catch(() => {})
     if (status === 409) {
-      // 同步商品最新资格，保留草稿；网络失败时不覆盖已有商品。
+      // Sync the product's latest eligibility while preserving the draft; do not overwrite the existing product on network failure.
       const latest = await http.get(`/products/${productId}`).catch(() => null)
       if (latest && String(route.params.id) === productId) product.value = latest
     }
@@ -413,7 +413,7 @@ async function requestTrade() {
     showToast(data.detail)
     if (data.id) router.push(`/trades/${data.id}`)
   } catch (err) {
-    // 失败不改商品/请求状态；若服务端因新冻结/封禁拒绝，刷新用户级资格提示。
+    // Failure does not change product/request state; if the server rejects because of a new freeze/ban, refresh the user-level eligibility notice.
     if (err?.response?.status === 403) session.refreshUser().catch(() => {})
   }
 }
@@ -435,7 +435,7 @@ async function withdrawReview() {
     const data = await http.post(`/products/${route.params.id}/withdraw-review`)
     showToast(data.detail || '已撤回审核并下架')
   } catch {
-    // 服务端拒绝时保留原状态，重新读取当前认领/审核结果。
+    // On server rejection keep the original state and re-read the current claim/review result.
   }
   await load()
 }
@@ -450,7 +450,7 @@ async function delist() {
     await http.post(`/products/${route.params.id}/delist`)
     showToast('已下架')
   } catch {
-    // 锁单交易等拒绝由服务端说明，失败不改变页面状态。
+    // Rejections such as a locked trade are explained by the server; failure does not change page state.
   }
   await load()
 }
@@ -465,7 +465,7 @@ async function relist() {
     await http.post(`/products/${route.params.id}/relist`)
     showToast('已重新上架')
   } catch {
-    // 冻结或审核无效时保留已下架状态。
+    // Keep the delisted state when frozen or when the review is invalid.
   }
   await load()
 }

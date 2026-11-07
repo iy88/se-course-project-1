@@ -59,7 +59,7 @@ import { createEvidenceUploads } from '../api/evidenceUploads'
 const props = defineProps({
   show: { type: Boolean, default: false },
   targetType: { type: String, required: true },
-  // 弹窗关闭时父级传入 null；提交前有 targetId 有效性校验兜底
+  // The parent passes null when the dialog is closed; a targetId validity check guards submission.
   targetId: { type: [Number, String], default: null },
   title: { type: String, default: '举报' },
 })

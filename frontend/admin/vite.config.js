@@ -4,15 +4,15 @@ import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { frontendSettings } from '../config.mjs'
 
-// 管理端仅桌面 Web；开发代理指向本机后端
+// Admin is desktop web only; the dev proxy points at the local backend
 export default defineConfig({
-  // 依赖预构建缓存放在本项目根目录，避免随共享 node_modules 被清理
+  // Keep the dependency prebundle cache in this project's root so it is not removed with the shared node_modules
   cacheDir: '.vite',
   plugins: [
     vue(),
     Components({
       dts: false,
-      // 先保持原有全量 CSS，避免样式注入顺序改变造成 UI 回归。
+      // Keep the existing full CSS import first to avoid changing style injection order and causing UI regressions.
       resolvers: [ElementPlusResolver({ importStyle: false })],
     }),
   ],

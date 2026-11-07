@@ -1,9 +1,10 @@
 /**
- * 身份刷新失败时的路由降级策略。
+ * Route fallback policy when identity refresh fails.
  *
- * 只有确定来自 HTTP 请求的网络断连/超时，或服务端明确返回 5xx，
- * 才允许离线降级。普通 JavaScript Error（例如“登录状态已变化”）
- * 不能仅因为缺少 response 就被当作网络故障，绕过身份校验。
+ * Offline fallback is allowed only for confirmed network disconnects/timeouts
+ * from HTTP requests, or an explicit 5xx from the server. A plain JavaScript
+ * Error (such as a changed login state) must not be treated as a network
+ * failure merely because it lacks a response, which would bypass identity checks.
  */
 const NETWORK_ERROR_CODES = new Set(['ERR_NETWORK', 'ECONNABORTED', 'ETIMEDOUT'])
 

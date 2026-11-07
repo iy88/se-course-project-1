@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { categoryAliasHint } from '../src/api/categoryAlias.js'
 
 
-test('分类别名作为同一标签的说明展示，不重复计为独立标签', () => {
+test('category aliases are shown as hints for the same tag, not counted as separate tags', () => {
   assert.equal(
     categoryAliasHint({ id: 7, name: '教材书籍', aliases: ['课本'] }),
     '（课本，同属本分类）',

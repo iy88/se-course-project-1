@@ -44,7 +44,7 @@ routes.push({ path: '/:pathMatch(.*)*', redirect: '/' })
 const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach(async (to) => {
-  // 离线兜底页不含业务数据，必须在任何 token 刷新前允许直接进入。
+  // The offline fallback page holds no business data and must be reachable before any token refresh.
   if (to.meta.offline) return true
   const session = useSession()
   const token = localStorage.getItem('token')
@@ -54,21 +54,21 @@ router.beforeEach(async (to) => {
     return to.meta.public ? true : login
   }
 
-  // 已保存的 token 不是已认证状态：先校验服务端身份，再渲染受保护页面。
+  // A stored token is not an authenticated state: verify the server identity before rendering protected pages.
   if (session.verifiedToken !== token) {
     try {
       await session.refreshUser()
     } catch (error) {
-      // 401 时 http 拦截器已清理 token，此处 hasToken=false → login，沿用既有会话失效流程。
-      // 离线/服务端暂时不可用且本地有缓存用户时放行已缓存的应用壳（由页面提示加载失败）；
-      // 403/404 及程序内部异常不会被误认成离线；没有缓存用户时显示公共离线页。
+      // On 401 the HTTP interceptor has already cleared the token, so hasToken=false → login, reusing the existing session-invalidation flow.
+      // When offline or the server is temporarily unavailable and a cached user exists, allow the cached app shell (pages report load failures);
+      // 403/404 and internal program errors are never mistaken for offline; without a cached user, show the public offline page.
       const decision = resolveRefreshFailure(error, {
         hasToken: Boolean(localStorage.getItem('token')),
         hasCachedUser: Boolean(session.user),
       })
       if (decision === 'login') return to.meta.public ? true : login
       if (decision === 'allow-shell') return true
-      // 有 token 但没有缓存的用户时，展示不泄露业务数据的独立兜底页，而不是取消导航导致白屏。
+      // With a token but no cached user, show a standalone fallback page that leaks no business data instead of cancelling navigation and leaving a blank screen.
       if (decision === 'offline') {
         return { path: '/offline', query: { redirect: to.fullPath } }
       }

@@ -2,9 +2,10 @@
 import { computed } from 'vue'
 
 /**
- * 管理端本地 SVG 图标集。
- * 统一 24 栅格、线性描边，颜色继承 currentColor，尺寸由 size 控制。
- * 图标为纯装饰时默认 aria-hidden；仅图标按钮请在外层补充 aria-label。
+ * Admin local SVG icon set.
+ * A consistent 24-unit grid and linear strokes; color inherits from currentColor and
+ * size is controlled by the size prop. Decorative icons default to aria-hidden;
+ * icon-only buttons should add an aria-label on the outer element.
  */
 const props = defineProps({
   name: { type: String, required: true },

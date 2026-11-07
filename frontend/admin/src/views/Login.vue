@@ -110,7 +110,7 @@ async function submit() {
     const redirect = route.query.redirect
     router.replace(safePostLoginRedirect(redirect))
   } catch {
-    // 失败反馈由 http 响应拦截器统一提示，登录态与管理员校验保持不变。
+    // Failure feedback is shown by the shared HTTP response interceptor; login state and admin validation stay unchanged.
   } finally {
     loading.value = false
   }

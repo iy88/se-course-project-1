@@ -219,7 +219,7 @@ async function loadCases() {
 }
 
 function loadAll() {
-  // 路由 afterEach 与页面激活都会刷新账户限制；store 合并并发请求，既避免重复风暴又保留实时资格。
+  // Route afterEach and page activation both refresh account restrictions; the store merges concurrent requests, avoiding a request storm while keeping eligibility current.
   session.refreshUser().catch(() => {})
   loadTodos()
   loadUnread()
@@ -229,7 +229,7 @@ function loadAll() {
 let firstActivated = false
 onMounted(loadAll)
 onActivated(() => {
-  // keep-alive 首次激活紧接 onMounted，避免首屏重复请求；之后返回本页重新读取。
+  // keep-alive's first activation immediately follows onMounted, so skip it to avoid a duplicate first-screen request; later returns re-read.
   if (firstActivated) loadAll()
   else firstActivated = true
 })

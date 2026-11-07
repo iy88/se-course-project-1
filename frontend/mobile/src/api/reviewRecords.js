@@ -1,6 +1,6 @@
 /**
- * 商品审核记录请求控制器：新路由/重试请求总是取代旧请求。
- * 旧响应不得覆盖新商品的记录；卸载后也不能继续写入页面状态。
+ * Product review-record request controller: a new route/retry request always supersedes the old one.
+ * Old responses must not overwrite records for a new product, and must not write page state after unmount.
  */
 export function createReviewRecordsLoader(fetchRecords, updateState) {
   let requestId = 0

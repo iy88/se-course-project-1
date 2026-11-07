@@ -5,7 +5,7 @@ import http from '../api/http'
 export const useSession = defineStore('session', () => {
   let cached = null
   try { cached = JSON.parse(localStorage.getItem('user') || 'null') } catch { localStorage.removeItem('user') }
-  // 临时图片链接由本轮身份刷新提供，避免先请求旧链接再替换为新签名。
+  // Temporary image URLs are supplied by this round of identity refresh, avoiding an old URL request before replacing it with a new signature.
   if (cached) { cached.avatar_url = null; cached.avatar_pending_url = null }
   const user = ref(localStorage.getItem('token') ? cached : null)
   const verifiedToken = ref(null)
@@ -28,13 +28,13 @@ export const useSession = defineStore('session', () => {
     user.value = userData
   }
 
-  /** 刷新当前账户限制（含 has_frozen_trade）；失败时保留旧值，由服务端继续兜底。 */
+  /** Refresh current account restrictions (including has_frozen_trade); keep previous values on failure and let the server continue to enforce them. */
   let refreshPromise = null
   async function refreshUser() {
-    // 合并路由与页面触发的身份刷新；退出后不允许旧响应恢复用户资料。
+    // Merge identity refreshes triggered by routes and pages; after logout, stale responses must not restore user data.
     const token = localStorage.getItem('token')
     if (!token) throw new Error('未登录')
-    // 路由切换与页面加载可能同时触发；合并同一时刻的刷新请求，避免重复风暴，仍以服务端最新响应为准。
+    // Route switches and page loads may fire together; merge same-instant refresh requests to avoid a request storm while still honoring the server's latest response.
     if (!refreshPromise) {
       refreshPromise = http
         .get('/auth/me')

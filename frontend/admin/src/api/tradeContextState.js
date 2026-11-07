@@ -1,6 +1,7 @@
 /**
- * 交易处置上下文的纯状态规则：展示与动作只使用“当前交易+当前事项”的最新成功加载结果。
- * 仅用于前端预检，最终权限由服务端校验。
+ * Pure state rules for trade-disposition context: display and actions use only
+ * the latest successful load for the current trade plus current case.
+ * Frontend preflight only; final authorization is validated by the server.
  */
 
 export function normalizeTradeContext(tradeId, caseId) {
@@ -36,7 +37,7 @@ export function createTradeSession() {
   }
 }
 
-/** 输入或事项变化时使旧内容与旧动作立即失效，并让在途响应全部过期。 */
+/** Invalidate old content and actions immediately when input or case changes, and expire all in-flight responses. */
 export function invalidateTradeSession(session) {
   return {
     seq: session.seq + 1,
@@ -95,7 +96,7 @@ export function failTradeLoad(session, response) {
   return { ...session, loading: false, pending: null, loaded: null }
 }
 
-/** 只有已加载且与当前输入完全一致的交易可以展示或执行动作。 */
+/** Only a loaded trade that exactly matches the current input may be displayed or acted on. */
 export function canUseLoadedTrade(session, context) {
   if (!session || session.loading || session.actionBusy) return false
   const ctx = normalizeTradeContext(context.tradeId, context.caseId)
@@ -104,7 +105,7 @@ export function canUseLoadedTrade(session, context) {
   return Number(session.loaded.trade?.id) === ctx.tradeId
 }
 
-/** 动作开始时锁定目标上下文；处理中再次调用返回 null，用于阻止重复提交。 */
+/** Lock the target context when an action starts; returns null if called again while busy to prevent duplicate submission. */
 export function beginTradeAction(session, context) {
   if (!canUseLoadedTrade(session, context)) return null
   const ctx = normalizeTradeContext(context.tradeId, context.caseId)
