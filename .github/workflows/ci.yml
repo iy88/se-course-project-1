@@ -31,6 +31,19 @@ jobs:
       - name: Sync backend dependencies
         run: uv sync --locked --managed-python --python 3.13
 
+      - name: Install Redis 8.2+ for acceptance services
+        # The acceptance Taskiq broker requires XACKDEL REF_POLICY ACKED.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lsb-release curl gpg
+          curl -fsSL https://packages.redis.io/gpg -o /tmp/project1-redis-signing-key
+          sudo gpg --dearmor --batch --yes -o /usr/share/keyrings/redis-archive-keyring.gpg /tmp/project1-redis-signing-key
+          sudo chmod 644 /usr/share/keyrings/redis-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+          sudo apt-get update
+          sudo apt-get install -y redis-server redis-tools
+          redis-server --version
+
       - name: Create private SQLite/local CI dotenv
         shell: bash
         run: |
