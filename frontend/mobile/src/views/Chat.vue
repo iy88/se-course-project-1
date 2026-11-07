@@ -110,6 +110,7 @@ import { connectWS } from '../api/ws'
 import { useSession } from '../stores/session'
 
 const route = useRoute()
+const conversationId = route.params.id
 const router = useRouter()
 const session = useSession()
 const conversation = ref(null)
@@ -129,6 +130,7 @@ function reportMessage(message) {
 let readTimer = null
 let pendingSend = null
 let unwireWS = null
+let active = true
 
 const title = ref('会话')
 
@@ -145,7 +147,7 @@ const sendBlockReason = computed(() => {
 async function load() {
   loadError.value = ''
   try {
-    conversation.value = await http.get(`/conversations/${route.params.id}`)
+    conversation.value = await http.get(`/conversations/${conversationId}`)
   } catch {
     loadError.value = '会话加载失败，请稍后重试。'
     return false
@@ -165,10 +167,11 @@ async function load() {
 }
 
 function markRead() {
+  if (!active) return
   // 打开并展示消息时推进该会话已读（BR-18）
   const last = messages.value[messages.value.length - 1]
   if (last) {
-    http.post(`/conversations/${route.params.id}/read`, { last_displayed_message_id: last.id }).catch(() => {})
+    http.post(`/conversations/${conversationId}/read`, { last_displayed_message_id: last.id }).catch(() => {})
   }
 }
 
@@ -197,7 +200,7 @@ async function send() {
   }
   sending.value = true
   try {
-    await http.post(`/conversations/${route.params.id}/messages`, { content }, {
+    await http.post(`/conversations/${conversationId}/messages`, { content }, {
       headers: { 'Idempotency-Key': pendingSend.key },
     })
     pendingSend = null
@@ -209,14 +212,14 @@ async function send() {
 }
 
 async function toNormal() {
-  const data = await http.post(`/conversations/${route.params.id}/to-normal`)
+  const data = await http.post(`/conversations/${conversationId}/to-normal`)
   showToast('已转入私聊（历史不迁移）')
   router.replace(`/conversations/${data.id}`)
 }
 
 async function onWS(data) {
   if (data.type === 'resync_required' ||
-      (data.type === 'message' && data.conversation_id === Number(route.params.id))) {
+      (data.type === 'message' && data.conversation_id === Number(conversationId))) {
     if (!await load()) throw new Error('Unable to refresh conversation')
   }
 }
@@ -227,6 +230,7 @@ onMounted(() => {
   readTimer = setInterval(markRead, 8000)
 })
 onUnmounted(() => {
+  active = false
   unwireWS?.()
   clearInterval(readTimer)
 })
