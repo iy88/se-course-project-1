@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.46
-Version-Datetime: 2026-11-07T00:04:56+08:00
+Version: 0.1.47
+Version-Datetime: 2026-11-07T18:29:39+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -117,11 +117,10 @@ AUDIT_TRUSTED_PROXIES=none
 
 | 配置 | 说明 |
 |---|---|
-| `API_HOST` / `API_PORT` | combined/api 从所选 dotenv 读取的监听地址与端口；默认 `127.0.0.1:8000`，生产示例使用 `8001`；不提供命令行覆盖 |
+| `API_HOST` / `API_PORT` | API 从所选 dotenv 读取的监听地址与端口；默认 `127.0.0.1:8000`，生产示例使用 `8001`；不提供命令行覆盖 |
 | `WS_HOST` / `WS_PORT` | split WS 角色监听地址；默认 `127.0.0.1:8002` |
-| `JOBS_HOST` / `JOBS_PORT` | 旧 3 角色 jobs 过渡入口的本机健康检查地址；默认 `127.0.0.1:8003`，不承接业务 API |
 | `TASKIQ_*` / `OUTBOX_MAX_ATTEMPTS` | Taskiq worker/scheduler 的进程数、并发、prefetch、reclaim、retry、interval、timeout 与 Redis 池预算；全部由 dotenv 构建 |
-| `APP_RUNTIME_ROLE` | 运行角色选择器 `combined/api/ws/worker/scheduler`（`jobs` 为旧入口），由 systemd 或 `serve-*`/`taskiq-*` 命令设置；不是业务配置 |
+| `APP_RUNTIME_ROLE` | 运行角色选择器 `api/ws/worker/scheduler`，由 systemd 或 `serve-*`/`taskiq-*` 命令设置；不是业务配置 |
 | `ALLOWED_ORIGINS` / `ALLOW_MISSING_ORIGIN` | WS Origin 白名单；生产必须显式列 HTTPS origin，缺 Origin 默认拒绝；仅可信非浏览器压测可临时允许缺失 |
 | `ALLOW_QUERY_TOKEN` | 过渡开关：仅 dev/test 可为 true 接受旧 `?token=`；生产必须 false，客户端使用一次性 ticket |
 | `API_DB_POOL_SIZE` / `WS_DB_POOL_SIZE` / `JOBS_DB_POOL_SIZE` 等 | 分角色 SQL 池、等待/超时与总连接预算；配置了 `DB_CONNECTION_BUDGET` 时启动校验 |
@@ -153,14 +152,14 @@ AUDIT_TRUSTED_PROXIES=none
 
 ```bash
 ./scripts/dev.sh start
-# 修改后端代码后重启三端
+# 修改后端代码后重启托管服务
 ./scripts/dev.sh restart
 ./scripts/dev.sh status
 # 测试结束
 ./scripts/dev.sh stop
 ```
 
-`start` 在后台运行后端8000、管理端5174、移动端5173；默认读取已有 `backend/.env.dev`，也可用 `APP_ENV_FILE` 选择其他 dotenv 文件。托管进程不会继承 shell 中的应用、前端或工具配置覆盖。脚本检查端口、执行 `uv sync --frozen`，前端缺少 Vite 时执行 `npm ci`；不会复制配置、启动 PostgreSQL/Redis、执行迁移或 seed。首次初始化和升级结构须先按下方命令显式迁移。锁文件变化后，先停止服务、在两个前端分别运行 `npm ci` 再启动，不能依赖脚本对已有 node_modules 自动重装。
+`start` 在后台运行API 8000、WS 8002、Taskiq worker、单实例 scheduler、管理端 5174 和移动端 5173；默认读取已有 `backend/.env.dev`，也可用 `APP_ENV_FILE` 选择其他 dotenv 文件。托管进程不会继承 shell 中的应用、前端或工具配置覆盖。脚本检查端口、执行 `uv sync --frozen`，前端缺少 Vite 时执行 `npm ci`；不会复制配置、启动 PostgreSQL/Redis、执行迁移或 seed。首次初始化和升级结构须先按下方命令显式迁移。锁文件变化后，先停止服务、在两个前端分别运行 `npm ci` 再启动，不能依赖脚本对已有 node_modules 自动重装。
 
 `status` 只检查托管进程；未运行时返回1是正常的停止状态。日志见 `var/log/dev-services.log`，状态文件见 `var/run/dev-services.json`。启动准备可能超过5秒，先查看 status/日志，勿重复运行 start。一个服务退出时托管器停止其它服务；手动启动的进程不会由此入口接管或停止。不要同时使用后台与下方手动方案。
 
@@ -175,17 +174,14 @@ cd backend
 uv sync --locked
 uv run python -m app.manage migrate          # 显式执行数据库迁移
 uv run python -m app.manage seed             # 持久化部署管理员及必要参考数据；密码交互输入
-uv run python -m app.manage serve            # combined：单进程兼容入口
-# split（生产）：四个独立进程/服务，共用同一 dotenv 与 release
+# 以下四条分别在独立终端运行，共用同一 dotenv
 uv run python -m app.manage serve-api
 uv run python -m app.manage serve-ws
 uv run python -m app.manage taskiq-worker
 uv run python -m app.manage taskiq-scheduler
-# 旧 3 角色/本地全任务过渡入口
-APP_RUNTIME_ROLE=jobs uv run python -m app.manage serve-jobs
 ```
 
-split 的 API/WS/worker/scheduler 各自初始化 engine、Redis、broker 与任务；不要用 `serve` 启动多个 combined worker，也不要在同一环境启动两个 scheduler。worker/scheduler 无 HTTP，使用 `app.manage health --role worker|scheduler` 做受控 readiness（worker 会真实入队 probe）。移动端先通过认证 HTTP `POST /api/v1/realtime/ticket` 获取 30 秒一次性 ticket，再连接同源 `/ws?ticket=...`；事件按 `user_seq` 连续应用并 ACK，断开后按游标补拉，超期收到 `resync_required` 后刷新业务快照。
+split 的 API/WS/worker/scheduler 各自初始化 engine、Redis、broker 与任务；同一环境只运行一个 scheduler。worker/scheduler 无 HTTP，使用 `app.manage health --role worker|scheduler` 做受控 readiness（worker 会真实入队 probe）。移动端先通过认证 HTTP `POST /api/v1/realtime/ticket` 获取 30 秒一次性 ticket，再连接同源 `/ws?ticket=...`；事件按 `user_seq` 连续应用并 ACK，断开后按游标补拉，超期收到 `resync_required` 后刷新业务快照。
 
 迁移、seed、runner 和 pytest 命令使用所选 dotenv 文件指定的后端。失败日志与覆盖率产物记录实际配置目标，不把一种存储后端的结果表述成另一种后端的验证。
 
@@ -267,11 +263,11 @@ Jenkins 等独立构建环境可显式选择公开配置模式，无需后端 Py
 (cd frontend/admin && npm run preview -- --port 4174 --strictPort)
 ```
 
-当前锁定的 Vite 6 预览默认继承 `server.proxy`，两端预览的 `/api`、`/ws` 仍指向本机8000，可在本机联调；后端须另行启动，预览不创建测试数据，也不由 `dev.sh` 管理。正式托管静态产物时需自行配置 `/api` 的HTTP反向代理、`/ws` 的WebSocket升级，以及前端路由回退到 `index.html`。两端均使用根路径，宜用不同域名或端口提供各自根目录，不直接拼接到同一站点的任意子路径。移动端PWA的Service Worker由生产构建生成，安装与缓存需在HTTPS或localhost安全上下文验证；业务操作仍依赖在线API。
+当前锁定的 Vite 6 预览默认继承 `server.proxy`，两端预览的 `/api`、`/ws` 分别指向本机 API 8000、WS 8002，可在本机联调；后端须另行启动，预览不创建测试数据，也不由 `dev.sh` 管理。正式托管静态产物时需自行配置 `/api` 的HTTP反向代理、`/ws` 的WebSocket升级，以及前端路由回退到 `index.html`。两端均使用根路径，宜用不同域名或端口提供各自根目录，不直接拼接到同一站点的任意子路径。移动端PWA的Service Worker由生产构建生成，安装与缓存需在HTTPS或localhost安全上下文验证；业务操作仍依赖在线API。
 
 局域网手机访问时，可使用 `npm run dev -- --host 0.0.0.0 --strictPort`，手机访问开发机IP的5173端口；代理仍由开发机连接本机后端。普通局域网HTTP可用于页面联调，但不等于已满足PWA安装条件。
 
-运行方案同时保留 combined 单进程与 api/ws/worker/scheduler split（旧 3 角色 jobs 仅作回退过渡）：split 要求共享 Redis，生产缺 Redis 启动失败；WS 使用每 gateway 独立 Redis stream cursor + PostgreSQL 周期回放/补偿，ticket/连接限额/频控跨进程共享；Taskiq worker/scheduler 使用与广播 stream 分离的任务 stream/group，ACK 为执行后确认，失败重试由官方 SmartRetry 与 schedule source 管理。每进程独立 SQL/Redis 池，按角色与 worker 进程数预算校验。PostgreSQL、私有 OSS 双桶、环境隔离与审计仍纳入统一验收与发布流水线；生产 split 首次切换需维护窗口，发布/回退见[部署说明](docs/development/部署说明.md)，实现与证据边界见[实施记录](docs/development/realtime-layers-implementation.md)。业务 SMTP 真实投递、真实生产 OSS、浏览器人工验收、400 混合压测及现场 systemd/Nginx 演练仍未验证，不因自动化通过或部署完成视为人工验收完成。
+开发与生产统一运行 API、WS、worker 和 scheduler 四个角色，依赖共享 Redis；WS 使用每 gateway 独立 Redis stream cursor + PostgreSQL 周期回放/补偿，ticket/连接限额/频控跨进程共享；Taskiq worker/scheduler 使用与广播 stream 分离的任务 stream/group，ACK 为执行后确认，失败重试由官方 SmartRetry 与 schedule source 管理。每进程独立 SQL/Redis 池，按角色与 worker 进程数预算校验。PostgreSQL、私有 OSS 双桶、环境隔离与审计仍纳入统一验收与发布流水线；生产 split 首次切换需维护窗口，发布/回退见[部署说明](docs/development/部署说明.md)，实现与证据边界见[实施记录](docs/development/realtime-layers-implementation.md)。业务 SMTP 真实投递、真实生产 OSS、浏览器人工验收、400 混合压测及现场 systemd/Nginx 演练仍未验证，不因自动化通过或部署完成视为人工验收完成。
 
 ## 成员分工
 

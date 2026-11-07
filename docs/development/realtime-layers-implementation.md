@@ -1,9 +1,11 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-11-06T22:35:00+08:00
+Version: 0.1.1
+Version-Datetime: 2026-11-07T18:29:39+08:00
 -->
 
 # Redis、可靠实时投递与服务分层实施记录
+
+> 本文保留 realtime 初版设计与实施记录。当前启动与发布方式以 [部署说明](部署说明.md) 为准。
 
 关联 [issue #36](https://github.com/iy88/se-course-project-1/issues/36) 与[设计合同](realtime-layers-design.md)。本文记录实际实现、命令结果、证据边界和未完成项；设计目标以合同为准，本记录不替代生产验收。
 

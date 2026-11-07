@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.3
-Version-Datetime: 2026-11-07T00:04:56+08:00
+Version: 0.2.4
+Version-Datetime: 2026-11-07T18:29:39+08:00
 -->
 
 # 开发与人工测试指南
@@ -48,7 +48,7 @@ chmod 600 backend/.env.dev backend/.env.prod
 ./scripts/dev.sh start     # 后台启动三端
 ./scripts/dev.sh restart   # 停止后按启动流程重启，加载最新后端代码与配置
 ./scripts/dev.sh status    # 查看托管阶段、环境文件、各服务 PID 与日志路径
-./scripts/dev.sh stop      # 联动停止三端，保留数据
+./scripts/dev.sh stop      # 联动停止全部服务，保留数据
 ```
 
 | 服务 | 地址 |
@@ -59,11 +59,9 @@ chmod 600 backend/.env.dev backend/.env.prod
 
 首次启动前先 `migrate`、`seed`。脚本每次 `uv sync --frozen`；仅当前端 Vite 不存在时 `npm ci`，前端锁文件变化需先停服手动 `npm ci`。启动等待约 5 秒后可能仅提示 preparing，用 status／日志观察，不重复 start；status 是进程检查，停止时返回 1 不等于异常。日志 `var/log/dev-services.log`，状态 `var/run/dev-services.json`。托管入口不管理单独启动的服务，不要两套并行。后端代码修改经 `restart` 加载；修改 dotenv 后需 stop/start，前端由 Vite 热更新，改代理或依赖需重启 Vite。运行后检查 `/api/health` 与实际页面。
 
-手动模式：后端 `APP_ENV_FILE=.env.dev .venv/bin/python -m app.manage serve`（combined 单进程；监听地址与端口读自 dotenv，不提供命令行覆盖）；两前端分别 `npm run dev -- --strictPort`。
-
 ### 分层角色与实时协议
 
-issue #36 最终生产可拆成 api/ws/worker/scheduler（旧 3 角色 jobs 仅作回退过渡）。`dev.sh` 仍只托管 combined 单进程；本地要验证 split 时分别启动四个终端（共用同一 `.env.dev`，角色用环境选择器；worker/scheduler 使用本机共享 Redis）：
+`dev.sh` 托管 API、WS、worker、scheduler 和两套前端。Vite 的 `/api` 与 `/ws` 分别代理到 API、WS 监听端口。手动启动时，从后端目录将以下四条启动命令分别在独立终端运行，再启动两个前端。
 
 ```bash
 APP_RUNTIME_ROLE=api       .venv/bin/python -m app.manage serve-api

@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-11-07T00:04:56+08:00
+Version: 0.1.2
+Version-Datetime: 2026-11-07T18:29:39+08:00
 -->
 
 # 真实负载压测与独立播种
@@ -40,8 +40,8 @@ reset 后旧 load/demo manifest 已失效；将旧 `var/load/manifest.json` 私�
   --env-file .env.dev --users 100 --products 10000 \
   --manifest ../var/load/manifest.json --verify-only)
 
-# 5. 独立终端启动后端；本地日志应保持私有，WS access log 可能含 token
-(cd backend && .venv/bin/python -m app.manage serve)
+# 5. 从根目录启动四角色和前端
+./scripts/dev.sh start
 ```
 
 从仓库根执行 Rust 工具（服务器需先安装 Rust 编译工具链）：
@@ -49,7 +49,7 @@ reset 后旧 load/demo manifest 已失效；将旧 `var/load/manifest.json` 私�
 ```bash
 cargo build --release --locked --manifest-path loadtest/Cargo.toml
 loadtest/target/release/campus-loadtest \
-  --base-url http://127.0.0.1:8000 \
+  --base-url http://127.0.0.1:8000 --ws-base-url http://127.0.0.1:8002 \
   --manifest var/load/manifest.json --output var/load/report.json \
   --users 100 --warmup-seconds 30 --duration-seconds 120 \
   --think-ms 1000 --timeout-seconds 60 --min-samples 20
@@ -59,7 +59,7 @@ Windows 使用 `backend/.venv/Scripts/python.exe` 和 `loadtest/target/release/c
 
 ## 数据规模、恢复与核验
 
-默认 100 个普通用户、5 个分类、10,000 个已审核在售商品，每个商品有独立 JPEG 对象、ProductImage、分类关联、通过的审核记录与 committed StoredObject。当前seed v2轮换键盘、教材、台灯、自行车、相机、水杯、笔记、球拍8种已有JPEG样本，每个商品独立key；图片字节和大小随样本变化，但不代表大图/视频分布。标题使用不同关键词与成色，描述长度和交付方式变化；同一卖家的商品跨分类轮换。每个用户平均100个商品，价格和时间确定分散。审核快照复用正式业务的 `product_content_dict` 格式（images/tags）。预置 100 个环形普通私聊、每会话 20 条历史消息。压测期间的发布、交易、消息、审计、通知和上传租约由真实业务接口继续累积。
+默认 100 个普通用户、5 个分类、10,000 个已审核在售商品，每个商品有独立 JPEG 对象、ProductImage、分类关联、通过的审核记录与 committed StoredObject。当前seed v2轮换键盘、教材、台灯、自行车、相机、水杯、显示器、球拍 8 种共享 JPEG 样本，每个商品独立key；图片字节和大小随样本变化，但不代表大图/视频分布。标题使用不同关键词与成色，描述长度和交付方式变化；同一卖家的商品跨分类轮换。每个用户平均100个商品，价格和时间确定分散。审核快照复用正式业务的 `product_content_dict` 格式（images/tags）。预置 100 个环形普通私聊、每会话 20 条历史消息。压测期间的发布、交易、消息、审计、通知和上传租约由真实业务接口继续累积。
 
 seed 用批量数据库写入和可配置线程数上传图片；不通过 HTTP 逐条生成 10,000 商品，不把 seed 吞吐量当 API 性能。对象 key 由先持久化的 tag 与序号确定，上传不可覆盖；再次执行同一清单会校验已有账号、商品/图片/登记引用和会话，抽查首/中/末图片字节，不重复插入、不恢复业务状态。`--verify-only` 对所有图片校验 SHA-256。账号统一使用随机测试密码及同一 bcrypt hash 以减少准备耗时；压测仍对每个账号通过正式登录接口验证密码。此方式不覆盖注册与验证码投递。
 

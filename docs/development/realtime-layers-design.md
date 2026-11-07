@@ -1,9 +1,11 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-11-06T22:35:00+08:00
+Version: 0.1.1
+Version-Datetime: 2026-11-07T18:29:39+08:00
 -->
 
 # Redis、可靠实时投递与服务分层实施设计
+
+> 本文保留 realtime 初版设计与实施记录。当前启动与发布方式以 [部署说明](部署说明.md) 为准。
 
 关联 [issue #36](https://github.com/iy88/se-course-project-1/issues/36)。单 worker 性能基线由 [PR #35](https://github.com/iy88/se-course-project-1/pull/35) 独立交付；本方案基于其提交 `7d40bcf`，在独立 feat 分支实现。PR #35 squash 合并后，该分支对齐到 `dev@d068333`（与原基线文件树相同）。本文是设计与验收合同，列出的目标行为不表示已经实现或生产验证；实现状态由同目录实施记录说明。
 
