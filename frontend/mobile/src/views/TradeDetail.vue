@@ -133,7 +133,7 @@
         </div>
 
         <div v-if="canConfirm" class="action-row">
-          <van-button size="small" type="primary" @click="confirmCompletion">提交完成确认</van-button>
+          <van-button size="small" type="primary" @click="openCompletion">提交完成确认</van-button>
         </div>
         <div v-else-if="trade.frozen" class="action-row">
           <span class="muted">冻结期间暂停完成确认；解冻且原确认有效时按服务端剩余时间续算。</span>
@@ -238,6 +238,20 @@
       </div>
     </van-popup>
 
+    <van-popup v-model:show="showCompletion" position="bottom" round class="app-bottom-popup"
+      :close-on-click-overlay="!submittingCompletion">
+      <div class="popup-panel">
+        <h3>提交完成确认</h3>
+        <p class="hint hint--left">提交即声明线下交付与支付均已完成。双方确认后交易完成，仅一方确认时开始 7 天等待。说明提交后不可自行修改。</p>
+        <TextField v-model="completionNote" :limit="500" type="textarea" rows="3" placeholder="交付或支付说明（可选）"
+          :disabled="submittingCompletion" />
+        <p v-if="actionError" role="alert">{{ actionError }}</p>
+        <van-button type="primary" block :loading="submittingCompletion"
+          :disabled="!canConfirm || !!completionNoteError" @click="confirmCompletion">确认提交</van-button>
+        <van-button block plain :disabled="submittingCompletion" @click="showCompletion = false">取消</van-button>
+      </div>
+    </van-popup>
+
     <van-popup v-model:show="showReview" position="bottom" round class="app-bottom-popup">
       <div class="popup-panel">
         <h3>评价本笔交易（1—5 分）</h3>
@@ -261,6 +275,7 @@ import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import http from '../api/http'
 import { fen2yuan, fmtDuration, fmtTime, tradeStatusLabels } from '../api/labels'
+import { textError } from '../api/text'
 import { useSession } from '../stores/session'
 
 const route = useRoute()
@@ -271,6 +286,10 @@ const loadError = ref('')
 const actionError = ref('')
 const showAgreement = ref(false)
 const showReview = ref(false)
+const showCompletion = ref(false)
+const completionNote = ref('')
+const completionNoteError = computed(() => textError(completionNote.value, 500))
+const submittingCompletion = ref(false)
 const agreementOpen = ref([])
 const confirmationOpen = ref([])
 const agreementAmountYuan = ref('')
@@ -512,24 +531,28 @@ async function decideAgreement(accept) {
   }
 }
 
-async function confirmCompletion() {
+function openCompletion() {
   if (!canConfirm.value) return
-  try {
-    await showConfirmDialog({
-      title: '提交完成确认',
-      message: '确认同时声明线下交付与支付均已完成；对方确认后交易完成。仅一方确认时开始 7 天等待。',
-    })
-  } catch {
-    return
-  }
-  if (!canConfirm.value) return
+  completionNote.value = ''
   actionError.value = ''
+  showCompletion.value = true
+}
+
+async function confirmCompletion() {
+  if (!canConfirm.value || completionNoteError.value || submittingCompletion.value) return
+  actionError.value = ''
+  submittingCompletion.value = true
   try {
-    const data = await http.post(`/trades/${route.params.id}/confirmations`, {})
+    const data = await http.post(`/trades/${route.params.id}/confirmations`, {
+      note: completionNote.value.trim() || null,
+    })
+    showCompletion.value = false
     showToast(data.detail)
     await load()
   } catch (err) {
     keepStateOnFailure('提交完成确认失败', err)
+  } finally {
+    submittingCompletion.value = false
   }
 }
 
