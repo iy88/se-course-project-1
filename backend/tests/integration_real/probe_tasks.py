@@ -43,10 +43,17 @@ def register(broker, settings) -> None:
         max_retries=0,
         ack_type="when_executed",
     )
-    async def slow_probe(token: str, seconds: float = 3.0) -> str:
+    async def slow_probe(token: str) -> str:
         await _write(token, {"phase": "started", "pid": os.getpid(),
                              "at": datetime.now(UTC).isoformat()})
-        await asyncio.sleep(max(0.1, min(float(seconds), 10.0)))
+        client = await _redis()
+        try:
+            gate = settings.redis_key_prefix + "test:release:" + token
+            async with asyncio.timeout(30):
+                while not await client.exists(gate):
+                    await asyncio.sleep(0.05)
+        finally:
+            await client.aclose()
         await _write(token, {"phase": "done", "pid": os.getpid(),
                              "at": datetime.now(UTC).isoformat()})
         return "done"

@@ -281,9 +281,7 @@ def _failure_log(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="真实业务验收")
-    parser.add_argument("--base-url", default=None, help="已运行服务地址；默认由本任务启动 127.0.0.1:8101")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--no-start-server", action="store_true", help="复用已启动服务（不注入受控时钟，7 天场景将 FAIL/SKIP）")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--inject-failure", choices=["after-files"], help=argparse.SUPPRESS)
     parser.add_argument("--only", nargs="*", default=None, help="只跑指定组（调试）")
@@ -303,7 +301,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
     from app.devtools._support import validate_run_id
     run_id = validate_run_id(args.run_id or _run_id())
     sandbox.run_id = run_id
-    if not args.no_start_server and args.port == 8000:
+    if args.port == 8000:
         print("acceptance fatal: 拒绝在 8000 启动验收测试服务；请用独立 --port（如 8101/8107）", file=sys.stderr)
         return 2
     ACCEPTANCE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -313,7 +311,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
         "environment": config.environment,
         "database": config.database.database if config.database_url.startswith("postgresql+") else "sqlite",
         "storage_backend": config.storage_backend,
-        "port": None if args.no_start_server else args.port,
+        "port": args.port,
     }
     server: ServerHandle | None = None
     run: AcceptanceRun | None = None
@@ -343,17 +341,8 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
         if credentials is None:
             raise CheckFailure("seed 未生成本轮凭据")
         seed_fingerprint = credentials.fingerprint
-        if args.no_start_server:
-            raise CheckFailure("验收必须启动本轮独立服务")
-        if args.base_url and not args.no_start_server:
-            raise CheckFailure("--base-url 仅与 --no-start-server 同用；否则由 --port 启动独立服务")
-        if args.no_start_server:
-            if not args.base_url:
-                raise CheckFailure("--no-start-server 需要 --base-url")
-            base_url = args.base_url.rstrip("/")
-        else:
-            server = start_server(port=args.port, run_id=run_id, sandbox=sandbox)
-            base_url = server.base_url
+        server = start_server(port=args.port, run_id=run_id, sandbox=sandbox)
+        base_url = server.base_url
         sandbox.run_context["base_url"] = base_url
         openapi_client = httpx.Client(base_url=base_url, timeout=20, trust_env=False)
         try:
@@ -368,6 +357,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             base_url=base_url,
             config=config,
             run_id=run_id,
+            credentials=credentials,
             server=server,
             only=args.only,
         )
@@ -449,13 +439,6 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
                 "clock_file_mode": "Windows private ACL" if sys.platform == "win32" else "0600",
                 "scan_interval_seconds": 2,
                 "production_rule_unchanged": True,
-            },
-            "cleanup": {
-                "counts": (run.rec.checks[-1].data.get("counts") if run.rec.checks and run.rec.checks[-1].data else {}),
-                "retained": run.retained,
-                "retained_objects": (run.rec.checks[-1].data.get("retained_objects") if run.rec.checks and run.rec.checks[-1].data else []),
-                "server_stopped": False,
-                "destructive_cleanup": False,
             },
             "notes": run.notes,
         }

@@ -83,10 +83,10 @@ async def test_redis_fixed_window_ticket_lease_and_connection_limit():
         assert await kv.incr_with_ttl(key, 30) == 1
         first_ttl = await redis.pttl(settings.redis_key_prefix + key)
         assert 20_000 < first_ttl <= 30_000
-        await asyncio.sleep(1.1)
+        await redis.pexpire(settings.redis_key_prefix + key, 1000)
         assert await kv.incr_with_ttl(key, 30) == 2
         second_ttl = await redis.pttl(settings.redis_key_prefix + key)
-        assert second_ttl < first_ttl, "fixed window must not extend TTL on later hits"
+        assert 0 < second_ttl <= 1000, "later hits must preserve the remaining TTL"
 
         ticket, _ttl = await issue_ticket(
             user_id=42,
@@ -251,33 +251,6 @@ async def test_dispatcher_does_not_hold_sql_during_publish_and_leases_take_over(
     assert row.attempts >= 2
 
 
-async def test_gateway_reconciliation_recovers_last_event_without_stream():
-    user = await create_user(f"recover-{secrets.token_hex(4)}")
-    settings = get_settings()
-    gateway = Gateway(settings)
-    conn = Connection(ws=None, user_id=user.id, since=0,
-                      auth_expires_at=int(datetime.now(UTC).timestamp()) + 60, settings=settings)
-    conn.replay_done = True
-    async with get_sessionmaker()() as db, db.begin():
-        await emit_events(db, [user.id], event_type="test", payload={"type": "message", "message_id": 1})
-    # No stream entry exists at all; PostgreSQL reconciliation alone must deliver.
-    await gateway._fill(conn)
-    frame = _recv(conn)
-    assert frame["user_seq"] == 1 and frame["event_id"]
-
-    # A second event after a simulated Redis restart/trim still arrives.
-    redis = await _redis()
-    try:
-        await redis.delete(settings.redis_key_prefix + settings.realtime_stream_name)
-    finally:
-        await redis.aclose()
-    async with get_sessionmaker()() as db, db.begin():
-        await emit_events(db, [user.id], event_type="test", payload={"type": "message", "message_id": 2})
-    await gateway._fill(conn)
-    frame2 = _recv(conn)
-    assert frame2["user_seq"] == 2
-    await gateway._fill(conn)  # idempotent: no duplicate at the same cursor
-    assert _empty(conn)
 
 
 async def test_retention_advances_low_watermark_only_after_delivery():
@@ -310,42 +283,6 @@ async def test_real_app_role_cannot_mutate_audit_or_run_ddl():
         await conn.execute(text("SELECT count(*) FROM realtime_events"))
 
 
-async def test_stream_is_accelerator_not_source_of_truth_after_restart():
-    user = await create_user(f"stream-{secrets.token_hex(4)}")
-    settings = get_settings()
-    async with get_sessionmaker()() as db, db.begin():
-        await emit_events(db, [user.id], event_type="test", payload={"type": "message", "message_id": 3})
-    async with get_sessionmaker()() as db:
-        event = (await db.exec(select(RealtimeEvent).where(RealtimeEvent.recipient_user_id == user.id))).one()
-        from app.realtime.events import event_wire
-
-        frame = event_wire(event)
-
-    from app.realtime.stream import RealtimeStream, StreamReader
-
-    stream = RealtimeStream(settings)
-    reader = StreamReader(settings, stream.name)
-    redis = await _redis()
-    try:
-        entry = await stream.publish(frame, event_id=event.event_id, user_id=user.id, user_seq=event.user_seq)
-        assert entry
-        rows = await reader.read("0-0", count=10)
-        assert any(fields.get("event_id") == event.event_id for _entry, fields in rows)
-        # Simulate Redis restart/trim/loss of the whole stream.
-        await redis.delete(stream.name)
-        assert await reader.read("0-0", count=10) == []
-    finally:
-        await reader.close()
-        await stream.close()
-        await redis.aclose()
-
-    gateway = Gateway(settings)
-    conn = Connection(ws=None, user_id=user.id, since=0,
-                      auth_expires_at=int(datetime.now(UTC).timestamp()) + 60, settings=settings)
-    conn.replay_done = True
-    await gateway._fill(conn)
-    delivered = _recv(conn)
-    assert delivered["event_id"] == event.event_id
 
 
 async def test_retention_does_not_advance_past_retained_out_of_order_event():

@@ -1,9 +1,9 @@
 <!--
-Version: 0.2.1
-Version-Datetime: 2026-11-07T23:50:00+08:00
+Version: 0.2.2
+Version-Datetime: 2026-11-08T00:28:40+08:00
 -->
 
-# 唯一全量真实验收套件
+# 真实业务验收
 
 本套件使用真实 HTTP/WS，按 `backend/.env.dev` 中的显式配置选择数据库、对象存储和 KV 后端；基础环境仅允许 `dev` 或 `test`，不读取生产配置，并拒绝继承的连接及密钥覆盖。数据库连接身份和迁移目标必须与配置一致。运行期间为隔离 schema 和子进程生成权限为 0600 的临时 dotenv，清理时删除。不同后端使用同一命令。
 
@@ -12,9 +12,9 @@ cd backend
 RUN_REAL_ACCEPTANCE=1 .venv/bin/python -m pytest -q
 ```
 
-本机HTTP客户端禁用环境代理，WebSocket连接显式`proxy=None`；OSS SDK的Session也禁用环境代理和netrc覆盖。测试不依赖终端是否开启代理，无效WS token校验保留真实连接异常用于诊断。
+本机HTTP客户端禁用环境代理，WebSocket连接显式`proxy=None`；OSS SDK的Session也禁用环境代理和netrc覆盖。
 
-默认端口 8101；可设置 `ACCEPTANCE_PORT`。测试启动和停止自己的服务，不复用日常服务，端口已占用时拒绝启动。未设置 `RUN_REAL_ACCEPTANCE=1` 时唯一测试明确失败。CLI 等价入口是 `.venv/bin/python -m tests.acceptance_real.runner`；`--port` 可指定独立端口。
+默认端口 8101；可设置 `ACCEPTANCE_PORT`。测试启动和停止自己的服务，不复用日常服务，端口已占用时拒绝启动。pytest 通过 `RUN_REAL_ACCEPTANCE=1` 启用 HTTP/WS 验收，日常运行时跳过该入口。CLI 等价入口是 `.venv/bin/python -m tests.acceptance_real.runner`；`--port` 可指定独立端口。
 
 每轮使用随机隔离 schema 或临时 SQLite 文件、独立存储前缀或目录以及 Redis 前缀。PostgreSQL 使用测试迁移角色应用真实 Alembic 迁移。运行前后只读比较共享 app schema 的表清单和指定表计数；该哨兵不是全部数据的逐行校验。结束或异常时先停本轮服务，再清理本轮资源；清理失败时非零退出并保留私有 ownership 清单和必要的对象写前日志。`SIGKILL`、网络长期不可用等情况下自动清理不能保证，服务停止后可对保留清单执行：
 

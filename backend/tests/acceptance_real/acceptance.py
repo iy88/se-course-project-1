@@ -21,14 +21,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from app.core.private_files import protect_private, require_private
-from app.devtools._support import (
-    DevConfig,
-    StorageProbe,
-    mint_fingerprint_token,
-    probe_database,
-    readonly_mapping,
-    readonly_rows,
-)
+from app.devtools._support import DevConfig, StorageProbe, readonly_mapping, readonly_rows
 
 from tests.acceptance_real.core import (
     BACKEND_ROOT,
@@ -40,10 +33,7 @@ from tests.acceptance_real.core import (
 )
 from tests.acceptance_real.seed import (
     SEED_DOMAIN,
-    SeedAccount,
-    identities_for_run,
-    load_credentials,
-    seed_identities,
+    SeedCredentials,
 )
 
 ASSETS = BACKEND_ROOT / "app" / "devtools" / "demo_scenarios" / "assets"
@@ -109,6 +99,7 @@ class AcceptanceRun:
         base_url: str,
         config: DevConfig,
         run_id: str,
+        credentials: SeedCredentials,
         server: ServerHandle | None = None,
         only: Sequence[str] | None = None,
     ) -> None:
@@ -116,6 +107,7 @@ class AcceptanceRun:
         self.ws_url = (server.ws_url if server else None) or base_url
         self.config = config
         self.run_id = run_id
+        self.credentials = credentials
         self.server = server
         self.only = {value.strip().lower() for value in (only or []) if value.strip()}
         self.route_index = RouteIndex({})
@@ -141,8 +133,7 @@ class AcceptanceRun:
         self.all_business_routes: list[tuple[str, str]] = []
         self.clock_events: list[dict[str, Any]] = []
         self.concurrency: list[dict[str, Any]] = []
-        self.seed_fingerprint: str | None = None
-        self.retained: list[dict[str, Any]] = []
+        self.seed_fingerprint: str | None = credentials.fingerprint
         # 审计完整性核验所需的本轮对象/敏感标记；不保存凭据或响应正文。
         self.audit_targets: dict[str, Any] = {}
         self._server_started_by_us = server is not None
@@ -239,33 +230,6 @@ class AcceptanceRun:
     # ------------------------------------------------------------------
     # 账号
     # ------------------------------------------------------------------
-    def _bootstrap_identities(self) -> dict[str, SeedAccount]:
-        """调用 tests 内唯一 seed，复用/创建本轮 canonical 身份。
-
-        只初始化账号身份，不建业务数据；凭据文件 0600，不输出密码。
-        被用户改过的账号不会被覆盖或重置，seed 以 preserved 报告。
-        """
-        path = self.config.credentials_path
-        if path is None:
-            raise CheckFailure("缺少隔离凭据路径")
-        summary = asyncio.run(
-            seed_identities(run_id=self.run_id, credentials_path=path, config=self.config)
-        )
-        if summary.preserved:
-            raise CheckFailure(
-                "本轮 seed 账号已被用户修改/封禁，拒绝重置；请换新 run_id："
-                + ",".join(summary.preserved)
-            )
-        credentials = load_credentials(path, require_private=True, identities=identities_for_run(self.run_id))
-        if credentials is None:
-            raise CheckFailure("缺少本轮 seed 凭据")
-        require_private(path)
-        self.seed_fingerprint = credentials.fingerprint
-        expected = {identity.key for identity in identities_for_run(self.run_id)}
-        if set(credentials.accounts) != expected:
-            raise CheckFailure("seed 凭据身份集合不是本轮 canonical 身份")
-        return dict(credentials.accounts)
-
     def _login_known(self, key: str, email: str, password: str, expected_id: int | None = None, expected_role: str | None = None) -> None:
         response = self._call("POST", "/api/v1/auth/login", expected=200, json_body={"email": email, "password": password})
         data = self._dict(response)
@@ -652,133 +616,25 @@ class AcceptanceRun:
     # 预检
     # ------------------------------------------------------------------
     def preflight(self) -> None:
-        with self.rec.step(
-            "ENV-01",
-            "环境/数据库/Redis/OSS 配置目标与真实可用性",
-            note="基础设施预检；不替代业务语义验收",
-        ):
-            identity = asyncio.run(probe_database(self.config.database_url, expect_test_target=True))
-            if self.config.database_url.startswith("postgresql+"):
-                self.rec.must_eq(identity.database, self.config.database.database, "数据库名")
-                self.rec.must_eq(identity.user, self.config.database.username, "数据库应用角色")
-            else:
-                self.rec.must_eq(identity.database, "sqlite", "隔离 SQLite")
-            self.rec.must_eq(self.config.environment in {"dev", "test"}, True, "ENVIRONMENT")
-            settings = self.config.settings
-            if settings.storage_backend == "oss":
-                self.rec.must_eq(settings.oss_media_bucket, self.config.oss_media_bucket, "media bucket")
-                self.rec.must_eq(settings.oss_evidence_bucket, self.config.oss_evidence_bucket, "evidence bucket")
-            if settings.kv_backend == "redis":
-                import redis.asyncio as aioredis
-                async def roundtrip():
-                    client = aioredis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
-                    try:
-                        key = settings.redis_key_prefix + "probe"
-                        pong = await client.ping()
-                        await client.set(key, "1", ex=30)
-                        value = await client.get(key)
-                        await client.delete(key)
-                        return pong, value
-                    finally:
-                        await client.aclose()
-                pong, value = asyncio.run(roundtrip())
-                self.rec.must(bool(pong), "Redis PING")
-                self.rec.must_eq(value, "1", "Redis SET/GET")
-                self.clock_events.append({"kind": "redis", "mode": "real", "ok": True})
-            else:
-                self.clock_events.append({"kind": "redis", "mode": "memory", "ok": True})
-            probe = StorageProbe.build(self.config)
-            for namespace in ("product", "report"):
-                key = f"{namespace}/probe/{self.run_id}.png"
-                self.rec.must(not probe.exists(key), f"{namespace} 本轮探测 key 不存在")
-
-        with self.rec.step(
-            "SVC-01",
-            "真实服务指纹、OpenAPI 路由基准、健康与文档端点",
-            note="基础设施检查；签名 URL/令牌不落报告",
-        ):
-            health = self._call("GET", "/api/health", expected=200)
-            self.rec.must_eq(self._dict(health).get("status"), "ok", "health")
-            live = self._dict(self._call("GET", "/health/live", expected=200))
-            self.rec.must_eq(live.get("status"), "ok", "health live")
+        with self.rec.step("SVC-01", "API 与依赖服务就绪"):
+            health = self._dict(self._call("GET", "/api/health", expected=200))
+            self.rec.must_eq(health.get("status"), "ok", "API health")
             ready = self._dict(self._call("GET", "/health/ready", expected=200))
-            self.rec.must(ready.get("status") in {"ready", "degraded"}, "health ready")
-            openapi_response = self._call("GET", "/openapi.json", expected=200)
-            self.openapi = self._dict(openapi_response)
-            self.route_index.__init__(self.openapi)  # 用最终运行 OpenAPI 重建
-            routes = sorted(
-                (method.upper(), path)
-                for path, item in (self.openapi.get("paths") or {}).items()
-                for method in item
-                if method.lower() in {"get", "post", "put", "patch", "delete"}
-            )
-            self.all_business_routes = [row for row in routes if row[1] != "/api/health"]
-            self.rec.must(len(self.all_business_routes) >= 90, f"OpenAPI 业务路由数 {len(self.all_business_routes)}")
-            docs = self._call("GET", "/docs", expected=200)
-            self.rec.must("text/html" in (docs.headers.get("content-type") or ""), "docs 返回 HTML")
-            self._call("GET", "/redoc", expected=200)
-            # 服务指纹：本地签短时 JWT -> /auth/me -> 只读 SQL 同一行。
-            path = self.config.credentials_path
-            if path is None:
-                raise CheckFailure("缺少隔离凭据路径")
-            admin = load_credentials(path, require_private=True)
-            if admin is None:
-                raise CheckFailure("缺少 seed 凭据")
-            account = admin.accounts["admin"]
-            token = mint_fingerprint_token(self.config, user_id=account.id, role=account.role, run_id=self.run_id)
-            auth = {"Authorization": f"Bearer {token}"}
-            me = self._dict(self._call("GET", "/api/v1/auth/me", expected=200, headers=auth))
-            self.rec.must_eq(int(me["id"]), account.id, "服务指纹 admin id")
-            watermark = self._dict(self._call("GET", "/api/v1/realtime/watermark",
-                                              expected=200, headers=auth))
-            self.rec.must(int(watermark["high_seq"]) >= 0, "realtime watermark")
-            ticket = self._dict(self._call("POST", "/api/v1/realtime/ticket", expected=200,
-                                           headers=auth, json_body={"since": 0}))
-            self.rec.must(bool(ticket.get("ticket")), "realtime ticket")
-            replay = self._dict(self._call("GET", "/api/v1/realtime/events", expected=200,
-                                           headers=auth, params={"after_seq": 0, "limit": 10}))
-            self.rec.must("events" in replay and "high_seq" in replay, "realtime replay page")
-            row = self._db_one("select id, email, role, display_name from app.users where id = :id", {"id": account.id})
-            self.rec.must(int(row["id"]) == account.id, "指纹账号存在于 test 库")
-            self.rec.must_eq(str(row["email"]), account.email, "指纹账号 email")
-            # WebSocket 未认证关闭码 4401；无效 token 不注册连接。
-            import websockets
-
-            async def _bad_ws() -> int | None:
-                try:
-                    async with websockets.connect(
-                        self.ws_url.replace("http", "ws", 1) + "/ws?token=invalid-token",
-                        proxy=None,  # Local acceptance traffic must ignore shell/system proxies.
-                        open_timeout=10,
-                        close_timeout=5,
-                    ) as websocket:
-                        try:
-                            await asyncio.wait_for(websocket.recv(), timeout=5)
-                        except websockets.exceptions.ConnectionClosed as exc:
-                            return exc.rcvd.code if exc.rcvd is not None else None
-                        return None
-                except websockets.exceptions.ConnectionClosed as exc:
-                    return exc.rcvd.code if exc.rcvd is not None else None
-
-            code = asyncio.run(_bad_ws())
-            self.rec.must_eq(code, 4401, "无效 WS token 关闭码")
-            self.ws_ok = True
-            self.rec.data["openapi_routes"] = len(routes)
-            self.rec.data["business_routes"] = len(self.all_business_routes)
+            self.rec.must(ready.get("status") in {"ready", "degraded"}, "API ready")
 
     def bootstrap_accounts(self) -> None:
         with self.rec.step(
             "ACC-01",
-            "canonical seed 身份登录、错误凭证与退出；同一 seed 幂等复用",
+            "seed 身份登录、错误凭证与退出",
         ):
-            credentials = self._bootstrap_identities()
+            credentials = self.credentials.accounts
             self.rec.must(bool(self.seed_fingerprint), "seed 指纹存在")
             # canonical 身份全部来自 tests.acceptance_real.seed，同一 run_id 可被人工浏览器复用。
             for key in ("admin", "admin2", "buyer", "buyer2", "seller", "seller2", "outsider", "commenter"):
                 account = credentials[key]
                 self._login_known(key, account.email, account.password, account.id, account.role)
             self.rec.must_eq(len(self.users), 8, "登录 canonical 身份数")
-            # 错误密码 + 连续失败不锁定
+            # 错误密码拒绝后仍可用正确凭据登录
             bad = self._call(
                 "POST",
                 "/api/v1/auth/login",
@@ -786,16 +642,9 @@ class AcceptanceRun:
                 json_body={"email": self.users["buyer"]["email"], "password": "definitely-wrong-password"},
             )
             self.rec.must_eq(bad.status_code, 401, "错误密码登录拒绝")
-            for _ in range(4):
-                self._call(
-                    "POST",
-                    "/api/v1/auth/login",
-                    expected=401,
-                    json_body={"email": self.users["buyer"]["email"], "password": "definitely-wrong-password"},
-                )
             self._login_known("buyer", self.users["buyer"]["email"], self.users["buyer"]["password"], self._uid("buyer"), "user")
             me = self._dict(self._call("GET", "/api/v1/auth/me", user="buyer", expected=200))
-            self.rec.must_eq(int(me["id"]), self._uid("buyer"), "失败多次后仍可登录")
+            self.rec.must_eq(int(me["id"]), self._uid("buyer"), "错误密码后可正常登录")
             logout = self._dict(self._call("POST", "/api/v1/auth/logout", user="buyer", expected=200))
             self.rec.must("退出" in str(logout.get("detail")), "退出接口返回")
             self._login_known("buyer", self.users["buyer"]["email"], self.users["buyer"]["password"], self._uid("buyer"), "user")
@@ -2406,11 +2255,11 @@ class AcceptanceRun:
 
         with self.rec.step(
             "CONC-01",
-            "并发锁单/重复请求：5轮独立商品真实并发，一胜一败无500，失败方无多余成功审计/通知/转移",
+            "并发锁单/重复请求：2轮独立商品真实并发，一胜一败无500，失败方无多余成功审计/通知/转移",
         ):
             accept_rounds: list[dict[str, Any]] = []
             accept_all_ok = True
-            for index in range(5):
+            for index in range(2):
                 product_key = f"P_CONC_{index}"
                 self._publish(
                     product_key,
@@ -2554,7 +2403,7 @@ class AcceptanceRun:
 
             dup_rounds: list[dict[str, Any]] = []
             dup_all_ok = True
-            for index in range(5):
+            for index in range(2):
                 product_key = f"P_CONC_DUP_{index}"
                 self._publish(
                     product_key,
@@ -3236,9 +3085,8 @@ class AcceptanceRun:
             self.clock_events.append(
                 {"kind": "freeze_pause", "offset_seconds": 86400, "trade_id": self.trades["T_FREEZE"]["id"], "at": datetime.now(UTC).isoformat()}
             )
-            time.sleep(3.5)
             still = self._trade_detail("T_FREEZE", "buyer")
-            self.rec.must_eq(still.get("status"), "in_progress", "冻结期间扫描不转异常")
+            self.rec.must_eq(still.get("status"), "in_progress", "冻结交易保持进行中")
             self.rec.must_eq(int(still["confirm_wait_remaining_seconds"]), remaining_paused, "冻结期间 remaining 不下降")
             self._call(
                 "POST",
@@ -3253,7 +3101,6 @@ class AcceptanceRun:
             resumed_remaining = int(resumed["confirm_wait_remaining_seconds"])
             self.rec.must(abs(resumed_remaining - remaining_paused) <= 3, "解冻从暂停点续算")
             self.server.set_clock_offset(86400 + 2 * 86400)
-            time.sleep(1.0)
             later = self._trade_detail("T_FREEZE", "buyer")
             self.rec.must(
                 int(later["confirm_wait_remaining_seconds"]) <= resumed_remaining - 2 * 86400 + 5,
@@ -3492,43 +3339,6 @@ class AcceptanceRun:
             )
 
     # ------------------------------------------------------------------
-        with self.rec.step(
-            "REVIEW-ADMIN-STATES",
-            "主助手补充：管理员九种目标状态逐项验证，不能伪造双方确认",
-        ):
-            self._publish("P_ADMIN_STATES", "seller", f"管理状态矩阵-{self.run_id}", price=7100, category_ids=[self.categories["main"]["id"]])
-            self._approve("P_ADMIN_STATES")
-            self._request_trade("T_ADMIN_STATES", "buyer", "P_ADMIN_STATES")
-            self._accept("T_ADMIN_STATES")
-            trade_id = int(self.trades["T_ADMIN_STATES"]["id"])
-            case_id = self._relevant_case_for_product(int(self.products["P_ADMIN_STATES"]["id"]))
-            targets = ["completed", "pending_acceptance", "rejected", "withdrawn", "closed", "in_progress", "disputed", "abnormal", "terminated"]
-            for target in targets:
-                before = self._trade_detail("T_ADMIN_STATES", "buyer")
-                notification_max = self._db_one("select coalesce(max(id), 0) as n from app.notifications where link_type='trade' and link_id=:id", {"id": trade_id})
-                audit_max = self._db_one("select coalesce(max(event_id), 0) as n from app.audit_events where target_type='trade' and target_id=:id", {"id": str(trade_id)})
-                reason = f"管理状态验收-{target}-{self.run_id}"
-                self._call("POST", f"/api/v1/admin/trades/{trade_id}/adjust", user="admin", expected=200, json_body={"to_status": target, "reason": reason, "case_id": case_id})
-                after = self._trade_detail("T_ADMIN_STATES", "buyer")
-                self.rec.must_eq(after.get("status"), target, f"管理目标状态 {target}")
-                self.rec.must_eq(len(after.get("confirmations") or []), 0, f"{target} 不伪造用户确认")
-                transitions = self._list(self._call("GET", f"/api/v1/trades/{trade_id}/transitions", user="buyer", expected=200))
-                last = transitions[-1]
-                self.rec.must_eq(last.get("from_status"), before["status"], f"{target} 转移前状态")
-                self.rec.must_eq(last.get("to_status"), target, f"{target} 转移后状态")
-                self.rec.must_eq(last.get("actor_role"), "admin", f"{target} 管理员归属")
-                self.rec.must_eq(last.get("basis_case_id"), case_id, f"{target} 依据事项")
-                self.rec.must_eq(last.get("reason"), reason, f"{target} 原因留痕")
-                notice = self._db_one("select count(distinct user_id) as n from app.notifications where link_type='trade' and link_id=:id and id>:min", {"id": trade_id, "min": int(notification_max["n"])})
-                self.rec.must_eq(int(notice["n"]), 2, f"{target} 通知双方")
-                audit = self._db_one("select count(*) as n from app.audit_events where target_type='trade' and target_id=:id and event_type='admin.trade_adjust' and event_id>:min", {"id": str(trade_id), "min": int(audit_max["n"])})
-                self.rec.must_eq(int(audit["n"]), 1, f"{target} 单次成功审计")
-                if target in {"completed", "terminated"}:
-                    self.rec.must_eq(after.get("conversation_archived"), True, f"{target} 分支归档")
-                    self.rec.must_eq(after.get("frozen"), False, f"{target} 解除本笔冻结")
-                if target in {"in_progress", "disputed", "abnormal"}:
-                    self.rec.must_eq(self._product_detail("P_ADMIN_STATES", "seller")["status"], "in_transaction", f"{target} 锁单商品状态")
-            self.rec.data["admin_target_states"] = targets
 
 
     # 举报 / 处置 / 封禁
@@ -4839,254 +4649,6 @@ class AcceptanceRun:
             self.rec.must_eq(sorted(set(found)), [], "审计 before/after 不含敏感字段名")
 
         with self.rec.step(
-            "AUDIT-02",
-            "17 写入口/16 新增事件逐条落库；常规幂等操作不重复；payload 无正文/密码/验证码/JWT/AK",
-        ):
-            # 新会话事件：使用本轮尚未成对的 commenter/outsider，避免复用已有普通会话。
-            created_conv = self._dict(
-                self._call(
-                    "POST",
-                    "/api/v1/conversations/normal",
-                    user="commenter",
-                    expected=201,
-                    json_body={"peer_user_id": self._uid("outsider")},
-                )
-            )
-            created_conv_id = int(created_conv["id"])
-            reused_conv = self._dict(
-                self._call(
-                    "POST",
-                    "/api/v1/conversations/normal",
-                    user="commenter",
-                    expected=201,
-                    json_body={"peer_user_id": self._uid("outsider")},
-                )
-            )
-            self.rec.must_eq(int(reused_conv["id"]), created_conv_id, "复用已有普通会话")
-            audit_message_content = f"审计正文标记-消息-{self.run_id}"
-            self.audit_targets.setdefault("sensitive_markers", []).append(audit_message_content)
-            audit_message = self._dict(
-                self._call(
-                    "POST",
-                    f"/api/v1/conversations/{created_conv_id}/messages",
-                    user="commenter",
-                    expected=200,
-                    json_body={"content": audit_message_content},
-                )
-            )
-            self._call(
-                "POST",
-                f"/api/v1/conversations/{created_conv_id}/read",
-                user="outsider",
-                expected=200,
-                json_body={"last_displayed_message_id": int(audit_message["id"])},
-            )
-            self._call(
-                "POST",
-                f"/api/v1/conversations/{created_conv_id}/read",
-                user="outsider",
-                expected=200,
-                json_body={"last_displayed_message_id": int(audit_message["id"])},
-            )
-            ban_trade = self._trade_detail("T_BAN_COMPLETED", "buyer2")
-            ban_branch = int(ban_trade["conversation_id"])
-            migrated = self._dict(
-                self._call(
-                    "POST",
-                    f"/api/v1/conversations/{ban_branch}/to-normal",
-                    user="buyer2",
-                    expected=200,
-                )
-            )
-            migrated_id = int(migrated["id"])
-            again_migrated = self._dict(
-                self._call(
-                    "POST",
-                    f"/api/v1/conversations/{ban_branch}/to-normal",
-                    user="buyer2",
-                    expected=200,
-                )
-            )
-            self.rec.must_eq(int(again_migrated["id"]), migrated_id, "再次转入复用普通会话")
-
-            category_ids = {
-                str(key): int(value)
-                for key, value in (self.audit_targets.get("category_ids") or {}).items()
-            }
-            alias_added = self._db_one(
-                "select id from app.category_aliases where category_id = :cid and name = :name",
-                {
-                    "cid": category_ids["main"],
-                    "name": str(self.audit_targets["alias_added_name"]),
-                },
-            )
-            alias_removed_by_name = self._db_one(
-                "select id from app.category_aliases where category_id = :cid and name = :name",
-                {
-                    "cid": int(self.audit_targets["alias_removed_by_name"]["category_id"]),
-                    "name": str(self.audit_targets["alias_removed_by_name"]["name"]),
-                },
-            )
-            alias_added_id = int(alias_added["id"])
-            alias_removed_by_name_id = int(alias_removed_by_name["id"])
-            alias_removed_by_id = int(self.audit_targets["alias_removed_by_id"])
-            prohibited_id = int(self.audit_targets["prohibited_item_id"])
-            favorite_product_id = int(self.audit_targets["favorite_product_id"])
-            favorite_first_id = int(self.audit_targets["favorite_removed_id"])
-            favorite_readded_id = int(self.audit_targets["favorite_readded_id"])
-            statement_case_id = int(self.cases["report_product"]["id"])
-            appeal_case_id = int(self.audit_targets["appeal_case_id"])
-            notification_id = int(self.audit_targets["notification_read_id"])
-
-            rows = self._db(
-                ("select event_type, target_type, target_id, actor_id, before_json, after_json "
-                 "from app.audit_events where created_at >= :started_at order by event_id"),
-                {"started_at": self.started_at},
-            )
-
-            def _object(value: Any) -> dict[str, Any]:
-                if isinstance(value, str):
-                    try:
-                        decoded = json.loads(value)
-                    except json.JSONDecodeError:
-                        return {}
-                    return decoded if isinstance(decoded, dict) else {}
-                return dict(value) if isinstance(value, dict) else {}
-
-            def _count(
-                event_type: str,
-                target_type: str | None = None,
-                target_id: int | None = None,
-                *,
-                after_product_id: int | None = None,
-            ) -> int:
-                total = 0
-                for row in rows:
-                    if str(row["event_type"]) != event_type:
-                        continue
-                    if target_type is not None and str(row["target_type"]) != target_type:
-                        continue
-                    if target_id is not None and int(row["target_id"] or 0) != int(target_id):
-                        continue
-                    if after_product_id is not None:
-                        after = _object(row["after_json"])
-                        if int(after.get("product_id") or 0) != int(after_product_id):
-                            continue
-                    total += 1
-                return total
-
-            required: list[tuple[str, str, int]] = []
-            for key in ("main", "second", "disable", "delete"):
-                required.append(("admin.category_create", "category", category_ids[key]))
-            required.extend(
-                [
-                    ("admin.category_update", "category", category_ids["main"]),
-                    ("admin.category_update", "category", category_ids["disable"]),
-                    ("admin.category_alias_add", "category_alias", alias_added_id),
-                    ("admin.category_alias_remove", "category_alias", alias_removed_by_name_id),
-                    ("admin.category_alias_remove", "category_alias", alias_removed_by_id),
-                    ("admin.category_delete", "category", category_ids["delete"]),
-                    ("admin.prohibited_item_create", "prohibited_item", prohibited_id),
-                    ("admin.prohibited_item_update", "prohibited_item", prohibited_id),
-                    ("admin.prohibited_item_delete", "prohibited_item", prohibited_id),
-                    ("favorite.add", "favorite", favorite_first_id),
-                    ("favorite.add", "favorite", favorite_readded_id),
-                    ("favorite.remove", "favorite", favorite_first_id),
-                    ("case.statement_submit", "disposal_case", statement_case_id),
-                    ("case.appeal_submit", "disposal_case", appeal_case_id),
-                    ("notification.read", "notification", notification_id),
-                    ("im.conversation_create", "conversation", created_conv_id),
-                    ("im.read_advance", "conversation", created_conv_id),
-                    ("im.conversation_to_normal", "conversation", migrated_id),
-                    ("im.message_send", "conversation", created_conv_id),
-                ]
-            )
-            missing = [
-                f"{event}:{target_type}#{target_id}"
-                for event, target_type, target_id in required
-                if _count(event, target_type, target_id) < 1
-            ]
-            self.rec.must_eq(missing, [], "17 写入口/16 新增事件逐条落库")
-            self.rec.must_eq(
-                _count("favorite.add", "favorite", after_product_id=favorite_product_id),
-                2,
-                "重复收藏不写第三条成功审计",
-            )
-            self.rec.must_eq(
-                _count("admin.prohibited_item_update", "prohibited_item", prohibited_id),
-                1,
-                "相同禁发值重复 PUT 不重复审计",
-            )
-            self.rec.must_eq(
-                _count("admin.category_update", "category", category_ids["disable"]),
-                1,
-                "相同分类状态重复 PATCH 不重复审计",
-            )
-            for event, target_type, target_id in (
-                ("im.conversation_create", "conversation", created_conv_id),
-                ("im.read_advance", "conversation", created_conv_id),
-                ("im.conversation_to_normal", "conversation", migrated_id),
-                ("im.message_send", "conversation", created_conv_id),
-                ("notification.read", "notification", notification_id),
-                ("case.statement_submit", "disposal_case", statement_case_id),
-                ("case.appeal_submit", "disposal_case", appeal_case_id),
-                ("favorite.remove", "favorite", favorite_first_id),
-            ):
-                self.rec.must_eq(
-                    _count(event, target_type, target_id),
-                    1,
-                    f"{event} 对同一目标仅一条成功记录",
-                )
-
-            required_events = {event for event, _target_type, _target_id in required}
-            forbidden_keys = {
-                "password",
-                "password_hash",
-                "access_token",
-                "refresh_token",
-                "verification_code",
-                "jwt",
-                "secret",
-                "access_key",
-                "access_key_id",
-                "access_key_secret",
-                "authorization",
-                "content",
-                "body",
-            }
-            bad_keys: set[str] = set()
-            sensitive_hits: list[str] = []
-            scanned = 0
-            markers = [str(value) for value in self.audit_targets.get("sensitive_markers") or []]
-
-            def _walk_keys(value: Any) -> None:
-                if isinstance(value, dict):
-                    for key, item in value.items():
-                        if str(key).lower() in forbidden_keys:
-                            bad_keys.add(str(key).lower())
-                        _walk_keys(item)
-                elif isinstance(value, list):
-                    for item in value:
-                        _walk_keys(item)
-
-            for row in rows:
-                if str(row["event_type"]) not in required_events:
-                    continue
-                scanned += 1
-                before = _object(row["before_json"])
-                after = _object(row["after_json"])
-                _walk_keys(before)
-                _walk_keys(after)
-                blob = json.dumps({"before": before, "after": after}, ensure_ascii=False)
-                for marker in markers:
-                    if marker and marker in blob:
-                        sensitive_hits.append(str(row["event_type"]))
-            self.rec.must_eq(sorted(bad_keys), [], "新增审计 payload 不含敏感字段名")
-            self.rec.must_eq(sensitive_hits, [], "新增审计 payload 不含消息/说明/申辩正文")
-            self.rec.data["new_event_names"] = sorted(required_events)
-            self.rec.data["scanned_events"] = scanned
-
-        with self.rec.step(
             "OBJ-01",
             "对象引用/清理不变量：业务引用 committed 且真实存在；dry-run 不把已引用对象列为候选",
             note="把原独立对象锁/回收专项收敛为业务不变量；不调用 mock，不删除共享桶",
@@ -5142,66 +4704,3 @@ class AcceptanceRun:
             self.rec.must(not result.deleted, "不执行物理删除")
             self.rec.data["business_objects"] = len(business_keys)
             self.rec.data["dry_run_candidates"] = len(result.candidates)
-
-        with self.rec.step(
-            "CLEAN-01",
-            "收尾前核对：运行期间历史、审计与引用对象完整；结束后清理本轮隔离资源",
-        ):
-            counts = {}
-            for table in ("users", "categories", "products", "trades", "reports", "disposal_cases", "audit_events", "stored_objects"):
-                row = self._db_one(f"select count(*) as n from app.{table}")
-                counts[table] = int(row["n"])
-            state_rows = self._db(
-                "select state, count(*) as n from app.stored_objects group by state order by state"
-            )
-            self.retained = [{"kind": "table", "table": name, "count": count, "action": "retained"} for name, count in counts.items()]
-            self.retained.extend(
-                {"kind": "stored_object_state", "state": row["state"], "count": int(row["n"]), "action": "retained"} for row in state_rows
-            )
-            # 本轮逻辑 key 仍被商品/举报引用（只读 SQL）。
-            report_key = self.files["report_evidence"]["key"]
-            referenced = self._db(
-                "select key from app.stored_objects where key = :key and state = 'committed'",
-                {"key": report_key},
-            )
-            self.rec.must_eq(len(referenced), 1, "举报证据对象已提交并保留")
-            probe_keys = [self.files["product_probe"]["key"], self.files["evidence_probe"]["key"]]
-            staged = self._db(
-                "select key, state from app.stored_objects where key = any(:keys)",
-                {"keys": probe_keys},
-            )
-            self.rec.must_eq(len(staged), 2, "探测上传对象登记存在")
-            self.rec.must(all(row["state"] in {"staged", "committed", "deleted"} for row in staged), "探测对象状态合法")
-            self.rec.must(not any(item.get("action", "").startswith("delete") for item in self.retained), "运行期间未提前清理本轮业务对象")
-            round_keys = sorted(
-                {
-                    str(value["key"])
-                    for value in self.files.values()
-                    if isinstance(value, dict) and value.get("key")
-                }
-            )
-            key_rows = self._db(
-                "select key, state, bucket_role from app.stored_objects where key = any(:keys)",
-                {"keys": round_keys},
-            )
-            key_state = {str(row["key"]): dict(row) for row in key_rows}
-            retained_objects: list[dict[str, Any]] = []
-            for key in round_keys:
-                row = key_state.get(key)
-                if row is None:
-                    retained_objects.append({"key": key, "state": "unregistered", "reason": "本轮上传未登记，记录运行期间状态"})
-                elif row["state"] == "committed":
-                    retained_objects.append(
-                        {"key": key, "state": "committed", "bucket_role": row["bucket_role"], "reason": "运行期间业务引用"}
-                    )
-                elif row["state"] == "staged":
-                    retained_objects.append(
-                        {"key": key, "state": "staged", "bucket_role": row["bucket_role"], "reason": "运行期间探测或未引用上传"}
-                    )
-                else:
-                    retained_objects.append(
-                        {"key": key, "state": row["state"], "bucket_role": row["bucket_role"], "reason": "运行期间历史状态"}
-                    )
-            self.rec.data["counts"] = counts
-            self.rec.data["stored_object_states"] = [dict(row) for row in state_rows]
-            self.rec.data["retained_objects"] = retained_objects

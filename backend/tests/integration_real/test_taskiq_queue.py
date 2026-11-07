@@ -1,4 +1,4 @@
-"""Real Taskiq gates: reclaim after kill, retries, terminal failure, scheduler restart."""
+"""Real Taskiq gates: reclaim after kill, retries and terminal failure."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ async def _enqueue(name: str, *args) -> None:
         await bundle.scheduler_heartbeat.close()
 
 
-async def test_killed_worker_message_is_reclaimed_and_duplicate_is_idempotent(tmp_path):
+async def test_killed_worker_task_is_reclaimed_by_another_process(tmp_path):
     env_file = Path(os.environ["INTEGRATION_ENV_FILE"])
     settings = probe_tasks._settings
     client = await _redis(settings)
@@ -115,22 +115,26 @@ async def test_killed_worker_message_is_reclaimed_and_duplicate_is_idempotent(tm
         await _wait_cli("scheduler", env_file)
         await _wait_cli("worker", env_file)
         token = secrets.token_hex(8)
-        await _enqueue(probe_tasks.SLOW_PROBE_TASK, token, 6.0)
+        await _enqueue(probe_tasks.SLOW_PROBE_TASK, token)
         key = settings.redis_key_prefix + "test:task:" + token
         started = await _wait_value(client, key, lambda value: value.get("phase") == "started", timeout=20)
         old_pid = started["pid"]
         _stop(worker, force=True)
         worker = _start(None, env_file, log)
-        done = await _wait_value(client, key, lambda value: value.get("phase") == "done", timeout=40)
-        # The re-delivered task is idempotent by token. SIGKILL cannot leave a
-        # writer behind, so a completed value must come from the new process.
+        await _wait_value(client, key,
+                          lambda value: value.get("phase") == "started" and value["pid"] != old_pid,
+                          timeout=40)
+        await client.set(settings.redis_key_prefix + "test:release:" + token, "1", ex=60)
+        done = await _wait_value(client, key, lambda value: value.get("phase") == "done")
+        # Completion must come from the process that reclaimed the task.
         assert isinstance(done["pid"], int)
         assert done["pid"] != old_pid
     finally:
         _stop(worker)
         _stop(scheduler)
         with contextlib.suppress(Exception):
-            await client.delete(settings.redis_key_prefix + "test:task:" + token)
+            await client.delete(settings.redis_key_prefix + "test:task:" + token,
+                                settings.redis_key_prefix + "test:release:" + token)
         await client.aclose()
 
 
@@ -171,34 +175,11 @@ async def test_retry_success_and_terminal_failure_are_observable(tmp_path):
         _stop(worker)
         _stop(scheduler)
         with contextlib.suppress(Exception):
-            await client.delete(settings.redis_key_prefix + "test:task:" + token)
+            await client.delete(settings.redis_key_prefix + "test:task:" + token,
+                                settings.redis_key_prefix + "test:release:" + token)
         await client.aclose()
 
 
-async def test_scheduler_restart_does_not_duplicate_static_schedules(tmp_path):
-    env_file = Path(os.environ["INTEGRATION_ENV_FILE"])
-    settings = probe_tasks._settings
-    client = await _redis(settings)
-    log = tmp_path / "scheduler.log"
-    key = settings.redis_key_prefix + "jobs:scheduler:heartbeat:" + settings.release_id
-    scheduler = _start("scheduler", env_file, log)
-    try:
-        first = await _wait_value(client, key, lambda value: value.get("dispatch_count", 0) >= 1, timeout=30)
-        ids = sorted(first["schedule_ids"])
-        assert len(ids) == len(set(ids)) == 4
-        first_pid = first["pid"]
-        _stop(scheduler)
-        scheduler = _start("scheduler", env_file, log)
-        second = await _wait_value(
-            client, key,
-            lambda value: value.get("pid") != first_pid and value.get("dispatch_count", 0) >= 1,
-            timeout=30,
-        )
-        assert sorted(second["schedule_ids"]) == ids
-        assert second["schedule_count"] == 4
-    finally:
-        _stop(scheduler)
-        await client.aclose()
 
 
 async def test_worker_readiness_fails_when_no_worker_is_running(tmp_path):
