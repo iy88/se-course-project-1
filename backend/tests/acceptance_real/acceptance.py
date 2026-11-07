@@ -432,7 +432,7 @@ class AcceptanceRun:
         price: int = 5000,
         category_ids: Sequence[int] | None = None,
         new_names: Sequence[str] | None = None,
-        asset: str = "tag_app_textbook_demo.jpg",
+        asset: str = "product_folding_bike.jpg",
         description: str | None = None,
     ) -> dict[str, Any]:
         uploaded = self._upload(seller, asset, "product")
@@ -1462,7 +1462,7 @@ class AcceptanceRun:
                 self.rec.must(urlsplit(approved['avatar_url']).netloc in self.api.allowed_storage_hosts, '头像返回OSS直链')
             self.api.signed_get(approved['avatar_url'])
             self._call('POST', decision_path, user='admin', expected=409, json_body={'key': avatar_key, 'approved': True})
-            product_file = self._upload("seller", "tag_app_textbook_demo.jpg", "product")
+            product_file = self._upload("seller", "product_folding_bike.jpg", "product")
             self.files["product_probe"] = product_file
             self.rec.must(str(product_file["key"]).startswith("product/"), "商品图 key 前缀 product/")
             signed = self.api.signed_get(str(product_file["url"]))
@@ -1479,7 +1479,7 @@ class AcceptanceRun:
             logical_key = product_file['key']
             sig = hmac.new(self.config.settings.file_url_secret.encode(), f'{logical_key}:{expiry}'.encode(), hashlib.sha256).hexdigest()
             self.api.signed_get(f'/api/v1/files/{logical_key}?exp={expiry}&sig={sig}')
-            valid = _asset_bytes("tag_app_textbook_demo.jpg")
+            valid = _asset_bytes("product_folding_bike.jpg")
             base = {"namespace":"product","filename":"x.jpg","content_type":"image/jpeg","size_bytes":len(valid),"sha256":hashlib.sha256(valid).hexdigest()}
             for body, expected, note in [
                 ({**base,"namespace":"unknown"},400,"invalid-namespace"),
@@ -1519,7 +1519,7 @@ class AcceptanceRun:
                         self.rec.must_eq(preflight.status_code,200,"测试桶浏览器直传预检通过")
                         self.rec.must_eq(preflight.headers.get('access-control-allow-origin'),origin,"预检来源匹配")
                 self.rec.must(True,"OSS拒绝篡改已签名元信息，后端拒绝实际hash/大小不一致")
-            evidence = self._upload("buyer", "evidence_chat.jpg", "report")
+            evidence = self._upload("buyer", "evidence_message.jpg", "report")
             self.files["evidence_probe"] = evidence
             self.rec.must(str(evidence["key"]).startswith("report/"), "举报证据 key 前缀 report/")
             self.api.signed_get(str(evidence["url"]))
@@ -3607,13 +3607,17 @@ class AcceptanceRun:
             ac=["US-03-AC-05", "US-07-AC-03", "US-07-AC-04", "US-07-AC-05", "US-08-AC-03", "US-08-AC-04", "US-08-AC-05", "US-09-AC-05", "US-12-AC-04"],
             sc=["SC-03-05", "SC-07-04", "SC-07-05", "SC-07-06", "SC-07-08", "SC-07-12", "SC-12-02"],
         ):
-            self._publish("P_REPORT", "seller", f"举报处置商品-{self.run_id}", price=7100, category_ids=[self.categories["main"]["id"]])
+            self._publish(
+                "P_REPORT", "seller", f"Kindle Paperwhite 4-{self.run_id}", price=7100,
+                category_ids=[self.categories["main"]["id"]], asset="product_kindle_demo.jpg",
+                description="Kindle Paperwhite 4，屏幕无划痕。",
+            )
             self._approve("P_REPORT")
             product_id = int(self.products["P_REPORT"]["id"])
             self._call("POST", f"/api/v1/favorites/{product_id}", user="buyer", expected=200)
             # 举报本身不自动下架/限制（SC-07-05）。
             self._call("GET", f"/api/v1/products/{product_id}", user="outsider", expected=200)
-            evidence = self._upload("buyer", "evidence_listing.jpg", "report")
+            evidence = self._upload("buyer", "evidence_kindle_screen.jpg", "report")
             self.files["report_evidence"] = evidence
             report = self._dict(
                 self._call(

@@ -110,7 +110,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_keyboard_pending", seller="seller",
         title="87 键红轴机械键盘 带备用键帽",
         description="自用 87 键机械键盘，红轴，2024 年 9 月购入，键帽有轻微打油，按键和灯效全部正常；附拔键器、备用键帽和 Type-C 线。168 元，最近换了静音键盘所以出，周末下午可在图书馆南门当面验货。",
-        price_cents=16800, status="pending_review", category="category_digital", asset="review_product_lamp_pending_demo.jpg",
+        price_cents=16800, status="pending_review", category="category_digital", asset="product_mechanical_keyboard.jpg",
         created_days_ago=1.5,
         tag_apps=(TagApplicationSpec("静音外设", "pending", 1.2),),
         reviews=(ReviewSpec("pending", 1.5, claimed_by="admin", claimed_days_ago=1, key="review_product_keyboard_pending", case_key="case_review_product_keyboard"),),
@@ -130,7 +130,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_shelf_withdrawn", seller="seller3",
         title="四层简易书架 可拆搬",
         description="宿舍用四层简易书架，2023 年双十一购入，左边一根横杆有轻微变形，不影响放书；可拆成两块搬走。原价 129，现 60 元出，不含其他配件，需自提，周六上午在 7 号宿舍楼下。",
-        price_cents=6000, status="delisted", category="category_home", asset="review_product_camera_rejected_demo.jpg",
+        price_cents=6000, status="delisted", category="category_home", asset="product_four_tier_bookshelf.jpg",
         created_days_ago=14, listed_days_ago=13, delisted_days_ago=12,
         tags=("category_disabled",),
         reviews=(ReviewSpec("withdrawn", 12, reviewer=None, key="review_shelf_withdrawn", case_key="case_review_shelf_withdrawn"),),
@@ -140,7 +140,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_monitor_resubmitted", seller="seller2",
         title="27 寸 2K 显示器 带 HDMI 线",
         description="27 寸 2K 显示器，2023 年 3 月购入，屏幕无坏点，底座有正常使用痕迹；附 HDMI 线和电源适配器。420 元，因换 4K 屏出，可约周三晚在 7 号宿舍楼大厅试机亮屏。",
-        price_cents=42000, status="pending_review", category="category_digital", asset="review_shelf_withdrawn_demo.jpg",
+        price_cents=42000, status="pending_review", category="category_digital", asset="product_monitor.jpg",
         created_days_ago=9,
         reviews=(
             ReviewSpec("rejected", 8, "请补充屏幕亮机照片和接口说明", "admin", key="review_monitor_rejected"),
@@ -159,7 +159,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_folding_bike", seller="seller3",
         title="20 寸折叠自行车 带车锁",
         description="20 寸折叠自行车，2023 年购入，通勤用约一年半，链条上月刚上油，后刹车皮磨损需更换（已如实说明）；附车锁和打气筒。折叠后可进电梯，320 元，周末白天可在南门车棚看车。",
-        price_cents=32000, status="listed", category="category_bike", asset="tag_app_textbook_demo.jpg",
+        price_cents=32000, status="listed", category="category_bike", asset="product_folding_bike.jpg",
         created_days_ago=20, listed_days_ago=19,
         tag_apps=(TagApplicationSpec("骑行装备", "approved_new", 19, resolved_category="category_bike", decided_days_ago=18, key="tag_app_bike"),),
     ),
@@ -167,7 +167,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_racket", seller="seller",
         title="尤尼克斯羽毛球拍 4U",
         description="尤尼克斯羽毛球拍，4U 规格，2024 年 5 月购入，拍框有一处掉漆，拉线 24 磅仍可用；附拍套和手胶。因为改打网球出，120 元，周二傍晚在体育馆门口试拍。",
-        price_cents=12000, status="listed", category="category_sports", asset="tag_app_bike_demo.jpg",
+        price_cents=12000, status="listed", category="category_sports", asset="product_badminton_racket.jpg",
         created_days_ago=18, listed_days_ago=17,
         tag_apps=(TagApplicationSpec("球类", "rejected", 16, reason="与现有“运动户外”分类重复，请使用运动户外或申请更具体的球拍分类", decided_days_ago=15, key="tag_app_racket"),),
     ),
@@ -175,7 +175,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_desk_organizer", seller="seller",
         title="桌面三层收纳架 带抽屉",
         description="桌面收纳架，2024 年 3 月购入，三层结构，右侧抽屉滑轨有点涩但能正常开合；附安装螺丝。25 元，周一下午在图书馆门口交付。",
-        price_cents=2500, status="listed", category="category_home", asset="tag_app_racket_demo.jpg",
+        price_cents=2500, status="listed", category="category_home", asset="product_desk_organizer.jpg",
         created_days_ago=12, listed_days_ago=11,
         edits=(EditSpec("seller", "有同学问价，降到 25 元", 2,
                         {"title": "桌面三层收纳架 带抽屉", "description": "桌面收纳架，2024 年 3 月购入，三层结构，右侧抽屉滑轨有点涩但能正常开合；附安装螺丝。30 元，周一下午在图书馆门口交付。", "price_cents": 3000},
@@ -185,7 +185,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_bike", seller="seller",
         title="捷安特山地车 后胎新换",
         description="捷安特山地车，2022 年购入，骑了约三年，车架右后侧有掉漆，变速和刹车正常，后胎上月新换；附车锁、尾灯。因毕业出，560 元，可约周三 18:30 在图书馆门口看车。",
-        price_cents=56000, status="listed", category="category_bike", asset="edit_organizer_demo.jpg",
+        price_cents=56000, status="listed", category="category_bike", asset="product_mountain_bike.jpg",
         created_days_ago=16, listed_days_ago=15,
         comments=(
             CommentSpec("comment_bike_ask", "buyer", "车架右后侧的掉漆面积大吗？周三 18:30 能在图书馆门口看车吗？", 4),
@@ -220,7 +220,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_powerbank", seller="seller2",
         title="20000mAh 充电宝 带收纳袋",
         description="20000mAh 充电宝，2023 年购入，外壳有轻微鼓包，仍能充电；附收纳袋。90 元，周三下午可在 5 号宿舍楼下自提，因换了新充电宝出。",
-        price_cents=9000, status="listed", category="category_digital", asset="product_violation.jpg",
+        price_cents=9000, status="listed", category="category_digital", asset="product_swollen_powerbank.jpg",
         created_days_ago=30, listed_days_ago=29,
         display_restricted=True, restricted_case="case_report_product_handled", restricted_days_ago=6,
         restricted_reason="存在电池鼓包安全隐患，已停止公开访问",
@@ -239,7 +239,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_headphones", seller="seller",
         title="索尼降噪耳机 带收纳盒",
         description="索尼降噪耳机，2023 年购入，耳罩有轻微掉皮，降噪和蓝牙正常；附收纳盒和音频线。220 元，周三下午在图书馆门口交付。",
-        price_cents=22000, status="listed", category="category_digital", asset="edit_projector_demo.jpg",
+        price_cents=22000, status="listed", category="category_digital", asset="product_headphones.jpg",
         created_days_ago=9, listed_days_ago=8,
     ),
     ProductSpec(
@@ -365,7 +365,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
         key="product_guitar", seller="multi_ban",
         title="尤尼克斯羽毛球拍套装 带拍包",
         description="尤尼克斯羽毛球拍套装，2022 年购入，拍框边缘有轻微磕碰，拉线 24 磅；附拍包和两筒训练球。210 元，周末在体育馆门口试拍。",
-        price_cents=21000, status="in_transaction", category="category_sports", asset="product_guitar_demo.jpg",
+        price_cents=21000, status="in_transaction", category="category_sports", asset="product_racket_set.jpg",
         created_days_ago=26, listed_days_ago=25,
         display_restricted=True, restricted_case="case_multi_ban", restricted_days_ago=4,
         restricted_reason="发布者账户被平台封禁，停止公开展示",
@@ -985,10 +985,10 @@ REPORTS: tuple[ReportSpec, ...] = (
         reason="商品描述写“屏幕无划痕”，但图片看起来有反光划痕，请核实",
         detail="我在私聊里问过卖家，对方说没有划痕，想请管理员看下原图。",
         days_ago=4, status="pending",
-        evidence=(EvidenceSpec("evidence_report_kindle", "evidence_listing.jpg"),),
+        evidence=(EvidenceSpec("evidence_report_kindle", "evidence_kindle_screen.jpg"),),
         supplements=(SupplementSpec("supplement_report_kindle", "outsider",
                                     "补充一张放大的背面照片，划痕位置在右下角。", 2,
-                                    (EvidenceSpec("evidence_report_kindle_supplement", "evidence_chat.jpg"),)),),
+                                    (EvidenceSpec("evidence_report_kindle_supplement", "evidence_kindle_back.jpg"),)),),
         case=CaseSpec(
             key="case_report_product_pending", case_type="report", title="举报事项：商品 Kindle 描述与图片不符",
             created_days_ago=4, status="pending", subject="seller2",
@@ -999,7 +999,7 @@ REPORTS: tuple[ReportSpec, ...] = (
         reason="卖家在描述里写的交付时间与私聊不一致，疑似误导",
         detail="商品写周一下午，私聊又说只有周二有空。",
         days_ago=3, status="processing",
-        evidence=(EvidenceSpec("evidence_report_organizer", "evidence_chat.jpg"),),
+        evidence=(EvidenceSpec("evidence_report_organizer", "evidence_organizer.jpg"),),
         supplements=(SupplementSpec("supplement_report_organizer", "buyer2",
                                     "补一张私聊截图，卖家确实改口说周二。", 1.5),),
         case=CaseSpec(
@@ -1021,7 +1021,7 @@ REPORTS: tuple[ReportSpec, ...] = (
         public_result="经核查，商品存在电池鼓包安全隐患，已停止公开访问并提醒卖方妥善处理",
         result_reason="商品图与描述均显示外壳鼓包，继续公开交易存在安全风险",
         closed_days_ago=6,
-        evidence=(EvidenceSpec("evidence_report_powerbank", "evidence_listing.jpg"),),
+        evidence=(EvidenceSpec("evidence_report_powerbank", "evidence_powerbank_swelling.jpg"),),
         case=CaseSpec(
             key="case_report_product_handled", case_type="report", title="举报事项：充电宝鼓包仍在售",
             created_days_ago=8, status="disposed", subject="seller2",
@@ -1070,7 +1070,7 @@ REPORTS: tuple[ReportSpec, ...] = (
         public_result="经核查，交易消息引导站外交易，已提醒并处置",
         result_reason="交易分支消息要求脱离平台转账，违反交易沟通规范",
         closed_days_ago=1,
-        evidence=(EvidenceSpec("evidence_report_message", "evidence_chat.jpg"),),
+        evidence=(EvidenceSpec("evidence_report_message", "evidence_message.jpg"),),
         case=CaseSpec(
             key="case_report_message_handled", case_type="report", title="举报事项：交易消息引导站外转账",
             created_days_ago=1.5, status="disposed", subject="buyer2",
@@ -1094,7 +1094,7 @@ REPORTS: tuple[ReportSpec, ...] = (
         public_result="经核查，评价含人身攻击内容，已移除",
         result_reason="评价超出商品与交易评价范围，含人身攻击",
         closed_days_ago=10,
-        evidence=(EvidenceSpec("evidence_report_review", "evidence_chat.jpg"),),
+        evidence=(EvidenceSpec("evidence_report_review", "evidence_review.jpg"),),
         case=CaseSpec(
             key="case_report_review_handled", case_type="report", title="举报事项：交易评价含人身攻击",
             created_days_ago=12, status="disposed", subject="buyer3",
@@ -1118,7 +1118,7 @@ REPORTS: tuple[ReportSpec, ...] = (
         public_result="经核查，用户多次发送骚扰信息，已封禁账户",
         result_reason="聊天记录显示多次骚扰且提醒后未停止",
         closed_days_ago=4,
-        evidence=(EvidenceSpec("evidence_report_user", "evidence_chat.jpg"),),
+        evidence=(EvidenceSpec("evidence_report_user", "evidence_user.jpg"),),
         case=CaseSpec(
             key="case_multi_ban", case_type="report", title="举报事项：用户私聊骚扰",
             created_days_ago=5, status="disposed", subject="multi_ban",
@@ -1142,7 +1142,7 @@ REPORTS: tuple[ReportSpec, ...] = (
         public_result=None,
         result_reason="商品描述为“刀头可拆洗”，聊天记录显示卖方在交付前已说明需整体清洗，证据不足以认定描述不实",
         closed_days_ago=2,
-        evidence=(EvidenceSpec("evidence_report_blender", "evidence_chat.jpg"),),
+        evidence=(EvidenceSpec("evidence_report_blender", "evidence_blender.jpg"),),
         case=CaseSpec(
             key="case_report_unfounded", case_type="report", title="举报事项：榨汁机刀头描述不符",
             created_days_ago=7, status="disposed", subject="seller",
@@ -1243,7 +1243,7 @@ NORMAL_CONVERSATIONS: tuple[NormalConversationSpec, ...] = (
 )
 
 AVATARS: tuple[AvatarSpec, ...] = (
-    AvatarSpec("outsider", "product_racket.jpg", "avatar_outsider", 1, CaseSpec(
+    AvatarSpec("outsider", "avatar_campus_court.jpg", "avatar_outsider", 1, CaseSpec(
         key="case_avatar_pending", case_type="avatar_review", title="头像审核：视觉传达23级·何佳",
         created_days_ago=1, status="pending", subject="outsider",
     ), "头像为校园球场照片，未含他人正脸"),
