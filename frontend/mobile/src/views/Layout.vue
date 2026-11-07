@@ -73,24 +73,25 @@ let badgeRefreshTimer = null
 
 async function refreshBadges() {
   const token = localStorage.getItem('token')
-  if (!token) return
+  if (!token) return false
   const version = ++badgeRefreshVersion
   try {
     const [msg, notif] = await Promise.all([
       http.get('/conversations/unread-summary'),
       http.get('/notifications/unread-count'),
     ])
-    if (version !== badgeRefreshVersion || localStorage.getItem('token') !== token) return
+    if (version !== badgeRefreshVersion || localStorage.getItem('token') !== token) return false
     session.unreadMessages = msg.unread
     session.unreadNotifications = notif.unread
+    return true
   } catch {
-    /* 静默失败，稍后随 WS/重试刷新 */
+    return false
   }
 }
 
 async function onWSMessage(data) {
   if (data.type === 'resync_required') {
-    await refreshBadges()
+    if (!await refreshBadges()) throw new Error('Unable to resync unread counts')
     return
   }
   if (data.type === 'notification' || (data.type === 'message' && data.sender_id !== session.user?.id)) {
