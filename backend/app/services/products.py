@@ -190,11 +190,11 @@ async def search_products(
                 CategoryAlias,
                 and_(col(CategoryAlias.category_id) == col(Category.id), col(CategoryAlias.removed_at).is_(None)),
             )
-            .where((col(Category.name).like(like)) | (col(CategoryAlias.name).like(like)))
+            .where((col(Category.name).ilike(like)) | (col(CategoryAlias.name).ilike(like)))
         )
         conditions.append(
-            (col(Product.title).like(like))
-            | (col(Product.description).like(like))
+            (col(Product.title).ilike(like))
+            | (col(Product.description).ilike(like))
             | (col(Product.id).in_(keyword_tag_ids))
         )
     if price_min_cents is not None:

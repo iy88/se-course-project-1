@@ -37,7 +37,7 @@ async def list_users(
         conditions.append(col(User.status) == user_status)
     if keyword:
         like = f"%{keyword}%"
-        conditions.append(or_(col(User.email).like(like), col(User.display_name).like(like)))
+        conditions.append(or_(col(User.email).ilike(like), col(User.display_name).ilike(like)))
     count_stmt = select(func.count()).select_from(User)
     rows_stmt = select(User).order_by(col(User.id).desc())
     if conditions:
