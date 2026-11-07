@@ -19,14 +19,6 @@ pipeline {
         nodejs 'node-latest'
     }
 
-    parameters {
-        choice(
-            name: 'DEPLOY_MODE',
-            choices: ['split', 'combined'],
-            description: 'Default split: install all prerequisites before merging/enabling webhooks. combined is an explicit maintenance/rollback choice and requires matching Nginx routing.'
-        )
-    }
-
     options {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
@@ -37,7 +29,7 @@ pipeline {
     environment {
         UV_CACHE_DIR = "${WORKSPACE}/.cache/uv"
         NPM_CONFIG_CACHE = "${WORKSPACE}/.cache/npm"
-        DEPLOY_MODE = "${params.DEPLOY_MODE}"
+        DEPLOY_MODE = 'split'
     }
 
     stages {
@@ -516,7 +508,7 @@ set -euo pipefail
 
 release_id="$1"
 mode="$2"
-case "$mode" in combined|split) ;; *) echo "Invalid deploy mode: $mode"; exit 1 ;; esac
+case "$mode" in split) ;; *) echo "Invalid deploy mode: $mode"; exit 1 ;; esac
 release_dir="/srv/se-course-project1/releases/$release_id"
 shared_config=/srv/se-course-project1/shared/.env.prod
 
@@ -595,9 +587,6 @@ PY
 
 # Strict production preflight: all roles, budgets, DB/Redis connectivity.
 APP_ENV_FILE=.env.prod .venv/bin/python ../deploy/preflight.py --mode "$mode" --connect
-if [ "$mode" = split ]; then
-    APP_ENV_FILE=.env.prod .venv/bin/python ../deploy/preflight.py --mode combined --connect
-fi
 
 printf 'prepared_at=%s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     > "$release_dir/PREPARED"
@@ -788,7 +777,7 @@ REMOTE
                         printf '%s\n' "${RELEASE_ID}" | grep -Eq '^[0-9a-f]{40}-[0-9]+$'
                         test -n "${PRODUCTION_BACKUP_DIR:-}"
                         printf '%s\n' "${PRODUCTION_BACKUP_DIR}" | grep -Eq '^/var/backups/se-course-project1/predeploy-[A-Za-z0-9-]+$'
-                        case "${DEPLOY_MODE}" in combined|split) ;; *) exit 1 ;; esac
+                        case "${DEPLOY_MODE}" in split) ;; *) exit 1 ;; esac
                         ssh -p 22 -o BatchMode=yes -o StrictHostKeyChecking=yes \
                             -o HostKeyAlgorithms=ssh-ed25519 -o ConnectTimeout=10 \
                             -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
@@ -800,7 +789,7 @@ backup_dir="$2"
 mode="$3"
 [[ "$release_id" =~ ^[0-9a-f]{40}-[0-9]+$ ]]
 [[ "$backup_dir" =~ ^/var/backups/se-course-project1/predeploy-[A-Za-z0-9-]+$ ]]
-case "$mode" in combined|split) ;; *) exit 1 ;; esac
+case "$mode" in split) ;; *) exit 1 ;; esac
 
 # Run this release's reviewed activator as deploy. Only exact service actions
 # inside it use sudo; no root-owned executable runs project Python code.

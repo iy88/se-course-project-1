@@ -129,18 +129,12 @@ class DotenvOnlySettings(BaseSettings):
 
 class Settings(DotenvOnlySettings):
     app_name: str
-    # Runtime role. ``combined`` keeps the legacy single-process entry point; the
-    # split roles own only their layer and never start another role's scanners.
-    # ``jobs`` is the transitional all-in-one jobs process. New split releases
-    # use the native Taskiq ``worker`` and ``scheduler`` roles, which each own a
-    # process-level SQL/Redis lifecycle and never share pools across forks.
-    app_role: Literal['combined', 'api', 'ws', 'jobs', 'worker', 'scheduler'] = 'combined'
+    # Runtime roles share the same business configuration.
+    app_role: Literal['api', 'ws', 'worker', 'scheduler'] = 'api'
     api_host: str = Field(default='127.0.0.1', min_length=1)
     api_port: int = Field(default=8000, ge=1, le=65535)
     ws_host: str = Field(default='127.0.0.1', min_length=1)
     ws_port: int = Field(default=8002, ge=1, le=65535)
-    jobs_host: str = Field(default='127.0.0.1', min_length=1)
-    jobs_port: int = Field(default=8003, ge=1, le=65535)
     api_workers: int = 1
     ws_workers: int = 1
     environment: Literal['dev', 'test', 'prod']
@@ -172,7 +166,6 @@ class Settings(DotenvOnlySettings):
     redis_control_max_connections_api: int = 16
     redis_control_max_connections_ws: int = 8
     redis_control_max_connections_jobs: int = 8
-    redis_control_max_connections_combined: int = 16
     redis_connection_budget: int = 0
     redis_connect_timeout_seconds: float = 1.0
     redis_socket_timeout_seconds: float = 2.0
@@ -306,20 +299,14 @@ class Settings(DotenvOnlySettings):
         return 'redis' if self.redis_url.strip() else 'memory'
 
     @property
-    def is_split(self) -> bool:
-        return self.app_role != 'combined'
-
-    @property
     def db_pool(self) -> tuple[int, int]:
         if self.app_role == 'scheduler':
             # The scheduler uses Redis only (schedule source + heartbeat); it
             # must not pretend to own a SQL pool it never creates.
             return (0, 0)
         return {
-            'combined': (self.api_db_pool_size, self.api_db_max_overflow),
             'api': (self.api_db_pool_size, self.api_db_max_overflow),
             'ws': (self.ws_db_pool_size, self.ws_db_max_overflow),
-            'jobs': (self.jobs_db_pool_size, self.jobs_db_max_overflow),
             'worker': (self.jobs_db_pool_size, self.jobs_db_max_overflow),
         }[self.app_role]
 
@@ -328,10 +315,8 @@ class Settings(DotenvOnlySettings):
         if self.app_role == 'scheduler':
             return 1  # readiness CLI control probe; zero means unbounded in redis-py
         return {
-            'combined': self.redis_control_max_connections_combined,
             'api': self.redis_control_max_connections_api,
             'ws': self.redis_control_max_connections_ws,
-            'jobs': self.redis_control_max_connections_jobs,
             'worker': self.redis_control_max_connections_jobs,
         }[self.app_role]
 
@@ -371,8 +356,6 @@ class Settings(DotenvOnlySettings):
 
     def sql_connection_budget(self) -> int:
         """Configured steady-state SQL connections for this role/machine."""
-        if self.app_role == 'combined':
-            return (self.api_db_pool_size + self.api_db_max_overflow)
         if self.app_role == 'api':
             return (self.api_db_pool_size + self.api_db_max_overflow) * max(self.api_workers, 1)
         if self.app_role == 'ws':
@@ -418,12 +401,6 @@ class Settings(DotenvOnlySettings):
         # count against Redis maxclients.
         api = self.redis_control_max_connections_api * max(self.api_workers, 1)
         ws = (self.redis_control_max_connections_ws + 1) * max(self.ws_workers, 1)
-        jobs = (self.redis_control_max_connections_jobs + self.redis_publish_max_connections +
-                self.taskiq_broker_max_connections + self.taskiq_schedule_max_connections +
-                self.taskiq_heartbeat_max_connections + self.taskiq_max_async_tasks)
-        if self.app_role == 'combined':
-            return (self.redis_control_max_connections_combined + self.redis_publish_max_connections +
-                    self.taskiq_heartbeat_max_connections + 1 + self.taskiq_max_async_tasks)
         if self.app_role == 'api':
             return api
         if self.app_role == 'ws':
@@ -432,8 +409,6 @@ class Settings(DotenvOnlySettings):
             return self._worker_redis_budget()
         if self.app_role == 'scheduler':
             return self._scheduler_redis_budget()
-        if self.app_role == 'jobs':
-            return jobs
         return api + ws + self._worker_redis_budget() + self._scheduler_redis_budget()
 
     @property
@@ -472,7 +447,7 @@ class Settings(DotenvOnlySettings):
                      'db_recycle_seconds', 'db_lock_timeout_ms', 'db_statement_timeout_ms',
                      'db_idle_in_transaction_timeout_ms',
                      'redis_control_max_connections_api', 'redis_control_max_connections_ws',
-                     'redis_control_max_connections_jobs', 'redis_control_max_connections_combined',
+                     'redis_control_max_connections_jobs',
                      'redis_publish_max_connections', 'redis_stream_block_ms',
                      'realtime_protocol_version', 'realtime_stream_maxlen', 'realtime_payload_max_bytes',
                      'realtime_event_retention_hours', 'realtime_replay_batch_size', 'realtime_replay_max_events',
@@ -596,7 +571,7 @@ class Settings(DotenvOnlySettings):
     def is_production(self) -> bool:
         return self.environment == 'prod'
 
-    def validate_for_runtime(self, env_file: Path | None = None, *, skip_smtp: bool = False) -> None:
+    def validate_for_runtime(self, env_file: Path | None = None, *, skip_smtp: bool = False, require_shared_redis: bool = True) -> None:
         errors = []
         for field in ('database_url', 'jwt_secret', 'file_url_secret'):
             if not getattr(self, field).strip():
@@ -660,7 +635,7 @@ class Settings(DotenvOnlySettings):
         # Shared state is mandatory whenever more than one process owns
         # realtime delivery. Silently falling back to per-process memory would
         # make tickets, rate limits and connection limits unreliable.
-        if (self.is_production or self.is_split) and self.kv_backend != 'redis':
+        if (self.is_production or require_shared_redis) and self.kv_backend != 'redis':
             errors.append('shared REDIS_URL/REDIS_KEY_PREFIX is required for production or split roles')
         if self.is_production:
             if not self.origin_allowlist:
@@ -668,10 +643,10 @@ class Settings(DotenvOnlySettings):
             if self.allow_query_token:
                 errors.append('ALLOW_QUERY_TOKEN must be false in prod')
         if self.db_connection_budget:
-            budget = self.split_sql_budget() if self.is_split else self.sql_connection_budget()
+            budget = self.split_sql_budget()
             if budget > self.db_connection_budget:
                 errors.append(f'SQL connection budget exceeded: {budget} > {self.db_connection_budget}')
-        redis_budget = self.redis_connection_budget_all() if self.is_split else self.redis_connection_budget_total()
+        redis_budget = self.redis_connection_budget_all()
         if self.redis_connection_budget and redis_budget > self.redis_connection_budget:
             errors.append(f'Redis connection budget exceeded: {redis_budget} > {self.redis_connection_budget}')
         if self.ws_heartbeat_timeout_seconds <= self.ws_heartbeat_seconds:
@@ -707,7 +682,7 @@ class Settings(DotenvOnlySettings):
             errors.append('TASKIQ_RECLAIM_IDLE_MS must exceed the task timeout and prefetched batch execution budget')
         # Split roles in dev/test still need explicit origins for the WS role;
         # localhost-only defaults are not guessed here.
-        if (self.is_split and not self.is_production and self.app_role == 'ws'
+        if (not self.is_production and self.app_role == 'ws'
                 and not self.origin_allowlist and not self.allow_missing_origin):
             errors.append('ALLOWED_ORIGINS or ALLOW_MISSING_ORIGIN is required for the ws role')
         if self.storage_backend == 'local' and self.storage_local_root is None:
@@ -804,7 +779,7 @@ def set_runtime_role(role: str | None) -> None:
     business values still come only from the selected file.
     """
     global _ROLE_OVERRIDE
-    if role is not None and role not in {'combined', 'api', 'ws', 'jobs', 'worker', 'scheduler'}:
+    if role is not None and role not in {'api', 'ws', 'worker', 'scheduler'}:
         raise ConfigurationError('invalid runtime role')
     _ROLE_OVERRIDE = role
     get_settings.cache_clear()
@@ -813,14 +788,15 @@ def set_runtime_role(role: str | None) -> None:
 def load_settings(env_file: str | Path | None = None, *, for_acceptance: bool = False) -> Settings:
     path = resolve_env_file(env_file)
     settings = _load_base_settings(Settings, path)
-    effective_role = _ROLE_OVERRIDE or os.environ.get('APP_RUNTIME_ROLE', '').strip() or settings.app_role
-    if effective_role not in {'combined', 'api', 'ws', 'jobs', 'worker', 'scheduler'}:
+    selected_role = _ROLE_OVERRIDE or os.environ.get('APP_RUNTIME_ROLE', '').strip()
+    effective_role = selected_role or settings.app_role
+    if effective_role not in {'api', 'ws', 'worker', 'scheduler'}:
         raise ConfigurationError('invalid runtime role')
     if effective_role != settings.app_role:
         settings = settings.model_copy(update={'app_role': effective_role})
     if for_acceptance and (path != DEFAULT_ENV_FILE.resolve() or settings.environment not in {'dev', 'test'} or settings.mail_backend != 'smtp'):
         raise ConfigurationError('acceptance base configuration requires the default development environment')
-    settings.validate_for_runtime(path, skip_smtp=for_acceptance)
+    settings.validate_for_runtime(path, skip_smtp=for_acceptance, require_shared_redis=bool(selected_role))
     return settings
 
 

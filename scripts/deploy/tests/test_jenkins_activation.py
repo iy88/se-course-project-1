@@ -8,8 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[3]
 RELEASE = "a" * 40 + "-42"
 BACKUP = "/var/backups/se-course-project1/predeploy-probe"
@@ -50,8 +48,8 @@ def run_activation(tmp_path, mode, release=RELEASE):
     return result, probe
 
 
-@pytest.mark.parametrize("mode", ["combined", "split"])
-def test_each_topology_uses_the_versioned_unprivileged_activator(tmp_path, mode):
+def test_split_uses_the_versioned_unprivileged_activator(tmp_path):
+    mode = "split"
     result, path = run_activation(tmp_path, mode)
     assert result.returncode == 0, result.stderr
     probe = json.loads(path.read_text())
@@ -68,6 +66,6 @@ def test_invalid_topology_never_reaches_ssh(tmp_path):
 
 
 def test_invalid_release_never_reaches_ssh(tmp_path):
-    result, path = run_activation(tmp_path, "combined", release="invalid-release")
+    result, path = run_activation(tmp_path, "split", release="invalid-release")
     assert result.returncode != 0
     assert not path.exists()

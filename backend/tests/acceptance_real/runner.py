@@ -131,12 +131,17 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
     log_handle = log_path.open("wb")
     env = sandbox.server_env()
     env["PYTHONUNBUFFERED"] = "1"
+    from tests.integration_real.runner import _free_ports
+
+    ws_port = _free_ports(1)[0]
     command = [
         sys.executable,
         "-m",
         "tests.acceptance_real.clock_server",
         "--port",
         str(port),
+        "--ws-port",
+        str(ws_port),
         "--clock-file",
         str(clock_file),
     ]
@@ -162,8 +167,10 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
             raise CheckFailure(f"测试服务启动失败（exit={process.returncode}）；日志仅保留退出码")
         try:
             response = httpx.get(base_url + "/api/health", timeout=3, trust_env=False)
-            if response.status_code == 200:
-                return ServerHandle(process=process, base_url=base_url, clock_file=clock_file, log_path=log_path)
+            ws_url = f"http://127.0.0.1:{ws_port}"
+            if response.status_code == 200 and httpx.get(ws_url + "/health/ready", timeout=3, trust_env=False).is_success:
+                return ServerHandle(process=process, base_url=base_url, clock_file=clock_file,
+                                    log_path=log_path, ws_url=ws_url)
             last_error = f"HTTP {response.status_code}"
         except httpx.HTTPError as exc:
             last_error = type(exc).__name__

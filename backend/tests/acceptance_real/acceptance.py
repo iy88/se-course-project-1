@@ -89,6 +89,7 @@ class ServerHandle:
     base_url: str
     clock_file: Path
     log_path: Path
+    ws_url: str | None = None
 
     def set_clock_offset(self, seconds: int) -> None:
         self.clock_file.write_text(f"{int(seconds)}\n", encoding="ascii")
@@ -114,6 +115,7 @@ class AcceptanceRun:
         only: Sequence[str] | None = None,
     ) -> None:
         self.base_url = base_url
+        self.ws_url = (server.ws_url if server else None) or base_url
         self.config = config
         self.catalog = catalog
         self.run_id = run_id
@@ -751,7 +753,7 @@ class AcceptanceRun:
             async def _bad_ws() -> int | None:
                 try:
                     async with websockets.connect(
-                        self.base_url.replace("http", "ws", 1) + "/ws?token=invalid-token",
+                        self.ws_url.replace("http", "ws", 1) + "/ws?token=invalid-token",
                         proxy=None,  # Local acceptance traffic must ignore shell/system proxies.
                         open_timeout=10,
                         close_timeout=5,
@@ -4313,7 +4315,7 @@ class AcceptanceRun:
             import websockets
 
             async def _ws_exchange() -> list[dict[str, Any]]:
-                ws_base = self.base_url.replace('http', 'ws', 1) + '/ws?token='
+                ws_base = self.ws_url.replace('http', 'ws', 1) + '/ws?token='
                 async with (
                     websockets.connect(ws_base + self._token('buyer'), proxy=None, open_timeout=10, close_timeout=5) as buyer_ws,
                     websockets.connect(ws_base + self._token('seller'), proxy=None, open_timeout=10, close_timeout=5) as seller_ws,

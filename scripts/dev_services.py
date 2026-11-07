@@ -177,14 +177,14 @@ for tool in ('uv', 'node', 'npm'):
         sys.exit(f'Missing {tool}. Follow README to install the development environment.')
 if int(subprocess.check_output(['node', '-p', 'process.versions.node.split(".")[0]'])) < 22:
     sys.exit('Node.js 22 or later is required.')
-# Check all ports before setup; strictPort also prevents automatic port changes.
-for port in (8000, 5173, 5174):
+# strictPort also prevents Vite from silently selecting a different port.
+def check_port(host, port):
     with socket.socket() as sock:
         # 与服务监听 socket 一致，允许重启时复用 TIME_WAIT 地址。
         # 已有监听者仍会使 bind 失败。
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE if sys.platform == 'win32' else socket.SO_REUSEADDR, 1)
         try:
-            sock.bind(('127.0.0.1', port))
+            sock.bind((host, port))
         except OSError as exc:
             sys.exit(f'Port {port} cannot be bound: {exc}')
 
@@ -256,23 +256,42 @@ try:
         if not (root / folder / ('node_modules/.bin/vite.cmd' if sys.platform == 'win32' else 'node_modules/.bin/vite')).exists():
             run(['npm', 'ci'], folder)
     backend_env = child_environment(app_env_file=env_path, python_unbuffered=True)
-    backend = start([str(root / 'backend' / ('.venv/Scripts/python.exe' if sys.platform == 'win32' else '.venv/bin/python')), '-m', 'app.manage', 'serve'], 'backend', env=backend_env)
-    state['services']['Backend'] = {'pid': backend.pid, 'started': identity(backend.pid)}
-    save_state()
+    python = str(root / 'backend' / ('.venv/Scripts/python.exe' if sys.platform == 'win32' else '.venv/bin/python'))
+    listeners = json.loads(subprocess.check_output(
+        [python, '-c', 'import json; from app.core.config import load_settings; s=load_settings(); '
+         'print(json.dumps([[s.api_host,s.api_port],[s.ws_host,s.ws_port]]))'],
+        cwd=root / 'backend', env=backend_env,
+    ))
+    if len({port for _, port in listeners} | {5173, 5174}) != 4:
+        raise RuntimeError('API, WebSocket and frontend ports must be distinct')
+    for host, port in [*listeners, ('127.0.0.1', 5173), ('127.0.0.1', 5174)]:
+        check_port(host, port)
+    services = {}
+    for name, command in (
+        ('Scheduler', 'taskiq-scheduler'), ('Worker', 'taskiq-worker'),
+        ('WS', 'serve-ws'), ('API', 'serve-api'),
+    ):
+        child = start([python, '-m', 'app.manage', command], 'backend', env=backend_env)
+        services[name] = child
+        state['services'][name] = {'pid': child.pid, 'started': identity(child.pid)}
+        save_state()
     frontend_env = child_environment(app_env_file=env_path)
     admin = start(['npm', 'run', 'dev', '--', '--strictPort'], 'frontend/admin', env=frontend_env)
     state['services']['Admin'] = {'pid': admin.pid, 'started': identity(admin.pid)}
     save_state()
     mobile = start(['npm', 'run', 'dev', '--', '--strictPort'], 'frontend/mobile', env=frontend_env)
     state['services']['Mobile'] = {'pid': mobile.pid, 'started': identity(mobile.pid)}
+    services.update(Admin=admin, Mobile=mobile)
     state['phase'] = 'running'
     save_state()
     print(('\nStarting services:\nMobile: http://localhost:5173\nAdmin: http://localhost:5174'
-           '\nBackend: http://127.0.0.1:8000/docs\nUse ./scripts/dev.sh stop to stop all services.'), flush=True)
+           f'\nAPI: http://127.0.0.1:{listeners[0][1]}/docs'
+           f'\nWebSocket: ws://127.0.0.1:{listeners[1][1]}/ws'
+           '\nUse ./scripts/dev.sh stop to stop all services.'), flush=True)
     while True:
         if stop_path.exists() and stop_path.read_text() == str(os.getpid()):
             break
-        for name, child in (('Backend', backend), ('Admin', admin), ('Mobile', mobile)):
+        for name, child in services.items():
             if child.poll() is not None:
                 raise RuntimeError(f'{name} exited ({child.returncode}); stopping the other services.')
         time.sleep(0.3)

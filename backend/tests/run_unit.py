@@ -27,7 +27,7 @@ def main() -> int:
         }
         env_file.write_text("".join(f"{key}={value}\n" for key, value in fields.items()))
         env_file.chmod(0o600)
-        env = dict(os.environ, APP_ENV_FILE=str(env_file), APP_RUNTIME_ROLE="combined",
+        env = dict(os.environ, APP_ENV_FILE=str(env_file), APP_RUNTIME_ROLE="",
                    CI_REALTIME_APPROVED="0")
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "tests",

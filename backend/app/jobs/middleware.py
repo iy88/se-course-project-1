@@ -42,15 +42,13 @@ class JobHeartbeatMiddleware(TaskiqMiddleware):
         self._started = False
 
     def _active(self) -> bool:
-        """Only a real consumer (or the combined/jobs all-in-one role) writes.
+        """Only a real consumer writes.
 
         Probe/scheduler factory processes import the same broker/tasks but must
         not manufacture worker rows or dispose a shared producer engine.
         """
         if self.settings.app_role == "scheduler":
             return False
-        if self.settings.app_role in {"combined", "jobs"}:
-            return True
         return bool(getattr(self.broker, "is_worker_process", False))
 
     def details(self, status: str = "ready") -> dict:

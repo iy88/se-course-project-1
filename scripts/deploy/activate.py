@@ -1,20 +1,4 @@
-#!/usr/bin/env python3
-"""Fixed-purpose release activation (install as /usr/local/sbin/...).
-
-Supports the legacy combined service and the split jobs/ws/api service set. It
-does not deploy artifacts, run migrations or roll back PostgreSQL/Redis. It:
-
-1. takes the existing activation lock;
-2. verifies release identity, PREPARED/MIGRATED markers and the backup path;
-3. switches the ``current`` symlink atomically;
-4. starts the selected service set and waits for each role's readiness CLI;
-5. on any failure stops the new set, restores the previous symlink and starts
-   the previous service set, then records ACTIVATION_FAILED without writing a
-   false ACTIVATED marker.
-
-The systemd units, sudoers and Nginx split config are administrator-installed
-one-time prerequisites; this script never writes them.
-"""
+"""Activate a four-role release and roll back to a previous four-role release."""
 
 from __future__ import annotations
 
@@ -32,12 +16,7 @@ import urllib.request
 from pathlib import Path
 
 SERVICE_PREFIX = "se-course-project1"
-# New split release: native Taskiq worker/scheduler plus WS/API. The previous
-# transitional split used a single jobs service and remains stoppable for
-# rollback.
 SPLIT_SERVICES = ("scheduler", "worker", "ws", "api")
-LEGACY_SPLIT_SERVICES = ("jobs", "ws", "api")
-KNOWN_SERVICES = ("backend", "scheduler", "worker", "ws", "api", "jobs")
 RELEASE_ID_RE = re.compile(r"^[0-9a-f]{40}-[0-9]+$")
 BACKUP_RE = re.compile(r"^/var/backups/se-course-project1/predeploy-[A-Za-z0-9-]+$")
 
@@ -73,10 +52,7 @@ class Activator:
         return completed
 
     def service(self, name: str) -> str:
-        # The existing production single-process unit is named "backend"; keep
-        # that identity so combined rollback does not require an admin rename.
-        suffix = "backend" if name == "combined" else name
-        return f"{SERVICE_PREFIX}-{suffix}.service"
+        return f"{SERVICE_PREFIX}-{name}.service"
 
     def systemd(self, action: str, name: str, *, check: bool = True) -> None:
         command = [self.systemctl, action, self.service(name)]
@@ -86,11 +62,10 @@ class Activator:
             command = ["sudo", "-n", *command]
         self._run(command, check=check)
 
-    def deactivate(self, mode: str, *, services: tuple[str, ...] | None = None,
+    def deactivate(self, *, services: tuple[str, ...] = SPLIT_SERVICES,
                    check: bool = True) -> list[str]:
-        names = services or (("combined",) if mode == "combined" else SPLIT_SERVICES)
         failures: list[str] = []
-        for name in reversed(names):
+        for name in reversed(services):
             try:
                 self.systemd("stop", name)
             except ActivationError as exc:
@@ -100,18 +75,9 @@ class Activator:
             raise ActivationError("failed to stop previous service set: " + "; ".join(failures))
         return failures
 
-    def activate_services(self, mode: str, *, services: tuple[str, ...] | None = None) -> None:
-        names = services or (("combined",) if mode == "combined" else SPLIT_SERVICES)
-        for name in names:
+    def activate_services(self) -> None:
+        for name in SPLIT_SERVICES:
             self.systemd("start", name)
-
-    def health_roles(self, mode: str, *, services: tuple[str, ...] | None = None) -> list[str]:
-        names = services or (("combined",) if mode == "combined" else SPLIT_SERVICES)
-        roles = ["combined" if name == "backend" else name for name in names]
-        # Dependencies/consumers first; HTTP roles last so readiness reflects a
-        # complete role set rather than a half-started one.
-        order = ["scheduler", "worker", "jobs", "combined", "ws", "api"]
-        return [role for role in order if role in roles]
 
     def _health_command(self, role: str) -> list[str]:
         if getattr(self.args, "health_command", None):
@@ -129,11 +95,10 @@ class Activator:
         return default
 
     def _http_health(self, role: str) -> tuple[bool, str]:
-        host = self._env_value("API_HOST" if role in {"combined", "api"} else
-                               ("WS_HOST" if role == "ws" else "JOBS_HOST"), "127.0.0.1")
-        port_key = "API_PORT" if role in {"combined", "api"} else ("WS_PORT" if role == "ws" else "JOBS_PORT")
-        port = self._env_value(port_key, {"combined": "8001", "api": "8001", "ws": "8002", "jobs": "8003"}[role])
-        path = "/api/health" if role in {"combined", "api"} else "/health/ready"
+        prefix = role.upper()
+        host = self._env_value(f"{prefix}_HOST", "127.0.0.1")
+        port = self._env_value(f"{prefix}_PORT", {"api": "8001", "ws": "8002"}[role])
+        path = "/api/health" if role == "api" else "/health/ready"
         url = f"http://{host}:{port}{path}"
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         try:
@@ -142,15 +107,12 @@ class Activator:
                 expected_release = self.cwd.parent.name
                 release = str(body.get("release_id") or "")
                 body_role = str(body.get("role") or "")
-                legacy_combined = role == "combined" and not release and not body_role
                 if response.status != 200 or str(body.get("status")) not in {"ok", "ready"}:
                     return False, f"{url} status={response.status} body_status={body.get('status')}"
                 if body.get("degraded") is True:
                     return False, f"{url} degraded"
-                if not legacy_combined and (release != expected_release or body_role != role):
+                if release != expected_release or body_role != role:
                     return False, f"{url} role/release identity mismatch"
-                if role == "combined" and body.get("status") != "ok":
-                    return False, f"{url} combined status is not ok"
                 return True, url
         except Exception as exc:  # noqa: BLE001
             return False, f"{url} {type(exc).__name__}"
@@ -224,34 +186,21 @@ class Activator:
             if not (self.release_dir / relative).is_file():
                 raise ActivationError(f"release is missing {relative}")
 
-    def previous(self) -> tuple[str | None, str, tuple[str, ...], str]:
+    def previous(self) -> tuple[str | None, str]:
         if not self.current.is_symlink():
-            return None, "combined", ("combined",), "0"
-        target = Path(os.readlink(self.current))
-        if not target.is_absolute():
-            target = (self.current.parent / target).resolve()
-        previous_id = target.name
-        mode = "combined"
-        services: tuple[str, ...] | None = None
-        protocol = "unknown"
-        activated = target / "ACTIVATED"
-        if activated.is_file():
-            for line in activated.read_text(encoding="utf-8", errors="replace").splitlines():
-                key, _, value = line.partition("=")
-                value = value.strip()
-                if key == "mode" and value:
-                    mode = value
-                elif key == "protocol" and value:
-                    protocol = value
-                elif key == "services" and value:
-                    parsed = tuple(name for name in value.split(",") if name in KNOWN_SERVICES)
-                    if parsed:
-                        services = parsed
-        if services is None:
-            # Legacy ACTIVATED markers predate services=. A split marker from
-            # the transitional release therefore maps to jobs/ws/api.
-            services = ("combined",) if mode == "combined" else LEGACY_SPLIT_SERVICES
-        return previous_id, mode, services, protocol
+            if self.current.exists():
+                raise ActivationError("current is not a release symlink")
+            return None, "0"
+        target = self.current.resolve()
+        if target.parent != (self.deploy_root / "releases").resolve() or not RELEASE_ID_RE.fullmatch(target.name):
+            raise ActivationError("current does not identify a release")
+        marker = target / "ACTIVATED"
+        if not marker.is_file():
+            raise ActivationError("current has no ACTIVATED marker")
+        values = dict(line.split("=", 1) for line in marker.read_text().splitlines() if "=" in line)
+        if values.get("mode") != "split" or set(values.get("services", "").split(",")) != set(SPLIT_SERVICES):
+            raise ActivationError("current is not a four-role release; prepare the production host before activation")
+        return target.name, values.get("protocol", "unknown")
 
     def switch(self, release_id: str) -> None:
         temp = self.deploy_root / f".activate-{os.getpid()}"
@@ -270,47 +219,45 @@ class Activator:
         with self.lock_path.open("a+") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             # Identify the previous set only after taking the activation lock.
-            previous_id, previous_mode, previous_services, previous_protocol = self.previous()
+            previous_id, previous_protocol = self.previous()
             if previous_id == self.args.release_id:
                 raise ActivationError("release is already current")
-            new_services = (("combined",) if self.args.mode == "combined" else SPLIT_SERVICES)
             try:
-                self.log(f"activating {self.args.release_id} mode={self.args.mode} "
-                         f"previous={previous_id} previous_services={','.join(previous_services)}")
-                self.deactivate(previous_mode, services=previous_services)
+                self.log(f"activating {self.args.release_id} previous={previous_id}")
+                self.deactivate()
                 self.switch(self.args.release_id)
-                self.activate_services(self.args.mode, services=new_services)
-                for role in self.health_roles(self.args.mode, services=new_services):
+                self.activate_services()
+                for role in SPLIT_SERVICES:
                     self.verify_process(role)
                     self.wait_health(role, self.args.health_timeout)
             except Exception as exc:  # noqa: BLE001 - rollback must cover any failure
                 self.log(f"activation failed: {type(exc).__name__}: {exc}")
                 failure = exc
                 try:
-                    self._rollback(previous_id, previous_mode, previous_services,
-                                   new_services=new_services)
+                    self._rollback(previous_id)
                 except Exception as rollback_exc:  # noqa: BLE001 - preserve both failures
                     failure = ActivationError(f"{exc}; rollback failed: {type(rollback_exc).__name__}: {rollback_exc}")
                 self._write_failed(failure)
                 return 1
-            self._write_activated(previous_id, previous_mode, previous_services, previous_protocol)
+            self._write_activated(previous_id, previous_protocol)
             self.log("activation complete")
         return 0
 
-    def _rollback(self, previous_id: str | None, previous_mode: str,
-                  previous_services: tuple[str, ...], *, new_services: tuple[str, ...]) -> None:
-        stop_failures = self.deactivate(self.args.mode, services=new_services, check=False)
+    def _rollback(self, previous_id: str | None) -> None:
+        stop_failures = self.deactivate(check=False)
         if previous_id is None:
             if stop_failures:
                 raise ActivationError("new service stop failures with no previous release: " + "; ".join(stop_failures))
+            if not self.args.dry_run and self.current.is_symlink() and self.current.resolve() == self.release_dir.resolve():
+                self.current.unlink()
             self.log("no previous release; leaving the service set stopped")
             return
         self.switch(previous_id)
         self.cwd = (self.deploy_root / "releases" / previous_id / "backend").resolve()
         restore_error: Exception | None = None
         try:
-            self.activate_services(previous_mode, services=previous_services)
-            for role in self.health_roles(previous_mode, services=previous_services):
+            self.activate_services()
+            for role in SPLIT_SERVICES:
                 self.verify_process(role)
                 self.wait_health(role, self.args.health_timeout)
         except Exception as exc:  # noqa: BLE001 - report both stop and restore failures
@@ -334,21 +281,18 @@ class Activator:
             encoding="utf-8",
         )
 
-    def _write_activated(self, previous_id: str | None, previous_mode: str,
-                         previous_services: tuple[str, ...], previous_protocol: str) -> None:
-        if getattr(self.args, "dry_run", False):
+    def _write_activated(self, previous_id: str | None, previous_protocol: str) -> None:
+        if self.args.dry_run:
             return
-        new_services = (("combined",) if self.args.mode == "combined" else SPLIT_SERVICES)
-        roles = self.health_roles(self.args.mode, services=new_services)
         protocol = self._env_value("REALTIME_PROTOCOL_VERSION", "2")
         (self.release_dir / "ACTIVATED").write_text(
             f"release_id={self.args.release_id}\nmode={self.args.mode}\n"
             f"protocol={protocol}\n"
-            f"roles={','.join(roles)}\n"
-            f"services={','.join(new_services)}\n"
-            f"previous_release={previous_id or ''}\nprevious_mode={previous_mode}\n"
+            f"roles={','.join(SPLIT_SERVICES)}\n"
+            f"services={','.join(SPLIT_SERVICES)}\n"
+            f"previous_release={previous_id or ''}\nprevious_mode={'split' if previous_id else ''}\n"
             f"previous_protocol={previous_protocol}\n"
-            f"previous_services={','.join(previous_services)}\n"
+            f"previous_services={','.join(SPLIT_SERVICES) if previous_id else ''}\n"
             f"backup_dir={self.args.backup_dir}\n"
             f"activated_at={dt.datetime.now(dt.UTC).isoformat()}\n",
             encoding="utf-8",
@@ -359,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release-id", required=True)
     parser.add_argument("--backup-dir", required=True)
-    parser.add_argument("--mode", choices=("combined", "split"), required=True)
+    parser.add_argument("--mode", choices=("split",), default="split")
     parser.add_argument("--deploy-root", default="/srv/se-course-project1")
     parser.add_argument("--systemctl", default="/usr/bin/systemctl", help="test hook; production uses /usr/bin/systemctl")
     parser.add_argument("--sudo", action="store_true", help="run the fixed systemctl commands through sudo -n")

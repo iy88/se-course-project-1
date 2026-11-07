@@ -170,7 +170,7 @@ class OutboxService:
     async def _publish(self, events: list[ClaimedEvent]) -> None:
         stream = self.stream
         if stream is None:
-            # No Redis acceleration (offline/combined dev). PostgreSQL
+            # No Redis acceleration (offline tests). PostgreSQL
             # reconciliation in the gateway still delivers; marking delivered
             # keeps the outbox bounded and events remain replayable.
             return

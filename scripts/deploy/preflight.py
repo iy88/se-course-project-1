@@ -27,7 +27,7 @@ BACKEND_ROOT = next(
 )
 sys.path.insert(0, str(BACKEND_ROOT))
 
-ROLES = ("combined", "api", "ws", "worker", "scheduler", "jobs")
+ROLES = ("api", "ws", "worker", "scheduler")
 
 
 def _validate_role(role: str) -> tuple[dict, list[str]]:
@@ -52,17 +52,15 @@ def _validate_role(role: str) -> tuple[dict, list[str]]:
         problems.append("ENVIRONMENT must be prod")
     if settings.db_auto_create:
         problems.append("DB_AUTO_CREATE must be false")
-    if settings.is_split and settings.kv_backend != "redis":
+    if settings.kv_backend != "redis":
         problems.append("split role requires shared Redis")
     # The administrator-installed source proxy uses these fixed upstreams.
     # Application listeners remain configurable for other deployments, but a
     # release here must not silently diverge from the reviewed production route.
-    if role in {"combined", "api"} and (settings.api_host, settings.api_port) != ("127.0.0.1", 8001):
+    if role == "api" and (settings.api_host, settings.api_port) != ("127.0.0.1", 8001):
         problems.append("API listener must match the installed upstream 127.0.0.1:8001")
     if role == "ws" and (settings.ws_host, settings.ws_port) != ("127.0.0.1", 8002):
         problems.append("WS listener must match the installed upstream 127.0.0.1:8002")
-    if role == "jobs" and settings.jobs_host != "127.0.0.1":
-        problems.append("jobs readiness listener must remain on loopback")
     if role in {"worker", "scheduler"}:
         # Native Taskiq roles have no public HTTP listener. Their parameters are
         # built from the same dotenv, never duplicated in systemd.
@@ -79,10 +77,9 @@ def _validate_role(role: str) -> tuple[dict, list[str]]:
         "redis_control_connections": settings.redis_control_limit,
         "release_id": settings.release_id,
         "protocol_version": settings.realtime_protocol_version,
-        "db_budget": settings.split_sql_budget() if settings.is_split else settings.sql_connection_budget(),
-        "ports": ([settings.api_port] if role in {"combined", "api"} else
-                  ([settings.ws_port] if role == "ws" else
-                   ([settings.jobs_port] if role == "jobs" else []))),
+        "db_budget": settings.split_sql_budget(),
+        "ports": ([settings.api_port] if role == "api" else
+                  ([settings.ws_port] if role == "ws" else [])),
         "taskiq_worker_processes": settings.taskiq_worker_processes,
         "taskiq_broker_connections_per_process": settings.taskiq_broker_max_connections,
         "taskiq_retry_connections_per_process": settings.taskiq_schedule_max_connections,
@@ -147,17 +144,13 @@ async def _taskiq_capability(settings) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("combined", "split"), default="split",
-                        help="target topology; combined validates the legacy role only")
+    parser.add_argument("--mode", choices=("split",), default="split")
     parser.add_argument("--role", choices=(*ROLES, "all"), default=None,
                         help="optional single-role probe (all means split roles)")
     parser.add_argument("--connect", action="store_true", help="probe real PostgreSQL and Redis")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    if args.role is not None:
-        roles = ("api", "ws", "worker", "scheduler") if args.role == "all" else (args.role,)
-    else:
-        roles = ("combined",) if args.mode == "combined" else ("api", "ws", "worker", "scheduler")
+    roles = ROLES if args.role in (None, "all") else (args.role,)
     report: dict = {"ok": True, "mode": args.mode, "roles": {}}
     problems: list[str] = []
     for role in roles:

@@ -140,15 +140,13 @@ async def readiness(settings: Settings, *, gateway=None) -> tuple[dict, bool]:
         payload["checks"]["database"] = "ok" if db_ok else "failed"
         critical_ok = db_ok
 
-        if settings.app_role in {"ws", "combined"}:
+        if settings.app_role == "ws":
             if gateway is not None:
                 status = gateway.status()
                 payload["checks"]["websocket"] = status
                 if not status["ready"]:
                     critical_ok = False
                 degraded = degraded or status["degraded"] or not status["stream_ok"]
-            elif settings.app_role == "combined":
-                payload["checks"]["websocket"] = "not_probed_cli"
             else:
                 fresh = now - timedelta(seconds=max(15, settings.ws_heartbeat_timeout_seconds))
                 row = (
@@ -168,18 +166,15 @@ async def readiness(settings: Settings, *, gateway=None) -> tuple[dict, bool]:
                 if row is None:
                     critical_ok = False
 
-        if settings.app_role in {"worker", "jobs", "combined"}:
+        if settings.app_role == "worker":
             fresh_after = now - timedelta(
                 seconds=max(30.0, settings.taskiq_outbox_interval_seconds * 3.0 + 5.0)
             )
-            roles = ["worker"] if settings.app_role == "worker" else [settings.app_role]
-            if settings.app_role == "jobs":
-                roles = ["jobs", "worker"]
             row = (
                 await db.exec(
                     select(ServiceHeartbeat)
                     .where(
-                        col(ServiceHeartbeat.role).in_(roles),
+                        ServiceHeartbeat.role == "worker",
                         col(ServiceHeartbeat.details)["role"].as_string() == "worker",
                         ServiceHeartbeat.release_id == settings.release_id,
                         ServiceHeartbeat.status != "stopping",
@@ -245,12 +240,6 @@ async def readiness(settings: Settings, *, gateway=None) -> tuple[dict, bool]:
                 degraded = True
             if age > max(60, settings.outbox_lease_seconds * 2) or pending > settings.realtime_pending_degraded_threshold:
                 degraded = True
-
-        if settings.app_role in {"scheduler", "jobs", "combined"}:
-            sched_ok, sched_degraded = await _scheduler_check(settings, payload, now, db)
-            if settings.app_role in {"jobs", "combined"}:
-                critical_ok = critical_ok and sched_ok
-            degraded = degraded or sched_degraded
 
         if settings.redis_url.strip():
             redis = await _redis_ok(settings)

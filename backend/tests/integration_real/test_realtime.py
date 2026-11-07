@@ -557,10 +557,10 @@ async def test_readiness_rejects_stale_release_or_stopping_heartbeat():
     from app.models.realtime import ServiceHeartbeat
     from app.realtime.health import readiness
 
-    settings = get_settings()
+    settings = get_settings().model_copy(update={"app_role": "worker"})
     async with get_sessionmaker()() as db, db.begin():
         db.add(ServiceHeartbeat(
-            name=f"stale-{secrets.token_hex(4)}", role="combined", instance_id="x",
+            name=f"stale-{secrets.token_hex(4)}", role="worker", instance_id="x",
             release_id="other-release", protocol_version=2, status="ready", details={}, pid=1,
         ))
     payload, ok = await readiness(settings)

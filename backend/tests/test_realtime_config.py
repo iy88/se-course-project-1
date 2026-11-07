@@ -70,12 +70,6 @@ def test_split_role_reports_effective_role_and_budget(tmp_path, monkeypatch):
     assert settings.app_role == "api"
 
 
-def test_combined_accepts_split_worker_values_but_cli_forces_one_process(tmp_path):
-    settings = load_settings(_env(tmp_path, extra="API_WORKERS=2\nWS_WORKERS=2"))
-    assert settings.app_role == "combined"
-    assert settings.api_workers == 2
-
-
 def test_reclaim_idle_covers_running_and_prefetched_work(tmp_path):
     with pytest.raises(ConfigurationError, match="TASKIQ_RECLAIM_IDLE_MS"):
         load_settings(_env(tmp_path, extra="ENVIRONMENT=dev\nTASKIQ_RECLAIM_IDLE_MS=60000"))
@@ -123,10 +117,6 @@ def test_role_apps_expose_only_their_own_surface(tmp_path, monkeypatch):
     ws_paths = {getattr(route, "path", "") for route in ws.routes}
     assert "/ws" in ws_paths
     assert not (ws.openapi()["paths"].keys() & {"/api/v1/products"})
-    combined = create_app("combined")
-    combined_paths = {getattr(route, "path", "") for route in combined.routes}
-    assert "/ws" in combined_paths
-    assert "/api/v1/products" in combined.openapi()["paths"]
 
 
 def test_release_id_parses_key_not_first_line():

@@ -1,8 +1,6 @@
 # Install with `visudo -cf` after review. The activation script itself runs as
 # deploy and owns release/current changes. Only exact project unit actions are
 # elevated; there is no wildcard, arbitrary script or shell permission.
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start se-course-project1-backend.service
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl stop se-course-project1-backend.service
 deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start se-course-project1-api.service
 deploy ALL=(root) NOPASSWD: /usr/bin/systemctl stop se-course-project1-api.service
 deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start se-course-project1-ws.service
@@ -11,7 +9,4 @@ deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start se-course-project1-worker.s
 deploy ALL=(root) NOPASSWD: /usr/bin/systemctl stop se-course-project1-worker.service
 deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start se-course-project1-scheduler.service
 deploy ALL=(root) NOPASSWD: /usr/bin/systemctl stop se-course-project1-scheduler.service
-# Transitional 3-role split remains stoppable during rollback.
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl start se-course-project1-jobs.service
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl stop se-course-project1-jobs.service
 deploy ALL=(root) NOPASSWD: /usr/local/sbin/se-course-project1-backup

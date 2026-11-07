@@ -204,7 +204,7 @@ def install_observability(app: Any) -> None:
         """Process-local diagnostics; never returns SQL text or user data."""
         return {
             "request_id": current_request_id(),
-            "role": getattr(request.app.state, "role", "combined"),
+            "role": getattr(request.app.state, "role", "api"),
             "protocol_version": getattr(request.app.state, "protocol_version", 0),
             "release_id": getattr(request.app.state, "release_id", ""),
             "counters": counters.snapshot(),

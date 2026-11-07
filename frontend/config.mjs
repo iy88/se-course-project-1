@@ -19,7 +19,8 @@ values = dotenv_values(resolve_env_file(), interpolate=False)
 result = {
     "apiBaseUrl": values.get("VITE_API_BASE_URL", "/api/v1"),
     "timeoutMs": values.get("VITE_API_TIMEOUT_MS", "15000"),
-    "proxyTarget": values.get("API_PROXY_TARGET", "http://127.0.0.1:8000"),
+    "proxyTarget": values.get("API_PROXY_TARGET", f"http://127.0.0.1:{settings.api_port}"),
+    "wsProxyTarget": values.get("WS_PROXY_TARGET", f"ws://127.0.0.1:{settings.ws_port}"),
 }
 print(json.dumps(result))
 `
@@ -36,6 +37,7 @@ if (configSource === 'public') {
     apiBaseUrl: process.env.VITE_API_BASE_URL ?? '/api/v1',
     timeoutMs: process.env.VITE_API_TIMEOUT_MS ?? '15000',
     proxyTarget: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8000',
+    wsProxyTarget: process.env.WS_PROXY_TARGET ?? 'ws://127.0.0.1:8002',
   }
 } else {
   let raw
@@ -76,15 +78,17 @@ if (/^https?:\/\//i.test(apiBaseUrl)) {
     apiBaseUrl.includes('?') || apiBaseUrl.includes('#')) {
   throw new Error('VITE_API_BASE_URL must be a root-relative path or absolute HTTP URL')
 }
-let target
-try {
-  target = new URL(proxyTarget)
-} catch {
-  throw new Error('API_PROXY_TARGET must be an absolute HTTP URL')
-}
-if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password ||
-    target.search || target.hash) {
-  throw new Error('API_PROXY_TARGET must be an HTTP(S) URL without credentials or query data')
+function proxyOrigin(value, name, protocols) {
+  let url
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error(`${name} must be an absolute URL`)
+  }
+  if (!protocols.includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error(`${name} must use ${protocols.join(' or ')} without credentials or query data`)
+  }
+  return url.origin
 }
 if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
   throw new Error('VITE_API_TIMEOUT_MS must be a positive integer')
@@ -93,5 +97,6 @@ if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
 export const frontendSettings = {
   apiBaseUrl,
   timeoutMs,
-  proxyTarget: target.origin,
+  proxyTarget: proxyOrigin(proxyTarget, 'API_PROXY_TARGET', ['http:', 'https:']),
+  wsProxyTarget: proxyOrigin(publicSettings.wsProxyTarget, 'WS_PROXY_TARGET', ['ws:', 'wss:']),
 }

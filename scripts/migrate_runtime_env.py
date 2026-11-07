@@ -23,8 +23,8 @@ from dotenv.parser import parse_stream
 from app.core.config import Settings
 
 GROUPS = (
-    ("Web 进程和监听；combined 入口仍固定单进程，角色由启动命令/systemd选择。", (
-        "api_workers", "ws_workers", "ws_host", "ws_port", "jobs_host", "jobs_port")),
+    ("Web 进程和监听，角色由启动命令/systemd选择。", (
+        "api_workers", "ws_workers", "ws_host", "ws_port")),
     ("SQL 池为每进程上限；split 总和还需预留迁移、运维和发布余量。", (
         "api_db_", "ws_db_", "jobs_db_", "db_pool_", "db_connection_budget",
         "db_pre_ping", "db_recycle_", "db_lock_", "db_statement_", "db_idle_")),

@@ -3,7 +3,6 @@
 用法（默认读取 backend/.env.dev，独立迁移命令才读取迁移凭据）::
 
     python -m app.manage migrate
-    python -m app.manage serve
     python -m app.manage seed --admin-email <administrator email>
     python -m app.manage demo-seed --env-file .env.dev
     python -m app.manage demo-verify --env-file .env.dev
@@ -45,16 +44,14 @@ def _parser() -> argparse.ArgumentParser:
     migrate = sub.add_parser("migrate", help="apply versioned PostgreSQL migrations")
     migrate.add_argument("--revision", default="head", help="target revision (default: head)")
 
-    sub.add_parser("serve", help="run the role selected by APP_RUNTIME_ROLE (default combined)")
     sub.add_parser("serve-api", help="run only the HTTP API role")
     sub.add_parser("serve-ws", help="run only the WebSocket gateway role")
-    sub.add_parser("serve-jobs", help="run the transitional all-in-one Taskiq jobs process")
     sub.add_parser("taskiq-worker", help="run the native Taskiq worker with dotenv budgets")
     sub.add_parser("taskiq-scheduler", help="run the single native Taskiq scheduler with dotenv schedules")
     probe = sub.add_parser("taskiq-probe", help="enqueue a real task and wait for worker execution")
     probe.add_argument("--timeout", type=float, default=None)
     health = sub.add_parser("health", help="probe role readiness without starting the service")
-    health.add_argument("--role", choices=("combined", "api", "ws", "jobs", "worker", "scheduler"), required=True)
+    health.add_argument("--role", choices=("api", "ws", "worker", "scheduler"), required=True)
     health.add_argument("--no-probe", action="store_true", help="worker: skip the live task-execution probe")
     retry = sub.add_parser("realtime-retry", help="requeue failed/expired realtime outbox events")
     retry.add_argument("--event-id", default=None, help="only requeue this event id")
@@ -138,7 +135,7 @@ def _activate_role(role: str | None) -> None:
     set_runtime_role(role)
 
 
-def run_serve(role: str | None = None) -> int:
+def run_serve(role: str) -> int:
     _activate_role(role)
     settings = load_settings()
     settings.validate_for_runtime()
@@ -149,20 +146,14 @@ def run_serve(role: str | None = None) -> int:
         "log_level": "info",
         "timeout_graceful_shutdown": settings.graceful_shutdown_seconds,
     }
-    if effective == "combined":
-        # The shared dotenv may carry split worker counts; combined always runs
-        # exactly one process so no second scanner/dispatcher is started.
-        uvicorn.run("app.main:app", host=settings.api_host, port=settings.api_port, workers=1, **common)
-    elif effective == "api":
+    if effective == "api":
         uvicorn.run("app.main:app", host=settings.api_host, port=settings.api_port,
                     workers=settings.api_workers, **common)
     elif effective == "ws":
         uvicorn.run("app.main:app", host=settings.ws_host, port=settings.ws_port,
                     workers=settings.ws_workers, ws="websockets", **common)
     else:
-        from app.runtime import create_app
-
-        uvicorn.run(create_app("jobs"), host=settings.jobs_host, port=settings.jobs_port, workers=1, **common)
+        raise ConfigurationError("Only API and WS roles expose an HTTP listener")
     return 0
 
 
@@ -350,14 +341,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "migrate":
             return run_migrate(args.revision)
-        if args.command == "serve":
-            return run_serve()
         if args.command == "serve-api":
             return run_serve("api")
         if args.command == "serve-ws":
             return run_serve("ws")
-        if args.command == "serve-jobs":
-            return run_serve("jobs")
         if args.command == "taskiq-worker":
             return run_taskiq_worker()
         if args.command == "taskiq-scheduler":

@@ -124,7 +124,7 @@ def _stop_managed_redis(control: Path | None, state: dict | None) -> list[str]:
 
 def _write_env(path: Path, *, schema: str, app_url: str, migrator_url: str, owner: str,
                app_role: str, redis_url: str, prefix: str, storage: Path,
-               api_port: int, ws_port: int, ws2_port: int, jobs_port: int) -> None:
+               api_port: int, ws_port: int, ws2_port: int) -> None:
     values = {
         "APP_NAME": "Project1 Realtime Integration",
         "ENVIRONMENT": "test",
@@ -132,8 +132,6 @@ def _write_env(path: Path, *, schema: str, app_url: str, migrator_url: str, owne
         "API_PORT": str(api_port),
         "WS_HOST": "127.0.0.1",
         "WS_PORT": str(ws_port),
-        "JOBS_HOST": "127.0.0.1",
-        "JOBS_PORT": str(jobs_port),
         "DATABASE_URL": app_url,
         "MIGRATION_DATABASE_URL": migrator_url,
         "MIGRATION_OWNER_ROLE": owner,
@@ -239,14 +237,14 @@ async def _setup(args, suffix: str) -> tuple[dict[str, str], str]:
     storage = work / "storage"
     storage.mkdir(parents=True, exist_ok=True)
     env_path = work / ".env"
-    api_port, ws_port, ws2_port, jobs_port = _free_ports(4)
+    api_port, ws_port, ws2_port = _free_ports(3)
     _write_env(env_path, schema=schema, app_url=app_url, migrator_url=migrator_url,
                owner=owner, app_role=app_role, redis_url=args.redis_url,
                prefix=f"ci-rt:{suffix}:", storage=storage,
-               api_port=api_port, ws_port=ws_port, ws2_port=ws2_port, jobs_port=jobs_port)
+               api_port=api_port, ws_port=ws_port, ws2_port=ws2_port)
     env = dict(os.environ)
     env["APP_ENV_FILE"] = str(env_path)
-    env["APP_RUNTIME_ROLE"] = "combined"
+    env["APP_RUNTIME_ROLE"] = "api"
     env["INTEGRATION_ENV_FILE"] = str(env_path)
     env["INTEGRATION_SCHEMA"] = schema
     env["INTEGRATION_APP_ROLE"] = app_role
@@ -256,7 +254,6 @@ async def _setup(args, suffix: str) -> tuple[dict[str, str], str]:
     env["INTEGRATION_API_PORT"] = str(api_port)
     env["INTEGRATION_WS_PORT"] = str(ws_port)
     env["INTEGRATION_WS2_PORT"] = str(ws2_port)
-    env["INTEGRATION_JOBS_PORT"] = str(jobs_port)
     return env, f'"{schema}"'
 
 

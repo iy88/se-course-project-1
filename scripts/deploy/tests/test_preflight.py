@@ -29,16 +29,16 @@ def test_non_production_configuration_fails_closed_without_secret_values():
         # The offline synthetic env is a local test resource, not production.
         return
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "--role", "combined", "--json"],
+        [sys.executable, str(SCRIPT), "--role", "api", "--json"],
         capture_output=True, text=True, timeout=30, check=False,
         env={"APP_ENV_FILE": str(env_file), "PATH": "/usr/bin:/bin"},
     )
     assert result.returncode == 1
-    assert "ENVIRONMENT must be prod" in result.stdout
+    assert "ENVIRONMENT must be prod" in result.stdout or "shared REDIS_URL" in result.stdout
     assert "DATABASE_URL" not in result.stdout
 
 
-def test_preflight_split_mode_does_not_validate_combined_port_twice(tmp_path):
+def test_preflight_checks_all_four_roles_once(tmp_path):
     env = tmp_path / "prod.env"
     env.write_text("\n".join([
         "APP_NAME=Preflight Test",
@@ -55,7 +55,7 @@ def test_preflight_split_mode_does_not_validate_combined_port_twice(tmp_path):
         "SMTP_USERNAME=x", "SMTP_PASSWORD=xxxxxxxx", "SMTP_FROM_EMAIL=x@example.com",
         "SMTP_FROM_NAME=X", "ALLOWED_ORIGINS=http://localhost:5173",
         "REDIS_URL=redis://127.0.0.1:6379/0", "REDIS_KEY_PREFIX=test:",
-        "API_PORT=8001", "WS_PORT=8002", "JOBS_PORT=8003",
+        "API_PORT=8001", "WS_PORT=8002",
     ]) + "\n")
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--mode", "split", "--json"],

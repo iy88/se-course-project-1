@@ -2,7 +2,7 @@
 
 Nothing here calls a task function directly: the probe is enqueued through the
 official Taskiq broker and must be picked up by a worker process, then its
-result is read from Redis (or SQL in the offline combined path).
+result is read from Redis (or SQL in the offline test path).
 """
 
 from __future__ import annotations

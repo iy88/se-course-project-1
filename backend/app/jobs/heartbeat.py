@@ -3,7 +3,7 @@
 Workers publish a SQL ``service_heartbeats`` row from Taskiq middleware and only
 count as ready after a task actually succeeded. The scheduler has no SQL pool of
 its own; it publishes a short-TTL Redis heartbeat updated by the schedule source
-and by every successful dispatch. The combined/dev fallback uses SQL only when
+and by every successful dispatch. The offline test fallback uses SQL only when
 Redis is absent.
 """
 

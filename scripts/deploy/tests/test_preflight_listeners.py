@@ -13,10 +13,10 @@ def check(monkeypatch, role, **changes):
     from app.core import config
 
     values = {
-        "environment": "prod", "db_auto_create": False, "is_split": role != "combined",
+        "environment": "prod", "db_auto_create": False,
         "kv_backend": "redis", "api_host": "127.0.0.1", "api_port": 8001,
-        "ws_host": "127.0.0.1", "ws_port": 8002, "jobs_host": "127.0.0.1",
-        "jobs_port": 8003, "db_pool": (8, 0), "redis_control_limit": 16,
+        "ws_host": "127.0.0.1", "ws_port": 8002,
+        "db_pool": (8, 0), "redis_control_limit": 16,
         "taskiq_worker_processes": 2, "taskiq_broker_max_connections": 4,
         "taskiq_schedule_max_connections": 2, "outbox_max_attempts": 8,
         "taskiq_retry_max_retries": 3, "release_id": "test",
@@ -31,9 +31,8 @@ def check(monkeypatch, role, **changes):
 
 
 @pytest.mark.parametrize(("role", "changes"), [
-    ("api", {"api_port": 8009}), ("combined", {"api_host": "0.0.0.0"}),
+    ("api", {"api_port": 8009}), ("api", {"api_host": "0.0.0.0"}),
     ("ws", {"ws_port": 8012}), ("ws", {"ws_host": "0.0.0.0"}),
-    ("jobs", {"jobs_host": "0.0.0.0"}),
     ("worker", {"taskiq_broker_max_connections": 1}),
     ("scheduler", {"taskiq_broker_max_connections": 0}),
 ])
@@ -41,10 +40,6 @@ def test_route_mismatch_is_rejected(monkeypatch, role, changes):
     assert check(monkeypatch, role, **changes)
 
 
-def test_internal_jobs_port_can_change_without_changing_proxy(monkeypatch):
-    assert check(monkeypatch, "jobs", jobs_port=8013) == []
-
-
 def test_taskiq_worker_and_scheduler_have_no_http_listener(monkeypatch):
-    assert check(monkeypatch, "worker", jobs_port=9999, api_port=9999, ws_port=9999) == []
-    assert check(monkeypatch, "scheduler", jobs_port=9999, api_port=9999, ws_port=9999) == []
+    assert check(monkeypatch, "worker", api_port=9999, ws_port=9999) == []
+    assert check(monkeypatch, "scheduler", api_port=9999, ws_port=9999) == []

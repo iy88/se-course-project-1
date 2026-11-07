@@ -1,12 +1,4 @@
-"""Role-aware application assembly and lifecycle.
-
-``combined`` is the compatibility single-process entry: HTTP + WS plus an
-in-process official Taskiq ``Receiver``/``SchedulerLoop`` over an InMemoryBroker.
-``api`` owns only HTTP, ``ws`` owns only the gateway, and ``jobs`` is the
-transitional all-in-one real Taskiq process. New split production uses the native
-``worker`` and ``scheduler`` roles through ``app.manage taskiq-worker`` /
-``taskiq-scheduler``. No role starts a hand-written consumer/retry loop.
-"""
+"""HTTP API and WebSocket application assembly for separate processes."""
 
 from __future__ import annotations
 
@@ -22,7 +14,6 @@ from app.api.audit_integration import install_audit
 from app.core.config import get_settings, set_runtime_role
 from app.db.migrations import upgrade_additive_schema
 from app.db.session import Base, dispose_engine, engine
-from app.jobs.runtime import JobsRuntime
 from app.kv.base import reset_kv
 from app.observability import install_observability, probe_event_loop_lag
 from app.realtime.admission import install_admission_handler
@@ -54,40 +45,27 @@ async def lifespan(app: FastAPI):
     settings.validate_for_runtime()
     role = settings.app_role
     tasks: list[asyncio.Task] = []
-    jobs: JobsRuntime | None = None
     heartbeat: HeartbeatLoop | None = None
     gateway = None
 
-    if role in {"combined", "api"}:
+    if role == "api":
         await _prepare_dev_schema()
 
-    if role in {"combined", "ws"}:
+    if role == "ws":
         gateway = get_gateway()
         await gateway.start()
 
     tasks.append(asyncio.create_task(probe_event_loop_lag(), name="event-loop-lag"))
 
-    if role == "combined":
-        # Compatibility boundary: official Taskiq in-memory receiver/scheduler.
-        jobs = JobsRuntime(settings, inline=True)
-        await jobs.start()
-    elif role == "jobs":
-        # Transitional all-in-one jobs process over the real Redis broker.
-        jobs = JobsRuntime(settings, inline=False)
-        await jobs.start()
-    elif role in {"api", "ws"}:
-        from app.realtime.heartbeat import instance_name
-
-        heartbeat = HeartbeatLoop(settings, name=instance_name(settings))
-        tasks.append(asyncio.create_task(heartbeat.run(), name="heartbeat"))
+    from app.realtime.heartbeat import instance_name
+    heartbeat = HeartbeatLoop(settings, name=instance_name(settings))
+    tasks.append(asyncio.create_task(heartbeat.run(), name="heartbeat"))
 
     try:
         yield
     finally:
         if heartbeat is not None:
             heartbeat.stop()
-        if jobs is not None:
-            await jobs.stop()
         if gateway is not None:
             await gateway.stop()
         for task in tasks:
@@ -104,6 +82,8 @@ def create_app(role: str | None = None) -> FastAPI:
         set_runtime_role(role)
     settings = get_settings()
     settings.validate_for_runtime()
+    if settings.app_role not in {"api", "ws"}:
+        raise ValueError("Only API and WS roles expose an ASGI application")
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.state.role = settings.app_role
     app.state.release_id = settings.release_id
@@ -112,7 +92,7 @@ def create_app(role: str | None = None) -> FastAPI:
 
     install_admission_handler(app)
 
-    if settings.app_role in {"combined", "api"}:
+    if settings.app_role == "api":
         from app.api.v1 import api_router
 
         app.include_router(api_router, prefix="/api/v1")
@@ -121,7 +101,7 @@ def create_app(role: str | None = None) -> FastAPI:
 
         @app.get("/api/health")
         async def health() -> dict:
-            payload, ok = await readiness(settings, gateway=get_gateway())
+            payload, ok = await readiness(settings)
             # Legacy Jenkins check requires body.status == "ok"; keep the
             # detailed readiness verdict under a separate key instead of
             # letting it overwrite this compatibility field.
@@ -129,12 +109,8 @@ def create_app(role: str | None = None) -> FastAPI:
             payload["readiness_status"] = payload.pop("status", "unknown")
             return {"status": "ok" if ok else "not_ready", **payload}
 
-    if settings.app_role in {"combined", "ws"}:
+    if settings.app_role == "ws":
         app.add_api_websocket_route("/ws", ws_endpoint)
-
-    if settings.app_role == "jobs":
-        # The transitional jobs role keeps only a loopback health surface.
-        pass
 
     @app.get("/health/live")
     async def live() -> dict:
@@ -144,7 +120,7 @@ def create_app(role: str | None = None) -> FastAPI:
     async def ready() -> JSONResponse:
         payload, ok = await readiness(
             settings,
-            gateway=get_gateway() if settings.app_role in {"ws", "combined"} else None,
+            gateway=get_gateway() if settings.app_role == "ws" else None,
         )
         return JSONResponse(payload, status_code=200 if ok else 503)
 

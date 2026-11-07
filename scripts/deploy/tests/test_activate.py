@@ -36,7 +36,7 @@ def fake_commands(tmp_path: Path) -> tuple[Path, Path, Path]:
     health.write_text(f'''#!/bin/sh
 role="$1"
 echo "$role" >> "{health_log}"
-if [ -f "{fail_role}" ] && [ "$(cat "{fail_role}")" = "$role" ]; then
+if [ -f "{fail_role}" ] && [ "$(cat "{fail_role}")" = "$role" ] && [ "$PWD" != "{tmp_path}/deploy/releases/{"a" * 40}-1/backend" ]; then
   exit 1
 fi
 exit 0
@@ -55,33 +55,31 @@ def run(root: Path, release_id: str, mode: str, systemctl: Path, health: Path,
     )
 
 
-def test_combined_activation_switches_and_records_mode(tmp_path):
+def mark_active(release: Path) -> None:
+    (release / "ACTIVATED").write_text("mode=split\nservices=scheduler,worker,ws,api\n")
+
+
+def test_old_topology_is_refused_before_stopping_services(tmp_path):
     root = tmp_path / "deploy"
-    make_release(root, "a" * 40 + "-1")
-    new = make_release(root, "b" * 40 + "-2")
-    (root / "current").symlink_to(root / "releases" / ("a" * 40 + "-1"))
+    previous = make_release(root, "a" * 40 + "-1")
+    (previous / "ACTIVATED").write_text("mode=combined\n")
+    make_release(root, "b" * 40 + "-2")
+    (root / "current").symlink_to(previous)
     systemctl, health, log = fake_commands(tmp_path)
-    result = run(root, "b" * 40 + "-2", "combined", systemctl, health)
-    assert result.returncode == 0, result.stderr
-    assert os.path.realpath(root / "current") == os.path.realpath(new)
-    activated = (new / "ACTIVATED").read_text()
-    assert "mode=combined" in activated and "services=combined" in activated
-    assert "previous_release=" + "a" * 40 + "-1" in activated
-    calls = log.read_text().splitlines()
-    assert "stop se-course-project1-backend.service" in calls
-    assert "start se-course-project1-backend.service" in calls
+    result = run(root, "b" * 40 + "-2", "split", systemctl, health)
+    assert result.returncode == 1
+    assert not log.exists()
+    assert (root / "current").resolve() == previous
 
 
 def test_split_activation_starts_worker_scheduler_ws_api_and_records_health(tmp_path):
     root = tmp_path / "deploy"
-    make_release(root, "a" * 40 + "-1")
     new = make_release(root, "c" * 40 + "-3")
-    (root / "current").symlink_to(root / "releases" / ("a" * 40 + "-1"))
     systemctl, health, log = fake_commands(tmp_path)
     result = run(root, "c" * 40 + "-3", "split", systemctl, health)
     assert result.returncode == 0, result.stderr
     calls = log.read_text().splitlines()
-    assert "stop se-course-project1-backend.service" in calls
+    assert "stop se-course-project1-backend.service" not in calls
     for suffix in ("scheduler", "worker", "ws", "api"):
         assert f"start se-course-project1-{suffix}.service" in calls
     activated = (new / "ACTIVATED").read_text()
@@ -93,7 +91,7 @@ def test_split_activation_starts_worker_scheduler_ws_api_and_records_health(tmp_
 def test_failed_health_rolls_back_to_previous_release(tmp_path):
     root = tmp_path / "deploy"
     previous = make_release(root, "a" * 40 + "-1")
-    (previous / "ACTIVATED").write_text("mode=combined\n")
+    mark_active(previous)
     new = make_release(root, "d" * 40 + "-4")
     (root / "current").symlink_to(previous)
     systemctl, health, log = fake_commands(tmp_path)
@@ -105,12 +103,13 @@ def test_failed_health_rolls_back_to_previous_release(tmp_path):
     assert not (new / "ACTIVATED").exists()
     assert (new / "ACTIVATION_FAILED").is_file()
     calls = log.read_text().splitlines()
-    assert "start se-course-project1-backend.service" in calls  # rollback set
+    assert calls.count("start se-course-project1-api.service") == 2
 
 
 def test_start_failure_rolls_back(tmp_path):
     root = tmp_path / "deploy"
     previous = make_release(root, "a" * 40 + "-1")
+    mark_active(previous)
     new = make_release(root, "e" * 40 + "-5")
     (root / "current").symlink_to(previous)
     _, health, log = fake_commands(tmp_path)
@@ -137,7 +136,7 @@ def test_invalid_release_identity_is_refused_before_switch(tmp_path):
     make_release(root, "a" * 40 + "-1")
     (root / "current").symlink_to(root / "releases" / ("a" * 40 + "-1"))
     systemctl, health, _ = fake_commands(tmp_path)
-    result = run(root, "not-a-release", "combined", systemctl, health)
+    result = run(root, "not-a-release", "split", systemctl, health)
     assert result.returncode == 1
     assert not (tmp_path / "systemctl.log").exists()
 
@@ -145,14 +144,14 @@ def test_invalid_release_identity_is_refused_before_switch(tmp_path):
 def test_split_upgrade_stops_all_previous_split_roles(tmp_path):
     root = tmp_path / "deploy"
     previous = make_release(root, "a" * 40 + "-1")
-    (previous / "ACTIVATED").write_text("mode=split\n")
+    mark_active(previous)
     make_release(root, "f" * 40 + "-6")
     (root / "current").symlink_to(previous)
     systemctl, health, log = fake_commands(tmp_path)
     result = run(root, "f" * 40 + "-6", "split", systemctl, health)
     assert result.returncode == 0, result.stderr
     calls = log.read_text().splitlines()
-    for suffix in ("api", "ws", "jobs"):
+    for suffix in ("api", "ws", "scheduler", "worker"):
         assert f"stop se-course-project1-{suffix}.service" in calls
     for suffix in ("scheduler", "worker", "ws", "api"):
         assert f"start se-course-project1-{suffix}.service" in calls
@@ -189,13 +188,15 @@ def test_systemd_units_are_non_root_and_allow_managed_python_reads():
 def test_rollback_stop_failure_is_reported_and_restore_still_attempted(tmp_path):
     root = tmp_path / "deploy"
     previous = make_release(root, "a" * 40 + "-1")
+    mark_active(previous)
     new = make_release(root, "b" * 40 + "-7")
     (root / "current").symlink_to(previous)
     _systemctl, health, log = fake_commands(tmp_path)
     failing = tmp_path / "failing-stop"
     failing.write_text(f'''#!/bin/sh
 echo "$@" >> "{log}"
-if [ "$1" = "stop" ] && [ "$2" = "se-course-project1-ws.service" ]; then
+if [ "$1" = "start" ]; then touch "{tmp_path}/started"; fi
+if [ -f "{tmp_path}/started" ] && [ "$1" = "stop" ] && [ "$2" = "se-course-project1-ws.service" ]; then
   exit 1
 fi
 exit 0
@@ -210,4 +211,4 @@ exit 0
     assert "rollback incomplete" in failed
     assert "stop failures" in failed
     calls = log.read_text().splitlines()
-    assert "start se-course-project1-backend.service" in calls
+    assert calls.count("start se-course-project1-api.service") == 2

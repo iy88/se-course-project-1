@@ -255,12 +255,16 @@ class Sandbox:
         client = redis.from_url(self.base.settings.redis_url, decode_responses=True, socket_timeout=5)
         try:
             prefix = self.name + ":"
-            keys = [key async for key in client.scan_iter(match=prefix + "*", count=200)]
-            if any(not key.startswith(prefix) for key in keys):
+            claim_prefix = "autoclaim:" + prefix
+            patterns = (prefix + "*", claim_prefix + "*:" + prefix + "*")
+            keys = [key for pattern in patterns async for key in client.scan_iter(match=pattern, count=200)]
+            if any(not key.startswith(prefix) and not (
+                key.startswith(claim_prefix) and ":" + prefix in key[len(claim_prefix):]
+            ) for key in keys):
                 raise GuardError("Redis 返回前缀外 key")
             if keys:
                 await client.delete(*keys)
-            remaining = [key async for key in client.scan_iter(match=prefix + "*", count=200)]
+            remaining = [key for pattern in patterns async for key in client.scan_iter(match=pattern, count=200)]
             if remaining:
                 raise GuardError("Redis 隔离前缀清理后仍有 key")
             return len(keys)
