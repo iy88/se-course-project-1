@@ -1,0 +1,54 @@
+@startuml
+left to right direction
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam shadowing false
+skinparam roundcorner 12
+skinparam linetype polyline
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam ArrowColor #526271
+skinparam packageStyle rectangle
+skinparam backgroundColor white
+
+package "浏览器" #F0F6FB {
+  rectangle "Mobile PWA\n移动用户端" as mobile
+  rectangle "Admin Web\n管理端" as admin
+}
+node "HTTPS 接入" #F2F7F2 {
+  rectangle "Nginx\n前端静态资源 / 同源代理" as nginx
+}
+package "后端运行角色" #F0F6FB {
+  rectangle "API 服务\n127.0.0.1:8001" as api
+  rectangle "WS gateway\n127.0.0.1:8002" as ws
+  rectangle "Taskiq worker\n后台任务执行" as worker
+  rectangle "Taskiq scheduler\n单实例定时派发" as scheduler
+}
+package "数据与共享状态" #FAF4EB {
+  database "PostgreSQL\n业务 / 审计 / 实时事件" as pg
+  database "Redis\n实时流 / 任务队列 / 共享控制" as redis
+}
+cloud "阿里云 OSS" #F4F0FA {
+  storage "私有媒体桶\n商品 / 头像 / 聊天图片" as media
+  storage "私有证据桶\n举报与补充材料" as evidence
+}
+rectangle "SMTP 邮件服务\n注册 / 找回密码 / 换邮箱验证码" as smtp #F4F0FA
+
+mobile --> nginx : HTTPS
+admin --> nginx : HTTPS
+nginx --> api : /api/v1
+nginx --> ws : /ws
+api --> pg
+ws --> pg
+worker --> pg
+api --> redis
+ws --> redis
+worker --> redis
+scheduler --> redis
+mobile --> media : 短期签名 PUT
+mobile --> evidence : 短期签名 PUT
+api --> media : 对象校验
+api --> evidence : 对象校验
+api --> smtp : 发送验证码邮件
+@enduml

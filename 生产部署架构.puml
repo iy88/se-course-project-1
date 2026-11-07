@@ -1,0 +1,52 @@
+@startuml
+top to bottom direction
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 14
+skinparam dpi 200
+skinparam shadowing false
+skinparam linetype polyline
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 45
+actor "浏览器" as browser
+cloud "公网接入" #F0F6FB {
+ rectangle "边缘 HTTPS / DNS / 证书" as edge
+ rectangle "公网 Nginx" as public_proxy
+}
+rectangle "内网隧道" as tunnel
+node "生产宿主机\n双路 Xeon E5-2650 v3 / 32 GB ECC" #F2F7F2 {
+ node "Ubuntu 生产 VM\n20 核 / 16 GB" as vm {
+  rectangle "源站 Nginx\nMobile / Admin 静态文件" as nginx
+  rectangle "API :8001" as api
+  rectangle "WS gateway :8002" as ws
+  rectangle "Taskiq worker / scheduler" as tasks
+  database "PostgreSQL" as pg
+  database "Redis" as redis
+ }
+}
+package "构建发布" #FAF4EB {
+ rectangle "内网 Git 服务\n发布主线 main" as git
+ rectangle "Jenkins\n构建 / 备份 / 迁移 / 激活" as jenkins
+}
+cloud "外部业务服务" #F4F0FA {
+ storage "私有 OSS\n媒体桶 / 证据桶" as oss
+ rectangle "SMTP" as smtp
+}
+browser --> edge : HTTPS
+edge --> public_proxy
+public_proxy --> tunnel : Host / WebSocket
+tunnel --> nginx
+nginx --> api : /api/v1
+nginx --> ws : /ws
+api --> pg
+ws --> pg
+tasks --> pg
+api --> redis
+ws --> redis
+tasks --> redis
+git --> jenkins : 检出 / Webhook
+jenkins --> vm : SSH 发布 release\n四角色激活
+api --> oss : 签名 / 对象校验
+browser --> oss : 短期签名 PUT / GET
+api --> smtp : 验证码邮件
+@enduml
