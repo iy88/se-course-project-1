@@ -81,6 +81,23 @@ jobs:
           APP_ENV_FILE: .env.dev
         run: .venv/bin/python -m tests.acceptance_real.runner --port 8101
 
+  backend-unit:
+    name: Backend unit and deployment scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+
+      - name: Sync backend dependencies
+        run: uv sync --locked --managed-python --python 3.13
+
       - name: Run isolated backend unit tests
         run: .venv/bin/python -m tests.run_unit
 
