@@ -70,6 +70,7 @@ const badge = (n) => (n > 0 ? (n > 99 ? '99+' : String(n)) : '')
 
 let badgeRefreshVersion = 0
 let badgeRefreshTimer = null
+let active = true
 
 async function refreshBadges() {
   const token = localStorage.getItem('token')
@@ -96,21 +97,33 @@ async function onWSMessage(data) {
   }
   if (data.type === 'notification' || (data.type === 'message' && data.sender_id !== session.user?.id)) {
     // Replay can include events already reflected in the server's unread counts.
-    if (badgeRefreshTimer !== null) return
-    badgeRefreshTimer = setTimeout(() => {
-      badgeRefreshTimer = null
-      refreshBadges()
-    }, 100)
+    scheduleBadgeRefresh(100)
   }
+}
+
+function scheduleBadgeRefresh(delay) {
+  if (!active || badgeRefreshTimer !== null) return
+  const token = localStorage.getItem('token')
+  if (!token) return
+  badgeRefreshTimer = setTimeout(async () => {
+    badgeRefreshTimer = null
+    if (localStorage.getItem('token') !== token) return
+    const refresh = refreshBadges()
+    const version = badgeRefreshVersion
+    if (!await refresh && version === badgeRefreshVersion && localStorage.getItem('token') === token) {
+      scheduleBadgeRefresh(2000)
+    }
+  }, delay)
 }
 
 let unwireWS = null
 
 onMounted(() => {
-  refreshBadges()
+  scheduleBadgeRefresh(0)
   unwireWS = connectWS(onWSMessage)
 })
 onUnmounted(() => {
+  active = false
   unwireWS?.()
   clearTimeout(badgeRefreshTimer)
   badgeRefreshVersion += 1
