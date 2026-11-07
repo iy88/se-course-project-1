@@ -468,7 +468,7 @@ export function connectWS(onMessage) {
   if (!token) return () => listeners.delete(onMessage)
   if (!stopped && socket && sessionToken === token) return () => detachListener(onMessage)
   if (!stopped && connecting && sessionToken === token) return () => detachListener(onMessage)
-  if (sessionToken !== token) {
+  if (sessionToken && sessionToken !== token) {
     dispose({ resetCursor: true })
   } else if (stopped) {
     clearTimers()

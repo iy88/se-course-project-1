@@ -68,13 +68,19 @@ const messagesBadge = computed(() => session.unreadMessages)
 const notificationsBadge = computed(() => session.unreadNotifications)
 const badge = (n) => (n > 0 ? (n > 99 ? '99+' : String(n)) : '')
 
+let badgeRefreshVersion = 0
+let badgeRefreshTimer = null
+
 async function refreshBadges() {
-  if (!localStorage.getItem('token')) return
+  const token = localStorage.getItem('token')
+  if (!token) return
+  const version = ++badgeRefreshVersion
   try {
     const [msg, notif] = await Promise.all([
       http.get('/conversations/unread-summary'),
       http.get('/notifications/unread-count'),
     ])
+    if (version !== badgeRefreshVersion || localStorage.getItem('token') !== token) return
     session.unreadMessages = msg.unread
     session.unreadNotifications = notif.unread
   } catch {
@@ -87,16 +93,14 @@ async function onWSMessage(data) {
     await refreshBadges()
     return
   }
-  if (data.type === 'notification') {
-    session.unreadNotifications += 1
-  } else if (data.type === 'message') {
-    // The sender's other devices receive the event; only peers raise unread.
-    if (data.sender_id !== session.user?.id) session.unreadMessages += 1
+  if (data.type === 'notification' || (data.type === 'message' && data.sender_id !== session.user?.id)) {
+    // Replay can include events already reflected in the server's unread counts.
+    if (badgeRefreshTimer !== null) return
+    badgeRefreshTimer = setTimeout(() => {
+      badgeRefreshTimer = null
+      refreshBadges()
+    }, 100)
   }
-}
-
-async function onResync() {
-  await refreshBadges()
 }
 
 let unwireWS = null
@@ -104,11 +108,11 @@ let unwireWS = null
 onMounted(() => {
   refreshBadges()
   unwireWS = connectWS(onWSMessage)
-  window.addEventListener('realtime:resync', onResync)
 })
 onUnmounted(() => {
   unwireWS?.()
-  window.removeEventListener('realtime:resync', onResync)
+  clearTimeout(badgeRefreshTimer)
+  badgeRefreshVersion += 1
 })
 
 defineExpose({ refreshBadges })
