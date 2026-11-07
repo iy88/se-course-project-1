@@ -1,11 +1,11 @@
 <!--
-Version: 0.1.2
-Version-Datetime: 2026-11-07T18:29:39+08:00
+Version: 0.1.3
+Version-Datetime: 2026-11-07T21:51:45+08:00
 -->
 
 # 部署资产（需管理员安装，不由 Jenkins 自动安装）
 
-本目录提供 issue #36 最终队列选型的仓库部署资产。系统服务、Nginx、sudoers 与备份脚本仍由服务器管理员安装；流水线只上传 release、执行迁移、preflight、真实队列门禁与激活脚本。生产主机地址、域名、账号和凭据不写入仓库。
+本目录提供 API、WS、Taskiq worker 和 scheduler 四角色的部署资产。系统服务、Nginx、sudoers 与备份脚本仍由服务器管理员安装；流水线只上传 release、执行迁移、preflight、真实队列门禁与激活脚本。生产主机地址、域名、账号和凭据不写入仓库。
 
 ## 资产
 
@@ -58,7 +58,7 @@ nginx -t && systemctl reload nginx
 
 ## 新环境与日常发布
 
-从零准备生产基础设施、Jenkins 依赖及凭据、配置四角色、手动发布和开放 Webhook 的完整顺序见[部署说明](../../docs/development/部署说明.md#从零部署)。安装并运行 API、WS、worker、scheduler 四个 unit。
+生产上线前准备基础设施、Jenkins 依赖及凭据，配置四个运行角色并完成手动发布。随后安装并运行 API、WS、worker、scheduler 四个 unit。
 
 发布流程保留 PostgreSQL/Redis 备份、迁移版本核对、PREPARED/MIGRATED 标记和真实 readiness。管理员单独维护 Nginx，服务就绪后加载 `/api/ → 8001`、`/ws → 8002` 路由并验证公网双向通信。日常升级成套停止旧服务、切换 current、启动四角色，不宣称零停机；scheduler 必须单实例。
 

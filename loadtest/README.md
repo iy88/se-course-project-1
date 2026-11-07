@@ -1,13 +1,13 @@
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-11-07T00:04:56+08:00
+Version: 0.1.2
+Version-Datetime: 2026-11-07T21:51:45+08:00
 -->
 
 # Rust 真实接口压测
 
-独立 HTTP/WebSocket 驱动，面向 [issue #34](https://github.com/iy88/se-course-project-1/issues/34)。Python 后端负责批量准备真实数据与资源，Rust 只读取私有 manifest，通过真实登录、业务 HTTP 和接收方 WebSocket 操作。服务器使用同一份代码和自己的 `backend/.env.dev`，不需要 Rust 访问数据库、Redis、OSS AK 或 JWT 签发密钥。
+独立 HTTP/WebSocket 性能测试驱动，用于验证 100 名活跃用户、10,000 条商品下的操作延迟和消息送达性能。Python 后端负责批量准备真实数据与资源，Rust 只读取私有 manifest，通过真实登录、业务 HTTP 和接收方 WebSocket 操作。服务器使用同一份代码和自己的 `backend/.env.dev`，不需要 Rust 访问数据库、Redis、OSS AK 或 JWT 签发密钥。
 
-完整的资源清空、播种、服务启动、负载口径与本地证据见[压测运行说明](../docs/development/load-testing.md)。需要 Rust 1.95+（本轮已验证版本）；使用 `cargo build --release --locked` 构建，`Cargo.lock` 固定本次依赖。Linux 服务器请在目标平台构建，不直接复制 macOS 二进制。
+运行前准备开发/测试数据库、Redis 前缀、OSS 范围、压测清单和服务。工具读取清单，通过真实 HTTP/WebSocket 业务流程执行测量，并将结果写入指定报告。需要 Rust 1.95+（本轮已验证版本）；使用 `cargo build --release --locked` 构建，`Cargo.lock` 固定本次依赖。Linux 服务器请在目标平台构建对应平台的二进制。
 
 从本目录执行：
 
@@ -21,9 +21,9 @@ cargo build --release --locked
   --output ../var/load/report.json
 ```
 
-从其他工作目录执行时，显式传入 manifest/output 路径。`--base-url` 只接受源站 origin，不带 `/api/v1`；工具自动使用 `/api/v1` 与 `/ws`，可经过反向代理访问。日志不输出账号密码、JWT、响应正文或 OSS 签名 URL。manifest 含测试账号密码，应保持私有、不提交、不上传到 issue；原始报告位于被 Git 忽略的 `var/load/`。
+从其他工作目录执行时，显式传入 manifest/output 路径。`--base-url` 只接受源站 origin，不带 `/api/v1`；工具自动使用 `/api/v1` 与 `/ws`，可经过反向代理访问。日志不输出账号密码、JWT、响应正文或 OSS 签名 URL。manifest 含测试账号密码，应保持私有、不提交、不公开分享；原始报告位于被 Git 忽略的 `var/load/`。
 
-退出码：`0` 表示本次配置下所有指标通过，`1` 表示错误、断连、样本不足或超阈值，`2` 表示配置/登录/握手等准备失败。小规模试跑通过只说明该规模通过；JSON 中的 `issue_34_api_ws_passed` 还要求至少 100 用户与 10,000 个预置商品。该字段代表 API/WS 层，不等于浏览器渲染与页面文字显示验收。
+退出码：`0` 表示本次配置下所有指标通过，`1` 表示错误、断连、样本不足或超阈值，`2` 表示配置/登录/握手等准备失败。小规模试跑通过只说明该规模通过；JSON 中的规模达标结果还要求至少 100 用户与 10,000 个预置商品，代表 API/WS 层，不等于浏览器渲染与页面文字显示验收。
 
 运行 `cargo test --locked` 验证百分位算法、缺项/样本不足/错误/延迟超限的失败判定，`cargo clippy --locked --all-targets -- -D warnings` 检查 Rust 代码。压测工具无自动重试、清库、服务启停或生产部署行为。
 
@@ -59,7 +59,7 @@ cargo build --release --locked
 保护与判定：默认最多2048个在途场景；SLA/错误预算明确失败时停止新增任务，按实际采样时长计算速率，并保留drain样本。单接口同时报告“预定到达→完成”的P95，混合业务完整流程延迟另列。达到配置最高强度并不等于已测得上限；未完成300秒持续验证的候选不会作为长期通过档位。
 
 
-## 实时协议 v2（issue #36）
+## 实时协议 v2
 
 驱动启动时为每个虚拟用户请求 `POST /api/v1/realtime/ticket`（Bearer JWT，先读持久高水位并使用 `since=high_seq`），再用一次性 ticket 连接 `/ws`，等待 `hello`/`replay_complete` 后开始；事件 envelope 的 `payload` 保留旧 `message` 字段，驱动在业务匹配后发送 `user_seq/event_id` ACK，并用连续 user_seq 游标去重。目标后端必须支持 ticket 且 `protocol_version >= 2`；旧后端会在准备阶段明确失败，不回退 query token。同机 100 用户压测需显式提高 `WS_HANDSHAKE_RATE_LIMIT`（默认 30/IP/min）与 `WS_MAX_CONNECTIONS_PER_IP`（默认 50），并只在隔离环境设置 `ALLOW_MISSING_ORIGIN=true`。非浏览器驱动需让目标环境显式允许其 Origin，或仅在隔离测试中设置 `ALLOW_MISSING_ORIGIN=true`，生产不得放宽来源。本轮未重新执行 100 用户/400 混合场景，历史单 worker 数据不能作为 split 容量结论。
 
