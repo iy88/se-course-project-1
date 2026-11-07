@@ -304,7 +304,7 @@ async function handleResync(frame) {
 }
 
 async function handleFrame(frame, ws, myEpoch) {
-  if (myEpoch !== epoch || ws !== socket) return
+  if (myEpoch !== epoch || ws !== socket || ws.readyState !== OPEN) return
   lastFrameAt = Date.now()
   const runEpoch = epoch
   if (sessionTokenChanged()) {
@@ -325,6 +325,7 @@ async function handleFrame(frame, ws, myEpoch) {
     case 'pong':
       break
     case 'replay_complete':
+      reconnectAttempts = 0
       lastFrameAt = Date.now()
       break
     case 'resync_required':
