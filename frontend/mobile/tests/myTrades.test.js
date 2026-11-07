@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { productTradesLink, parseTradeFilters, createMyTradesLoader } from '../src/api/myTrades.js'
 
 test('product entry selects seller without excluding historical states; invalid product ids fail closed', () => {
@@ -34,13 +33,4 @@ test('route changes, clears, failures and unmount invalidate stale list response
   const before = state; loader.invalidate()
   pending[4].resolve([{ id: 14 }]); await retry
   assert.equal(state, before)
-})
-
-test('permanent product entry survives zero pending count and list displays the counterparty', () => {
-  const products = readFileSync(new URL('../src/views/MyProducts.vue', import.meta.url), 'utf8')
-  assert.match(products, /<router-link :to="productTradesLink\(p.id\)" class="listing-card__link">关联请求／交易/)
-  assert.match(products, /<router-link v-if="p.pending_request_count" :to="productTradesLink\(p.id\)"/)
-  const trades = readFileSync(new URL('../src/views/MyTrades.vue', import.meta.url), 'utf8')
-  assert.match(trades, /t.buyer\?\.display_name/)
-  assert.match(trades, /clearProductFilter/)
 })

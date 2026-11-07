@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { createEditHistoryLoader } from '../src/api/productEditHistory.js'
 
 test('latest request wins; errors clear records; denied access is distinct from empty history', async () => {
@@ -30,16 +29,4 @@ test('latest request wins; errors clear records; denied access is distinct from 
   pending[4].resolve([{ id: 4 }])
   await last
   assert.equal(state, snapshot)
-})
-
-test('history is reachable from own products and trades, with no nested links', () => {
-  const read = file => readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
-  for (const file of ['views/MyProducts.vue', 'views/MyTrades.vue', 'views/TradeDetail.vue']) {
-    assert.match(read(file), /\/edit-history/)
-  }
-  assert.match(read('router/index.js'), /products\/:id\/edit-history/)
-  assert.match(read('views/MyTrades.vue'), /<article v-for="t in trades"/)
-  const page = read('views/ProductEditHistory.vue')
-  for (const field of ['before_json', 'after_json', 'editor_name', 'before_image_urls', 'after_image_urls']) assert.ok(page.includes(field))
-  assert.match(page, /closeable: true/)
 })

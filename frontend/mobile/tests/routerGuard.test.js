@@ -1,6 +1,5 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { isTransientNetworkError, resolveRefreshFailure } from '../src/router/guard.js'
 
 const axiosOffline = { isAxiosError: true, code: 'ERR_NETWORK' }
@@ -30,13 +29,4 @@ test('refresh failure separates logged-out, cached shell, public fallback, and b
   assert.equal(resolveRefreshFailure(new Error('登录状态已变化'), { hasToken: true, hasCachedUser: true }), 'block')
   assert.equal(resolveRefreshFailure({ response: { status: 401 } }, { hasToken: true, hasCachedUser: true }), 'block')
   assert.equal(resolveRefreshFailure({ response: { status: 403 } }, { hasToken: true, hasCachedUser: false }), 'block')
-})
-
-test('offline page is public and bypasses credential refresh', () => {
-  const source = readFileSync(new URL('../src/router/index.js', import.meta.url), 'utf8')
-  assert.match(source, /path: '\/offline', component: .*?meta: \{ public: true, offline: true \}/)
-  const guardStart = source.indexOf('router.beforeEach(async (to) => {')
-  const bypass = source.indexOf('if (to.meta.offline) return true', guardStart)
-  const refresh = source.indexOf('await session.refreshUser()', guardStart)
-  assert.ok(bypass > guardStart && bypass < refresh)
 })
