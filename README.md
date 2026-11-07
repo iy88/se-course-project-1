@@ -1,13 +1,13 @@
 <!--
-Version: 0.1.47
-Version-Datetime: 2026-11-07T18:29:39+08:00
+Version: 0.1.48
+Version-Datetime: 2026-11-08T00:05:28+08:00
 -->
 
 # 校园二手交易与物品流转平台
 
 ## dev 开发分支说明
 
-`dev` 分支用于持续开发，包含后端 `backend/`、桌面管理端 `frontend/admin/` 和移动PWA `frontend/mobile/` 的开发实现，运行期数据位于被忽略的 `var/`。开发决策与技术口径见[开发技术决策](docs/development/技术决策.md)，运行与人工测试命令见[开发与人工测试指南](docs/development/guidance.md)。
+`dev` 分支用于持续开发，包含后端 `backend/`、桌面管理端 `frontend/admin/` 和移动PWA `frontend/mobile/` 的开发实现，运行期数据位于被忽略的 `var/`。开发决策与技术口径见[开发技术决策](docs/development/技术决策.md)，运行与数据管理命令见[开发指南](docs/development/guidance.md)。
 
 2026-10-28同步需求主线 `c4ee232`，A／B报告均已确认。随后按合并后的需求完成三端实现对齐、隔离副本并行开发和多轮代码审查；历史测试及人工核验仅代表各自记录的范围，本轮自动化回归不替代系统人工验收，历次实现与验证记录由 Git 提交历史追踪。下文需求阶段范围约束适用于需求材料维护。
 
@@ -15,15 +15,15 @@ Version-Datetime: 2026-11-07T18:29:39+08:00
 
 ## 开发设计与接入计划
 
-测试与浏览器复核按同一份 UC/US/SC 清单、角色和预期执行；HTTP 自动化与浏览器是不同执行通道，结果分别记录。数据库、存储与 KV 后端由选定 dotenv 文件明确配置，同一测试和 seed 命令适用，不使用 `--profile`。自动化 seed、数据库、存储及 Redis 资源按本轮隔离；浏览器人工登录使用部署初始化保留的管理员及单独注册的测试用户，不依赖自动化临时身份。业务 SMTP 真实收件箱投递验收、生产多实例/现场 split 演练和备份恢复演练仍未验证；issue #36 的 Redis/WS/数据库/Web 分层实现状态见[实时分层实施记录](docs/development/realtime-layers-implementation.md)，生产发布由流水线执行并经分角色健康检查，见[部署说明](docs/development/部署说明.md)。测试流程与当前验收状态见[整体验收](docs/development/整体验收.md)。
+开发环境、数据库初始化和演示数据操作见[开发指南](docs/development/guidance.md)。双前端、四角色后端、实时事件与资源权限见[技术决策与系统架构](docs/development/技术决策.md)；生产构建、发布和运维见[部署说明](docs/development/部署说明.md)。
 
 ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQLAlchemy基础设施。图片使用OSS Python SDK V2的短期上传租约：前端直传，后端核对SHA256、元信息、大小与真实图片后确认引用；本地存储使用相同租约API。后端与前端依赖版本分别由 `backend/uv.lock` 和各前端 `package-lock.json` 锁定。
 
-人工演示使用 `(cd backend && .venv/bin/python -m app.manage demo-seed --env-file .env.dev)`，向所选环境持久添加演示账号、图片和业务记录，沿用配置的数据库 schema 与存储资源。先对同一环境执行 `migrate`；seed 后可用 `(cd backend && .venv/bin/python -m app.manage demo-verify --env-file .env.dev)` 只读校验记录、文件、场景覆盖与权限，不修改演示状态。共享场景目录、账号清单、现场起点、验证命令与 US／UC／SC 演示步骤见 [Demo seed](docs/development/demo-seed.md)。
+人工演示使用 `(cd backend && .venv/bin/python -m app.manage demo-seed --env-file .env.dev)`，向所选环境持久添加演示账号、图片和业务记录，沿用配置的数据库 schema 与存储资源。先对同一环境执行 `migrate`；seed 后可用 `(cd backend && .venv/bin/python -m app.manage demo-verify --env-file .env.dev)` 只读校验记录、文件、场景覆盖与权限，不修改演示状态。演示账号、清单字段和操作路线见[开发指南](docs/development/guidance.md#演示数据)。
 
 ## 项目运行与配置
 
-性能压测使用独立 `load-seed` 准备真实数据库与 OSS 图片，Rust 驱动在 `loadtest/` 中通过真实 HTTP/WebSocket 执行 100 用户稳态负载、业务竞态，以及单接口/混合业务容量探测。清库、播种、运行参数、指标口径与本地记录见[真实负载压测](docs/development/load-testing.md)。
+性能压测使用独立 `load-seed` 准备真实数据库与 OSS 图片，Rust 驱动在 `loadtest/` 中通过真实 HTTP/WebSocket 执行 100 用户稳态负载、业务竞态，以及单接口/混合业务容量探测。清库、播种和模式切换命令见[环境清单](环境清单.md)。
 
 ### 环境与目录
 
@@ -229,9 +229,7 @@ RUN_REAL_ACCEPTANCE=1 .venv/bin/python -m pytest -q
 .venv/bin/python -m tests.acceptance_real.runner --port 8107
 ```
 
-runner自行准备本轮seed和隔离资源，启动专用测试服务，并在成功或失败时清理本轮数据库、存储和 Redis 数据；共享数据不得删除。最终全量与故障注入的资源清理已复验，结果见开发验收文档。退出码非0或存在FAIL/SKIP/PARTIAL/UNCOVERED均须查看 `var/acceptance-real/acceptance-failure-<run_id>.log`；测试通过时不生成测试报告。当前清单计数和执行状态见[整体验收](docs/development/整体验收.md)；浏览器清单维持独立 NOT-RUN，不继承 API 状态。
-
-同一全量入口默认采集整个 `backend/app` 的代码行与分支覆盖率，并合并验收驱动和真实 API 子进程的数据。HTML、JSON、XML、文本报告保存在 `var/acceptance-real/code-coverage/<hash>/`（coverage 原生产物），运行时仅在控制台输出覆盖率数字，不再写入验收报告；代码覆盖率与路由、UC/US/SC 覆盖率分别记录。
+runner 准备临时身份与隔离资源，启动独立服务，执行代码中的业务断言并清理资源。终端输出检查计数和清理结果；失败详情见 `var/acceptance-real/acceptance-failure-<run_id>.log`。
 
 lint、类型检查、文档构建检查和前端构建仍保留为工程检查，不另维护单元/专项测试套件：
 
@@ -251,7 +249,7 @@ Jenkins 等独立构建环境可显式选择公开配置模式，无需后端 Py
 
 此模式只读取公开参数 `VITE_API_BASE_URL`（默认 `/api/v1`）、`VITE_API_TIMEOUT_MS`（默认 `15000`）和开发代理参数 `API_PROXY_TARGET`（默认 `http://127.0.0.1:8000`），继续执行地址和超时校验。构建产物中的 API 地址供浏览器使用；默认值要求生产 Nginx 将同源 `/api/v1` 转发到后端，WebSocket 使用同源 `/ws`。未设置 `PROJECT1_FRONTEND_CONFIG` 时仍沿用后端 dotenv 配置；此开关不改变后端配置读取方式。
 
-构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。当前统一验收结果见[整体验收](docs/development/整体验收.md)；历次实现与验证记录由 Git 提交历史追踪。命令构建、真实 HTTP 测试通过与人工功能验收分别记录。
+构建产物分别位于 `frontend/mobile/dist/`、`frontend/admin/dist/`。生产静态资源由 Nginx 提供，具体配置见[部署说明](docs/development/部署说明.md)。
 
 先启动后端，再在两个独立终端预览构建产物：
 
@@ -267,7 +265,7 @@ Jenkins 等独立构建环境可显式选择公开配置模式，无需后端 Py
 
 局域网手机访问时，可使用 `npm run dev -- --host 0.0.0.0 --strictPort`，手机访问开发机IP的5173端口；代理仍由开发机连接本机后端。普通局域网HTTP可用于页面联调，但不等于已满足PWA安装条件。
 
-开发与生产统一运行 API、WS、worker 和 scheduler 四个角色，依赖共享 Redis；WS 使用每 gateway 独立 Redis stream cursor + PostgreSQL 周期回放/补偿，ticket/连接限额/频控跨进程共享；Taskiq worker/scheduler 使用与广播 stream 分离的任务 stream/group，ACK 为执行后确认，失败重试由官方 SmartRetry 与 schedule source 管理。每进程独立 SQL/Redis 池，按角色与 worker 进程数预算校验。PostgreSQL、私有 OSS 双桶、环境隔离与审计仍纳入统一验收与发布流水线；生产 split 首次切换需维护窗口，发布/回退见[部署说明](docs/development/部署说明.md)，实现与证据边界见[实施记录](docs/development/realtime-layers-implementation.md)。业务 SMTP 真实投递、真实生产 OSS、浏览器人工验收、400 混合压测及现场 systemd/Nginx 演练仍未验证，不因自动化通过或部署完成视为人工验收完成。
+开发与生产统一运行 API、WS、worker 和 scheduler 四个角色，使用共享 Redis、独立连接池与 PostgreSQL 持久事件。实时连接、回放、任务队列和资源预算见[技术决策与系统架构](docs/development/技术决策.md)，生产发布和回退见[部署说明](docs/development/部署说明.md)。
 
 ## 成员分工
 
