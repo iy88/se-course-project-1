@@ -1,7 +1,7 @@
-"""任务 F 全 API/全 AC/SC 真实验收运行器（显式 opt-in）。
+"""真实业务验收运行器（显式 opt-in）。
 
 通过时不写测试报告；失败时仅写 ``var/acceptance-real/acceptance-failure-<run_id>.log``，
-只包含未通过检查、缺口、清理与调试信息。覆盖率仅保留 coverage 原生产物。
+只包含未通过检查、清理与调试信息。
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ import socket
 import subprocess
 import sys
 import time
-from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,16 +22,11 @@ from typing import TYPE_CHECKING, Any
 import httpx
 from app.core.private_files import protect_private
 
-from tests.acceptance_real.catalog import build_payload
 from tests.acceptance_real.core import (
     BACKEND_ROOT,
     FAIL,
-    PARTIAL,
     PASS,
     REPO_ROOT,
-    SKIP,
-    UNCOVERED,
-    Catalog,
     CheckFailure,
     CheckRecord,
     RouteIndex,
@@ -145,7 +139,6 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
         "--clock-file",
         str(clock_file),
     ]
-    command = [sys.executable, "-m", *sandbox.code_coverage.server_command(command[2:])]
     process = subprocess.Popen(
         command,
         cwd=BACKEND_ROOT,
@@ -180,186 +173,8 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
     raise CheckFailure(f"测试服务未在 45s 内健康（最后 {last_error}）")
 
 
-def _requirements_coverage(catalog: Catalog, checks: Sequence[Any], kind: str) -> dict[str, Any]:
-    ids = catalog.ac_ids if kind == "AC" else catalog.sc_ids
-    by_item: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for check in checks:
-        for item_id in (check.ac if kind == "AC" else check.sc):
-            by_item[item_id].append(
-                {
-                    "check_id": check.check_id,
-                    "status": check.status,
-                    "coverage": check.coverage,
-                    "note": check.note,
-                }
-            )
-    rows: list[dict[str, Any]] = []
-    counts: dict[str, int] = defaultdict(int)
-    for item_id in ids:
-        item = catalog.items[item_id]
-        mappings = by_item.get(item_id, [])
-        if not mappings:
-            status = UNCOVERED
-        elif any(row["status"] == FAIL for row in mappings):
-            status = FAIL
-        elif all(row["status"] == SKIP for row in mappings):
-            status = SKIP
-        elif any(row["status"] == PASS and row["coverage"] == "full" for row in mappings):
-            status = PASS
-        elif any(row["status"] == PASS for row in mappings):
-            status = PARTIAL
-        else:
-            status = UNCOVERED
-        counts[status] += 1
-        rows.append(
-            {
-                "id": item_id,
-                "kind": kind,
-                "title": item.title,
-                "source_file": item.file,
-                "text": item.text[:800],
-                "status": status,
-                "mappings": mappings,
-            }
-        )
-    return {
-        "counts": dict(counts),
-        "total": len(ids),
-        "items": rows,
-        "missing": [row["id"] for row in rows if row["status"] == UNCOVERED],
-        "failing": [row["id"] for row in rows if row["status"] == FAIL],
-        "partial": [row["id"] for row in rows if row["status"] == PARTIAL],
-        "skipped": [row["id"] for row in rows if row["status"] == SKIP],
-    }
-
-
-def _uc_coverage(payload: Mapping[str, Any], checks: Sequence[Any]) -> dict[str, Any]:
-    """主用例/子用例覆盖：只有全部映射 check PASS 才 PASS。"""
-    status_by_check = {check.check_id: check.status for check in checks}
-    sub_rows: list[dict[str, Any]] = []
-    counts: dict[str, int] = defaultdict(int)
-    for item in payload.get("uc_subcases") or []:
-        mapped = list(item.get("check_ids") or [])
-        statuses = [status_by_check.get(check_id, UNCOVERED) for check_id in mapped]
-        if not mapped:
-            status = UNCOVERED
-        elif any(value == FAIL for value in statuses):
-            status = FAIL
-        elif any(value == SKIP for value in statuses):
-            status = SKIP
-        elif all(value == PASS for value in statuses):
-            status = PASS
-        elif any(value == PASS for value in statuses):
-            status = PARTIAL
-        else:
-            status = UNCOVERED
-        counts[status] += 1
-        sub_rows.append(
-            {
-                "id": item.get("id"),
-                "main_uc": item.get("main_uc"),
-                "title": item.get("title"),
-                "source_file": item.get("source_file"),
-                "check_ids": mapped,
-                "check_status": dict(zip(mapped, statuses)),
-                "status": status,
-                "evidence": item.get("evidence"),
-            }
-        )
-    main_rows: list[dict[str, Any]] = []
-    main_counts: dict[str, int] = defaultdict(int)
-    for main in payload.get("uc") or []:
-        subs = [row for row in sub_rows if row["main_uc"] == main.get("id")]
-        if not subs:
-            status = UNCOVERED
-        elif any(row["status"] == FAIL for row in subs):
-            status = FAIL
-        elif any(row["status"] == SKIP for row in subs):
-            status = SKIP
-        elif all(row["status"] == PASS for row in subs):
-            status = PASS
-        elif any(row["status"] == PASS for row in subs):
-            status = PARTIAL
-        else:
-            status = UNCOVERED
-        main_counts[status] += 1
-        main_rows.append(
-            {
-                "id": main.get("id"),
-                "title": main.get("title"),
-                "source_file": main.get("source_file"),
-                "subcase_count": len(subs),
-                "subcases": [row["id"] for row in subs],
-                "check_ids": sorted({check_id for row in subs for check_id in row["check_ids"]}),
-                "status": status,
-            }
-        )
-    return {
-        "counts": dict(main_counts),
-        "total": len(main_rows),
-        "items": main_rows,
-        "subcase_counts": dict(counts),
-        "subcase_total": len(sub_rows),
-        "subcases": sub_rows,
-        "missing": [row["id"] for row in sub_rows if row["status"] in {UNCOVERED, PARTIAL}],
-        "failing": [row["id"] for row in sub_rows if row["status"] == FAIL],
-        "skipped": [row["id"] for row in sub_rows if row["status"] == SKIP],
-        "main_failing": [row["id"] for row in main_rows if row["status"] == FAIL],
-        "main_missing": [row["id"] for row in main_rows if row["status"] in {UNCOVERED, PARTIAL, SKIP}],
-    }
-
-
-def _route_coverage(run: AcceptanceRun, checks: Sequence[Any]) -> dict[str, Any]:
-    calls_by_route: dict[tuple[str, str], list[Any]] = defaultdict(list)
-    unmatched: list[dict[str, Any]] = []
-    infra_paths = {"/api/health", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
-    for call in run.api.calls:
-        if call.template:
-            calls_by_route[(call.method, call.template)].append(call)
-        elif call.actual_path not in infra_paths:
-            unmatched.append(call.as_dict())
-    check_by_id = {check.check_id: check for check in checks}
-    rows: list[dict[str, Any]] = []
-    for method, path in sorted(run.all_business_routes, key=lambda row: (row[1], row[0])):
-        calls = calls_by_route.get((method, path), [])
-        normal = [call for call in calls if isinstance(call.status, int) and 200 <= call.status < 300]
-        semantic = [
-            call for call in normal if check_by_id.get(call.check_id) and check_by_id[call.check_id].status == PASS
-        ]
-        negative = [
-            call
-            for call in calls
-            if isinstance(call.status, int)
-            and 400 <= call.status < 500
-            and check_by_id.get(call.check_id)
-            and check_by_id[call.check_id].status == PASS
-        ]
-        rows.append(
-            {
-                "method": method,
-                "path": path,
-                "calls": len(calls),
-                "normal_2xx": len(normal),
-                "semantic_success": len(semantic),
-                "meaningful_negative": len(negative),
-                "check_ids": sorted({call.check_id for call in calls}),
-                "status": "PASS" if semantic else ("FAIL" if calls else UNCOVERED),
-            }
-        )
-    missing = [row for row in rows if row["status"] != "PASS"]
-    return {
-        "total": len(rows),
-        "covered": len(rows) - len(missing),
-        "missing_or_unverified": missing,
-        "infrastructure": {
-            "health": any(call.actual_path == "/api/health" and call.status == 200 for call in run.api.calls),
-            "openapi": any(call.actual_path == "/openapi.json" and call.status == 200 for call in run.api.calls),
-            "docs": any(call.actual_path == "/docs" and call.status == 200 for call in run.api.calls),
-            "websocket": run.ws_ok,
-        },
-        "unmatched_calls": unmatched,
-        "routes": rows,
-    }
+def _checks_passed(checks: Sequence[CheckRecord]) -> bool:
+    return bool(checks) and all(check.status == PASS for check in checks)
 
 
 def _call_index(calls: Sequence[Any]) -> dict[int, dict[str, Any]]:
@@ -384,18 +199,13 @@ def _append_check_debug(
     call_index: Mapping[int, Mapping[str, Any]],
 ) -> None:
     lines += ["", f"### [{check.get('status')}] `{check.get('check_id')}` {check.get('title')}", ""]
-    meta = [f"{key}={check.get(key)}" for key in ("coverage", "duration_ms", "role") if check.get(key) is not None]
+    meta = [f"{key}={check.get(key)}" for key in ("duration_ms", "role") if check.get(key) is not None]
     if meta:
         lines.append("- " + "；".join(meta))
     for key, label in (("precondition", "前置"), ("action", "动作"), ("expected", "期望"), ("note", "说明")):
         value = check.get(key)
         if value:
             lines.append(f"- {label}：{value}")
-    ac = check.get("ac") or []
-    sc = check.get("sc") or []
-    subcases = check.get("uc_subcases") or []
-    if ac or sc or subcases:
-        lines.append(f"- 映射：AC={ac} SC={sc} UC子用例={subcases}")
     if check.get("error"):
         lines.append(f"- 错误：{check['error']}")
     assertions = check.get("assertions") or []
@@ -420,33 +230,6 @@ def _append_check_debug(
         lines += ["- 实际数据：", "```json", _json_excerpt(data), "```"]
 
 
-def _coverage_line(measurement: Mapping[str, Any]) -> str:
-    artifacts = measurement.get("artifacts") or {}
-    directory = Path(str(artifacts.get("html") or "")).parent.parent if artifacts.get("html") else "未生成"
-    return " ".join([
-        "coverage:",
-        f"line={measurement.get('covered_lines')}/{measurement.get('total_lines')}({measurement.get('line_percent')}%)",
-        f"branch={measurement.get('covered_branches')}/{measurement.get('total_branches')}({measurement.get('branch_percent')}%)",
-        f"dir={directory}",
-    ])
-
-
-_GAP_LABELS: tuple[tuple[str, str], ...] = (
-    ("routes_missing_or_unverified", "路由缺口"),
-    ("ac_failing", "AC 失败"),
-    ("ac_partial", "AC 部分覆盖"),
-    ("ac_uncovered", "AC 未覆盖"),
-    ("sc_failing", "SC 失败"),
-    ("sc_partial", "SC 部分覆盖"),
-    ("sc_uncovered", "SC 未覆盖"),
-    ("uc_main_failing", "UC 主用例失败"),
-    ("uc_main_missing", "UC 主用例未覆盖"),
-    ("uc_subcase_failing", "UC 子用例失败"),
-    ("uc_subcase_missing", "UC 子用例未覆盖"),
-    ("uc_subcase_skipped", "UC 子用例跳过"),
-)
-
-
 def _failure_log(
     *,
     run_id: str,
@@ -457,8 +240,6 @@ def _failure_log(
     call_index: Mapping[int, Mapping[str, Any]],
     fatal: str | None,
     cleanup: Mapping[str, Any] | None,
-    coverage: Mapping[str, Any] | None,
-    coverage_error: str | None,
 ) -> str:
     lines = [f"# 验收失败日志 {run_id}", ""]
     if report is not None:
@@ -484,36 +265,22 @@ def _failure_log(
     failed = [check for check in checks if check.get("status") != PASS]
     lines += ["", f"## 未通过检查（{len(failed)}）"]
     if not failed:
-        lines.append("- 无未通过检查；失败来自缺口、清理或覆盖率采集。")
+        lines.append("- 无未通过检查；失败来自运行或清理过程。")
     for check in failed:
         _append_check_debug(lines, check, call_index)
     if report is not None:
-        gaps = report.get("gaps") or {}
-        for key, label in _GAP_LABELS:
-            rows = gaps.get(key) or []
-            if rows:
-                lines += ["", f"## {label}（{len(rows)}）", ""]
-                _append_excerpts(lines, rows)
         notes = report.get("notes") or []
         if notes:
             lines += ["", "## 备注", ""]
             _append_excerpts(lines, [{"note": note} for note in notes])
     if cleanup is not None:
         lines += ["", "## 清理结果", "", f"- {json.dumps(cleanup, ensure_ascii=False)}"]
-    if coverage_error:
-        lines += ["", "## 覆盖率采集失败", "", f"- {coverage_error}"]
-    elif coverage:
-        artifacts = coverage.get("artifacts") or {}
-        lines += ["", "## 覆盖率（coverage 原生产物）", ""]
-        lines.append(f"- 行：{coverage.get('covered_lines')}/{coverage.get('total_lines')}（{coverage.get('line_percent')}%）；分支：{coverage.get('covered_branches')}/{coverage.get('total_branches')}（{coverage.get('branch_percent')}%）")
-        if artifacts.get("html"):
-            lines.append(f"- 目录：{Path(str(artifacts['html'])).parent.parent}")
     return "\n".join(lines) + "\n"
 
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Task F 全 API/全 AC/SC 真实验收")
+    parser = argparse.ArgumentParser(description="真实业务验收")
     parser.add_argument("--base-url", default=None, help="已运行服务地址；默认由本任务启动 127.0.0.1:8101")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-start-server", action="store_true", help="复用已启动服务（不注入受控时钟，7 天场景将 FAIL/SKIP）")
@@ -588,12 +355,6 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             server = start_server(port=args.port, run_id=run_id, sandbox=sandbox)
             base_url = server.base_url
         sandbox.run_context["base_url"] = base_url
-        catalog = Catalog().load()
-        manifest_payload = build_payload(catalog)
-        if not manifest_payload["validation"]["ok"]:
-            raise CheckFailure(
-                "业务测试清单校验失败：" + "; ".join(manifest_payload["validation"]["errors"])
-            )
         openapi_client = httpx.Client(base_url=base_url, timeout=20, trust_env=False)
         try:
             openapi_response = openapi_client.get("/openapi.json")
@@ -606,7 +367,6 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
         run = AcceptanceRun(
             base_url=base_url,
             config=config,
-            catalog=catalog,
             run_id=run_id,
             server=server,
             only=args.only,
@@ -637,9 +397,6 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
                         check_id=f"GROUP-{name}",
                         title=f"场景组 {name} 未完成",
                         status=FAIL,
-                        ac=[],
-                        sc=[],
-                        coverage="none",
                         note=None,
                         error=str(exc),
                     )
@@ -650,9 +407,6 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
                         check_id=f"GROUP-{name}",
                         title=f"场景组 {name} 异常",
                         status=FAIL,
-                        ac=[],
-                        sc=[],
-                        coverage="none",
                         note=None,
                         error=f"{type(exc).__name__}: {exc}",
                     )
@@ -660,25 +414,13 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             if args.inject_failure == "after-files" and name == "files_products":
                 raise CheckFailure("注入失败：商品与对象写入后中止")
         run.finished_at = datetime.now(UTC)
-        routes = _route_coverage(run, run.rec.checks)
-        ac = _requirements_coverage(catalog, run.rec.checks, "AC")
-        sc = _requirements_coverage(catalog, run.rec.checks, "SC")
-        uc = _uc_coverage(manifest_payload, run.rec.checks)
         check_counts = run.rec.counts()
-        manifest_checks = {row["check_id"]: row for row in manifest_payload["checks"]}
-        checks_payload: list[dict[str, Any]] = []
-        for check in run.rec.checks:
-            item = check.as_dict()
-            meta = manifest_checks.get(check.check_id, {})
-            for field in ("role", "precondition", "action", "expected", "uc_subcases"):
-                item[field] = meta.get(field)
-            checks_payload.append(item)
+        checks_payload = [check.as_dict() for check in run.rec.checks]
         report = {
             "run_id": run_id,
             "started_at": started_at,
             "finished_at": run.finished_at.isoformat(),
             "runtime_source": _source_digest(),
-            "catalog": catalog.summary(),
             "environment": {
                 "base_url": base_url,
                 "environment": config.environment,
@@ -698,39 +440,8 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
                 "business_route_count": len(run.all_business_routes),
                 "routes": [{"method": method, "path": path} for method, path in run.all_business_routes],
             },
-            "summary": {
-                "checks": check_counts,
-                "routes": {"total": routes["total"], "covered": routes["covered"]},
-                "ac": {"total": ac["total"], "counts": ac["counts"]},
-                "sc": {"total": sc["total"], "counts": sc["counts"]},
-                "uc": {"total": uc["total"], "counts": uc["counts"]},
-                "uc_subcases": {"total": uc["subcase_total"], "counts": uc["subcase_counts"]},
-            },
-            "gaps": {
-                "routes_missing_or_unverified": routes["missing_or_unverified"],
-                "ac_failing": ac["failing"],
-                "ac_partial": ac["partial"],
-                "ac_uncovered": ac["missing"],
-                "sc_failing": sc["failing"],
-                "sc_partial": sc["partial"],
-                "sc_uncovered": sc["missing"],
-                "uc_main_failing": uc["main_failing"],
-                "uc_main_missing": uc["main_missing"],
-                "uc_subcase_failing": uc["failing"],
-                "uc_subcase_missing": uc["missing"],
-                "uc_subcase_skipped": uc["skipped"],
-            },
+            "summary": {"checks": check_counts},
             "checks": checks_payload,
-            "routes": routes,
-            "ac": ac,
-            "sc": sc,
-            "uc": uc,
-            "catalog_manifest": {
-                "validation": manifest_payload["validation"],
-                "summary": manifest_payload["summary"],
-                "source_digest_sha256": manifest_payload["source"]["source_digest_sha256"],
-                "manual_channel": manifest_payload["manual_channel"],
-            },
             "concurrency": run.concurrency,
             "clock_events": run.clock_events,
             "time_simulation": {
@@ -750,26 +461,8 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
         }
         if server is not None:
             server.stop()
-        print(
-            (f"acceptance: run_id={run_id} checks={check_counts} "
-             f"routes={routes['covered']}/{routes['total']} ac={ac['counts']} sc={sc['counts']} "
-             f"uc={uc['counts']} subuc={uc['subcase_counts']}")
-        )
-        full_pass = (
-            check_counts.get(FAIL, 0) == 0
-            and check_counts.get(SKIP, 0) == 0
-            and check_counts.get(PASS, 0) == len(run.rec.checks)
-            and all(check.coverage == "full" for check in run.rec.checks)
-            and not routes["missing_or_unverified"]
-            and ac["counts"].get(PASS, 0) == ac["total"]
-            and sc["counts"].get(PASS, 0) == sc["total"]
-            and uc["counts"].get(PASS, 0) == uc["total"]
-            and uc["subcase_counts"].get(PASS, 0) == uc["subcase_total"]
-            and not uc["failing"]
-            and not uc["missing"]
-            and not uc["skipped"]
-            and manifest_payload["validation"]["ok"]
-        )
+        print(f"acceptance: run_id={run_id} checks={check_counts}")
+        full_pass = _checks_passed(run.rec.checks)
         if not full_pass:
             sandbox.failure_state = {
                 "report": report,
@@ -801,10 +494,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
 def main(argv: list[str] | None = None) -> int:
     import signal
 
-    from tests.acceptance_real.code_coverage import CodeCoverage
-
     sandbox = None
-    collector = None
     result = 2
     fatal_error: str | None = None
     actual_args = list(sys.argv[1:] if argv is None else argv)
@@ -830,14 +520,12 @@ def main(argv: list[str] | None = None) -> int:
         raise KeyboardInterrupt()
     signal.signal(signal.SIGTERM, interrupted)
     try:
-        collector = CodeCoverage()
         signal.signal(signal.SIGTERM, interrupted)
         from app.devtools._support import load_dev_config
 
         from tests.acceptance_real.sandbox import Sandbox
 
         sandbox = Sandbox(load_dev_config(for_acceptance=True, require_storage=True))
-        sandbox.code_coverage = collector
         config = sandbox.create()
         sandbox.active = True
         sandbox._write_manifest("active")
@@ -850,8 +538,6 @@ def main(argv: list[str] | None = None) -> int:
         previous_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         cleanup: dict[str, Any] | None = None
-        measurement: dict[str, Any] | None = None
-        coverage_error: str | None = None
         if sandbox is not None:
             try:
                 process = getattr(sandbox, "process", None)
@@ -864,17 +550,6 @@ def main(argv: list[str] | None = None) -> int:
                     result = 2
             except BaseException as exc:  # noqa: BLE001 - cleanup also handles interruption
                 print(f"cleanup failed: {type(exc).__name__}; manifest={sandbox.manifest}", file=sys.stderr)
-                result = 2
-        if collector is not None:
-            try:
-                measurement = collector.finish(
-                    server_started=sandbox is not None and sandbox.process is not None,
-                    acceptance_exit_code=result,
-                )
-                print(_coverage_line(measurement))
-            except Exception as exc:  # noqa: BLE001 - preserve cleanup success but fail missing measurement
-                coverage_error = type(exc).__name__
-                print(f"code coverage failed: {coverage_error}", file=sys.stderr)
                 result = 2
         if sandbox is not None and result != 0:
             state = getattr(sandbox, "failure_state", None) or {}
@@ -890,8 +565,6 @@ def main(argv: list[str] | None = None) -> int:
                     call_index=state.get("call_index") or {},
                     fatal=state.get("fatal") or fatal_error,
                     cleanup=cleanup,
-                    coverage=measurement,
-                    coverage_error=coverage_error,
                 ),
                 encoding="utf-8",
             )

@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.0
-Version-Datetime: 2026-10-30T14:05:00+08:00
+Version: 0.2.1
+Version-Datetime: 2026-11-07T23:50:00+08:00
 -->
 
 # 唯一全量真实验收套件
@@ -22,7 +22,7 @@ RUN_REAL_ACCEPTANCE=1 .venv/bin/python -m pytest -q
 .venv/bin/python -m tests.acceptance_real.runner --recover /绝对路径/ownership.json
 ```
 
-恢复只接受本轮受控目录、随机名称、原测试目标及匹配的 schema 所有权标记；若原服务仍可能运行则拒绝。OSS 清理由写前日志逐项删除并 HEAD 验证；日志写入失败时拒绝上传。若凭据不允许列桶，报告会明确说明无法列举前缀，逐项验证不得表述为前缀列举为空。
+恢复只接受本轮受控目录、随机名称、原测试目标及匹配的 schema 所有权标记；若原服务仍可能运行则拒绝。OSS 清理由写前日志逐项删除并 HEAD 验证；日志写入失败时拒绝上传。若凭据不允许列桶，清理结果会说明无法列举前缀，逐项验证不得表述为前缀列举为空。
 
 一次性身份 seed 的独立入口如下，它在隔离数据库创建并校验 8 个身份后立即清理，包括凭据文件；自动套件直接调用相同 helper，不需要先运行此命令：
 
@@ -30,22 +30,11 @@ RUN_REAL_ACCEPTANCE=1 .venv/bin/python -m pytest -q
 .venv/bin/python -m tests.acceptance_real.seed
 ```
 
-浏览器人工测试需要持久账号，应按部署初始化命令创建管理员并通过应用注册用户，不能依赖一次性 seed。自动报告不记录密码、连接串、JWT、AK 或签名 URL。
+浏览器人工测试需要持久账号，应按部署初始化命令创建管理员并通过应用注册用户，不能依赖一次性 seed。失败日志中的请求摘要会过滤密码、连接串、JWT、AK 和签名 URL。
 
-清单来自 US、UC、SC 源文档，映射 51 项检查、105 AC、109 SC、14 主用例与 66 子用例；浏览器人工通道 6 项单独标注，不以 API 测试替代。离线检查和导出命令：
+验收直接执行账户、分类、文件与商品、交易、治理、即时消息和通知等业务检查，使用 HTTP 响应、WebSocket 事件、数据库状态和捕获邮件进行断言。OpenAPI JSON 用于识别请求路由。执行所需输入来自环境配置和结构化运行数据。
 
-```bash
-.venv/bin/python -m tests.acceptance_real.catalog --check
-.venv/bin/python -m tests.acceptance_real.catalog --output tests/acceptance_real/coverage.json
-```
-
-## 应用代码覆盖率
-
-同一pytest/CLI入口默认采集代码行与分支覆盖率，无需增加`--cov`参数。coverage.py分别追踪验收驱动与真实API子进程，服务停止、隔离资源清理后合并数据；配置启用thread/greenlet，以追踪SQLAlchemy异步调用跨greenlet切换的执行。采集范围为完整`backend/app`，包括未执行文件；测试驱动源码、第三方库、Alembic脚本和前端不计入分母。不同配置的每次运行独立出报告，不自动混合历史数据。
-
-验收JSON/Markdown报告的`code_coverage`包含行/分支计数、独立百分比和产物路径；HTML逐行报告、JSON、Cobertura XML、文本表及原始进程数据保存在`var/acceptance-real/code-coverage/<本轮随机标识>/`。输出目录独立于待删除的测试资源目录，因此资源回滚后仍可查看报告。coverage工具的综合百分比同时计入行和分支，与单独行覆盖率不同。
-
-真实API子进程必须提供有效的行/分支数据；采集或报告生成失败会让验收返回非零。业务或清理失败时，已有覆盖率标记`complete_acceptance=false`，不能当作完整验收的结果。当前没有人为设置最低覆盖率门槛，也不通过排除低覆盖文件抬高结果。默认pytest会捕获输出，可在验收报告中查看产物路径，或使用同一CLI入口查看终端摘要。
+全部已执行检查通过且本轮资源清理成功时，命令返回 0；检查失败、跳过、未执行任何检查或清理失败时返回非零。终端输出检查计数和清理结果，失败诊断保存在 `var/acceptance-real/acceptance-failure-<run_id>.log`，包含未通过检查、请求摘要和清理信息。
 
 ## 验证码邮件隔离
 

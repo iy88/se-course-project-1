@@ -13,7 +13,6 @@ import sys
 import tempfile
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from dotenv import dotenv_values, set_key
 from sqlalchemy import text
@@ -35,10 +34,6 @@ from app.devtools._support import (
 
 _PATTERN = re.compile(r"^acceptance_[0-9a-f]{32}$")
 
-if TYPE_CHECKING:
-    from tests.acceptance_real.code_coverage import CodeCoverage
-
-
 class Sandbox:
     def __init__(self, config: DevConfig):
         self.base = config
@@ -53,7 +48,6 @@ class Sandbox:
         self.schema_pending = False
         self.process = None
         self.clock_file: Path | None = None
-        self.code_coverage: CodeCoverage | None = None
         self.active = False
         self.baseline = None
         self.cleanup_failures: list[str] = []

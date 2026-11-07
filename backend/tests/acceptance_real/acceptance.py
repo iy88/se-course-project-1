@@ -34,7 +34,6 @@ from tests.acceptance_real.core import (
     BACKEND_ROOT,
     REPO_ROOT,
     ApiClient,
-    Catalog,
     CheckFailure,
     Recorder,
     RouteIndex,
@@ -109,7 +108,6 @@ class AcceptanceRun:
         *,
         base_url: str,
         config: DevConfig,
-        catalog: Catalog,
         run_id: str,
         server: ServerHandle | None = None,
         only: Sequence[str] | None = None,
@@ -117,7 +115,6 @@ class AcceptanceRun:
         self.base_url = base_url
         self.ws_url = (server.ws_url if server else None) or base_url
         self.config = config
-        self.catalog = catalog
         self.run_id = run_id
         self.server = server
         self.only = {value.strip().lower() for value in (only or []) if value.strip()}
@@ -658,8 +655,6 @@ class AcceptanceRun:
         with self.rec.step(
             "ENV-01",
             "环境/数据库/Redis/OSS 配置目标与真实可用性",
-            ac=["US-01-AC-01"],
-            sc=["SC-01-01"],
             note="基础设施预检；不替代业务语义验收",
         ):
             identity = asyncio.run(probe_database(self.config.database_url, expect_test_target=True))
@@ -700,7 +695,6 @@ class AcceptanceRun:
         with self.rec.step(
             "SVC-01",
             "真实服务指纹、OpenAPI 路由基准、健康与文档端点",
-            sc=["SC-01-05"],
             note="基础设施检查；签名 URL/令牌不落报告",
         ):
             health = self._call("GET", "/api/health", expected=200)
@@ -776,8 +770,6 @@ class AcceptanceRun:
         with self.rec.step(
             "ACC-01",
             "canonical seed 身份登录、错误凭证与退出；同一 seed 幂等复用",
-            ac=["US-01-AC-03"],
-            sc=["SC-01-03", "SC-01-08"],
         ):
             credentials = self._bootstrap_identities()
             self.rec.must(bool(self.seed_fingerprint), "seed 指纹存在")
@@ -812,8 +804,6 @@ class AcceptanceRun:
         with self.rec.step(
             "ACC-02",
             "注册验证码：错误验证码拒绝；正确验证码创建唯一账户；重复邮箱拒绝",
-            ac=["US-01-AC-01", "US-01-AC-02", "US-01-AC-08"],
-            sc=["SC-01-01", "SC-01-02", "SC-01-11"],
         ):
             email = self._fresh_email("lifecycle")
             code_response = self._dict(
@@ -877,8 +867,6 @@ class AcceptanceRun:
         with self.rec.step(
             "ACC-03",
             "忘记密码：绑定邮箱验证码重置；旧密码失效、用户 ID 不变",
-            ac=["US-01-AC-04"],
-            sc=["SC-01-04"],
         ):
             account = self.users["lifecycle"]
             email = str(account["email"])
@@ -903,8 +891,6 @@ class AcceptanceRun:
         with self.rec.step(
             "ACC-04",
             "主动改密：旧密码校验；改后旧密码失效、新密码可登录",
-            ac=["US-01-AC-05"],
-            sc=["SC-01-08"],
         ):
             account = self.users["lifecycle"]
             self._call(
@@ -942,8 +928,6 @@ class AcceptanceRun:
         with self.rec.step(
             "ACC-05",
             "换邮箱双验证+唯一性；改名；历史业务仍归原用户 ID",
-            ac=["US-01-AC-02", "US-01-AC-05", "US-01-AC-06"],
-            sc=["SC-01-08", "SC-01-09", "SC-01-10"],
         ):
             account = self.users["lifecycle"]
             # 先用普通私聊建立历史业务，再改邮箱/名称。
@@ -1027,8 +1011,6 @@ class AcceptanceRun:
         with self.rec.step(
             "CAT-01",
             "分类创建与读取；普通用户/匿名维护拒绝",
-            ac=["US-13-AC-04", "US-13-AC-05"],
-            sc=["SC-10-03"],
         ):
             suffix = self.run_id.lower()
             for key, name in (
@@ -1055,8 +1037,6 @@ class AcceptanceRun:
         with self.rec.step(
             "CAT-02",
             "改名保留旧主名为别名；别名搜索；按名称/ID 移除别名后旧名不再解析",
-            ac=["US-13-AC-03", "US-13-AC-07"],
-            sc=["SC-10-03", "SC-10-04"],
         ):
             key = "main"
             new_name = f"验收主分类改名-{self.run_id.lower()}"
@@ -1152,8 +1132,6 @@ class AcceptanceRun:
         with self.rec.step(
             "CAT-03",
             "停用分类：新发布拒绝；已有商品保留；有关联仅可停用不可删除；未关联可逻辑删除",
-            ac=["US-13-AC-04", "US-13-AC-05"],
-            sc=["SC-10-03"],
         ):
             # 先创建关联商品，再停用。
             product = self._publish(
@@ -1231,8 +1209,6 @@ class AcceptanceRun:
         with self.rec.step(
             "PROH-01",
             "禁发范围：登录读取、管理员增改删、普通用户/匿名拒绝",
-            ac=["US-02-AC-08", "US-08-AC-08", "US-08-AC-09"],
-            sc=["SC-02-11", "SC-02-12"],
         ):
             self._list(self._call("GET", "/api/v1/prohibited-items", user="buyer", expected=200))
             created = self._dict(
@@ -1420,8 +1396,6 @@ class AcceptanceRun:
         with self.rec.step(
             "FILE-01",
             "图片上传真实入 media/evidence 双桶；签名读取；篡改/非法/超限/错误命名空间拒绝",
-            ac=["US-02-AC-01", "US-07-AC-03"],
-            sc=["SC-02-01", "SC-07-04"],
             note="桶落点另由只读 SQL 核验",
         ):
             from io import BytesIO
@@ -1537,8 +1511,6 @@ class AcceptanceRun:
         with self.rec.step(
             "PROD-01",
             "待审核商品可见性、撤回审核、修改重提、共享池并发认领、审核通过",
-            ac=["US-02-AC-01", "US-02-AC-09", "US-08-AC-02", "US-09-AC-01"],
-            sc=["SC-02-01", "SC-02-04", "SC-02-13", "SC-02-14", "SC-02-15", "SC-07-10"],
             note="并发认领证据在 CONC-01 单列",
         ):
             product = self._publish(
@@ -1642,8 +1614,6 @@ class AcceptanceRun:
         with self.rec.step(
             "PROD-02",
             "审核不通过原因可见、公开不可见、修改重提后独立审核通过",
-            ac=["US-02-AC-02", "US-09-AC-01"],
-            sc=["SC-02-02"],
         ):
             product = self._publish(
                 "P_REJECT",
@@ -1674,8 +1644,6 @@ class AcceptanceRun:
         with self.rec.step(
             "PROD-03",
             "标签审核 approve_new 与 map_alias：新标签公开、同义别名生效；未通过不公开",
-            ac=["US-13-AC-01"],
-            sc=["SC-10-01"],
         ):
             new_tag = f"验收新标签-{self.run_id}"
             alias_name = f"验收同义名-{self.run_id}"
@@ -1743,8 +1711,6 @@ class AcceptanceRun:
         with self.rec.step(
             "PROD-04",
             "商品通过同时拒绝个别标签：逐申请原因落库；卖方可见/非本人不可见；空原因400无部分审批",
-            ac=["US-13-AC-01", "US-13-AC-02"],
-            sc=["SC-10-02"],
         ):
             good_tag = f"验收合适标签-{self.run_id}"
             bad_tag = f"验收不合适标签-{self.run_id}"
@@ -1891,8 +1857,6 @@ class AcceptanceRun:
         with self.rec.step(
             "PROD-05",
             "商品编辑历史、未结束买方通知、下架关闭待接受请求、重新上架",
-            ac=["US-02-AC-03", "US-02-AC-05", "US-02-AC-06", "US-09-AC-03", "US-09-AC-04", "US-09-AC-06", "US-12-AC-07"],
-            sc=["SC-02-05", "SC-02-08", "SC-02-09", "SC-02-10", "SC-02-16"],
         ):
             self._publish(
                 "P_EDIT",
@@ -1961,8 +1925,6 @@ class AcceptanceRun:
         with self.rec.step(
             "PROD-06",
             "商品权限与状态拒绝：非所有者、匿名、交易中禁改/禁下架、已认领撤回 409",
-            ac=["US-02-AC-03", "US-02-AC-04", "US-02-AC-09", "US-09-AC-02"],
-            sc=["SC-02-03", "SC-02-06", "SC-02-07", "SC-02-14"],
         ):
             product_id = int(self.products["P_EDIT"]["id"])
             self._call("PATCH", f"/api/v1/products/{product_id}", user="outsider", expected=404, json_body={"title": "越权"})
@@ -2018,8 +1980,6 @@ class AcceptanceRun:
         with self.rec.step(
             "SEARCH-01",
             "组合检索：关键词/多标签全部匹配/价格/别名/无匹配；未登录拒绝",
-            ac=["US-03-AC-01", "US-03-AC-02", "US-03-AC-03", "US-03-AC-06", "US-13-AC-07"],
-            sc=["SC-03-01", "SC-03-02", "SC-03-03", "SC-10-04"],
         ):
             self._publish(
                 "P_MULTI",
@@ -2107,8 +2067,6 @@ class AcceptanceRun:
         with self.rec.step(
             "FAV-01",
             "收藏：有效/重复/取消/失效提示/解封或重新上架恢复；封禁只读",
-            ac=["US-04-AC-01", "US-04-AC-02", "US-04-AC-09", "US-03-AC-04"],
-            sc=["SC-03-01", "SC-03-06", "SC-03-07", "SC-03-08", "SC-03-09"],
         ):
             self._publish(
                 "P_FAV",
@@ -2153,8 +2111,6 @@ class AcceptanceRun:
         with self.rec.step(
             "COMM-01",
             "评论：登录用户评论、卖方回复、作者删除、越权拒绝、限频、下架拒绝",
-            ac=["US-04-AC-03"],
-            sc=["SC-04-01", "SC-04-02", "SC-04-03", "SC-04-04"],
         ):
             self._publish(
                 "P_COMMENT",
@@ -2289,8 +2245,6 @@ class AcceptanceRun:
         with self.rec.step(
             "USERS-01",
             "卖方个人页：登录可见在售商品；未知用户 404；匿名 401",
-            ac=["US-04-AC-04"],
-            sc=["SC-04-05"],
         ):
             profile = self._dict(
                 self._call("GET", f"/api/v1/users/{self._uid('seller')}/profile", user="outsider", expected=200)
@@ -2307,8 +2261,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-01",
             "购买请求/重复请求/锁单关闭其余请求/接受权限/分支与通知",
-            ac=["US-05-AC-01", "US-05-AC-02", "US-05-AC-04", "US-05-AC-07", "US-05-AC-10", "US-09-AC-02", "US-13-AC-06"],
-            sc=["SC-05-01", "SC-05-02", "SC-05-04", "SC-05-05", "SC-05-12", "SC-02-06", "SC-03-04"],
         ):
             self._publish(
                 "P_MAIN",
@@ -2455,7 +2407,6 @@ class AcceptanceRun:
         with self.rec.step(
             "CONC-01",
             "并发锁单/重复请求：5轮独立商品真实并发，一胜一败无500，失败方无多余成功审计/通知/转移",
-            sc=["SC-05-05"],
         ):
             accept_rounds: list[dict[str, Any]] = []
             accept_all_ok = True
@@ -2725,8 +2676,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-02",
             "约定多轮：无约定不可确认完成；拒绝不改原约定；重复提案 409；本人提案不可自确认",
-            ac=["US-05-AC-05", "US-05-AC-07", "US-05-AC-11"],
-            sc=["SC-05-08", "SC-05-13"],
         ):
             # 无有效约定时不能提交完成确认。
             self._call("POST", f"/api/v1/trades/{self.trades['T_MAIN']['id']}/confirmations", user="buyer", expected=409, json_body={})
@@ -2769,8 +2718,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-03",
             "单方确认→双方确认完成；完成联动下架/归档/通知；双方评价与重复评价拒绝",
-            ac=["US-05-AC-07", "US-05-AC-10", "US-06-AC-01", "US-06-AC-02", "US-06-AC-03", "US-06-AC-05", "US-06-AC-06", "US-07-AC-01", "US-07-AC-02"],
-            sc=["SC-05-01", "SC-05-08", "SC-07-01", "SC-07-02", "SC-07-03"],
         ):
             one = self._confirm("T_MAIN", "buyer", note="买方已交付付款")
             self.rec.must("等待对方" in str(one.get("detail")), "单方确认仅记进度")
@@ -2857,8 +2804,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-04",
             "卖方拒绝/买方撤回/非当事人权限/已处理重复操作拒绝",
-            ac=["US-05-AC-02", "US-05-AC-03"],
-            sc=["SC-05-02", "SC-05-03", "SC-05-06", "SC-05-07"],
         ):
             self._publish(
                 "P_REJECT_TRADE",
@@ -2904,8 +2849,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-05",
             "取消：首约前买方直接取消；约定后双方同意；取消申请撤回与拒绝",
-            ac=["US-05-AC-06"],
-            sc=["SC-05-10", "SC-06-06"],
         ):
             self._publish("P_CANCEL_DIRECT", "seller", f"直接取消商品-{self.run_id}", price=6200, category_ids=[self.categories["main"]["id"]])
             self._approve("P_CANCEL_DIRECT")
@@ -3012,8 +2955,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-06",
             "争议：任一方发起即 disputed、清计时；双方确认解决恢复且不启动计时；争议后不可直接确认完成",
-            ac=["US-05-AC-08", "US-06-AC-04"],
-            sc=["SC-06-01", "SC-06-02", "SC-06-04", "SC-06-05", "SC-06-07", "SC-06-08"],
         ):
             self._publish("P_DISPUTE", "seller", f"争议商品-{self.run_id}", price=6500, category_ids=[self.categories["main"]["id"]])
             self._approve("P_DISPUTE")
@@ -3163,8 +3104,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-07",
             "冻结暂停计时：冻结期间写操作/双方IM拒绝，remaining 不下降；解冻续算；第三方会话不受影响",
-            ac=["US-02-AC-07", "US-04-AC-07", "US-07-AC-07", "US-14-AC-04", "US-08-AC-06"],
-            sc=["SC-02-17", "SC-05-11", "SC-09-04", "SC-09-08", "SC-09-10", "SC-04-08"],
         ):
             self._publish("P_FREEZE", "seller", f"冻结暂停商品-{self.run_id}", price=6600, category_ids=[self.categories["main"]["id"]])
             self._approve("P_FREEZE")
@@ -3335,8 +3274,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-08",
             "受控时钟 8 天：真实扫描转 abnormal+frozen、生成事项/通知；非认领 403；问询/说明/回复/调整/解冻/终止",
-            ac=["US-05-AC-09", "US-06-AC-05", "US-06-AC-06", "US-14-AC-01", "US-14-AC-02", "US-14-AC-03", "US-14-AC-05", "US-14-AC-06", "US-14-AC-07"],
-            sc=["SC-05-09", "SC-06-03", "SC-06-08", "SC-09-01", "SC-09-02", "SC-09-03", "SC-09-05", "SC-09-06", "SC-09-07", "SC-09-08"],
             note="7 天阈值未改；仅测试服务进程注入 UTC offset",
         ):
             self._timeout_race_regression()
@@ -3485,8 +3422,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-09",
             "已有单方确认后变更约定：生效清当前确认/停旧计时；重新确认后完整计时",
-            ac=["US-05-AC-11"],
-            sc=["SC-05-13"],
         ):
             self._publish("P_CHANGE", "seller", f"约定变更商品-{self.run_id}", price=6800, category_ids=[self.categories["main"]["id"]])
             self._approve("P_CHANGE")
@@ -3514,8 +3449,6 @@ class AcceptanceRun:
         with self.rec.step(
             "TRADE-10",
             "D-48：旧交易已结束、同商品新交易仍锁单时恢复旧交易 409，且无副作用",
-            ac=["US-14-AC-08"],
-            sc=["SC-09-09"],
         ):
             self._publish("P_D48", "seller", f"旧交易恢复冲突商品-{self.run_id}", price=6900, category_ids=[self.categories["main"]["id"]])
             self._approve("P_D48")
@@ -3562,8 +3495,6 @@ class AcceptanceRun:
         with self.rec.step(
             "REVIEW-ADMIN-STATES",
             "主助手补充：管理员九种目标状态逐项验证，不能伪造双方确认",
-            ac=["US-14-AC-06"],
-            sc=["SC-06-03", "SC-09-08"],
         ):
             self._publish("P_ADMIN_STATES", "seller", f"管理状态矩阵-{self.run_id}", price=7100, category_ids=[self.categories["main"]["id"]])
             self._approve("P_ADMIN_STATES")
@@ -3606,8 +3537,6 @@ class AcceptanceRun:
         with self.rec.step(
             "GOV-01",
             "商品举报：证据双桶、补充、认领/问询/说明/回复、限制展示、匿名公开、解除展示",
-            ac=["US-03-AC-05", "US-07-AC-03", "US-07-AC-04", "US-07-AC-05", "US-08-AC-03", "US-08-AC-04", "US-08-AC-05", "US-09-AC-05", "US-12-AC-04"],
-            sc=["SC-03-05", "SC-07-04", "SC-07-05", "SC-07-06", "SC-07-08", "SC-07-12", "SC-12-02"],
         ):
             report_product_title = f"Kindle Paperwhite 4-{self.run_id}"
             self._publish(
@@ -3826,8 +3755,6 @@ class AcceptanceRun:
         with self.rec.step(
             "GOV-02",
             "评论举报：无关交易内容仅移除违规对象；被处置人收到通知；收到举报入口可读",
-            ac=["US-07-AC-03", "US-07-AC-04", "US-07-AC-06", "US-08-AC-04", "US-12-AC-04"],
-            sc=["SC-07-11", "SC-07-13", "SC-12-02"],
         ):
             product_id = int(self.products["P_COMMENT"]["id"])
             comment_id = int(self.comments["second"])
@@ -3899,8 +3826,6 @@ class AcceptanceRun:
         with self.rec.step(
             "GOV-03",
             "举报无法认定：记录不予处理并匿名公开；不推定平台外事实、不自动处罚",
-            ac=["US-07-AC-02", "US-07-AC-05", "US-08-AC-03"],
-            sc=["SC-07-06"],
         ):
             # 用主交易买方评价作为举报对象。
             published = self._list(
@@ -3980,8 +3905,6 @@ class AcceptanceRun:
         with self.rec.step(
             "GOV-04",
             "举报认定违规并封禁：待接受请求关闭/通知/归档；交易冻结暂停计时；可申诉与管理员回复；解除恢复权限与展示",
-            ac=["US-01-AC-07", "US-04-AC-07", "US-07-AC-07", "US-08-AC-04", "US-08-AC-05", "US-08-AC-07", "US-09-AC-05", "US-14-AC-07"],
-            sc=["SC-01-06", "SC-01-07", "SC-01-12", "SC-07-07", "SC-07-09", "SC-07-13", "SC-09-05"],
         ):
             self._publish("P_BAN_PENDING", "seller2", f"封禁待接受商品-{self.run_id}", price=7200, category_ids=[self.categories["main"]["id"]])
             self._approve("P_BAN_PENDING")
@@ -4148,8 +4071,6 @@ class AcceptanceRun:
         with self.rec.step(
             "GOV-05",
             "管理事项直接处置、用户列表、直接封禁/解除路径与权限",
-            ac=["US-08-AC-01", "US-08-AC-07"],
-            sc=["SC-07-09", "SC-07-10"],
         ):
             # 管理员用户列表
             users = self._list(self._call("GET", "/api/v1/admin/users", user="admin", expected=200, params={"status": "all"}))
@@ -4224,8 +4145,6 @@ class AcceptanceRun:
         with self.rec.step(
             "IM-01",
             "普通私聊复用、交易分支、未读/已读独立、归档禁发、转普通私聊、WS 真实收发",
-            ac=["US-04-AC-04", "US-04-AC-05", "US-04-AC-06", "US-04-AC-07", "US-04-AC-08", "US-11-AC-03"],
-            sc=["SC-04-05", "SC-04-06", "SC-04-08", "SC-04-09", "SC-11-02"],
         ):
             normal = self._dict(
                 self._call(
@@ -4357,7 +4276,6 @@ class AcceptanceRun:
         with self.rec.step(
             "IM-02",
             "管理员仅按认领事项必要范围读取会话：消息举报目标会话成功，未认领/他人/普通人/无关会话拒绝，已读不变",
-            sc=["SC-04-07"],
         ):
             conversation = self._dict(
                 self._call(
@@ -4554,7 +4472,6 @@ class AcceptanceRun:
         with self.rec.step(
             "IM-03",
             "消息举报处置：处置前/他人不可见，处置后仅作者收到、不显示举报人",
-            sc=["SC-12-02"],
         ):
             message_report = self.reports["message"]
             message_report_id = int(message_report["id"])
@@ -4618,8 +4535,6 @@ class AcceptanceRun:
         with self.rec.step(
             "NOTIF-01",
             "通知列表不标读；打开具体通知才已读；未读数/待办独立；他人通知 404",
-            ac=["US-11-AC-01", "US-11-AC-02", "US-11-AC-04", "US-11-AC-06"],
-            sc=["SC-11-01", "SC-11-02", "SC-11-03", "SC-11-04"],
         ):
             before = self._dict(self._call("GET", "/api/v1/notifications/unread-count", user="buyer", expected=200))
             count_before = int(before.get("unread") or 0)
@@ -4655,8 +4570,6 @@ class AcceptanceRun:
         with self.rec.step(
             "NOTIF-02",
             "通知接收方与关键事件矩阵：请求/接受/约定/确认/完成/冻结/异常/问询/处置/申诉",
-            ac=["US-11-AC-05"],
-            sc=["SC-11-01"],
         ):
             buyer_items = self._notifications("buyer")
             seller_items = self._notifications("seller")
@@ -4672,8 +4585,6 @@ class AcceptanceRun:
         with self.rec.step(
             "MY-01",
             "我的商品全状态/审核原因/待接受数；我的交易双身份；评价发表/收到；举报/事项入口",
-            ac=["US-12-AC-01", "US-12-AC-02", "US-12-AC-03", "US-12-AC-04", "US-12-AC-05", "US-12-AC-06"],
-            sc=["SC-12-01", "SC-12-02", "SC-12-03", "SC-12-04"],
         ):
             # 留下 pending 与 rejected 两类，便于全状态断言。
             self._publish("P_MY_PENDING", "seller", f"我的待审商品-{self.run_id}", price=7400, category_ids=[self.categories["main"]["id"]])
@@ -4745,8 +4656,6 @@ class AcceptanceRun:
         with self.rec.step(
             "ADMIN-CORRECTION-01",
             "用户不可自改交付记录；认领管理员有依据调整并保留原确认历史",
-            ac=["US-06-AC-05"],
-            sc=["SC-06-03", "SC-06-08"],
             note="UC-C06-03：用户说明后由管理员按事项处理，不是普通用户自行更正",
         ):
             trade_id = int(self.trades["T_MAIN"]["id"])
@@ -4812,8 +4721,6 @@ class AcceptanceRun:
         with self.rec.step(
             "STATS-01",
             "管理员统计：账户/商品/事项/交易计数与只读 SQL 对照；无金额；范围按完成时间；权限",
-            ac=["US-10-AC-01", "US-10-AC-02", "US-10-AC-03", "US-10-AC-04", "US-10-AC-05", "US-10-AC-06"],
-            sc=["SC-08-01", "SC-08-02", "SC-08-03", "SC-08-04", "SC-08-05", "SC-08-06"],
         ):
             stats = self._dict(self._call("GET", "/api/v1/admin/stats", user="admin", expected=200))
             expected_users = self._db_one("select count(*) as n, count(*) filter (where status='banned') as banned from app.users")
@@ -4876,8 +4783,6 @@ class AcceptanceRun:
         with self.rec.step(
             "AUDIT-01",
             "审计：管理员分页/详情；失败登录与成功业务事件；app 无 UPDATE/DELETE/TRUNCATE；敏感字段不落审计",
-            ac=["US-01-AC-06", "US-08-AC-01"],
-            sc=["SC-01-10"],
         ):
             summary = self._dict(self._call('GET', '/api/v1/admin/audit/summary', user='admin', params={'days': 7}))
             self.rec.must_eq(summary['timezone'], 'Asia/Shanghai', '审计概览采用北京时间')
@@ -4936,8 +4841,6 @@ class AcceptanceRun:
         with self.rec.step(
             "AUDIT-02",
             "17 写入口/16 新增事件逐条落库；常规幂等操作不重复；payload 无正文/密码/验证码/JWT/AK",
-            ac=["US-08-AC-01"],
-            sc=["SC-01-10"],
         ):
             # 新会话事件：使用本轮尚未成对的 commenter/outsider，避免复用已有普通会话。
             created_conv = self._dict(
@@ -5186,8 +5089,6 @@ class AcceptanceRun:
         with self.rec.step(
             "OBJ-01",
             "对象引用/清理不变量：业务引用 committed 且真实存在；dry-run 不把已引用对象列为候选",
-            ac=["US-02-AC-01", "US-07-AC-03"],
-            sc=["SC-02-01", "SC-07-04"],
             note="把原独立对象锁/回收专项收敛为业务不变量；不调用 mock，不删除共享桶",
         ):
             image_keys = sorted(
@@ -5245,8 +5146,6 @@ class AcceptanceRun:
         with self.rec.step(
             "CLEAN-01",
             "收尾前核对：运行期间历史、审计与引用对象完整；结束后清理本轮隔离资源",
-            ac=["US-12-AC-06"],
-            sc=["SC-12-03"],
         ):
             counts = {}
             for table in ("users", "categories", "products", "trades", "reports", "disposal_cases", "audit_events", "stored_objects"):

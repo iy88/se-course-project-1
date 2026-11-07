@@ -1,8 +1,7 @@
-"""验收核心：OpenAPI 路由归一化、真实 HTTP 客户端、步骤记录、需求源清单。"""
+"""验收核心：OpenAPI 路由归一化、真实 HTTP 客户端、步骤记录与断言。"""
 
 from __future__ import annotations
 
-import hashlib
 import re
 import time
 from collections.abc import Iterable, Mapping, Sequence
@@ -15,13 +14,10 @@ import httpx
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = REPO_ROOT / "backend"
-DOCS_ROOT = REPO_ROOT / "docs" / "appendices"
 
 PASS = "PASS"
 FAIL = "FAIL"
 SKIP = "SKIP"
-PARTIAL = "PARTIAL"
-UNCOVERED = "UNCOVERED"
 
 
 class CheckFailure(AssertionError):
@@ -287,9 +283,6 @@ class CheckRecord:
     check_id: str
     title: str
     status: str
-    ac: list[str]
-    sc: list[str]
-    coverage: str
     note: str | None
     assertions: list[str] = field(default_factory=list)
     data: dict[str, Any] = field(default_factory=dict)
@@ -302,9 +295,6 @@ class CheckRecord:
             "check_id": self.check_id,
             "title": self.title,
             "status": self.status,
-            "ac": self.ac,
-            "sc": self.sc,
-            "coverage": self.coverage,
             "note": self.note,
             "assertions": self.assertions,
             "data": self.data,
@@ -347,9 +337,6 @@ class Recorder:
         check_id: str,
         title: str,
         *,
-        ac: Sequence[str] = (),
-        sc: Sequence[str] = (),
-        coverage: str = "full",
         note: str | None = None,
     ) -> Any:
         outer = self
@@ -357,9 +344,6 @@ class Recorder:
             check_id=check_id,
             title=title,
             status=FAIL,
-            ac=list(ac),
-            sc=list(sc),
-            coverage=coverage,
             note=note,
         )
 
@@ -388,15 +372,12 @@ class Recorder:
 
         return _Ctx()
 
-    def skip(self, check_id: str, title: str, *, ac: Sequence[str] = (), sc: Sequence[str] = (), reason: str) -> None:
+    def skip(self, check_id: str, title: str, *, reason: str) -> None:
         self.checks.append(
             CheckRecord(
                 check_id=check_id,
                 title=title,
                 status=SKIP,
-                ac=list(ac),
-                sc=list(sc),
-                coverage="none",
                 note=reason,
             )
         )
@@ -412,157 +393,3 @@ class Recorder:
         for check in self.checks:
             result[check.status] = result.get(check.status, 0) + 1
         return result
-
-
-@dataclass
-class RequirementItem:
-    item_id: str
-    kind: str
-    file: str
-    title: str
-    text: str
-
-
-class Catalog:
-    """从仓库源文本直接抽取 AC/SC 与 14 主用例/66 子用例。
-
-    不读取外部覆盖清单，也不以数量/编号出现作为语义覆盖。
-    """
-
-    def __init__(self, root: Path = DOCS_ROOT) -> None:
-        self.root = root
-        self.items: dict[str, RequirementItem] = {}
-        self.files: list[Path] = []
-        self.ac_ids: list[str] = []
-        self.sc_ids: list[str] = []
-        self.uc_ids: list[str] = []
-        self.subuc_ids: list[str] = []
-        self.digest = ""
-        self.cross_check: dict[str, Any] = {}
-
-    @staticmethod
-    def _table_rows(text: str, prefix: str) -> list[tuple[str, list[str]]]:
-        rows: list[tuple[str, list[str]]] = []
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped.startswith("|"):
-                continue
-            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-            if not cells:
-                continue
-            item_id = cells[0]
-            if re.fullmatch(rf"{prefix}-\d{{2}}-(?:AC-)?\d{{2}}", item_id):
-                rows.append((item_id, cells[1:]))
-        return rows
-
-    @staticmethod
-    def _uc_rows(text: str) -> list[tuple[str, str, list[str]]]:
-        """返回 (子用例编号, 名称, 其余单元格)。"""
-        rows: list[tuple[str, str, list[str]]] = []
-        for line in text.splitlines():
-            stripped = line.strip()
-            if not stripped.startswith("|"):
-                continue
-            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-            if not cells:
-                continue
-            item_id = cells[0].split(" ", 1)[0]
-            if re.fullmatch(r"UC-C\d{2}-\d{2}", item_id):
-                name = cells[0][len(item_id) :].strip() or item_id
-                rows.append((item_id, name, cells[1:]))
-        return rows
-
-    def load(self) -> Catalog:
-        us_dir = self.root / "user-stories"
-        sc_dir = self.root / "scenarios"
-        for path in sorted(us_dir.glob("US-*.md")):
-            self.files.append(path)
-            text = path.read_text(encoding="utf-8")
-            m = re.search(r"^#\s+(US-\d{2})\s+(.+)$", text, re.MULTILINE)
-            title = m.group(2).strip() if m else path.stem
-            for item_id, cells in self._table_rows(text, "US"):
-                if item_id not in self.ac_ids:
-                    self.ac_ids.append(item_id)
-                self.items[item_id] = RequirementItem(
-                    item_id=item_id,
-                    kind="AC",
-                    file=str(path.relative_to(REPO_ROOT)),
-                    title=title,
-                    text=" | ".join(cells),
-                )
-        for path in sorted(sc_dir.glob("SC-*.md")):
-            self.files.append(path)
-            text = path.read_text(encoding="utf-8")
-            m = re.search(r"^#\s+(SC-\d{2})\s+(.+)$", text, re.MULTILINE)
-            title = m.group(2).strip() if m else path.stem
-            for item_id, cells in self._table_rows(text, "SC"):
-                if item_id not in self.sc_ids:
-                    self.sc_ids.append(item_id)
-                self.items[item_id] = RequirementItem(
-                    item_id=item_id,
-                    kind="SC",
-                    file=str(path.relative_to(REPO_ROOT)),
-                    title=title,
-                    text=" | ".join(cells),
-                )
-        uc_dir = self.root / "use-cases"
-        for path in sorted(uc_dir.glob("UC-C*.md")):
-            self.files.append(path)
-            text = path.read_text(encoding="utf-8")
-            m = re.search(r"^#\s+(UC-C\d{2})\s+(.+)$", text, re.MULTILINE)
-            if not m:
-                continue
-            main_id = m.group(1)
-            main_title = m.group(2).strip()
-            if main_id not in self.uc_ids:
-                self.uc_ids.append(main_id)
-            self.items[main_id] = RequirementItem(
-                item_id=main_id,
-                kind="UC",
-                file=str(path.relative_to(REPO_ROOT)),
-                title=main_title,
-                text=main_title,
-            )
-            for sub_id, sub_title, cells in self._uc_rows(text):
-                if sub_id not in self.subuc_ids:
-                    self.subuc_ids.append(sub_id)
-                self.items[sub_id] = RequirementItem(
-                    item_id=sub_id,
-                    kind="SUC",
-                    file=str(path.relative_to(REPO_ROOT)),
-                    title=sub_title,
-                    text=" | ".join(cells),
-                )
-        hasher = hashlib.sha256()
-        for path in sorted(self.files):
-            hasher.update(str(path.relative_to(REPO_ROOT)).encode("utf-8"))
-            hasher.update(b"\0")
-            hasher.update(path.read_bytes())
-            hasher.update(b"\0")
-        self.digest = hasher.hexdigest()
-        self._cross_check()
-        return self
-
-    def _cross_check(self) -> None:
-        # 唯一来源是 docs；不再依赖外部覆盖清单。
-        self.cross_check = {
-            "source": "docs",
-            "legacy_expected_file_used": False,
-            "uc_main_count": len(self.uc_ids),
-            "uc_subcase_count": len(self.subuc_ids),
-        }
-
-    def summary(self) -> dict[str, Any]:
-        return {
-            "source_digest_sha256": self.digest,
-            "source_files": [str(p.relative_to(REPO_ROOT)) for p in self.files],
-            "ac_count": len(self.ac_ids),
-            "sc_count": len(self.sc_ids),
-            "uc_main_count": len(self.uc_ids),
-            "uc_subcase_count": len(self.subuc_ids),
-            "ac_ids": self.ac_ids,
-            "sc_ids": self.sc_ids,
-            "uc_ids": self.uc_ids,
-            "uc_subcase_ids": self.subuc_ids,
-            "cross_check": self.cross_check,
-        }

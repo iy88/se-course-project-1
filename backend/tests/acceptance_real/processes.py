@@ -1,4 +1,4 @@
-"""Stop the owned acceptance server while allowing coverage to flush."""
+"""Stop the owned acceptance server and wait for graceful shutdown."""
 from __future__ import annotations
 
 import subprocess

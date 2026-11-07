@@ -16,11 +16,7 @@ import pytest
 
 def test_real_acceptance() -> None:
     if os.environ.get("RUN_REAL_ACCEPTANCE") != "1":
-        pytest.fail(
-            ("真实全量验收未启用：请显式设置 RUN_REAL_ACCEPTANCE=1；"
-             "拒绝以 skipped/0 条视为成功。默认只允许离线清单导出："
-             "python -m tests.acceptance_real.catalog --check")
-        )
+        pytest.fail("请设置 RUN_REAL_ACCEPTANCE=1 启用真实业务验收。")
     from tests.acceptance_real.runner import main
 
     port = int(os.environ.get("ACCEPTANCE_PORT", "8101"))
@@ -29,4 +25,4 @@ def test_real_acceptance() -> None:
     if run_id:
         argv.extend(["--run-id", run_id])
     result = main(argv)
-    assert result == 0, "真实验收存在 FAIL/SKIP/未语义覆盖，查看 var/acceptance-real/acceptance-failure-*.log 与 code-coverage/ 原生产物"
+    assert result == 0, "真实验收存在失败或跳过的检查，查看 var/acceptance-real/acceptance-failure-*.log"
