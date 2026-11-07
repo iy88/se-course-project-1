@@ -3607,8 +3607,9 @@ class AcceptanceRun:
             ac=["US-03-AC-05", "US-07-AC-03", "US-07-AC-04", "US-07-AC-05", "US-08-AC-03", "US-08-AC-04", "US-08-AC-05", "US-09-AC-05", "US-12-AC-04"],
             sc=["SC-03-05", "SC-07-04", "SC-07-05", "SC-07-06", "SC-07-08", "SC-07-12", "SC-12-02"],
         ):
+            report_product_title = f"Kindle Paperwhite 4-{self.run_id}"
             self._publish(
-                "P_REPORT", "seller", f"Kindle Paperwhite 4-{self.run_id}", price=7100,
+                "P_REPORT", "seller", report_product_title, price=7100,
                 category_ids=[self.categories["main"]["id"]], asset="product_kindle_demo.jpg",
                 description="Kindle Paperwhite 4，屏幕无划痕。",
             )
@@ -3757,7 +3758,7 @@ class AcceptanceRun:
                     "/api/v1/products/search",
                     user="buyer",
                     expected=200,
-                    params={"keyword": f"举报处置商品-{self.run_id}"},
+                    params={"keyword": report_product_title},
                 )
             )
             self.rec.must_eq(restricted_search.get("total"), 0, "展示限制后搜索无入口")
@@ -3811,7 +3812,7 @@ class AcceptanceRun:
                     "/api/v1/products/search",
                     user="buyer",
                     expected=200,
-                    params={"keyword": f"举报处置商品-{self.run_id}"},
+                    params={"keyword": report_product_title},
                 )
             )
             self.rec.must_eq(restored_search.get("total"), 1, "解除限制后搜索恢复")
