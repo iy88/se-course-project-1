@@ -113,23 +113,24 @@ pipeline {
                         .venv/bin/python -m pip --version \
                             2>/dev/null || true
 
-                        # 只检查依赖导入，不加载项目生产配置
-                        .venv/bin/python -c '
-import fastapi
-import uvicorn
-import sqlalchemy
-import asyncpg
-import taskiq
-import taskiq_redis
-import anyio
-
-print("Backend dependency imports passed.")
-'
+                        # 本地 push 前运行测试；GitHub Actions 保留完整 CI。
+                        # Jenkins 中暂时关闭依赖导入 smoke test。
+                        # .venv/bin/python -c '
+                        # import fastapi
+                        # import uvicorn
+                        # import sqlalchemy
+                        # import asyncpg
+                        # import taskiq
+                        # import taskiq_redis
+                        # import anyio
+                        # print("Backend dependency imports passed.")
+                        # '
                     '''
                 }
             }
         }
 
+        /* Jenkins 自动化测试暂时关闭；本地 push 前主动运行，GitHub Actions 保留完整 CI。
         stage('Realtime Integration - PostgreSQL + Redis + Taskiq') {
             steps {
                 dir('source/backend') {
@@ -257,6 +258,7 @@ PY
                 }
             }
         }
+        */
 
         stage('Install Mobile Dependencies') {
             steps {
@@ -294,7 +296,7 @@ PY
                     sh '''
                         set -eu
 
-                        npm test
+                        # npm test  # 本地 push 前运行；GitHub Actions 保留
                         PROJECT1_FRONTEND_CONFIG=public npm run build
 
                         test -s dist/index.html
@@ -311,7 +313,7 @@ PY
                     sh '''
                         set -eu
 
-                        npm test
+                        # npm test  # 本地 push 前运行；GitHub Actions 保留
                         PROJECT1_FRONTEND_CONFIG=public npm run build
 
                         test -s dist/index.html
