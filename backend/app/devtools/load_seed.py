@@ -225,7 +225,7 @@ def main(argv=None) -> int:
         with credentials_lock(path):
             if path.exists():
                 require_private(path)
-                data = json.loads(path.read_text())
+                data = json.loads(path.read_text(encoding='utf-8'))
                 if (data.get('version'), data.get('target'), data.get('users'), data.get('products')) != (VERSION, _target(settings), args.users, args.products):
                     raise ValueError('manifest version/target/scale mismatch; use a new manifest')
             elif args.verify_only:

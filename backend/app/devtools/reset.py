@@ -32,6 +32,7 @@ def clear_oss(s: Settings) -> None:
     for name in (config.media_bucket, config.evidence_bucket):
         print(f'OSS clearing: {name}/{config.key_prefix}', flush=True)
         bucket = _create_bucket(config, name)
+        deleted_count = 0
         while True:
             result = bucket.client.list_objects_v2(oss.ListObjectsV2Request(bucket=name, prefix=config.key_prefix, max_keys=1000))
             keys = [item.key for item in (result.contents or [])]
@@ -41,7 +42,18 @@ def clear_oss(s: Settings) -> None:
             for key in keys:
                 if not key.startswith(config.key_prefix):
                     raise ValueError('OSS 对象超出前缀范围')
-                _close_result(bucket.delete_object(key))
+            result = bucket.client.delete_multiple_objects(oss.DeleteMultipleObjectsRequest(
+                bucket=name,
+                delete=oss.Delete(objects=[oss.ObjectIdentifier(key=key) for key in keys], quiet=False),
+            ))
+            try:
+                confirmed = {item.key for item in (result.deleted_objects or [])}
+                if confirmed != set(keys):
+                    raise ValueError('OSS 批量删除未完整确认；请核对资源后重跑')
+            finally:
+                _close_result(result)
+            deleted_count += len(keys)
+            print(f'OSS clearing: {name}, deleted={deleted_count}', flush=True)
         print(f'OSS cleared: {name}/{config.key_prefix}', flush=True)
 
 
