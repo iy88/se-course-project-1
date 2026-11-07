@@ -124,6 +124,7 @@ def _run(env_file: Path, manifest: Path, *, fault: bool = False, response_lost: 
         )
     code = """
 import sys
+from threading import Lock
 import app.storage.base as storage_base
 from app.devtools.demo_seed import main
 original_build = storage_base.build_storage
@@ -131,11 +132,14 @@ class FailingStorage:
     def __init__(self, wrapped):
         self.wrapped = wrapped
         self.calls = 0
+        self.lock = Lock()
     def __getattr__(self, name):
         return getattr(self.wrapped, name)
     def save_to_key(self, *args, **kwargs):
-        self.calls += 1
-        if self.calls == 2:
+        with self.lock:
+            self.calls += 1
+            should_fail = self.calls == 2
+        if should_fail:
             if RESPONSE_LOST:
                 self.wrapped.save_to_key(*args, **kwargs)
             raise RuntimeError('injected storage failure')
@@ -182,10 +186,10 @@ def test_demo_seed_sqlite_local(tmp_path):
     assert failed.returncode != 0 and 'RuntimeError' in failed.stderr
     partial = _load_manifest(manifest)
     assert partial['version'] == 2 and not partial['complete']
-    assert len(partial['files']) == 2
     partial_keys = {entry['key'] for entry in partial['files'].values()}
     existing_keys = {p.relative_to(storage_root).as_posix() for p in storage_root.rglob('*') if p.is_file()}
-    assert len(existing_keys) == 1 and existing_keys <= partial_keys
+    assert existing_keys < partial_keys
+    assert len(partial_keys - existing_keys) == 1
 
     first = _run(env_file, manifest)
     assert first.returncode == 0, first.stderr
@@ -699,8 +703,10 @@ def test_demo_seed_recovers_lost_upload_response(tmp_path):
     failed = _run(env_file, manifest, fault=True, response_lost=True)
     assert failed.returncode != 0 and 'RuntimeError' in failed.stderr
     partial = _load_manifest(manifest)
-    assert not partial['complete'] and len(partial['files']) == 2
-    assert len({p.relative_to(storage_root).as_posix() for p in storage_root.rglob('*') if p.is_file()}) == 2
+    assert not partial['complete']
+    assert {p.relative_to(storage_root).as_posix() for p in storage_root.rglob('*') if p.is_file()} == {
+        entry['key'] for entry in partial['files'].values()
+    }
     retried = _run(env_file, manifest)
     assert retried.returncode == 0, retried.stderr
     data = _load_manifest(manifest)

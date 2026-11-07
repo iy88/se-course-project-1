@@ -27,6 +27,7 @@ from app.core.private_files import require_private
 from app.core.security import hash_password, verify_password
 from app.devtools._support import credentials_lock, write_private_json
 from app.devtools.demo_seed import _target
+from app.devtools.demo_scenarios.catalog import PRODUCTS
 from app.models import User, Category, Product, ProductImage, ProductTag, ReviewRecord, Conversation, Message
 from app.models.stored_object import StoredObject
 from app.storage.base import StorageAlreadyExists, build_storage
@@ -35,8 +36,16 @@ ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MANIFEST = ROOT / 'var/load/manifest.json'
 ASSETS = Path(__file__).parent / 'demo_scenarios/assets'
 VERSION = 2
-TOPICS = ('键盘', '教材', '台灯', '自行车', '相机', '水杯', '笔记', '球拍')
-ASSET_NAMES = ('keyboard', 'textbook', 'lamp', 'bike', 'camera', 'mug', 'notes', 'racket')
+LOAD_IMAGES = (
+    ('keyboard', '键盘', 'product_keyboard_pending'),
+    ('textbook', '教材', 'product_textbook'),
+    ('lamp', '台灯', 'product_lamp_pending'),
+    ('bike', '自行车', 'product_folding_bike'),
+    ('camera', '相机', 'product_camera_rejected'),
+    ('mug', '水杯', 'product_mug'),
+    ('monitor', '显示器', 'product_monitor_resubmitted'),
+    ('racket', '球拍', 'product_racket'),
+)
 
 
 def asset_for(data: dict, index: int) -> dict:
@@ -50,14 +59,15 @@ def category_index(index: int, users: int) -> int:
 def new_manifest(settings, users: int, products: int) -> dict:
     tag = secrets.token_hex(8)
     assets = []
-    for name, keyword in zip(ASSET_NAMES, TOPICS):
-        image = (ASSETS / f'product_{name}.jpg').read_bytes()
+    product_assets = {product.key: product.asset for product in PRODUCTS}
+    for name, keyword, product_key in LOAD_IMAGES:
+        image = (ASSETS / product_assets[product_key]).read_bytes()
         assets.append(dict(name=name, keyword=keyword, base64=base64.b64encode(image).decode(),
                            sha256=hashlib.sha256(image).hexdigest(), size_bytes=len(image)))
     return dict(version=VERSION, target=_target(settings), tag=tag, complete=False,
                 users=users, products=products, password=secrets.token_urlsafe(24),
                 image_base64=assets[0]['base64'], image_sha256=assets[0]['sha256'],
-                image_assets=assets, search_terms=list(TOPICS),
+                image_assets=assets, search_terms=[asset['keyword'] for asset in assets],
                 accounts=[], product_ids=[], category_ids=[], conversation_ids=[])
 
 
@@ -146,8 +156,8 @@ async def seed(settings, path: Path, data: dict, workers: int, *, verify_only: b
             data['product_ids'] = []
             for offset in range(0, data['products'], 500):
                 products = [Product(seller_id=accounts[i % data['users']].id,
-                                    title=f'{TOPICS[i % len(TOPICS)]} {("九成新", "闲置", "毕业转让")[i % 3]} {i:06d}',
-                                    description=(f'{TOPICS[i % len(TOPICS)]}，{("自提", "校内面交", "图书馆门口交接")[i % 3]}。' * (2 + i % 23)),
+                                    title=f'{asset_for(data, i)["keyword"]} {("九成新", "闲置", "毕业转让")[i % 3]} {i:06d}',
+                                    description=(f'{asset_for(data, i)["keyword"]}，{("自提", "校内面交", "图书馆门口交接")[i % 3]}。' * (2 + i % 23)),
                                     price_cents=100 + (i * 137) % 100000, status='listed',
                                     created_at=now - timedelta(minutes=i), listed_at=now - timedelta(minutes=i))
                             for i in range(offset, min(offset + 500, data['products']))]

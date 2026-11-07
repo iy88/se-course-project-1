@@ -47,7 +47,7 @@ from tests.acceptance_real.seed import (
     seed_identities,
 )
 
-ASSETS = BACKEND_ROOT / "tests" / "acceptance_real" / "assets"
+ASSETS = BACKEND_ROOT / "app" / "devtools" / "demo_scenarios" / "assets"
 ACCEPTANCE_ROOT = REPO_ROOT / "var" / "acceptance-real"
 
 AGREEMENT_A = {
@@ -432,7 +432,7 @@ class AcceptanceRun:
         price: int = 5000,
         category_ids: Sequence[int] | None = None,
         new_names: Sequence[str] | None = None,
-        asset: str = "product_bike.jpg",
+        asset: str = "tag_app_textbook_demo.jpg",
         description: str | None = None,
     ) -> dict[str, Any]:
         uploaded = self._upload(seller, asset, "product")
@@ -1462,7 +1462,7 @@ class AcceptanceRun:
                 self.rec.must(urlsplit(approved['avatar_url']).netloc in self.api.allowed_storage_hosts, '头像返回OSS直链')
             self.api.signed_get(approved['avatar_url'])
             self._call('POST', decision_path, user='admin', expected=409, json_body={'key': avatar_key, 'approved': True})
-            product_file = self._upload("seller", "product_bike.jpg", "product")
+            product_file = self._upload("seller", "tag_app_textbook_demo.jpg", "product")
             self.files["product_probe"] = product_file
             self.rec.must(str(product_file["key"]).startswith("product/"), "商品图 key 前缀 product/")
             signed = self.api.signed_get(str(product_file["url"]))
@@ -1479,7 +1479,7 @@ class AcceptanceRun:
             logical_key = product_file['key']
             sig = hmac.new(self.config.settings.file_url_secret.encode(), f'{logical_key}:{expiry}'.encode(), hashlib.sha256).hexdigest()
             self.api.signed_get(f'/api/v1/files/{logical_key}?exp={expiry}&sig={sig}')
-            valid = _asset_bytes("product_bike.jpg")
+            valid = _asset_bytes("tag_app_textbook_demo.jpg")
             base = {"namespace":"product","filename":"x.jpg","content_type":"image/jpeg","size_bytes":len(valid),"sha256":hashlib.sha256(valid).hexdigest()}
             for body, expected, note in [
                 ({**base,"namespace":"unknown"},400,"invalid-namespace"),

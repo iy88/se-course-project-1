@@ -16,6 +16,7 @@ import json
 import os
 import secrets
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -182,8 +183,9 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
             cursor.close()
     storage = build_storage(settings)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    uploads: dict[str, bytes] = {}
 
-    def ensure_file(name: str, namespace: str, filename: str, asset: str, content: bytes) -> dict:
+    def register_file(name: str, namespace: str, filename: str, asset: str, content: bytes) -> dict:
         entry = data['files'].get(name)
         if entry is None:
             entry = {
@@ -195,17 +197,18 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
                 'sha256': hashlib.sha256(content).hexdigest(),
             }
             data['files'][name] = entry
-            # Persist the key before the first remote write, including its uncertainty window.
-            write_private_json(manifest, data)
-        if not storage.exists(entry['key']):
-            try:
-                storage.save_to_key(entry['key'], content)
-            except StorageAlreadyExists:
-                # Another writer or a successful write with a lost response: compare below.
-                pass
-        if storage.open(entry['key']) != content:
-            raise ValueError('已登记演示文件内容不一致；拒绝覆盖')
+        uploads[entry['key']] = content
         return entry
+
+    def upload(item: tuple[str, bytes]) -> None:
+        key, content = item
+        try:
+            storage.save_to_key(key, content)
+        except StorageAlreadyExists:
+            # A retry can encounter an object uploaded before a lost response.
+            pass
+        if storage.open(key) != content:
+            raise ValueError('已登记演示文件内容不一致；拒绝覆盖')
     try:
         async with factory() as session:
             if data['complete']:
@@ -231,10 +234,13 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
                     raise ValueError(f'演示邮箱已存在（{key}）；拒绝接管')
             validate_catalog()
             now = datetime.now(UTC)
-            await build(session, data=data, settings=settings, ensure_file=ensure_file, now=now)
-            # The manifest is prepared before commit. A commit whose outcome is unknown is
-            # deliberately refused on retry if its account emails already exist.
+            await build(session, data=data, settings=settings, ensure_file=register_file, now=now)
+            # Journal every key before starting uploads. Commit only after the whole batch verifies.
             write_private_json(manifest, data)
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                pending_uploads = [pool.submit(upload, item) for item in uploads.items()]
+            for pending in pending_uploads:
+                pending.result()
             await session.commit()
             data['complete'] = True
             write_private_json(manifest, data)
