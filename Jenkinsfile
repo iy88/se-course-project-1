@@ -160,18 +160,18 @@ pipeline {
                         RELEASE_ID="${REVISION}-${BUILD_NUMBER}"
                         OUTPUT_DIR="${WORKSPACE}/release-artifacts"
 
-                        # 只清理本任务专用的发布包目录。
+                        # Clean only this job's dedicated release directory.
                         mkdir -p "${OUTPUT_DIR}"
                         find "${OUTPUT_DIR}" -maxdepth 1 -type f -delete
 
-                        # 后端仅打包此提交中已追踪的 backend 文件。
-                        # 不包含工作区的 .venv、测试运行数据或未追踪配置。
+                        # Package only backend files tracked in this commit.
+                        # Excludes the workspace .venv, test run data, and untracked configuration.
                         git archive \
                             --format=tar.gz \
                             --output="${OUTPUT_DIR}/backend-${RELEASE_ID}.tar.gz" \
                             HEAD backend
 
-                        # 前端使用本次 CI 已生成的构建产物。
+                        # Frontend uses the build artifacts produced by this CI run.
                         tar -C frontend/mobile/dist \
                             -czf "${OUTPUT_DIR}/mobile-${RELEASE_ID}.tar.gz" .
 
@@ -232,22 +232,22 @@ pipeline {
 
                         OUTPUT_DIR="${WORKSPACE}/release-artifacts"
 
-                        # 从已打包的发布信息读取版本，而不是重新拉取代码。
+                        # Read the version from the packaged release metadata instead of re-fetching code.
                         RELEASE_ID="$(sed -n 's/^release_id=//p' "${OUTPUT_DIR}/release.txt")"
 
-                        # 后续会将版本号用于远端路径，先严格限制格式。
+                        # The version becomes part of remote paths; enforce a strict format first.
                         printf '%s\\n' "${RELEASE_ID}" |
                             grep -Eq '^[0-9a-f]{40}-[0-9]+$'
 
                         REMOTE_DIR="/srv/se-course-project1/releases/${RELEASE_ID}"
 
-                        # 上传前再次检查本地发布包。
+                        # Re-verify the local release package before upload.
                         (
                             cd "${OUTPUT_DIR}"
                             sha256sum --check SHA256SUMS
                         )
 
-                        # 统一使用已核对的主机公钥进行 SSH 连接。
+                        # Always connect using the pre-verified host public key.
                         ssh_prod() {
                             ssh \
                                 -p 22 \
@@ -261,7 +261,7 @@ pipeline {
                                 "$@"
                         }
 
-                        # 每次构建使用独立目录；若已存在则停止，避免覆盖。
+                        # Each build uses its own directory; stop if it already exists to avoid overwrites.
                         ssh_prod "mkdir -- '${REMOTE_DIR}'"
 
                         scp \
@@ -280,7 +280,7 @@ pipeline {
                             "${OUTPUT_DIR}/SHA256SUMS" \
                             "deploy@192.168.3.221:${REMOTE_DIR}/"
 
-                        # 在生产机校验上传后的文件。
+                        # Verify the uploaded files on the production host.
                         ssh_prod \
                             "set -eu
                              cd '${REMOTE_DIR}'
@@ -441,20 +441,20 @@ REMOTE
                         }
 
                         if (completed.size() != 1) {
-                            error('生产备份未返回唯一的完成标记，停止流水线。')
+                            error('The production backup did not return exactly one completion marker; stopping the pipeline.')
                         }
 
                         String backupPath = completed[0].substring('BACKUP_COMPLETE='.length()).trim()
 
                         if (!(backupPath ==~ '^/var/backups/se-course-project1/predeploy-[A-Za-z0-9-]+$')) {
-                            error('生产备份返回的目录格式不符合预期，停止流水线。')
+                            error('The production backup returned a directory in an unexpected format; stopping the pipeline.')
                         }
 
                         env.PRODUCTION_BACKUP_DIR = backupPath
 
-                        currentBuild.description = "生产备份：${backupPath}"
+                        currentBuild.description = "Production backup: ${backupPath}"
 
-                        echo "生产 PostgreSQL 与 Redis 备份完成：${backupPath}"
+                        echo "Production PostgreSQL and Redis backup completed: ${backupPath}"
                     }
                 }
             }
@@ -466,7 +466,7 @@ REMOTE
                     sh '''
                         set -eu
 
-                        # 必须由本次流水线的备份阶段取得完成标记。
+                        # The completion marker must come from this pipeline's backup stage.
                         test -n "${PRODUCTION_BACKUP_DIR:-}"
 
                         OUTPUT_DIR="${WORKSPACE}/release-artifacts"
@@ -622,11 +622,11 @@ REMOTE
                 allowEmptyArchive: false
             )
 
-            echo '前端构建、生产备份、数据库迁移及版本激活通过。'
+            echo 'Frontend build, production backup, database migration, and release activation passed.'
         }
 
         failure {
-            echo '流水线失败，请查看第一个失败阶段；若已进入激活阶段，请同时检查回退结果。'
+            echo 'Pipeline failed; check the first failed stage. If activation had started, also check the rollback result.'
             script {
                 sendBuildNotification()
             }

@@ -100,11 +100,11 @@ if len(sys.argv) != 2 or sys.argv[1] not in ('start', 'stop', 'restart', 'status
     sys.exit(0 if sys.argv[1:] in ([], ['--help']) else 2)
 action = sys.argv[1]
 if action == 'restart':
-    # 默认沿用正在托管的环境；显式 APP_ENV_FILE 可切换目标。
+    # Reuse the currently supervised environment by default; an explicit APP_ENV_FILE switches the target.
     previous_env = load_state().get('env_file')
     if 'APP_ENV_FILE' not in os.environ and previous_env:
         os.environ['APP_ENV_FILE'] = previous_env
-    selected_env_path()  # 在停止前验证环境选择参数。
+    selected_env_path()  # Validate the environment selection before stopping.
     script = str(Path(__file__).resolve())
     result = subprocess.run([sys.executable, script, 'stop'], check=False)
     if result.returncode:
@@ -180,8 +180,8 @@ if int(subprocess.check_output(['node', '-p', 'process.versions.node.split(".")[
 # strictPort also prevents Vite from silently selecting a different port.
 def check_port(host, port):
     with socket.socket() as sock:
-        # 与服务监听 socket 一致，允许重启时复用 TIME_WAIT 地址。
-        # 已有监听者仍会使 bind 失败。
+        # Match the service listening socket so restarts can reuse TIME_WAIT addresses.
+        # An existing listener will still make bind fail.
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE if sys.platform == 'win32' else socket.SO_REUSEADDR, 1)
         try:
             sock.bind((host, port))
@@ -297,7 +297,7 @@ try:
         time.sleep(0.3)
 except KeyboardInterrupt:
     print('\nStopping services...', flush=True)
-except Exception as exc:  # noqa: BLE001 - CLI 顶层统一转退出码，保留 traceback 以外的干净提示
+except Exception as exc:  # noqa: BLE001 - convert to an exit code at the CLI top level; keep a clean message without traceback
     print(str(exc), file=sys.stderr)
     sys.exit(1)
 finally:

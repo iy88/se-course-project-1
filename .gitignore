@@ -15,17 +15,17 @@ dist/
 .vite/
 *.local
 
-# 运行期数据（数据库/本地对象存储/日志）
+# Runtime data (database/local object storage/logs)
 /var/
 
-# 环境变量
+# Environment variables
 .env
 .env.*
 !.env.example
 !/backend/.env.dev.example
 !/backend/.env.prod.example
 
-# 编辑器
+# Editor
 .idea/
 .vscode/
 
