@@ -148,7 +148,7 @@ async function load() {
     conversation.value = await http.get(`/conversations/${route.params.id}`)
   } catch {
     loadError.value = '会话加载失败，请稍后重试。'
-    return
+    return false
   } finally {
     loading.value = false
   }
@@ -161,6 +161,7 @@ async function load() {
   await nextTick()
   markRead()
   scrollToBottom()
+  return true
 }
 
 function markRead() {
@@ -214,28 +215,19 @@ async function toNormal() {
 }
 
 async function onWS(data) {
-  if (data.type === 'resync_required') {
-    await load()
-    return
+  if (data.type === 'resync_required' ||
+      (data.type === 'message' && data.conversation_id === Number(route.params.id))) {
+    if (!await load()) throw new Error('Unable to refresh conversation')
   }
-  if (data.type === 'message' && data.conversation_id === Number(route.params.id)) {
-    await load()
-  }
-}
-
-async function onResync() {
-  await load()
 }
 
 onMounted(() => {
   load()
   unwireWS = connectWS(onWS)
-  window.addEventListener('realtime:resync', onResync)
   readTimer = setInterval(markRead, 8000)
 })
 onUnmounted(() => {
   unwireWS?.()
-  window.removeEventListener('realtime:resync', onResync)
   clearInterval(readTimer)
 })
 </script>
