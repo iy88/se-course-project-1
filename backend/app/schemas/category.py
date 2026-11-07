@@ -1,4 +1,4 @@
-"""分类标签 Pydantic 模型。"""
+"""Pydantic models for category tags."""
 
 from pydantic import BaseModel, Field
 from app.core.text import NonBlank64

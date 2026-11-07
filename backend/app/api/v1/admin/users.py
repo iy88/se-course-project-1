@@ -1,4 +1,4 @@
-"""管理员账户管理：列表、封禁与解除（BR-32、DT-03、TR-10）。"""
+"""Administrator account management: listing, banning, and unbanning (BR-32, DT-03, TR-10)."""
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -71,7 +71,7 @@ async def list_users(
 
 @router.post("/{user_id}/ban")
 async def ban_user(user_id: int, body: BanIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """封禁账户：记录执行者、理由与时间（BR-32）；联动冻结交易与商品停止展示（DT-03）。"""
+    """Ban an account: record the actor, reason, and time (BR-32); cascade to freezing trades and stopping product display (DT-03)."""
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
@@ -79,8 +79,10 @@ async def ban_user(user_id: int, body: BanIn, admin: CurrentAdmin, db: DbSession
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能封禁管理员账户")
     if user.status == AccountStatus.BANNED.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "该账户已被封禁")
-    # 直接触发封禁时建立封禁事项，作为申辩沟通入口；处置即时形成，
-    # 执行管理员即该事项认领人（BR-34），申辩沟通限受限用户与认领管理员（BR-32）
+    # A directly triggered ban creates a ban case as the appeal/communication entry;
+    # the disposal is immediate, the executing administrator is the case claimant
+    # (BR-34), and appeal communication is limited to the restricted user and the
+    # claiming administrator (BR-32).
     case = await case_service.create_case(
         db,
         case_type=CaseType.ACCOUNT_BAN,
@@ -109,7 +111,7 @@ async def ban_user(user_id: int, body: BanIn, admin: CurrentAdmin, db: DbSession
 
 @router.post("/{user_id}/unban")
 async def unban_user(user_id: int, body: UnbanIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """解除封禁：管理员确认解除后自动恢复原权限及因处置停止的展示（TR-10）。"""
+    """Lift a ban: after administrator confirmation, automatically restore original permissions and display stopped by the disposal (TR-10)."""
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")

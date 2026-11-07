@@ -1,4 +1,4 @@
-"""图片校验：限制大小，核对文件头/扩展名，并校验图片结构及解码。"""
+"""Image validation: enforce size limits, check magic bytes/extension consistency, and validate image structure and decoding."""
 
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ _GIF_MAGICS = (b"GIF87a", b"GIF89a")
 
 
 class ImageValidationError(StorageError):
-    """上传内容不是受支持的真实图片。"""
+    """The uploaded content is not a genuine supported image."""
 
 
 def detect_image_type(content: bytes) -> str | None:
-    """只依据文件头返回 image/*；无法识别时返回 None。"""
+    """Return image/* based only on magic bytes; return None when unrecognized."""
     if not content:
         return None
     if content.startswith(_PNG_MAGIC):
@@ -41,7 +41,7 @@ def detect_image_type(content: bytes) -> str | None:
 
 
 def validate_image(content: bytes, filename: str) -> str:
-    """校验大小、magic 与扩展名一致性，返回真实 MIME。"""
+    """Validate size, magic bytes, and extension consistency, and return the real MIME type."""
     if not content:
         raise ImageValidationError("空文件")
     if len(content) > MAX_IMAGE_BYTES:

@@ -1,17 +1,22 @@
-"""一次性验收身份 seed：仅在本轮隔离空间准备8个逻辑角色，结束清理。
+"""One-shot acceptance identity seed: prepares eight logical roles in this run's isolated space and cleans up on exit.
 
-命令::
+Command::
 
     cd backend
     .venv/bin/python -m tests.acceptance_real.seed --run-id <run_id>
 
-设计约束：
+Design constraints:
 
-- 只读取后端 ``.env.dev``，按配置使用隔离SQLite或校验固定test PostgreSQL目标；不读取 ``.env.prod``。
-- 每个隔离空间使用独立身份；同一空间内幂等，独立CLI退出即清理。
-- 不覆盖/重置用户已修改的邮箱、显示名称、密码或封禁状态；发现变更时只报告并保留。
-- 密码随机生成，只写入 0600 私有凭据文件；标准输出只打印路径和脱敏标识。
-- 只准备身份，不创建分类、商品、交易、举报等业务流程数据。
+- Reads only backend ``.env.dev``; uses isolated SQLite or a validated fixed test PostgreSQL
+  target per configuration; never reads ``.env.prod``.
+- Each isolated space uses independent identities; operations are idempotent within a space,
+  and the standalone CLI cleans up when it exits.
+- Never overwrites/resets a user's changed email, display name, password, or ban status;
+  changes are reported and preserved.
+- Passwords are random and written only to a 0600 private credentials file; stdout prints
+  only paths and masked identifiers.
+- Prepares identities only; creates no categories, products, trades, reports, or other
+  business-flow data.
 """
 
 from __future__ import annotations
@@ -63,7 +68,7 @@ class SeedIdentity:
     role: str
 
 
-# canonical 角色：两名管理员、两名买方、两名卖方、第三方与限频演员。
+# Canonical roles: two admins, two buyers, two sellers, an outsider, and a rate-limit actor.
 CANONICAL_IDENTITIES: tuple[SeedIdentity, ...] = (
     SeedIdentity("admin", "", "验收管理员", "admin"),
     SeedIdentity("admin2", "", "验收管理员2", "admin"),
@@ -79,7 +84,7 @@ CANONICAL_IDENTITIES: tuple[SeedIdentity, ...] = (
 def normalize_run_id(run_id: str) -> str:
     value = re.sub(r"[^a-z0-9]", "", run_id.lower())
     if not value:
-        raise SeedError("run_id 不能为空或只包含分隔符")
+        raise SeedError("run_id must not be empty or contain only separators")
     return value[:32]
 
 
@@ -99,7 +104,7 @@ def identities_for_run(run_id: str) -> tuple[SeedIdentity, ...]:
 
 def credentials_path_for_run(run_id: str, root: Path = SEED_ROOT) -> Path:
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", run_id):
-        raise SeedError("run_id 只允许字母、数字、点、下划线和短横线，长度 1—64")
+        raise SeedError("run_id allows only letters, digits, dots, underscores, and hyphens, length 1-64")
     return root / run_id / "identities.json"
 
 
@@ -146,17 +151,17 @@ def _new_password() -> str:
 
 def _validate_fingerprint(value: str) -> str:
     if len(value) < 16:
-        raise SeedError("凭据文件缺少有效 seed 指纹；请人工核对，不自动重置")
+        raise SeedError("Credentials file lacks a valid seed fingerprint; check manually; do not reset automatically")
     try:
         int(value, 16)
     except ValueError:
-        raise SeedError("凭据文件 seed 指纹格式错误；请人工核对，不自动重置") from None
+        raise SeedError("Credentials file seed fingerprint has an invalid format; check manually; do not reset automatically") from None
     return value
 
 
 def _account_from_record(key: str, raw: Any) -> SeedAccount:
     if not isinstance(raw, dict):
-        raise SeedError(f"凭据文件账号记录格式错误（{key}）；请人工核对")
+        raise SeedError(f"Credentials file account record has an invalid format ({key}); check manually")
     try:
         account_id = int(raw["id"])
         email = str(raw["email"])
@@ -164,10 +169,10 @@ def _account_from_record(key: str, raw: Any) -> SeedAccount:
         role = str(raw["role"])
         password = str(raw["password"])
     except (KeyError, TypeError, ValueError):
-        raise SeedError(f"凭据文件账号字段缺失（{key}）；请人工核对") from None
+        raise SeedError(f"Credentials file account fields are missing ({key}); check manually") from None
     status = str(raw.get("status") or "normal")
     if account_id <= 0 or not email or not display_name or role not in {"admin", "user"} or not password:
-        raise SeedError(f"凭据文件账号字段非法（{key}）；请人工核对")
+        raise SeedError(f"Credentials file account fields are invalid ({key}); check manually")
     return SeedAccount(
         key=key,
         id=account_id,
@@ -185,9 +190,10 @@ def load_credentials(
     require_private: bool = True,
     identities: Sequence[SeedIdentity] | None = None,
 ) -> SeedCredentials | None:
-    """读取任意数量身份；传入 identities 时要求这些 key 全部存在。
+    """Read any number of identities; when identities is passed, all of their keys must exist.
 
-    旧实现只接受固定 admin/buyer/seller 三项；这里用于自定义多身份与人工/自动共享。
+    The old implementation accepted only the fixed admin/buyer/seller trio; this version
+    supports custom multi-identity sets shared by humans and automation.
     """
     if not path.exists():
         return None
@@ -196,19 +202,19 @@ def load_credentials(
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        raise SeedError("凭据文件无法读取或已损坏；请人工核对，不自动重置") from None
+        raise SeedError("Credentials file cannot be read or is corrupted; check manually; do not reset automatically") from None
     if not isinstance(data, dict) or int(data.get("version", 0)) != SEED_VERSION:
-        raise SeedError("凭据文件版本不支持；请人工核对，不自动重置")
+        raise SeedError("Credentials file version is unsupported; check manually; do not reset automatically")
     fingerprint = _validate_fingerprint(str(data.get("fingerprint", "")))
     raw_accounts = data.get("accounts")
     if not isinstance(raw_accounts, dict):
-        raise SeedError("凭据文件缺少 accounts；请人工核对，不自动重置")
+        raise SeedError("Credentials file lacks accounts; check manually; do not reset automatically")
     accounts: dict[str, SeedAccount] = {}
     required = [identity.key for identity in identities] if identities is not None else list(raw_accounts)
     for key in required:
         raw = raw_accounts.get(key)
         if raw is None:
-            raise SeedError(f"凭据文件缺少账号记录（{key}）；请人工核对，不自动重置")
+            raise SeedError(f"Credentials file lacks an account record ({key}); check manually; do not reset automatically")
         accounts[key] = _account_from_record(key, raw)
     return SeedCredentials(
         version=SEED_VERSION,
@@ -276,7 +282,7 @@ async def seed_identities_core(
     run_id: str,
     check_only: bool = False,
 ) -> SeedSummary:
-    """在调用方会话上执行 seed；不依赖全局配置，不触碰业务数据。"""
+    """Run the seed on the caller's session; depends on no global configuration and touches no business data."""
     from app.core.security import hash_password, verify_password
     from app.models.user import User
 
@@ -286,7 +292,7 @@ async def seed_identities_core(
     created_at = existing_credentials.created_at if existing_credentials and existing_credentials.created_at else _utc_now()
     recorded_run_id = existing_credentials.run_id if existing_credentials else ""
     if recorded_run_id and recorded_run_id != run_id:
-        raise SeedError("凭据文件的 run_id 与本次不一致；拒绝复用，请换用对应 run_id 或新凭据文件")
+        raise SeedError("Credentials file run_id does not match this run; refusing reuse; use the matching run_id or a new credentials file")
 
     created: list[str] = []
     existing: list[str] = []
@@ -309,18 +315,18 @@ async def seed_identities_core(
             by_id = users_by_id.get(account.id) if account else None
 
             if user is None and by_id is not None:
-                # 记录 ID 对应账号仍存在，但邮箱已被用户改掉；保留不重置。
+                # The account for the recorded ID still exists but the user changed its email; preserve it without resetting.
                 preserved.append(identity.key)
                 continue
 
             if account is not None and (account.email != identity.email or account.role != identity.role):
                 raise SeedError(
-                    f"凭据文件与本次 canonical 身份定义不一致（{identity.key}）；拒绝接管"
+                    f"Credentials file does not match this run's canonical identity definition ({identity.key}); refusing adoption"
                 )
 
             if user is None:
                 if account is not None:
-                    # 同名记录存在但数据库账号已不存在：不静默重建，交人工处理。
+                    # A record exists under this name but the database account is gone: do not silently recreate it; leave it for manual handling.
                     preserved.append(identity.key)
                     continue
                 if check_only:
@@ -348,10 +354,10 @@ async def seed_identities_core(
 
             if account is None:
                 raise SeedError(
-                    f"发现同名非 seed 账号（{identity.key}），拒绝接管；凭据文件缺失或不是本 seed 创建"
+                    f"Found a non-seed account with the same name ({identity.key}); refusing adoption; credentials are missing or were not created by this seed"
                 )
 
-            # 既有账号：所有字段与密码哈希都必须与凭据文件一致，才视为未变更。
+            # Existing account: all fields and the password hash must match the credentials file to count as unchanged.
             unchanged = (
                 int(account.id) == int(user.id)
                 and user.email == identity.email
@@ -375,7 +381,7 @@ async def seed_identities_core(
                     status=user.status,
                 )
             else:
-                # 不更新数据库、不重写密码/邮箱/昵称/状态；只保留记录。
+                # Do not update the database or rewrite password/email/name/status; preserve the record as-is.
                 preserved.append(identity.key)
 
         if check_only:
@@ -397,10 +403,10 @@ async def seed_identities_core(
         except SQLAlchemyError as exc:
             await session.rollback()
             if is_undefined_table(exc):
-                raise SeedError("数据库表未迁移（缺少 users 表）；请先运行迁移") from None
-            raise SeedError(f"seed 写入 test 数据库失败（{type(exc).__name__}）") from None
+                raise SeedError("Database tables are not migrated (users table missing); run migrations first") from None
+            raise SeedError(f"Seed write to the test database failed ({type(exc).__name__})") from None
 
-    # 只在新账号或首次创建时写文件；既有账号不变时不重写密码。
+    # Write the file only for new accounts or first creation; do not rewrite the password when existing accounts are unchanged.
     if created or existing_credentials is None:
         write_private_json(
             credentials_path,
@@ -415,7 +421,7 @@ async def seed_identities_core(
         try:
             protect_private(credentials_path)
         except OSError:
-            raise SeedError("无法将凭据文件权限修正为 0600；请人工检查") from None
+            raise SeedError("Unable to set credentials file permissions to 0600; check manually") from None
 
     return SeedSummary(
         created=tuple(created),
@@ -440,7 +446,7 @@ async def seed_identities(
 ) -> SeedSummary:
     # The configured database is shared. Never seed it without a per-run sandbox.
     if config is None or not getattr(config, "acceptance_sandbox", False):
-        raise GuardError("验收 seed 需要本轮隔离环境；拒绝写入共享数据库")
+        raise GuardError("The acceptance seed requires this run's isolated environment; refusing to write to a shared database")
     config = config or load_dev_config(for_acceptance=True, require_storage=False, env_file=env_file)
     await probe_database(config.database_url, expect_test_target=True)
     path = credentials_path or credentials_path_for_run(run_id)
@@ -463,12 +469,12 @@ async def seed_identities(
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python -m tests.acceptance_real.seed",
-        description="创建/校验 .env.dev test 库中的 canonical 验收身份（不输出密码）。",
+        description="Create/validate canonical acceptance identities in the .env.dev test database (never outputs passwords).",
     )
     from app.devtools._support import new_run_id
-    parser.add_argument("--run-id", default=new_run_id(), help="本轮唯一运行标识")
-    parser.add_argument("--credentials-file", default=None, help="可选私有凭据路径（默认按 run_id）")
-    parser.add_argument("--check", action="store_true", help="只校验目标与账号状态，不写库")
+    parser.add_argument("--run-id", default=new_run_id(), help="Unique run identifier for this run")
+    parser.add_argument("--credentials-file", default=None, help="Optional private credentials path (defaults to run_id)")
+    parser.add_argument("--check", action="store_true", help="Validate only the target and account state; do not write to the database")
     return parser.parse_args(argv)
 
 
@@ -494,7 +500,7 @@ def main(
     if credentials_file is not None:
         args.credentials_file = str(credentials_file)
     if args.credentials_file:
-        print("seed: 拒绝外部凭据路径；凭据仅保存在一次性隔离目录", file=sys.stderr)
+        print("seed: refusing an external credentials path; credentials are stored only in the one-shot isolated directory", file=sys.stderr)
         return 2
     import signal
 
@@ -514,11 +520,11 @@ def main(
             verification = asyncio.run(seed_identities(run_id=args.run_id, config=config,
                 credentials_path=config.credentials_path, check_only=True))
             if not verification.ready:
-                raise SeedError("一次性身份校验未通过")
+                raise SeedError("One-shot identity verification did not pass")
         print(f"seed: run_id={args.run_id} created={len(summary.created)} would_create={len(summary.would_create)}")
         result = 1 if args.check and not summary.ready else 0
     except BaseException as exc:  # noqa: BLE001 - cleanup also handles interruption
-        print(f"seed: 失败：{type(exc).__name__}", file=sys.stderr)
+        print(f"seed: failed: {type(exc).__name__}", file=sys.stderr)
     finally:
         previous_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
@@ -529,7 +535,7 @@ def main(
                     print(f"seed: cleanup_failures={cleanup['cleanup_failures']} manifest={sandbox.manifest}", file=sys.stderr)
                     result = 2
                 else:
-                    print("seed: 一次性身份和隔离资源已清理")
+                    print("seed: one-shot identities and isolated resources cleaned up")
             except BaseException as exc:  # noqa: BLE001 - cleanup also handles interruption
                 print(f"seed: cleanup failed: {type(exc).__name__}; manifest={sandbox.manifest}", file=sys.stderr)
                 result = 2

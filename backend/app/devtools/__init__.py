@@ -1,7 +1,8 @@
-"""运维/测试工具包：对象回收与测试工具共享安全辅助。
+"""Operations/test tooling package: shared safety helpers for object cleanup and test tools.
 
-仅由 CLI 延迟导入，不在服务启动时加载；不读取 ``.env.prod``。
-测试身份 seed 位于 ``tests.acceptance_real.seed``，应用模块不反向依赖 tests。
+Imported lazily by CLIs only and never loaded at service startup; ``.env.prod`` is not read.
+The test identity seed lives in ``tests.acceptance_real.seed``; application modules do not
+depend on tests in reverse.
 """
 
 __all__: list[str] = []

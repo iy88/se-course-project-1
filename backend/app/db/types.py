@@ -1,4 +1,4 @@
-"""数据库方言兼容类型：SQLite 使用 JSON，PostgreSQL 使用 JSONB。"""
+"""Dialect-compatible database types: JSON for SQLite and JSONB for PostgreSQL."""
 
 from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import JSONB

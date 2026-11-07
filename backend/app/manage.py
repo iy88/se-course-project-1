@@ -1,14 +1,17 @@
-"""后端管理命令。
+"""Backend management commands.
 
-用法（默认读取 backend/.env.dev，独立迁移命令才读取迁移凭据）::
+Usage (reads backend/.env.dev by default; only the standalone migration command
+reads migration credentials)::
 
     python -m app.manage migrate
     python -m app.manage seed --admin-email <administrator email>
     python -m app.manage demo-seed --env-file .env.dev
     python -m app.manage demo-verify --env-file .env.dev
 
-持久初始化使用 seed 子命令；自动化身份 seed 属于验收套件（``python -m tests.acceptance_real.seed``），
-不再由应用管理命令提供；应用模块不反向依赖 tests。
+Persistent initialization uses the seed subcommand; automated identity seeding
+belongs to the acceptance suite (``python -m tests.acceptance_real.seed``) and is
+no longer provided by the application management command; application modules
+must not depend on tests.
 """
 
 from __future__ import annotations
@@ -84,7 +87,7 @@ def run_migrate(revision: str) -> int:
     settings = load_settings()
     if settings.database_url.startswith("sqlite+"):
         if revision != "head":
-            raise ConfigurationError("SQLite本地初始化只支持head；PostgreSQL使用版本化迁移")
+            raise ConfigurationError("SQLite local initialization supports head only; use versioned migrations for PostgreSQL")
         from sqlalchemy.ext.asyncio import create_async_engine
 
         import app.models  # noqa: F401 - register metadata  # pyright: ignore[reportUnusedImport]
@@ -106,7 +109,7 @@ def run_migrate(revision: str) -> int:
         return 0
     migration = load_migration_settings()
     validate_migration_context(migration)
-    # 延迟导入，普通服务/测试不会加载 Alembic 或迁移配置。
+    # Delayed import: normal services/tests never load Alembic or migration configuration.
     from alembic import command
     from alembic.config import Config
 
@@ -326,10 +329,10 @@ def run_seed(admin_email: str | None, admin_name: str, categories: list[str]) ->
         result = asyncio.run(initialize(settings, admin_email=email, admin_name=admin_name, categories=categories))
     except InitialPasswordRequired:
         if not sys.stdin.isatty():
-            raise ConfigurationError("新管理员需要交互终端输入密码；不接受命令行明文密码") from None
+            raise ConfigurationError("A new administrator needs an interactive terminal for the password; plaintext command-line passwords are not accepted") from None
         password = getpass.getpass("New administrator password: ")
         if password != getpass.getpass("Confirm administrator password: "):
-            raise ConfigurationError("两次密码不一致")
+            raise ConfigurationError("The two passwords do not match")
         result = asyncio.run(initialize(settings, admin_email=email, password=password, admin_name=admin_name, categories=categories))
     print(f"Initialization: admin_id={result.admin_id} admin_created={result.admin_created} "
            f"categories_created={result.categories_created} categories_existing={result.categories_existing}")
@@ -394,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except SystemExit:
         raise
-    except Exception:  # noqa: BLE001 - CLI 输出完整异常以便定位管理命令故障
+    except Exception:  # noqa: BLE001 - print the full exception so management-command failures are diagnosable
         traceback.print_exc()
         return 1
     return 2

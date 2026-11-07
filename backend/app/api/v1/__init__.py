@@ -1,4 +1,4 @@
-"""API v1 路由汇总。"""
+"""API v1 router registry."""
 
 from fastapi import APIRouter
 

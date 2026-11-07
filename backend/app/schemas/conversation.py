@@ -1,4 +1,4 @@
-"""IM 相关 Pydantic 模型。"""
+"""Pydantic models for IM."""
 
 from pydantic import BaseModel, Field
 from app.core.text import NonBlank2000

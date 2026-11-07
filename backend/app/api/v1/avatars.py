@@ -1,4 +1,4 @@
-"""头像提交与管理员审核。"""
+"""Avatar submission and administrator review."""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import col, select
@@ -29,7 +29,7 @@ async def submit_avatar(body: AvatarIn, user: CurrentUser, db: DbSession):
 async def submit_avatar_transaction(body: AvatarIn, user: User, db, *, commit: bool):
     if user.status != 'normal':
         raise HTTPException(403, '当前账户状态无法提交头像')
-    # 锁定账户，与审核串行；始终要求已完成且属于本人的头像租约。
+    # Lock the account to serialize with review; always require a completed avatar lease owned by this user.
     user = (await db.exec(select(User).where(col(User.id) == user.id).with_for_update().execution_options(populate_existing=True))).one()
     lease = (await db.exec(select(UploadLease).where(col(UploadLease.key) == body.key))).one_or_none()
     if not lease or lease.owner_id != user.id or lease.namespace != 'avatar' or lease.state != 'completed':

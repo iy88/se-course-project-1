@@ -59,20 +59,20 @@ class Sandbox:
     def recover(cls, path: Path, config: DevConfig) -> Sandbox:
         path = path.expanduser()
         if path.is_symlink() or path.name != "ownership.json":
-            raise GuardError("恢复清单路径非法")
+            raise GuardError("Invalid recovery manifest path")
         root = path.parent.resolve()
         if root.parent != (PROJECT_ROOT / "var").resolve() or root.is_symlink():
-            raise GuardError("恢复目录不在受控位置")
+            raise GuardError("Recovery directory is not in the controlled location")
         require_private(root, directory=True)
         require_private(path)
         data = json.loads(path.read_text(encoding="utf-8"))
         name = data.get("name", "")
         if data.get("version") != 1 or not _PATTERN.fullmatch(name) or not root.name.startswith(name + "-"):
-            raise GuardError("恢复清单所有权标识非法")
+            raise GuardError("Invalid ownership marker in the recovery manifest")
         database = "postgresql" if config.database_url.startswith("postgresql+") else "sqlite"
         if (data.get("database") != database or data.get("backend") != config.storage_backend
                 or data.get("target_fingerprint") != cls._target_fingerprint(config)):
-            raise GuardError("恢复配置与原运行不一致")
+            raise GuardError("Recovery configuration does not match the original run")
         pid = data.get("server_pid")
         if pid:
             try:
@@ -80,9 +80,9 @@ class Sandbox:
             except ProcessLookupError:
                 pass
             except PermissionError:
-                raise GuardError("无法确认原服务已停止") from None
+                raise GuardError("Unable to confirm the original service has stopped") from None
             else:
-                raise GuardError("原测试服务可能仍在运行；先确认并停止该服务")
+                raise GuardError("The original test service may still be running; confirm and stop it first")
         obj = cls.__new__(cls)
         obj.base, obj.name, obj.root, obj.manifest = config, name, root, path
         obj._fingerprint = cls._target_fingerprint(config)
@@ -145,7 +145,7 @@ class Sandbox:
         url = make_url(migration.migration_database_url)
         app_url = make_url(self.base.database_url)
         if (url.host, url.port or 5432, url.database) != (app_url.host, app_url.port or 5432, app_url.database) or migration.app_role != app_url.username:
-            raise GuardError("迁移与应用连接目标不一致")
+            raise GuardError("Migration and application connection targets do not match")
         self._migration = migration
         self.baseline = await self._base_sentinel()
         self.schema_pending = True
@@ -155,7 +155,7 @@ class Sandbox:
             async with engine.begin() as conn:
                 identity = (await conn.execute(text("SELECT current_database(), current_user"))).one()
                 if tuple(identity) != (url.database, url.username):
-                    raise GuardError("迁移连接身份与所选配置不一致")
+                    raise GuardError("Migration connection identity does not match the selected configuration")
                 await conn.execute(text(f'SET ROLE "{migration.migration_owner_role}"'))
                 await conn.execute(text(f'CREATE SCHEMA "{self.name}"'))
                 await conn.execute(text(f'CREATE TABLE "{self.name}"._acceptance_owner (token text NOT NULL)'))
@@ -180,12 +180,12 @@ class Sandbox:
 
     def create(self) -> DevConfig:
         if self.config is not None:
-            raise GuardError("隔离环境不能重复创建")
+            raise GuardError("The isolated environment cannot be created twice")
         if not _PATTERN.fullmatch(self.name) or self.name == self.base.settings.database_schema:
-            raise GuardError("隔离标识非法或与基础 schema 相同")
+            raise GuardError("Invalid isolation identifier or identical to the base schema")
         settings = self.base.settings
         if settings is None:
-            raise GuardError("缺少经过校验的设置")
+            raise GuardError("Validated settings are missing")
         journal = self.root / "storage-journal.jsonl"
         fd = os.open(journal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         os.close(fd)
@@ -201,7 +201,7 @@ class Sandbox:
             result = subprocess.run([sys.executable, "-m", "app.manage", "migrate"], cwd=BACKEND_ROOT,
                 env=env, capture_output=True, timeout=120, check=False)
             if result.returncode:
-                raise GuardError(f"隔离 schema 迁移失败（exit={result.returncode}）")
+                raise GuardError(f"Isolated schema migration failed (exit={result.returncode})")
         else:
             updates["database_url"] = "sqlite+aiosqlite:///" + str(self.root / "sandbox.db")
             asyncio.run(self._create_sqlite(updates["database_url"]))
@@ -255,12 +255,12 @@ class Sandbox:
             if any(not key.startswith(prefix) and not (
                 key.startswith(claim_prefix) and ":" + prefix in key[len(claim_prefix):]
             ) for key in keys):
-                raise GuardError("Redis 返回前缀外 key")
+                raise GuardError("Redis returned a key outside the prefix")
             if keys:
                 await client.delete(*keys)
             remaining = [key for pattern in patterns async for key in client.scan_iter(match=pattern, count=200)]
             if remaining:
-                raise GuardError("Redis 隔离前缀清理后仍有 key")
+                raise GuardError("Redis still has keys after isolated-prefix cleanup")
             return len(keys)
         finally:
             await client.aclose()
@@ -269,14 +269,14 @@ class Sandbox:
         if not self.schema_pending:
             return False
         if self._migration is None:
-            raise GuardError("缺少隔离迁移配置")
+            raise GuardError("Isolated migration configuration is missing")
         engine = create_async_engine(self._migration.migration_database_url, poolclass=NullPool)
         try:
             async with engine.begin() as conn:
                 url = make_url(self._migration.migration_database_url)
                 identity = (await conn.execute(text("SELECT current_database(), current_user"))).one()
                 if tuple(identity) != (url.database, url.username):
-                    raise GuardError("迁移连接身份与所选配置不一致")
+                    raise GuardError("Migration connection identity does not match the selected configuration")
                 await conn.execute(text(f'SET ROLE "{self._migration.migration_owner_role}"'))
                 owner = (await conn.execute(text("SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname=:name"), {"name": self.name})).scalar_one_or_none()
                 if owner is None:
@@ -284,17 +284,17 @@ class Sandbox:
                     self.schema_created = False
                     return True
                 if owner != self._migration.migration_owner_role:
-                    raise GuardError("schema 所有者不符，拒绝删除")
+                    raise GuardError("Schema owner mismatch; refusing to delete")
                 marker = (await conn.execute(text("SELECT to_regclass(:marker)"), {"marker": self.name + "._acceptance_owner"})).scalar_one_or_none()
                 if marker is None:
-                    raise GuardError("schema 缺少所有权标记，拒绝删除")
+                    raise GuardError("Schema lacks the ownership marker; refusing to delete")
                 tokens = (await conn.execute(text(f'SELECT token FROM "{self.name}"._acceptance_owner'))).scalars().all()
                 if tokens != [self.name]:
-                    raise GuardError("schema 所有权标记不符，拒绝删除")
+                    raise GuardError("Schema ownership marker mismatch; refusing to delete")
                 await conn.execute(text(f'DROP SCHEMA "{self.name}" CASCADE'))
                 exists = (await conn.execute(text("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname=:name)"), {"name": self.name})).scalar_one()
                 if exists:
-                    raise GuardError("隔离 schema 清理后仍存在")
+                    raise GuardError("Isolated schema still exists after cleanup")
             self.schema_created = False
             self.schema_pending = False
             return True
@@ -303,7 +303,7 @@ class Sandbox:
 
     def cleanup(self) -> dict[str, object]:
         if not _PATTERN.fullmatch(self.name) or not self.root.name.startswith(self.name + "-"):
-            raise GuardError("拒绝清理非本轮资源")
+            raise GuardError("Refusing to clean up resources not owned by this run")
         failures = []
         def attempt(label, fn):
             try:
@@ -317,7 +317,7 @@ class Sandbox:
                 settings = self.base.settings.model_copy(update={"storage_key_prefix": self.name + "/", "storage_operation_journal": self.root / "storage-journal.jsonl"})
                 storage = build_storage(settings)
                 if not isinstance(storage, OssStorage):
-                    raise GuardError("存储后端不是 OSS")
+                    raise GuardError("Storage backend is not OSS")
                 count = storage.cleanup_from_journal()
                 self.evidence["oss_verification"] = "all journaled puts absent by HEAD; prefix listing not performed"
                 return count
@@ -329,7 +329,7 @@ class Sandbox:
             def compare():
                 same = asyncio.run(self._base_sentinel()) == self.baseline
                 if not same:
-                    raise GuardError("base schema 哨兵变化")
+                    raise GuardError("Base schema sentinel changed")
                 return same
             attempt("base_sentinel_unchanged", compare)
         # Never retain password files, even when external cleanup fails.
@@ -339,7 +339,7 @@ class Sandbox:
             def remove_local_storage():
                 storage_root = self.root / "storage"
                 if storage_root.is_symlink():
-                    raise GuardError("本地存储目录是符号链接")
+                    raise GuardError("Local storage directory is a symlink")
                 if storage_root.exists():
                     shutil.rmtree(storage_root)
             attempt("local_storage_removed", remove_local_storage)

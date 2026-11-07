@@ -1,4 +1,4 @@
-"""管理处置动作：封禁/解除及联动（DT-03、BR-32/33、TR-09/10）。"""
+"""Administrative disposal actions: ban/lift and their cascades (DT-03, BR-32/33, TR-09/10)."""
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -29,9 +29,9 @@ def now_utc() -> datetime:
 
 
 async def freeze_trade(db: AsyncSession, trade: Trade, reason: str, case_id: int | None, admin_id: int | None) -> None:
-    """冻结整个交易进度（BR-33）：暂停双方操作，已有单方确认时暂停原等待（D-51）。
+    """Freeze the entire trade progress (BR-33): suspend both parties' actions and pause an existing unilateral-confirmation wait (D-51).
 
-    重复冻结直接返回，不重置冻结开始、暂停开始或剩余时间。
+    Repeated freezes return immediately without resetting the freeze start, pause start, or remaining time.
     """
     locked = await trade_service.lock_product_then_trade(db, trade.id, trade.product_id)
     if locked is None:
@@ -63,7 +63,7 @@ async def freeze_trade(db: AsyncSession, trade: Trade, reason: str, case_id: int
 
 
 async def _participant_ban_active(db: AsyncSession, trade: Trade) -> bool:
-    """交易任一方仍有生效账户封禁（BR-33：其他有效限制继续生效）。"""
+    """Either party still has an active account ban (BR-33: other active restrictions remain in effect)."""
     user_ids = (trade.buyer_id, trade.seller_id)
     restriction = (await db.exec(
         select(col(AccountRestriction.id))
@@ -85,14 +85,14 @@ async def _participant_ban_active(db: AsyncSession, trade: Trade) -> bool:
 
 
 async def unfreeze_trade(db: AsyncSession, trade: Trade, reason: str, admin_id: int) -> None:
-    """有依据解除冻结：其他有效限制保留（BR-33）；仅符合条件的有效确认续算剩余（D-51）。"""
+    """Lift a freeze with a basis while other active restrictions remain (BR-33); only an eligible active confirmation resumes its remaining wait (D-51)."""
     locked = await trade_service.lock_product_then_trade(db, trade.id, trade.product_id)
     if locked is None:
         raise HTTPException(404, '交易不存在')
     trade = locked
     if not trade.frozen:
         return
-    # D-51/BR-33：封禁等有效限制未解除前不得手工解冻，更不能让计时在禁令期间恢复累计。
+    # D-51/BR-33: do not unfreeze manually while active restrictions such as bans remain, and never let the timer accrue during a ban.
     if await _participant_ban_active(db, trade):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -100,7 +100,7 @@ async def unfreeze_trade(db: AsyncSession, trade: Trade, reason: str, admin_id: 
         )
     from app.models import TradeTransition
 
-    # 升级前已冻结、尚无暂停字段的记录：以冻结时刻为暂停点补齐，避免解冻时误按自然墙钟。
+    # Records frozen before the upgrade with no pause fields: backfill the freeze instant as the pause point so unfreezing does not incorrectly use wall-clock time.
     if trade.confirm_wait_paused_at is None and trade.confirm_wait_remaining_seconds is None:
         frozen_base = as_utc(trade.frozen_at)
         if frozen_base is not None:
@@ -139,7 +139,7 @@ async def unfreeze_trade(db: AsyncSession, trade: Trade, reason: str, admin_id: 
 
 
 async def restrict_product_display(db: AsyncSession, product: Product, reason: str, case_id: int | None) -> None:
-    """违规撤销公开访问（TR-09）：展示限制与生命周期分开；关闭待接受请求并注明原因。"""
+    """Revoke public access for a violation (TR-09): display restriction stays separate from lifecycle; close pending-acceptance requests with a reason."""
     if product.display_restricted:
         return
     product.display_restricted = True
@@ -166,7 +166,7 @@ async def ban_user(
     case_id: int | None,
     admin_id: int,
 ) -> AccountRestriction:
-    """封禁（BR-32/DT-03）：禁写保读；冻结其进行中交易；其商品停止公开展示。"""
+    """Ban (BR-32/DT-03): block writes while preserving reads; freeze their in-progress trades; stop public display of their products."""
     if user.status == AccountStatus.BANNED.value:
         existing = (await db.exec(
             select(AccountRestriction).where(
@@ -186,12 +186,13 @@ async def ban_user(
     )
     db.add(restriction)
     user.status = AccountStatus.BANNED.value
-    # D-52：封禁副作用前先关闭其作为买方或卖方参与的全部待接受请求；
-    # 原因固定为“相关账户被封禁”，通知双方并归档分支，已接受交易不按请求关闭。
+    # D-52: before ban side effects, close all pending-acceptance requests where the
+    # user is buyer or seller; the reason is fixed as "related account banned", both
+    # parties are notified, branches are archived, and accepted trades are not closed as requests.
     closed_pending = await trade_service.close_pending_requests_for_user(
         db, user.id, reason=trade_service.BANNED_PENDING_REASON
     )
-    # DT-03：封禁任一交易方 → 冻结整个已接受交易进度（已有单方确认时暂停计时）
+    # DT-03: banning either trade party freezes the whole accepted trade progress (pausing the timer when a unilateral confirmation exists)
     result = await db.exec(
         select(Trade).where(
             ((col(Trade.buyer_id) == user.id) | (col(Trade.seller_id) == user.id)),
@@ -200,8 +201,8 @@ async def ban_user(
     )
     for trade in result:
         await freeze_trade(db, trade, f"交易方账户被平台封禁：{reason}", case_id, admin_id)
-    # DT-03：封禁账户的商品 → 停止公开展示（待接受请求已在上一步按封禁原因关闭）。
-    # 交易中商品同样可能被公开访问，必须一并撤销展示；生命周期与锁单保持不变。
+    # DT-03: the banned account's products stop public display (pending-acceptance requests were already closed with the ban reason in the previous step).
+    # Products in a trade may also be publicly accessible and must have display revoked too; lifecycle and lock stay unchanged.
     products = await db.exec(
         select(Product).where(
             col(Product.seller_id) == user.id,
@@ -238,7 +239,7 @@ async def unban_user(
     case_id: int | None,
     admin_id: int,
 ) -> int:
-    """解除封禁（TR-10）：恢复原权限及因处置停止的展示；原非在售商品不自动变为在售。"""
+    """Lift a ban (TR-10): restore original permissions and display stopped by the disposal; previously unlisted products do not become listed automatically."""
     result = await db.exec(
         select(AccountRestriction).where(
             col(AccountRestriction.user_id) == user.id, col(AccountRestriction.status) == RestrictionStatus.ACTIVE.value
@@ -255,7 +256,7 @@ async def unban_user(
         restriction.lift_reason = lift_reason
     user.status = AccountStatus.NORMAL.value
     lifted_case_ids = {r.case_id for r in restrictions if r.case_id}
-    # 仅恢复因本次解除的封禁而停止展示的商品（只解除限制标记，不改生命周期状态）
+    # Restore only products whose display stopped because of the bans lifted now (clear only the restriction flag; do not change lifecycle state)
     products = await db.exec(
         select(Product).where(
             col(Product.seller_id) == user.id,
@@ -265,7 +266,7 @@ async def unban_user(
     )
     for product in products:
         product.display_restricted = False
-    # 解除因该账户封禁而冻结的交易
+    # Unfreeze trades frozen because of this account ban
     trades = await db.exec(
         select(Trade).where(
             ((col(Trade.buyer_id) == user.id) | (col(Trade.seller_id) == user.id)),
@@ -277,8 +278,9 @@ async def unban_user(
         try:
             await unfreeze_trade(db, trade, f"账户封禁解除：{lift_reason}", admin_id)
         except HTTPException:
-            # 另一交易方封禁仍生效：本次解封照常生效，但该交易继续冻结，
-            # 待其他有效限制解除后由认领管理员有依据解冻（BR-33）。
+            # The other trade party is still banned: this ban lift still takes effect,
+            # but the trade stays frozen until the other active restriction is lifted and
+            # the claiming administrator unfreezes it with a basis (BR-33).
             continue
     if case_id:
         from app.models import DisposalCase

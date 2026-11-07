@@ -1,4 +1,4 @@
-"""C-02 商品、C-04 审核记录、C-05 收藏、C-06 商品评论、C-16 禁发范围。"""
+"""C-02 products, C-04 review records, C-05 favorites, C-06 product comments, C-16 prohibited items."""
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -34,10 +34,10 @@ class Product(Base, table=True):
     seller_id: int = Field(sa_column=Column(ForeignKey("users.id"), index=True, nullable=False))
     title: str = Field(sa_column=Column(Text, nullable=False))
     description: str = Field(sa_column=Column(Text, nullable=False))
-    price_cents: int = Field(sa_column=Column(BigInteger, nullable=False))  # 标价（分）
+    price_cents: int = Field(sa_column=Column(BigInteger, nullable=False))  # list price (cents)
     status: str = Field(default=ProductStatus.PENDING_REVIEW.value, sa_column=Column(String(24), default=ProductStatus.PENDING_REVIEW.value, index=True, nullable=False))
 
-    # 展示限制（违规撤销公开访问，TR-09/10）：与生命周期状态分开（4.10）
+    # Display restriction (violations revoke public access, TR-09/10): kept separate from the lifecycle status (4.10)
     display_restricted: bool = Field(default=False, sa_column=Column(Boolean, default=False, nullable=False))
     display_restricted_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     display_restricted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
@@ -48,7 +48,7 @@ class Product(Base, table=True):
         nullable=True,
     ))
 
-    # 待审核/未通过的最新说明（历史结论看 review_records）
+    # Latest note for pending review/rejection (historical conclusions live in review_records)
     reject_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
@@ -83,7 +83,7 @@ class ProductTag(Base, table=True):
 
 
 class ProductTagApplication(Base, table=True):
-    """随商品提交的新标签申请：商品审核通过时一并批准生效（4.16）。"""
+    """New tag application submitted with a product: approved together when the product review passes (4.16)."""
 
     __tablename__ = cast(Any, "product_tag_applications")
 
@@ -93,14 +93,14 @@ class ProductTagApplication(Base, table=True):
     # pending / approved_new / approved_alias / rejected / withdrawn
     status: str = Field(default='pending', sa_column=Column(String(24), default="pending", nullable=False))
     resolved_category_id: int | None = Field(default=None, sa_column=Column(ForeignKey("categories.id"), nullable=True))
-    # 管理员对本次申请的业务说明；仅在拒绝时要求非空。历史记录可空，不回填。
+    # Administrator business note for this application; required non-empty only on rejection. Historical records may be null and are not backfilled.
     decision_reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     decided_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
 
 class ProductEditHistory(Base, table=True):
-    """编辑历史：保留前后内容、修改人及时间（BR-11、4.18）；管理员分类纠正同表留痕。"""
+    """Edit history: retains before/after content, editor, and time (BR-11, 4.18); administrator category corrections are recorded in the same table."""
 
     __tablename__ = cast(Any, "product_edit_histories")
 
@@ -115,23 +115,23 @@ class ProductEditHistory(Base, table=True):
 
 
 class ReviewRecord(Base, table=True):
-    """C-04：一次商品内容审核的结论（重提形成独立记录，历史保留）。"""
+    """C-04: conclusion of one product content review (resubmission creates a separate record; history is retained)."""
 
     __tablename__ = cast(Any, "review_records")
 
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
     product_id: int = Field(sa_column=Column(ForeignKey("products.id"), index=True, nullable=False))
-    content_json: dict = Field(sa_column=Column(JSONType, nullable=False))  # 当次被审核内容
+    content_json: dict = Field(sa_column=Column(JSONType, nullable=False))  # content reviewed at that time
     reviewer_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))
     result: str = Field(default=ReviewResult.PENDING.value, sa_column=Column(String(16), default=ReviewResult.PENDING.value, nullable=False))
-    reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 不通过原因（含退回补充）
+    reason: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # rejection reason (including requests for supplements)
     reviewed_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     case_id: int | None = Field(default=None, sa_column=Column(ForeignKey("disposal_cases.id"), nullable=True))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
 
 
 class Favorite(Base, table=True):
-    """C-05：本人收藏，仅本人可见（BR-16）。"""
+    """C-05: a user's own favorites, visible only to that user (BR-16)."""
 
     __tablename__ = cast(Any, "favorites")
     __table_args__ = (UniqueConstraint("user_id", "product_id"),)
@@ -143,7 +143,7 @@ class Favorite(Base, table=True):
 
 
 class Comment(Base, table=True):
-    """C-06：商品页评论（咨询），卖方可回复买方；逻辑删除保留历史（BR-17）。"""
+    """C-06: product-page comments (inquiries); the seller may reply to the buyer; soft deletion keeps history (BR-17)."""
 
     __tablename__ = cast(Any, "comments")
 
@@ -163,13 +163,13 @@ Index("uq_product_active", col(Product.seller_id), col(Product.status))
 
 
 class ProhibitedItem(Base, table=True):
-    """C-16：禁发细目（管理员维护，登录用户发布前可查看；BR-13/22）。"""
+    """C-16: prohibited items (maintained by administrators, viewable by signed-in users before publishing; BR-13/22)."""
 
     __tablename__ = cast(Any, "prohibited_items")
 
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
-    group_name: str = Field(sa_column=Column(Text, nullable=False))  # 类别（如“危险品与管制物品”）
-    content: str = Field(sa_column=Column(Text, nullable=False))  # 细目
+    group_name: str = Field(sa_column=Column(Text, nullable=False))  # group (e.g. "hazardous and controlled goods")
+    content: str = Field(sa_column=Column(Text, nullable=False))  # item
     sort: int = Field(default=0, sa_column=Column(Integer, default=0, nullable=False))
     updated_by_id: int = Field(sa_column=Column(ForeignKey("users.id"), nullable=False))
     updated_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False))

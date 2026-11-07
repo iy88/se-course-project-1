@@ -1,4 +1,4 @@
-"""认证与账户相关 Pydantic 模型。"""
+"""Pydantic models for authentication and accounts."""
 
 from datetime import datetime
 
@@ -20,7 +20,7 @@ class UserOut(BaseModel):
     avatar_pending_url: str | None = None
     avatar_review_status: str | None = None
     avatar_review_reason: str | None = None
-    has_frozen_trade: bool = False  # 当前是否存在有效交易冻结（D-50，供前端刷新限制）
+    has_frozen_trade: bool = False  # whether an active trade freeze exists (D-50, lets the frontend refresh restrictions)
     created_at: datetime
 
 
@@ -35,7 +35,7 @@ class RegisterIn(BaseModel):
     email: EmailStr
     display_name: NonBlank64
     password: str = Field(min_length=6, max_length=72)
-    code: str = Field(pattern=r"^\d{6}$")  # 注册邮箱验证码（D-47）
+    code: str = Field(pattern=r"^\d{6}$")  # registration email verification code (D-47)
 
     @field_validator("display_name")
     @classmethod
@@ -76,8 +76,8 @@ class ChangePasswordIn(BaseModel):
 
 
 class SendEmailChangeCodeIn(BaseModel):
-    target: str = Field(pattern="^(old|new)$")  # 向旧绑定邮箱或新邮箱发码
-    new_email: EmailStr | None = None  # target=new 时必填
+    target: str = Field(pattern="^(old|new)$")  # send the code to the old bound email or the new email
+    new_email: EmailStr | None = None  # required when target=new
 
 
 class ChangeEmailIn(BaseModel):

@@ -1,4 +1,4 @@
-"""处置事项（C-13）辅助：创建事项、认领校验、沟通消息留痕。"""
+"""Disposal-case (C-13) helpers: case creation, claim validation, and communication-message records."""
 
 from datetime import UTC, datetime
 
@@ -13,7 +13,7 @@ from app.models.enums import (
     DisposalMessageRole,
 )
 
-# 异常交易/交易争议直接关联交易时，买卖双方均为该事项的沟通参与方（BR-26/33）。
+# When an abnormal trade/trade dispute is directly linked to a trade, both buyer and seller are communication participants in the case (BR-26/33).
 TRADE_PARTICIPANT_CASE_TYPES = (
     CaseType.ABNORMAL_TRADE.value,
     CaseType.TRADE_DISPUTE.value,
@@ -21,15 +21,16 @@ TRADE_PARTICIPANT_CASE_TYPES = (
 
 
 def has_inquiry(case: DisposalCase) -> bool:
-    """是否已由管理员发起问询（问询消息留存于同一沟通单）。"""
+    """Whether an administrator has already started an inquiry (inquiry messages are retained in the same communication case)."""
     return any(m.kind == DisposalMessageKind.INQUIRY.value for m in case.messages)
 
 
 async def case_participant_ids(db: AsyncSession, case: DisposalCase) -> list[int]:
-    """事项有沟通资格的用户 ID，去重并保持稳定顺序。
+    """User IDs eligible to communicate on the case, deduplicated and kept in stable order.
 
-    普通审核/举报/封禁仅 subject_user；仅异常交易/交易争议且直接关联 trade_id 时，
-    买卖双方均有沟通资格，不把其他事项的关联交易当作扩权依据。
+    Ordinary review/report/ban cases include only subject_user; only an abnormal
+    trade/trade dispute directly linked by trade_id includes both buyer and seller,
+    and a linked trade from another case never serves as a basis for broader access.
     """
     ids: list[int] = []
     if case.subject_user_id is not None:
@@ -42,12 +43,12 @@ async def case_participant_ids(db: AsyncSession, case: DisposalCase) -> list[int
 
 
 async def case_is_entitled(db: AsyncSession, case: DisposalCase, user_id: int) -> bool:
-    """统一的事项访问/沟通资格判断。"""
+    """Unified eligibility check for case access/communication."""
     return user_id in await case_participant_ids(db, case)
 
 
 async def get_entitled_case(db: AsyncSession, case_id: int, user_id: int) -> DisposalCase:
-    """按统一资格取事项；不存在 404，无资格 403。"""
+    """Load a case under the unified eligibility rules; nonexistent yields 404 and ineligible yields 403."""
     case = await db.get(DisposalCase, case_id)
     if not case:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
@@ -57,14 +58,14 @@ async def get_entitled_case(db: AsyncSession, case_id: int, user_id: int) -> Dis
 
 
 async def case_capabilities(db: AsyncSession, case: DisposalCase, user_id: int) -> dict:
-    """由后端真实资格与状态计算说明/申辩能力，接口与详情布尔值共用。"""
+    """Compute statement/appeal capability from real backend eligibility and state, shared by the API and detail booleans."""
     entitled = await case_is_entitled(db, case, user_id)
     return {
-        # 说明：须有沟通资格、已问询且仍在处理中（已处置只能申辩）。
+        # Statement: requires communication eligibility, an existing inquiry, and processing status (a disposed case only allows an appeal).
         "can_submit_statement": bool(
             entitled and case.status == CaseStatus.PROCESSING.value and has_inquiry(case)
         ),
-        # 申辩：须有沟通资格且已形成处置结论。
+        # Appeal: requires communication eligibility and an existing disposal conclusion.
         "can_submit_appeal": bool(entitled and case.status == CaseStatus.DISPOSED.value),
     }
 
@@ -79,7 +80,7 @@ async def create_case(
     report_id: int | None = None,
     trade_id: int | None = None,
 ) -> DisposalCase:
-    """事项进入共享待处理池（BR-34），等待管理员主动认领。"""
+    """The case enters the shared pending pool (BR-34), awaiting an administrator to claim it voluntarily."""
     case = DisposalCase(
         case_type=case_type.value,
         title=title,
@@ -94,7 +95,7 @@ async def create_case(
 
 
 async def ensure_claimant(case: DisposalCase, admin_id: int) -> None:
-    """BR-34：处理权限限该事项认领人。"""
+    """BR-34: handling permission is limited to the case claimant."""
     if case.claimed_by_id != admin_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "仅该事项认领管理员可处理")
 
@@ -136,7 +137,7 @@ async def dispose_case(
 
 
 async def lock_case_for_update(db: AsyncSession, case_id: int) -> DisposalCase | None:
-    """写入前按商品→事项顺序加锁，并刷新锁等待前读到的状态。"""
+    """Lock in product→case order before a write and refresh state read before the lock wait."""
     from sqlmodel import col, select, update
 
     from app.services.trades import lock_product_for_update

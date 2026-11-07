@@ -1,4 +1,4 @@
-"""管理员商品审核与分类纠正（BR-10/11/13、TR-01—TR-03）。"""
+"""Administrator product review and category correction (BR-10/11/13, TR-01—TR-03)."""
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -38,14 +38,14 @@ router = APIRouter(prefix="/admin/products", tags=["admin-products"])
 class TagDecisionIn(BaseModel):
     application_id: int
     decision: str = Field(pattern="^(approve_new|map_alias|reject)$")
-    category_id: int | None = None  # map_alias 时指向已有分类
-    # 拒绝时必须说明原因；商品通过同时拒绝标签时逐申请可见。
+    category_id: int | None = None  # points to an existing category for map_alias
+    # A rejection must state a reason; when the product passes while a tag is rejected, the reason is visible per application.
     reason: Text500 | None = Field(default=None)
 
 
 class ReviewDecisionIn(BaseModel):
     result: str = Field(pattern="^(approved|rejected)$")
-    # 商品级原因：不通过时必填；通过时可作为逐申请标签拒绝原因的 fallback。
+    # Product-level reason: required on rejection; on approval it can serve as the fallback reason for individually rejected tag applications.
     reason: Text500 | None = Field(default=None)
     tag_decisions: list[TagDecisionIn] = []
 
@@ -69,9 +69,10 @@ async def list_products(
     display_restricted: str = Query(default="all", pattern="^(all|yes|no)$"),
     keyword: str | None = Query(default=None, max_length=100),
 ) -> dict:
-    """管理端商品列表：服务端分页、状态/分类/展示限制筛选与关键词检索。
+    """Admin product list: server-side pagination, status/category/display-restriction filters, and keyword search.
 
-    关键词匹配名称、描述、所关联分类的主名与活跃别名；纯数字关键词同时精确匹配商品 ID。
+    Keywords match name, description, and the primary names/active aliases of linked
+    categories; an all-digit keyword also matches the product ID exactly.
     """
     conditions = []
     if product_status != "all":
@@ -140,19 +141,19 @@ class RestoreDisplayIn(BaseModel):
 
 
 def _clean_reason(value: str | None) -> str | None:
-    """去除首尾空白；全空白视为未提供，不写入或用于通过校验。"""
+    """Trim surrounding whitespace; an all-whitespace value counts as absent and is neither stored nor used to pass validation."""
     cleaned = (value or "").strip()
     return cleaned or None
 
 
 @router.post("/cases/{case_id}/review")
 async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """审核当次内容（TR-01/02）：通过联动展示与标签批准；不通过记录原因并通知。"""
+    """Review the submitted content (TR-01/02): approval drives display and tag approval; rejection records a reason and notifies."""
     case = await case_service.lock_case_for_update(db, case_id)
     if not case:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
     if case.status == CaseStatus.DISPOSED.value:
-        # 撤回/已处置事项不能按旧 id 再审，历史保留
+        # A withdrawn/disposed case cannot be reviewed again under its old id; history is retained
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置")
     await ensure_claimant(case, admin.id)
     if case.case_type != CaseType.PRODUCT_REVIEW.value:
@@ -174,8 +175,9 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
     ).all()
     apps_by_id = {app.id: app for app in apps}
     decision_ids = [d.application_id for d in body.tag_decisions]
-    # R8/R11：决定只能指向本次待审核商品当前有效的 pending 申请；
-    # 撤回、已处理、其他商品/他人的申请 ID 明确拒绝，不得忽略后继续批准。
+    # R8/R11: decisions may target only currently valid pending applications of this
+    # product under review; withdrawn, handled, other-product, and other-user application
+    # IDs are rejected explicitly and must not be ignored while continuing to approve.
     if len(decision_ids) != len(set(decision_ids)):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签申请决定重复")
     for decision in body.tag_decisions:
@@ -187,8 +189,9 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
     decisions = {d.application_id: d for d in body.tag_decisions}
     product_reason = _clean_reason(body.reason)
 
-    # 在任何审核/标签写入之前完成原因校验：拒绝标签必须说明原因，
-    # 可复用管理员显式提交的商品级原因作为 fallback；不自动生成固定理由。
+    # Validate reasons before any review/tag write: a rejected tag must state a reason,
+    # and the product-level reason explicitly submitted by the administrator may serve as
+    # a fallback; never generate a fixed reason automatically.
     if body.result == "approved":
         undecided = [app.id for app in apps if app.id not in decisions]
         if undecided:
@@ -207,13 +210,13 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
     elif not product_reason:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不通过时须记录拒绝原因")
 
-    # D-46：认领前后卖方均可修改，审核结论以提交结论时的最新内容为准并刷新快照。
-    # 校验通过后才写入，避免无效原因留下部分审核/标签变更。
+    # D-46: the seller may edit before or after claiming; the review conclusion uses the latest content when the conclusion is submitted, and the snapshot is refreshed.
+    # Write only after validation passes so an invalid reason leaves no partial review/tag changes.
     review.content_json = await product_service.snapshot_content(db, product)
     now = case_service.now_utc()
 
     if body.result == "approved":
-        # 标签随商品通过生效（4.16）
+        # Tags take effect when the product passes (4.16)
         approved_tag_ids = {t.id for t in await product_service.load_product_tags(db, product.id)}
         for app in apps:
             decision = decisions.get(app.id)
@@ -230,7 +233,7 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
                 if exists:
                     category = exists
                 else:
-                    # 新主名不得与现有活跃别名冲突；此类名称应走别名映射。
+                    # A new primary name must not conflict with an existing active alias; such names should use alias mapping.
                     alias_conflict = (await db.exec(
                         select(CategoryAlias).where(
                             col(CategoryAlias.name) == app.requested_name, col(CategoryAlias.removed_at).is_(None)
@@ -248,13 +251,13 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
                 app.resolved_category_id = category.id
                 app.decision_reason = None
                 approved_tag_ids.add(category.id)
-            else:  # map_alias：同义名称作为已有分类别名，商品关联原分类
+            else:  # map_alias: use the synonym as an alias of an existing category and link the product to the original category
                 target = await db.get(Category, decision.category_id)
                 if not target or target.deleted_at is not None:
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, f"别名映射目标分类不存在（申请 {app.id}）")
                 if target.status != "active":
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, f"别名映射目标分类已停用（申请 {app.id}）")
-                # 别名不得与其他分类主名或活跃别名冲突（4.16）。
+                # An alias must not conflict with another category's primary name or active alias (4.16).
                 principal_conflict = (await db.exec(
                     select(Category).where(
                         col(Category.name) == app.requested_name,
@@ -305,7 +308,7 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
         for app in apps:
             decision = decisions.get(app.id)
             app.status = "rejected"
-            # 逐申请优先使用显式原因；未单独填写时复用管理员显式提交的商品级原因。
+            # Prefer an explicit per-application reason; otherwise reuse the administrator-submitted product-level reason.
             app.decision_reason = (_clean_reason(decision.reason) if decision else None) or reason
             app.decided_at = now
         product.status = ProductStatus.REJECTED.value
@@ -331,7 +334,7 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
             "status": product.status,
             "review_result": review.result,
             "case_id": case.id,
-            # 只记录逐申请结果，不把管理员业务说明正文写入审计。
+            # Record only per-application results; do not write the administrator's business note text into the audit.
             "tag_applications": [{"application_id": app.id, "status": app.status} for app in apps],
         },
     )
@@ -343,10 +346,11 @@ async def review_product(case_id: int, body: ReviewDecisionIn, admin: CurrentAdm
 async def restore_product_display(
     product_id: int, body: RestoreDisplayIn, admin: CurrentAdmin, db: DbSession
 ) -> dict:
-    """D-44/TR-10：认领原展示限制事项的管理员有依据解除公开访问限制。
+    """D-44/TR-10: the administrator who claimed the original display-restriction case may lift public access with a basis.
 
-    只解除该事项来源的展示限制：不改生命周期（不把已下架变在售）、
-    不解锁/解冻交易，也不解除仍有效的账户封禁或其他来源限制。
+    Only the display restriction originating from that case is lifted: the lifecycle is
+    not changed (a delisted product does not become listed), trades are not unlocked or
+    unfrozen, and still-active account bans or restrictions from other sources remain.
     """
     product = await db.get(Product, product_id)
     if not product:
@@ -361,7 +365,7 @@ async def restore_product_display(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
     await ensure_claimant(case, admin.id)
 
-    # 事项须与原展示限制对象相关：商品本身、关联交易商品或同一发布者封禁事项。
+    # The case must relate to the original display-restriction subject: the product itself, a related trade product, or a ban case for the same seller.
     related = case.product_id == product.id
     if not related and case.trade_id:
         trade = await db.get(Trade, case.trade_id)
@@ -403,7 +407,7 @@ async def restore_product_display(
         "display_restricted_case_id": None,
         "status": product.status,
     }
-    # 复用商品编辑历史留痕：执行人、时间、原因及前后限制，不新增 schema。
+    # Reuse product edit history for the actor, time, reason, and before/after restrictions without adding a schema.
     await product_service.record_edit_history(
         db, product, admin.id, before, after, edit_type="display_restore", reason=reason
     )
@@ -448,7 +452,7 @@ async def restore_product_display(
 
 @router.post("/{product_id}/correct-category")
 async def correct_category(product_id: int, body: CategoryCorrectionIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """管理员有依据纠正分类（BR-11）：留前后内容、原因、操作人与时间，通知卖方。"""
+    """Correct categories with a basis (BR-11): retain before/after content, reason, actor, and time, and notify the seller."""
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
@@ -459,7 +463,7 @@ async def correct_category(product_id: int, body: CategoryCorrectionIn, admin: C
         category = await db.get(Category, cid)
         if not category or category.deleted_at is not None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"分类不存在：{cid}")
-        # 停用分类只可作为“保留原关联”出现在纠正结果中，不能用作新增关联（4.16、US-13-AC-04）。
+        # A disabled category may appear in the correction only as a retained original link; it cannot be used as a new link (4.16, US-13-AC-04).
         if category.status != "active" and category.id not in retained_ids:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"所选标签已停用：{category.name}")
         categories.append(category)

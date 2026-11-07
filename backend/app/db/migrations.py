@@ -1,13 +1,14 @@
-"""SQLite 增量结构升级（D-51）。
+"""SQLite incremental schema upgrades (D-51).
 
-新库由 create_all 建表；已有 SQLite 库补齐缺失列与头像待审事项。
-审计清理按现行规则删除匿名事件，保留账户及明确系统任务记录。
+New databases are created by create_all; existing SQLite databases get missing
+columns plus pending avatar review cases. Audit cleanup deletes anonymous events
+per current rules while retaining accounts and explicit system task records.
 """
 
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Connection
 
-# 仅允许追加、可空、无服务端默认值的列；升级可重复执行。
+# Only additive, nullable columns without server defaults are allowed; the upgrade is idempotent.
 ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
     "disposal_cases": {"avatar_key": "VARCHAR(512)"},
     "users": {'avatar_key': 'VARCHAR(512)', 'avatar_pending_key': 'VARCHAR(512)', 'avatar_review_status': 'VARCHAR(16)', 'avatar_review_reason': 'VARCHAR(500)'},
@@ -15,7 +16,7 @@ ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
         "confirm_wait_paused_at": "DATETIME",
         "confirm_wait_remaining_seconds": "INTEGER",
     },
-    # 任务 K：旧本地 SQLite 库只追加标签审核原因列，不重建、不丢历史申请。
+    # Task K: old local SQLite databases only get the tag review reason column; no rebuild and no loss of historical applications.
     "product_tag_applications": {
         "decision_reason": "VARCHAR(500)",
     },
@@ -23,7 +24,7 @@ ADDITIVE_COLUMNS: dict[str, dict[str, str]] = {
 
 
 def upgrade_additive_schema(conn: Connection) -> list[str]:
-    """在 create_all 之后补齐旧库缺失列，返回实际追加的列名。"""
+    """Add missing columns to an old database after create_all and return the columns actually added."""
     if conn.dialect.name != "sqlite":
         return []
     inspector = inspect(conn)

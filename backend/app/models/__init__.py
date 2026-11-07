@@ -1,4 +1,4 @@
-"""模型汇总：导入全部模型以便 create_all 建表。"""
+"""Model registry: import all models so create_all creates every table."""
 
 from app.models.audit import AuditEvent
 from app.models.category import Category, CategoryAlias

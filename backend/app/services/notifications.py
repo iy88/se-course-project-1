@@ -1,7 +1,8 @@
-"""站内通知服务（4.17）：创建通知并写入同事务 durable realtime event。
+"""In-site notification service (4.17): create notifications and durable realtime events in the same transaction.
 
-此函数不再直接触碰 WebSocket。调用者提交业务、通知、审计与事件组成的同一
-事务后，由 dispatcher 投递；回滚时通知与事件一起消失。
+This function no longer touches WebSocket directly. After the caller commits the single
+transaction containing business rows, notifications, audits, and events, the dispatcher
+delivers them; on rollback the notifications and events disappear together.
 """
 from collections.abc import Iterable
 
@@ -23,10 +24,12 @@ async def notify(
     link_id: int | None = None,
     payload: dict | None = None,
 ) -> list[Notification]:
-    """给每个有效普通用户创建一条通知及其事件。
+    """Create one notification and event per valid regular user.
 
-    4.17：管理员待办来自共享处理池，不接收站内个人通知；未知用户不落库，
-    避免非法外键。BR-32：封禁账户仍可读取本人通知，故不按账户状态过滤。
+    4.17: administrator to-dos come from the shared processing pool and receive no
+    personal in-site notifications; unknown users are not persisted, avoiding invalid
+    foreign keys. BR-32: banned accounts can still read their own notifications, so
+    account status is not filtered.
     """
     candidates = list(dict.fromkeys(uid for uid in user_ids if uid is not None))
     if not candidates:
@@ -42,7 +45,7 @@ async def notify(
             )
         ).all()
     )
-    # 保持入参顺序去重，使返回值、持久化与事件接收人完全一致。
+    # Deduplicate while preserving input order so return values, persistence, and event recipients match exactly.
     users = [uid for uid in candidates if uid in existing_ids]
     if not users:
         return []

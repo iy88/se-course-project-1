@@ -1,4 +1,4 @@
-"""交易状态机核心操作：转移留痕、结束联动（商品下架/分支归档/本笔解冻）、通知。"""
+"""Core trade state-machine operations: transition records, end cascades (product delisting/branch archiving/unfreezing this trade), and notifications."""
 from datetime import UTC, datetime
 
 from sqlmodel import col, select
@@ -43,7 +43,7 @@ async def record_transition(
 
 
 async def product_snapshot(db: AsyncSession, product: Product) -> dict:
-    """交易时内容快照（BR-30）。"""
+    """Snapshot of content at trade time (BR-30)."""
     images = await product_service.load_product_images(db, product.id)
     tags = await product_service.load_product_tags(db, product.id)
     return {
@@ -58,7 +58,7 @@ async def product_snapshot(db: AsyncSession, product: Product) -> dict:
 
 
 async def clear_current_confirmations(db: AsyncSession, trade_id: int) -> int:
-    """清空当前完成确认标记，保留历史记录（D-49、BR-07、BR-08）。"""
+    """Clear current completion-confirmation flags while retaining historical records (D-49, BR-07, BR-08)."""
     result = await db.exec(
         select(CompletionConfirmation).where(
             col(CompletionConfirmation.trade_id) == trade_id,
@@ -83,7 +83,7 @@ async def finish_trade(
     basis_case_id: int | None = None,
     title: str = "",
 ) -> Trade:
-    """交易结束统一联动：状态、本笔解冻、分支归档、商品默认下架（TR-15/17/18、BR-14/33）。"""
+    """Unified end-of-trade cascade: status, unfreezing this trade, branch archiving, and default product delisting (TR-15/17/18, BR-14/33)."""
     from app.services import trades as trade_service
 
     from_status = trade.status
@@ -93,7 +93,7 @@ async def finish_trade(
     clear_wait_state(trade)
     trade.cancel_requested_by_id = None
     trade.cancel_requested_at = None
-    # 已完成/已终止自动解除本笔冻结，其他冻结/封禁保留（BR-33）
+    # Completion/termination automatically lifts this trade's freeze; other freezes/bans remain (BR-33)
     if trade.frozen:
         trade.frozen = False
     await record_transition(
@@ -102,8 +102,9 @@ async def finish_trade(
     )
     await conversation_service.archive_trade_branch(db, trade.id)
     product = await db.get(Product, trade.product_id)
-    # 只有本笔交易确实持有锁单时才下架；旧已完成交易被再次调整时不得打断
-    # 同商品另一笔锁单交易及其商品资格（BR-02/D-48）。
+    # Delist only when this trade actually held the lock; re-adjusting an old completed
+    # trade must not interrupt another locking trade on the same product or its product
+    # eligibility (BR-02/D-48).
     if product and product.status == ProductStatus.IN_TRANSACTION.value and was_locking:
         other_locking = await trade_service.get_locking_trade(db, trade.product_id)
         if other_locking is None:

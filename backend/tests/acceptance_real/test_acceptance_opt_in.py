@@ -20,4 +20,4 @@ def test_real_acceptance() -> None:
     if run_id:
         argv.extend(["--run-id", run_id])
     result = main(argv)
-    assert result == 0, "真实验收存在失败或跳过的检查，查看 var/acceptance-real/acceptance-failure-*.log"
+    assert result == 0, "Real acceptance has failed or skipped checks; see var/acceptance-real/acceptance-failure-*.log"

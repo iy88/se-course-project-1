@@ -1,4 +1,4 @@
-"""依赖注入：当前用户、管理员、封禁校验。"""
+"""Dependency injection: current user, administrator, and ban validation."""
 
 from contextvars import ContextVar
 from typing import Annotated
@@ -24,10 +24,11 @@ def current_token_expires_at() -> int:
 async def get_audit_db(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AsyncSession:
-    """业务请求会话：同时把同一 engine 暴露给审计上下文做独立失败事务。
+    """Business request session: also exposes the same engine to the audit context for independent failure transactions.
 
-    使用 contextvar 而不是 Request 注入，保证 HTTP 与 WebSocket 共用 DbSession
-    时都能工作；审计中间件只读取 engine，不提交、不关闭业务会话。
+    Uses a contextvar rather than Request injection so HTTP and WebSocket can share
+    DbSession; the audit middleware only reads the engine and does not commit or close
+    the business session.
     """
     audit_service.set_audit_bind(db.bind)
     return db
@@ -51,7 +52,7 @@ async def get_optional_user(
         _TOKEN_EXPIRES_AT.set(0)
     user = await db.get(User, int(payload["sub"]))
     if user is not None:
-        # 审计上下文：成功事件与失败/拒绝事件都按已解析主体归属。
+        # Audit context: success events and failure/denial events are attributed to the resolved actor.
         audit_service.set_actor(user.id, user.role)
     return user
 
@@ -59,7 +60,7 @@ async def get_optional_user(
 async def get_current_user(
     user: Annotated[User | None, Depends(get_optional_user)],
 ) -> User:
-    """BR-22：业务内容要求已登录；未登录/无效令牌返回 401。"""
+    """BR-22: business content requires sign-in; unauthenticated/invalid tokens return 401."""
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "未登录或登录已过期")
     return user
@@ -78,7 +79,7 @@ CurrentAdmin = Annotated[User, Depends(get_current_admin)]
 
 
 def ensure_not_banned(user: User) -> None:
-    """BR-32：封禁账户禁止业务写操作（处置沟通单除外，由各接口自行放宽）。"""
+    """BR-32: banned accounts cannot perform business writes (except disposal communication cases, which individual endpoints may relax)."""
     if user.status == AccountStatus.BANNED.value:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "账户已被封禁，当前操作不可用")
 

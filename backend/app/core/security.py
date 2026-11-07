@@ -1,4 +1,4 @@
-"""密码散列与 JWT 签发/校验。"""
+"""Password hashing and JWT issuing/verification."""
 
 import hashlib
 import hmac
@@ -41,7 +41,7 @@ def decode_access_token(token: str) -> dict | None:
 
 
 def sign_file_key(key: str, expire_seconds: int | None = None) -> str:
-    """为文件访问生成带过期时间的签名（配合 BR-22：未登录不可见业务文件）。"""
+    """Generate an expiring signature for file access (BR-22: business files are not visible to anonymous users)."""
     settings = get_settings()
     exp = int(time.time()) + (expire_seconds or settings.file_url_expire_seconds)
     sig = hmac.new(settings.file_url_secret.encode(), f"{key}:{exp}".encode(), hashlib.sha256).hexdigest()

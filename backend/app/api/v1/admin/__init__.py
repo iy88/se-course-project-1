@@ -1,4 +1,4 @@
-"""管理端路由汇总（全部要求管理员身份）。"""
+"""Admin router registry (all require administrator identity)."""
 
 from fastapi import APIRouter
 

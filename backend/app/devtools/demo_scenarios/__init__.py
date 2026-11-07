@@ -1,4 +1,4 @@
-"""持久演示场景目录共享包（seed / 只读核验 / 回归测试共用）。"""
+"""Shared package for the persistent demo scenario catalog (used by seed, read-only verification, and regression tests)."""
 
 from app.devtools.demo_scenarios.checks import (
     CatalogError,

@@ -1,7 +1,9 @@
-"""单方完成确认等待计时（BR-05、TR-14、D-51）。
+"""Wait timer for unilateral completion confirmation (BR-05, TR-14, D-51).
 
-所有时间按 UTC 解释；SQLite 读出的 datetime 可能不带时区，统一补齐为 UTC 后再比较。
-暂停只冻结“有效等待”的累计时间，不改变交易状态、当前确认或有效约定。
+All times are interpreted as UTC; datetimes read from SQLite may lack a timezone, so
+they are normalized to UTC before comparison. Pausing freezes only the accumulated
+"effective wait" time and does not change the trade state, current confirmation, or
+effective agreement.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -15,7 +17,7 @@ def now_utc() -> datetime:
 
 
 def as_utc(value: datetime | None) -> datetime | None:
-    """SQLite 可能返回 naive datetime；统一按 UTC 处理，避免 aware/naive 比较异常。"""
+    """SQLite may return naive datetimes; treat all as UTC to avoid aware/naive comparison errors."""
     if value is None:
         return None
     if value.tzinfo is None:
@@ -28,7 +30,7 @@ def timeout_seconds() -> int:
 
 
 def wait_remaining_seconds(trade: Trade, now: datetime | None = None) -> int | None:
-    """当前有效等待的剩余秒数；无等待返回 None，已耗尽返回 0。"""
+    """Remaining seconds of the current effective wait; None when there is no wait, 0 when exhausted."""
     timeout = timeout_seconds()
     paused_at = as_utc(trade.confirm_wait_paused_at)
     if paused_at is not None:
@@ -45,13 +47,13 @@ def wait_remaining_seconds(trade: Trade, now: datetime | None = None) -> int | N
         return None
     reference = now or now_utc()
     if trade.frozen:
-        # 兼容升级前已冻结、尚无暂停字段的记录：按冻结时刻截断，绝不按自然墙钟累计。
+        # Records frozen before the upgrade with no pause fields: cut off at the freeze instant and never accrue wall-clock time.
         reference = as_utc(trade.frozen_at) or reference
     return max(0, int(timeout - (reference - started).total_seconds()))
 
 
 def pause_wait_for_freeze(trade: Trade, now: datetime | None = None) -> int | None:
-    """冻结前保存已等待进度与剩余时间；重复冻结保持原暂停起点，不重置。"""
+    """Save elapsed progress and remaining time before freezing; repeated freezes keep the original pause point and do not reset it."""
     if trade.confirm_wait_paused_at is not None:
         return trade.confirm_wait_remaining_seconds
     started = as_utc(trade.confirm_wait_started_at)
@@ -65,7 +67,7 @@ def pause_wait_for_freeze(trade: Trade, now: datetime | None = None) -> int | No
 
 
 def resume_wait_after_unfreeze(trade: Trade, *, eligible: bool, now: datetime | None = None) -> int | None:
-    """仅当交易仍进行中且保留当前确认时续算剩余时间；否则结束旧轮暂停状态。"""
+    """Resume the remaining time only when the trade is still in progress and retains its current confirmation; otherwise end the old paused round."""
     paused_at = as_utc(trade.confirm_wait_paused_at)
     stored = trade.confirm_wait_remaining_seconds
     started = as_utc(trade.confirm_wait_started_at)
@@ -77,7 +79,7 @@ def resume_wait_after_unfreeze(trade: Trade, *, eligible: bool, now: datetime | 
 
     remaining = stored
     if remaining is None:
-        # 旧库升级后可能只有 frozen_at 与 started_at，没有显式剩余值。
+        # After upgrading an old database, only frozen_at and started_at may exist with no explicit remaining value.
         base = as_utc(trade.frozen_at) or paused_at or now_utc()
         if started is None:
             clear_wait_state(trade)
@@ -92,7 +94,7 @@ def resume_wait_after_unfreeze(trade: Trade, *, eligible: bool, now: datetime | 
 
 
 def clear_wait_state(trade: Trade) -> None:
-    """结束当前等待轮次（确认被清空、争议、变更生效、结束或管理恢复）。"""
+    """End the current wait round (confirmation cleared, dispute, change effective, completion, or administrative restoration)."""
     trade.confirm_wait_started_at = None
     trade.confirm_wait_paused_at = None
     trade.confirm_wait_remaining_seconds = None

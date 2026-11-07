@@ -1,4 +1,4 @@
-"""交易评价（C-11/BR-24）：完成后互评，仅本人按发表/收到查看。"""
+"""Trade reviews (C-11/BR-24): mutual reviews after completion, visible to the user only as published/received."""
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -20,7 +20,7 @@ class ReviewCreateIn(BaseModel):
 
 @router.post("/{trade_id}/review", status_code=201)
 async def create_review(trade_id: int, body: ReviewCreateIn, user: CurrentUser, db: DbSession) -> dict:
-    """已完成交易双方互评，每方每笔一条（BR-24）。"""
+    """Both parties review a completed trade, one review per party per trade (BR-24)."""
     ensure_can_write(user)
     trade = await db.get(Trade, trade_id)
     if not trade or user.id not in (trade.buyer_id, trade.seller_id):
@@ -71,7 +71,7 @@ def _review_out(review: TradeReview, other_name: str, trade_status: str) -> dict
 
 @reviews_router.get("")
 async def my_reviews(user: CurrentUser, db: DbSession, type: str = Query(pattern="^(published|received)$", default="published")) -> list[dict]:
-    """我的评价：按发表/收到查看，均关联交易（FR-12）。"""
+    """My reviews: view by published/received, each linked to a trade (FR-12)."""
     if type == "published":
         query = select(TradeReview).where(col(TradeReview.reviewer_id) == user.id)
     else:

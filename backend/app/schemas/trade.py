@@ -1,4 +1,4 @@
-"""交易相关 Pydantic 模型。"""
+"""Pydantic models for trades."""
 
 from pydantic import BaseModel, Field
 from app.core.text import NonBlank100, NonBlank1000, NonBlank200, Text200, Text500
@@ -14,7 +14,7 @@ class RejectIn(BaseModel):
 
 
 class AgreementProposeIn(BaseModel):
-    """约定要素（4.15）：交付时间/文字地点/方式 + 约定金额/支付方式/支付时点。"""
+    """Agreement elements (4.15): delivery time/text location/method plus agreed amount/payment method/payment timing."""
 
     delivery_time: NonBlank200
     delivery_location: NonBlank200

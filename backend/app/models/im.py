@@ -1,4 +1,4 @@
-"""C-07 IM 会话（普通私聊/交易分支）、C-08 消息、会话已读。"""
+"""C-07 IM conversations (regular private chat/trade branch), C-08 messages, conversation read state."""
 
 from datetime import datetime
 from typing import Any, cast
@@ -25,7 +25,7 @@ from app.models.enums import ConversationType, MessageKind
 
 
 class Conversation(Base, table=True):
-    """普通私聊按双人复用；交易分支按请求/交易独立（BR-18）。user_low/high 用于唯一约束。"""
+    """Regular private chats are reused per pair of users; trade branches are independent per request/trade (BR-18). user_low/high back the unique constraint."""
 
     __tablename__ = cast(Any, "conversations")
     __table_args__ = (
@@ -59,13 +59,13 @@ class Conversation(Base, table=True):
 
 
 class Message(Base, table=True):
-    """C-08：文字消息与系统消息；不向非会话成员公开（BR-18/19）。"""
+    """C-08: text and system messages; not exposed to non-members of the conversation (BR-18/19)."""
 
     __tablename__ = cast(Any, "messages")
 
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
     conversation_id: int = Field(sa_column=Column(ForeignKey("conversations.id"), index=True, nullable=False))
-    sender_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))  # 系统消息为空
+    sender_id: int | None = Field(default=None, sa_column=Column(ForeignKey("users.id"), nullable=True))  # null for system messages
     kind: str = Field(default=MessageKind.TEXT.value, sa_column=Column(String(16), default=MessageKind.TEXT.value, nullable=False))
     content: str = Field(sa_column=Column(Text, nullable=False))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))
@@ -74,7 +74,7 @@ class Message(Base, table=True):
 
 
 class ConversationRead(Base, table=True):
-    """会话级已读进度：仅打开并展示消息时推进（BR-18）。"""
+    """Conversation-level read progress: advances only when messages are opened and displayed (BR-18)."""
 
     __tablename__ = cast(Any, "conversation_reads")
     __table_args__ = (UniqueConstraint("conversation_id", "user_id"),)

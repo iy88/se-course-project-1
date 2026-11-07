@@ -1,4 +1,4 @@
-"""IM 会话与消息（C-07/C-08，BR-18）：普通私聊与交易分支在同一双人入口下组织。"""
+"""IM conversations and messages (C-07/C-08, BR-18): regular private chats and trade branches are organized under the same two-person entry point."""
 
 from typing import Annotated
 
@@ -47,7 +47,7 @@ async def _get_last_read_id(db: AsyncSession, conversation_id: int, user_id: int
 async def _existing_normal_conversation_id(
     db: AsyncSession, user_a: int, user_b: int
 ) -> int | None:
-    """普通私聊按双人排序后的稳定键复用；用于区分新建与幂等复用（BR-18）。"""
+    """Regular private chats are reused by a stable key from the sorted user pair; used to distinguish creation from idempotent reuse (BR-18)."""
     low, high = sorted((user_a, user_b))
     return (await db.exec(
         select(col(Conversation.id)).where(
@@ -201,7 +201,7 @@ async def _conversation_items(db: AsyncSession, conversations: list[Conversation
 
 @router.get("")
 async def list_conversations(user: CurrentUser, db: DbSession) -> list[dict]:
-    """同一双人入口下展示普通私聊与交易分支（FR-04）；批量投影避免 N+1。"""
+    """Show regular private chats and trade branches under the same two-person entry point (FR-04); batch projection avoids N+1."""
     result = await db.exec(
         select(Conversation)
         .where((col(Conversation.user_low_id) == user.id) | (col(Conversation.user_high_id) == user.id))
@@ -212,7 +212,7 @@ async def list_conversations(user: CurrentUser, db: DbSession) -> list[dict]:
 
 @router.post("/normal", status_code=201)
 async def create_normal(body: NormalConversationCreateIn, user: CurrentUser, db: DbSession) -> dict:
-    """发起/复用普通私聊：不以商品或购买请求为前提（BR-18）。"""
+    """Start/reuse a regular private chat: no product or purchase request is required (BR-18)."""
     ensure_can_write(user)
     if body.peer_user_id == user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能向本人发起私聊")
@@ -255,7 +255,7 @@ async def conversation_detail(
     before_id: int | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
 ) -> dict:
-    """会话消息（倒序分页）。查看历史不改变已读；已读由 /read 显式推进（BR-18）。"""
+    """Conversation messages (reverse-ordered pagination). Viewing history does not change read state; /read advances it explicitly (BR-18)."""
     conversation = await _get_member_conversation(db, conversation_id, user.id)
     query = select(Message).where(col(Message.conversation_id) == conversation.id)
     if before_id is not None:
@@ -287,9 +287,10 @@ async def send_message(
     db: DbSession,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> dict:
-    """发送文字消息：成员、封禁、双人冻结、归档校验（BR-17/18/32/33）。
+    """Send a text message: membership, ban, pair-freeze, and archive validation (BR-17/18/32/33).
 
-    可选 Idempotency-Key 与消息、审计、durable event 同事务；同一键不同内容拒绝。
+    An optional Idempotency-Key shares the transaction with the message, audit, and
+    durable event; reusing a key with different content is rejected.
     """
     key = idempotency_service.parse_key(idempotency_key)
     async with idempotency_service.guard(
@@ -327,7 +328,7 @@ async def send_message(
 
 @router.post("/{conversation_id}/read")
 async def advance_read(conversation_id: int, body: ReadAdvanceIn, user: CurrentUser, db: DbSession) -> dict:
-    """仅将已展示消息标为已读（BR-18）：推进本人该会话已读指针。"""
+    """Mark only displayed messages as read (BR-18): advance the user's read pointer for this conversation."""
     conversation = await _get_member_conversation(db, conversation_id, user.id)
     max_id = (await db.exec(
         select(col(Message.id)).where(col(Message.conversation_id) == conversation.id).order_by(col(Message.id).desc()).limit(1)
@@ -363,7 +364,7 @@ async def advance_read(conversation_id: int, body: ReadAdvanceIn, user: CurrentU
 
 @router.post("/{conversation_id}/to-normal")
 async def migrate_to_normal(conversation_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """归档分支引导转入普通私聊：不迁移消息、不自动发送（BR-18）。"""
+    """Guide an archived branch into a regular private chat: no messages are migrated and nothing is sent automatically (BR-18)."""
     conversation = await _get_member_conversation(db, conversation_id, user.id)
     peer_id = conversation.user_high_id if user.id == conversation.user_low_id else conversation.user_low_id
     existing_id = await _existing_normal_conversation_id(db, user.id, peer_id)

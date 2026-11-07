@@ -1,4 +1,4 @@
-"""收藏（C-05/BR-16）：本人清单、失效提示、取消收藏。"""
+"""Favorites (C-05/BR-16): my list, invalid-item hints, and removal."""
 
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import col, select
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/favorites", tags=["favorites"])
 
 @router.get("")
 async def my_favorites(user: CurrentUser, db: DbSession) -> list[dict]:
-    """本人清单；失效项仅显示通用提示，不泄露不可见内容（BR-16）。"""
+    """My list; invalid items show only a generic hint and never leak inaccessible content (BR-16)."""
     result = await db.exec(
         select(Favorite).where(col(Favorite.user_id) == user.id).order_by(col(Favorite.created_at).desc())
     )
@@ -24,7 +24,7 @@ async def my_favorites(user: CurrentUser, db: DbSession) -> list[dict]:
     out: list[dict] = []
     for favorite in favorites:
         product = await db.get(Product, favorite.product_id)
-        # D-44：只按当前公开资格判定；不复用买方历史详情资格，失效不硬删除收藏关系
+        # D-44: judge by current public eligibility only; do not reuse a buyer's historical detail eligibility, and do not hard-delete the favorite when invalid
         valid = product is not None and is_favorite_valid(product)
         if valid and product is not None:
             seller = await db.get(User, product.seller_id)
@@ -60,7 +60,7 @@ async def my_favorites(user: CurrentUser, db: DbSession) -> list[dict]:
 
 @router.post("/{product_id}")
 async def add_favorite(product_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """收藏公开商品；重复收藏返回已有结果（重试一致，6.5）。"""
+    """Favorite a public product; a duplicate favorite returns the existing result (retry consistency, 6.5)."""
     ensure_can_write(user)
     product = await db.get(Product, product_id)
     if not product or product.status != ProductStatus.LISTED.value or product.display_restricted:
@@ -86,7 +86,7 @@ async def add_favorite(product_id: int, user: CurrentUser, db: DbSession) -> dic
 
 @router.delete("/{product_id}")
 async def remove_favorite(product_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """取消本人收藏；失效商品仍可取消而不开放内容（BR-16）。"""
+    """Remove the user's favorite; an invalid product can still be removed without exposing content (BR-16)."""
     ensure_can_write(user)
     favorite = (await db.exec(
         select(Favorite).where(col(Favorite.user_id) == user.id, col(Favorite.product_id) == product_id)

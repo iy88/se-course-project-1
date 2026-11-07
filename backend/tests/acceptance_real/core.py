@@ -1,4 +1,4 @@
-"""验收核心：OpenAPI 路由归一化、真实 HTTP 客户端、步骤记录与断言。"""
+"""Acceptance core: OpenAPI route normalization, real HTTP client, step recording, and assertions."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ SKIP = "SKIP"
 
 
 class CheckFailure(AssertionError):
-    """可安全写入报告的断言失败（不含响应正文/凭据）。"""
+    """Assertion failure that is safe to write to reports (no response body or credentials)."""
 
 
 def _short(value: Any, limit: int = 300) -> str:
@@ -30,7 +30,7 @@ def _short(value: Any, limit: int = 300) -> str:
 
 
 class RouteIndex:
-    """把真实请求路径映射回 OpenAPI 规范模板。"""
+    """Map real request paths back to OpenAPI specification templates."""
 
     def __init__(self, openapi: Mapping[str, Any]) -> None:
         self.templates: list[tuple[str, str, re.Pattern[str]]] = []
@@ -51,7 +51,7 @@ class RouteIndex:
                 else:
                     pattern = re.sub(r"\\\{[^}]+\\\}", r"[^/]+", escaped)
                 self.templates.append((method_upper, path, re.compile(rf"^{pattern}$")))
-        # 更具体的模板优先：参数更少者先匹配，再比较静态长度。
+        # More specific templates first: fewer parameters match earlier, then compare static length.
         self.templates.sort(key=lambda row: (row[1].count("{"), -len(row[1].replace("{", ""))))
 
     @property
@@ -105,14 +105,14 @@ class CallRecord:
 
 
 class ApiClient:
-    """真实 HTTP 客户端；只记录方法/模板/状态，不保存响应正文或查询串。"""
+    """Real HTTP client; records only method/template/status, never response bodies or query strings."""
 
     def __init__(self, base_url: str, route_index: RouteIndex, *, timeout: float = 40.0) -> None:
         parsed = urlsplit(base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise CheckFailure("base_url 必须是 http(s) 地址")
+            raise CheckFailure("base_url must be an http(s) URL")
         if parsed.username or parsed.password:
-            raise CheckFailure("base_url 不能包含凭据")
+            raise CheckFailure("base_url must not contain credentials")
         self.origin = f"{parsed.scheme}://{parsed.netloc}"
         self.route_index = route_index
         self.client = httpx.Client(
@@ -185,7 +185,7 @@ class ApiClient:
                     note or type(exc).__name__,
                 )
             )
-            raise CheckFailure(f"{method} {actual_path} 请求失败（{type(exc).__name__}）") from None
+            raise CheckFailure(f"{method} {actual_path} request failed ({type(exc).__name__})") from None
         duration = round((time.monotonic() - started) * 1000, 1)
         self.calls.append(
             CallRecord(
@@ -203,8 +203,8 @@ class ApiClient:
         )
         if allowed and response.status_code not in allowed:
             raise CheckFailure(
-                f"{method} {actual_path} 返回 {response.status_code}，预期 {allowed}"
-                + (f"（{note}）" if note else "")
+                f"{method} {actual_path} returned {response.status_code}, expected {allowed}"
+                + (f" ({note})" if note else "")
             )
         return response
 
@@ -228,37 +228,37 @@ class ApiClient:
         try:
             return response.json()
         except ValueError:
-            raise CheckFailure(f"HTTP {response.status_code} 响应不是 JSON") from None
+            raise CheckFailure(f"HTTP {response.status_code} response is not JSON") from None
 
     @staticmethod
     def dict_of(response: httpx.Response) -> dict[str, Any]:
         value = ApiClient.json_of(response)
         if not isinstance(value, dict):
-            raise CheckFailure("响应不是 JSON 对象")
+            raise CheckFailure("Response is not a JSON object")
         return value
 
     @staticmethod
     def list_of(response: httpx.Response) -> list[Any]:
         value = ApiClient.json_of(response)
         if not isinstance(value, list):
-            raise CheckFailure("响应不是 JSON 数组")
+            raise CheckFailure("Response is not a JSON array")
         return value
 
     def signed_get(self, url: str, *, expected: int = 200) -> httpx.Response:
         parsed = urlsplit(url)
         origin = urlsplit(self.origin)
         if not parsed.scheme and not parsed.netloc:
-            # 后端返回站内相对签名 URL；补 base origin，仍不记录查询串。
+            # The backend returns a same-origin relative signed URL; prepend the base origin and still do not log the query string.
             target = self.origin + (url if url.startswith("/") else "/" + url)
             parsed = urlsplit(target)
         elif parsed.netloc != origin.netloc:
             if parsed.scheme != 'https' or parsed.netloc not in self.allowed_storage_hosts or parsed.username or parsed.password:
-                raise CheckFailure('签名 URL 主机不在配置的存储白名单')
+                raise CheckFailure('Signed URL host is not in the configured storage allowlist')
         safe_path = parsed.path or "/"
         try:
             response = self.client.get(parsed.geturl())
         except httpx.HTTPError as exc:
-            raise CheckFailure(f"GET {safe_path} 请求失败（{type(exc).__name__}）") from None
+            raise CheckFailure(f"GET {safe_path} request failed ({type(exc).__name__})") from None
         self.calls.append(
             CallRecord(
                 len(self.calls) + 1,
@@ -274,7 +274,7 @@ class ApiClient:
             )
         )
         if response.status_code != expected:
-            raise CheckFailure(f"GET {safe_path} 返回 {response.status_code}，预期 {expected}")
+            raise CheckFailure(f"GET {safe_path} returned {response.status_code}, expected {expected}")
         return response
 
 
@@ -317,12 +317,12 @@ class Recorder:
 
     def must_eq(self, actual: Any, expected: Any, message: str) -> None:
         if actual != expected:
-            raise CheckFailure(f"{message}：实际 {actual!r}，预期 {expected!r}")
+            raise CheckFailure(f"{message}: actual {actual!r}, expected {expected!r}")
         self._assertion(f"OK: {message} = {expected!r}")
 
     def must_in(self, member: Any, container: Iterable[Any], message: str) -> None:
         if member not in container:
-            raise CheckFailure(f"{message}：{member!r} 不在预期集合")
+            raise CheckFailure(f"{message}: {member!r} is not in the expected collection")
         self._assertion(f"OK: {message}")
 
     def _assertion(self, text: str) -> None:

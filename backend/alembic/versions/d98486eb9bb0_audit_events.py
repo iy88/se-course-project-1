@@ -49,7 +49,7 @@ def upgrade() -> None:
         schema = config.attributes["migration_schema"]
         if not role:
             raise RuntimeError("migration app role is required to grant audit privileges")
-        # 审计只追加：app 仅 SELECT/INSERT，禁止 UPDATE/DELETE/TRUNCATE。
+        # Audit is append-only: app may only SELECT/INSERT; UPDATE/DELETE/TRUNCATE are forbidden.
         op.execute(sa.text(f'REVOKE ALL ON "{schema}".audit_events FROM PUBLIC'))
         op.execute(sa.text(f'REVOKE UPDATE, DELETE, TRUNCATE ON "{schema}".audit_events FROM "{role}"'))
         op.execute(sa.text(f'GRANT SELECT, INSERT ON "{schema}".audit_events TO "{role}"'))

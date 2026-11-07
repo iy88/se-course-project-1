@@ -1,9 +1,9 @@
-"""管理端分类纠正：停用分类不得作为新增关联（#12 重开、US-13-AC-04）。
+"""Admin category correction: disabled categories must not be added as new associations (#12 reopened, US-13-AC-04).
 
-覆盖：
-- 新增未关联的停用分类 → 400，标签不变；
-- 保留商品原有的停用关联 → 允许，且可同时调整启用分类；
-- 仅启用分类的正常纠正 → 成功。
+Covers:
+- adding an unassociated disabled category -> 400 with tags unchanged;
+- keeping a product's existing disabled association -> allowed, and active categories may be adjusted at the same time;
+- a normal correction using only active categories -> success.
 """
 
 import pytest
@@ -73,7 +73,7 @@ async def test_correct_category_rejects_new_disabled_association(tmp_path):
                 await correct_category(clean.id, body, admin, db)
             assert exc.value.status_code == 400
             assert other_disabled.name in str(exc.value.detail)
-            # 校验失败发生在替换标签之前，原关联保持不变。
+            # Validation fails before tags are replaced, so the original associations stay unchanged.
             tags = await load_product_tags(db, clean.id)
             assert [t.id for t in tags] == [active.id]
     finally:

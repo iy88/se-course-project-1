@@ -93,7 +93,7 @@ def upgrade() -> None:
         schema = config.attributes["migration_schema"]
         if not role:
             raise RuntimeError("migration app role is required to grant registry privileges")
-        # app 只能登记/提交/标记回收，不能删除登记或清空表。
+        # app may only register/commit/mark for reclamation; it cannot delete registrations or truncate the table.
         op.execute(sa.text(f'REVOKE ALL ON "{schema}".stored_objects FROM PUBLIC'))
         op.execute(
             sa.text(f'REVOKE DELETE, TRUNCATE ON "{schema}".stored_objects FROM "{role}"')

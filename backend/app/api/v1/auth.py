@@ -1,4 +1,4 @@
-"""FR-01 账户生命周期：注册、登录、退出、忘记密码、改密、换邮箱、改名。"""
+"""FR-01 account lifecycle: registration, login, logout, forgot password, password change, email change, and display-name change."""
 
 from typing import Annotated
 
@@ -37,7 +37,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _normalized_email(email: str) -> str:
-    """注册、登录、验证码及绑定邮箱使用同一标准化口径。"""
+    """Registration, login, verification codes, and bound emails share the same normalization."""
     return email.strip().lower()
 
 
@@ -54,7 +54,7 @@ async def _token_out(db: AsyncSession, user: User) -> TokenOut:
 
 @router.post("/register/send-code", response_model=CodeOut)
 async def register_send_code(body: SendCodeIn, db: DbSession) -> CodeOut:
-    """D-47：创建账户前验证当前注册邮箱由本人控制；沿用开发环境返回验证码。"""
+    """D-47: verify that the registrant controls the registration email before creating the account; in development the code is still returned."""
     email = _normalized_email(body.email)
     await verification.send_code(PURPOSE_REGISTER, email)
     return CodeOut(detail="验证码已发送，请验证当前注册邮箱后完成注册")
@@ -62,12 +62,12 @@ async def register_send_code(body: SendCodeIn, db: DbSession) -> CodeOut:
 
 @router.post("/register", response_model=TokenOut)
 async def register(body: RegisterIn, db: DbSession) -> TokenOut:
-    """BR-20/D-47：注册邮箱验证通过且邮箱唯一、资料有效后才创建账户。"""
+    """BR-20/D-47: create the account only after the registration email is verified, the email is unique, and the profile is valid."""
     email = _normalized_email(body.email)
     exists = (await db.exec(select(User).where(col(User.email) == email))).first()
     if exists:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该邮箱已被使用")
-    # 用途、邮箱绑定且一次性使用；验证失败不创建账户
+    # Purpose-bound, email-bound, and single-use; a failed verification creates no account
     await verification.verify_code(PURPOSE_REGISTER, email, body.code)
     user = User(
         email=email,
@@ -77,11 +77,11 @@ async def register(body: RegisterIn, db: DbSession) -> TokenOut:
     )
     db.add(user)
     try:
-        # 先 flush 取得主键并暴露唯一约束冲突；审计写入放在同一 commit 前，
-        # 保证审计失败时账户创建一起回滚。
+        # Flush first to obtain the primary key and surface unique-constraint conflicts;
+        # the audit write precedes the same commit so an audit failure rolls back account creation too.
         await db.flush()
     except IntegrityError:
-        # 并发注册同一邮箱时由唯一约束兜底，返回业务拒绝而不是 500
+        # For concurrent registrations of the same email, the unique constraint is the backstop, returning a business rejection rather than 500
         await db.rollback()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "该邮箱已被使用") from None
     await audit_service.record_event(
@@ -100,10 +100,10 @@ async def register(body: RegisterIn, db: DbSession) -> TokenOut:
 
 @router.post("/login", response_model=TokenOut)
 async def login(body: LoginIn, db: DbSession) -> TokenOut:
-    """BR-32：封禁不等于不能登录读取本人记录，登录不校验封禁状态。"""
+    """BR-32: a ban does not prevent signing in to read one's own records; login does not check ban status."""
     user = (await db.exec(select(User).where(col(User.email) == _normalized_email(body.email)))).first()
     if user is not None:
-        # 已知账户的失败登录也可归属；未知邮箱保持匿名，不把邮箱写入审计。
+        # A failed login for a known account is still attributable; an unknown email stays anonymous and is not written to the audit.
         audit_service.set_actor(user.id, user.role)
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "邮箱或密码错误")
@@ -125,7 +125,7 @@ async def logout(
     db: DbSession,
     user: Annotated[User | None, Depends(get_optional_user)],
 ) -> dict:
-    """JWT 无状态退出：客户端清除令牌即可；保留接口并记录已认证退出动作。"""
+    """Stateless JWT logout: the client only needs to discard the token; the endpoint remains and records authenticated logout."""
     if user is not None:
         await audit_service.record_event(
             db,
@@ -144,7 +144,7 @@ async def forgot_password_send_code(body: SendCodeIn, db: DbSession) -> CodeOut:
     email = _normalized_email(body.email)
     user = (await db.exec(select(User).where(col(User.email) == email))).first()
     if not user:
-        # 保留一致响应，不在HTTP返回验证码
+        # Keep the response consistent; never return the verification code over HTTP
         return CodeOut(detail="如果该邮箱已注册，验证码已发送")
     await verification.send_code(PURPOSE_RESET, email)
     return CodeOut(detail="如果该邮箱已注册，验证码已发送")
@@ -152,7 +152,7 @@ async def forgot_password_send_code(body: SendCodeIn, db: DbSession) -> CodeOut:
 
 @router.post("/forgot-password/reset", response_model=TokenOut)
 async def forgot_password_reset(body: ResetPasswordIn, db: DbSession) -> TokenOut:
-    """BR-20：通过绑定邮箱验证后自助设置新密码。"""
+    """BR-20: self-service password reset after verification through the bound email."""
     email = _normalized_email(body.email)
     user = (await db.exec(select(User).where(col(User.email) == email))).first()
     if not user:
@@ -174,7 +174,7 @@ async def forgot_password_reset(body: ResetPasswordIn, db: DbSession) -> TokenOu
 
 @router.post("/change-password")
 async def change_password(body: ChangePasswordIn, user: CurrentUser, db: DbSession) -> dict:
-    """4.19：主动改密须验证当前密码。"""
+    """4.19: a voluntary password change must verify the current password."""
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "当前密码不正确")
     user.password_hash = hash_password(body.new_password)
@@ -192,7 +192,7 @@ async def change_password(body: ChangePasswordIn, user: CurrentUser, db: DbSessi
 
 @router.post("/email/send-code", response_model=CodeOut)
 async def email_change_send_code(body: SendEmailChangeCodeIn, user: CurrentUser, db: DbSession) -> CodeOut:
-    """更换邮箱须同时验证旧邮箱和新邮箱（4.19）。"""
+    """Changing the email requires verifying both the old and new email addresses (4.19)."""
     if body.target == "new":
         if not body.new_email:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "请填写新邮箱")
@@ -216,7 +216,7 @@ async def email_change(body: ChangeEmailIn, user: CurrentUser, db: DbSession) ->
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "新邮箱已被其他账户使用")
     await verification.verify_code(PURPOSE_EMAIL_OLD, user.email, body.old_code)
     await verification.verify_code(PURPOSE_EMAIL_NEW, new_email, body.new_code)
-    # 用户 ID 保持不变，既有业务记录继续归属原用户 ID（4.19）
+    # The user ID stays unchanged, so existing business records keep their original user ID (4.19)
     user.email = new_email
     await audit_service.record_event(
         db,
@@ -238,7 +238,7 @@ async def email_change(body: ChangeEmailIn, user: CurrentUser, db: DbSession) ->
 
 @router.patch("/profile", response_model=UserOut)
 async def update_profile(body: ProfileUpdateIn, user: CurrentUser, db: DbSession) -> UserOut:
-    """4.19：显示名称可自行修改，历史记录保留用户 ID 归属。"""
+    """4.19: users may change their display name; historical records retain ownership by user ID."""
     before_name = user.display_name
     user.display_name = body.display_name
     await audit_service.record_event(

@@ -1,9 +1,10 @@
-"""持久演示场景的数据模型。
+"""Data model for persistent demo scenarios.
 
-本模块只描述“预置什么”，不写数据库、不依赖测试代码。``catalog.py`` 用这些
-结构声明一套可追踪的校园场景；``builder.py`` 负责落库，``checks.py`` 负责静态
-校验与只读核验。场景 key、对象 key 与 manifest 中的记录一一对应，避免 seed
-和自动化测试各自复制一份相似的文案。
+This module only describes what to seed; it never writes to the database and does not
+depend on test code. ``catalog.py`` declares a traceable set of campus scenarios with
+these structures; ``builder.py`` persists them, and ``checks.py`` handles static
+validation and read-only verification. Scenario keys, object keys, and manifest records
+correspond one-to-one, so the seed and automated tests do not each duplicate similar text.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class AccountSpec:
-    """演示身份。显示名使用虚构的“专业年级 + 姓名”风格，不含真实联系方式。"""
+    """Demo identity. Display names use a fictional "major/year + name" style and contain no real contact details."""
 
     key: str
     display_name: str
@@ -52,16 +53,16 @@ class ProhibitedSpec:
 
 @dataclass(frozen=True)
 class ReviewSpec:
-    """一次商品内容审核。重提会形成新的 ReviewSpec / 新事项。"""
+    """One product-content review. A resubmission creates a new ReviewSpec / new case."""
 
     result: str  # approved / rejected / pending / withdrawn
     days_ago: float
     reason: str | None = None
     reviewer: str | None = "admin"
-    claimed_by: str | None = None  # 仅 pending：事项是否已被认领
+    claimed_by: str | None = None  # pending only: whether the case has been claimed
     claimed_days_ago: float | None = None
-    key: str = ""  # 可选稳定对象 key；为空时由商品与序号生成
-    case_key: str = ""  # 可选审核事项 key
+    key: str = ""  # optional stable object key; generated from product and index when empty
+    case_key: str = ""  # optional review case key
 
 
 @dataclass(frozen=True)
@@ -122,7 +123,7 @@ class ProductSpec:
     restricted_case: str | None = None
     restricted_days_ago: float | None = None
     restricted_reason: str | None = None
-    image_slug: str | None = None  # 默认使用 key
+    image_slug: str | None = None  # defaults to key
 
     @property
     def all_tags(self) -> tuple[str, ...]:
@@ -179,7 +180,7 @@ class TransitionSpec:
 
 @dataclass(frozen=True)
 class MessageSpec:
-    sender: str | None  # None 表示系统消息
+    sender: str | None  # None means a system message
     content: str
     days_ago: float
 
@@ -214,8 +215,8 @@ class TradeSpec:
     finished_reason: str | None = None
     finished_case: str | None = None
     messages: tuple[MessageSpec, ...] = ()
-    reads: tuple[tuple[str, int], ...] = ()  # (账号 key, 已读到的消息序号，1 起)
-    history: tuple[TransitionSpec, ...] = ()  # 首尾之外的中间状态转换
+    reads: tuple[tuple[str, int], ...] = ()  # (account key, last read message number, 1-based)
+    history: tuple[TransitionSpec, ...] = ()  # intermediate transitions between the first and last states
     case: CaseSpec | None = None
 
 
@@ -266,7 +267,7 @@ class ReportSpec:
     key: str
     reporter: str
     target_type: str
-    target: str  # 商品/评论/消息/评价/用户的对象 key
+    target: str  # object key of the product/comment/message/review/user target
     reason: str
     days_ago: float
     detail: str | None = None
@@ -304,7 +305,7 @@ class NotificationSpec:
     content: str
     days_ago: float
     link_type: str | None = None
-    link: str | None = None  # 场景对象 key
+    link: str | None = None  # scenario object key
     payload: dict = field(default_factory=dict)
     is_read: bool = False
     read_days_ago: float | None = None
@@ -331,10 +332,11 @@ class AvatarSpec:
 
 @dataclass(frozen=True)
 class ScenarioSpec:
-    """一条可独立演示的业务路线。
+    """A business path that can be demonstrated independently.
 
-    ``objects`` 是本场景现场操作的入口对象；同一对象只能属于一个场景，互斥分支
-    必须使用不同对象。``checks`` 是自动化与只读核验共同引用的断言标识。
+    ``objects`` are the entry objects for live operations in this scenario; an object may
+    belong to only one scenario, and mutually exclusive branches must use different objects.
+    ``checks`` are assertion identifiers shared by automation and read-only verification.
     """
 
     key: str

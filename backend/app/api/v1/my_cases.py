@@ -1,4 +1,4 @@
-"""用户侧处置沟通（C-13）：问询说明、处置申辩与管理员回复（BR-26/32/33）。"""
+"""User-side disposal communication (C-13): inquiry statements, disposal appeals, and administrator replies (BR-26/32/33)."""
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
@@ -24,13 +24,13 @@ class StatementIn(BaseModel):
 
 
 async def _entitled_case(db, case_id: int, user_id: int) -> DisposalCase:
-    """统一复用服务的资格判断，避免详情与提交入口口径漂移。"""
+    """Reuse the service eligibility check uniformly so detail and submission entry points cannot drift apart."""
     return await case_service.get_entitled_case(db, case_id, user_id)
 
 
 @router.get("")
 async def my_cases(user: CurrentUser, db: DbSession) -> list[dict]:
-    """本人事项入口：含受处置事项，以及本人参与的异常交易/争议事项。"""
+    """Own-case entry point: matters where the user is the subject, plus abnormal-trade/dispute cases the user participates in."""
     my_trades = (
         await db.exec(select(col(Trade.id)).where((col(Trade.buyer_id) == user.id) | (col(Trade.seller_id) == user.id)))
     ).all()
@@ -84,7 +84,7 @@ async def case_detail(case_id: int, user: CurrentUser, db: DbSession) -> dict:
                 "role": m.role,
                 "kind": m.kind,
                 "content": m.content,
-                "sender_id": m.sender_id if m.sender_id == user.id else None,  # 不披露管理员身份细节
+                "sender_id": m.sender_id if m.sender_id == user.id else None,  # do not disclose administrator identity details
                 "mine": m.sender_id == user.id,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
@@ -95,7 +95,7 @@ async def case_detail(case_id: int, user: CurrentUser, db: DbSession) -> dict:
 
 @router.post("/{case_id}/statement")
 async def submit_statement(case_id: int, body: StatementIn, user: CurrentUser, db: DbSession) -> dict:
-    """问询阶段说明：从问询通知进入提交；问询不改变状态（BR-26）。"""
+    """Statement during the inquiry stage: submitted from the inquiry notification; an inquiry does not change state (BR-26)."""
     case = await _entitled_case(db, case_id, user.id)
     capabilities = await case_service.case_capabilities(db, case, user.id)
     if not capabilities["can_submit_statement"]:
@@ -121,7 +121,7 @@ async def submit_statement(case_id: int, body: StatementIn, user: CurrentUser, d
 
 @router.post("/{case_id}/appeal")
 async def submit_appeal(case_id: int, body: StatementIn, user: CurrentUser, db: DbSession) -> dict:
-    """处置后申辩：不因提交自动撤销处置（BR-26）。"""
+    """Appeal after disposal: submitting an appeal does not automatically revoke the disposal (BR-26)."""
     case = await _entitled_case(db, case_id, user.id)
     capabilities = await case_service.case_capabilities(db, case, user.id)
     if not capabilities["can_submit_appeal"]:

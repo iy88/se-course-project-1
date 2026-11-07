@@ -1,4 +1,4 @@
-"""C-03 商品分类（单级多标签）与别名。"""
+"""C-03 product categories (single level, multiple labels) and aliases."""
 
 from datetime import datetime
 from typing import Any, cast
@@ -20,12 +20,12 @@ from app.db.session import Base
 
 
 class Category(Base, table=True):
-    """单级标签，无父子层级；停用/逻辑删除保留历史（4.16）。"""
+    """Single-level label with no parent/child hierarchy; disabling/soft deletion keeps history (4.16)."""
 
     __tablename__ = cast(Any, "categories")
 
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
-    name: str = Field(sa_column=Column(Text, index=True, nullable=False))  # 主名称
+    name: str = Field(sa_column=Column(Text, index=True, nullable=False))  # primary name
     status: str = Field(default='active', sa_column=Column(String(16), default="active", nullable=False))  # active / disabled
     deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     created_by_id: int = Field(sa_column=Column(ForeignKey("users.id"), nullable=False))
@@ -34,7 +34,7 @@ class Category(Base, table=True):
 
 
 class CategoryAlias(Base, table=True):
-    """同义别名：主名/别名指向同一分类，不重复计标签（4.16）。"""
+    """Synonym alias: primary name and aliases point to the same category and do not count as separate labels (4.16)."""
 
     __tablename__ = cast(Any, "category_aliases")
 

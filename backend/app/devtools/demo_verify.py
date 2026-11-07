@@ -1,4 +1,4 @@
-"""只读核验持久 demo-seed；不修改业务状态、不打印秘密。"""
+"""Read-only verification of a persistent demo-seed; does not change business state or print secrets."""
 from __future__ import annotations
 
 import argparse
@@ -32,7 +32,7 @@ async def _run(settings, manifest: Path, *, verify_api: bool):
             cursor.execute('PRAGMA foreign_keys=ON')
             cursor.close()
     storage = build_storage(settings)
-    # 只读 API 检查复用同一个存储实例；不改配置、不落业务写入。
+    # Read-only API checks reuse the same storage instance; configuration is unchanged and no business writes occur.
     import app.storage.base as storage_base
 
     storage_base._storage = storage
@@ -49,8 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--env-file', help='dotenv path; defaults to APP_ENV_FILE or backend/.env.dev')
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST, help='private manifest path')
-    parser.add_argument('--skip-api', action='store_true', help='跳过只读 API 可见性检查')
-    parser.add_argument('--json', action='store_true', help='输出 JSON 摘要（不含凭据/连接串）')
+    parser.add_argument('--skip-api', action='store_true', help='Skip read-only API visibility checks')
+    parser.add_argument('--json', action='store_true', help='Output a JSON summary (without credentials or connection strings)')
     args = parser.parse_args(argv)
     try:
         path = args.manifest.expanduser().absolute()
@@ -83,8 +83,8 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f'demo verify failed: {exc}', file=sys.stderr)
         return 1
-    except Exception as exc:  # noqa: BLE001 - 不输出连接串/凭据
-        print(f'demo verify failed: {type(exc).__name__}; 请检查迁移、配置及资源访问', file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - do not print connection strings or credentials
+        print(f'demo verify failed: {type(exc).__name__}; check migrations, configuration, and resource access', file=sys.stderr)
         return 1
 
 

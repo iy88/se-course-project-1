@@ -1,4 +1,4 @@
-"""业务枚举：状态与类型统一在此定义（对齐需求 BR/TR 与第 5 章状态分析）。"""
+"""Business enums: statuses and types are defined here (aligned with BR/TR requirements and the Chapter 5 state analysis)."""
 
 from enum import StrEnum
 
@@ -10,50 +10,50 @@ class UserRole(StrEnum):
 
 class AccountStatus(StrEnum):
     NORMAL = "normal"
-    BANNED = "banned"  # C-14 封禁生效
+    BANNED = "banned"  # C-14 ban in effect
 
 
 class ProductStatus(StrEnum):
-    """商品生命周期（TR-01—TR-08）；展示限制单独字段，不混入生命周期。"""
+    """Product lifecycle (TR-01—TR-08); display restriction is a separate field and is not mixed into the lifecycle."""
 
-    PENDING_REVIEW = "pending_review"  # 待审核
-    REJECTED = "rejected"  # 审核未通过
-    LISTED = "listed"  # 公开可交易
-    IN_TRANSACTION = "in_transaction"  # 交易中
-    DELISTED = "delisted"  # 已下架
+    PENDING_REVIEW = "pending_review"  # awaiting review
+    REJECTED = "rejected"  # review rejected
+    LISTED = "listed"  # publicly tradable
+    IN_TRANSACTION = "in_transaction"  # in a transaction
+    DELISTED = "delisted"  # delisted
 
 
 class ReviewResult(StrEnum):
-    """C-04 审核记录结论（退回补充作为不通过原因记录；撤回仅结束该次审核记录）。"""
+    """C-04 review record result (a request for supplements is recorded as a rejection reason; withdrawal only ends that review record)."""
 
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
-    WITHDRAWN = "withdrawn"  # 卖方在认领前撤回，商品置为已下架（D-46，非商品生命周期状态）
+    WITHDRAWN = "withdrawn"  # seller withdrew before claim; the product is set to delisted (D-46, not a product lifecycle status)
 
 
 class TradeStatus(StrEnum):
-    """C-09 交易生命周期（TR-11—TR-19）。"""
+    """C-09 trade lifecycle (TR-11—TR-19)."""
 
-    PENDING_ACCEPTANCE = "pending_acceptance"  # 待接受
-    REJECTED = "rejected"  # 已拒绝
-    WITHDRAWN = "withdrawn"  # 已撤回
-    CLOSED = "closed"  # 已关闭（其他用户锁单/商品下架）
-    IN_PROGRESS = "in_progress"  # 进行中
-    DISPUTED = "disputed"  # 有争议
-    ABNORMAL = "abnormal"  # 异常交易（单方确认超时）
-    TERMINATED = "terminated"  # 已终止（计失败）
-    COMPLETED = "completed"  # 已完成
+    PENDING_ACCEPTANCE = "pending_acceptance"  # awaiting acceptance
+    REJECTED = "rejected"  # rejected
+    WITHDRAWN = "withdrawn"  # withdrawn
+    CLOSED = "closed"  # closed (another user locked the product / product delisted)
+    IN_PROGRESS = "in_progress"  # in progress
+    DISPUTED = "disputed"  # disputed
+    ABNORMAL = "abnormal"  # abnormal trade (unilateral confirmation timed out)
+    TERMINATED = "terminated"  # terminated (counted as a failure)
+    COMPLETED = "completed"  # completed
 
 
-# 进行中/仍锁单的交易状态：同一商品同时至多一笔
+# In-progress/still-locking trade statuses: at most one per product at a time
 LOCKING_TRADE_STATUSES = (
     TradeStatus.IN_PROGRESS,
     TradeStatus.DISPUTED,
     TradeStatus.ABNORMAL,
 )
 
-# 已结束的交易状态：解除锁单、归档分支、解本笔冻结
+# Ended trade statuses: release the lock, archive the branch, and unfreeze this trade
 ENDED_TRADE_STATUSES = (
     TradeStatus.COMPLETED,
     TradeStatus.TERMINATED,
@@ -61,15 +61,15 @@ ENDED_TRADE_STATUSES = (
 
 
 class AgreementStatus(StrEnum):
-    PROPOSED = "proposed"  # 已提出待对方确认
-    CONFIRMED = "confirmed"  # 已确认生效
-    REJECTED = "rejected"  # 被拒绝（仅结束该次提案）
-    SUPERSEDED = "superseded"  # 被后续确认的变更替换
+    PROPOSED = "proposed"  # proposed, awaiting the counterparty
+    CONFIRMED = "confirmed"  # confirmed and in effect
+    REJECTED = "rejected"  # rejected (ends only that proposal)
+    SUPERSEDED = "superseded"  # replaced by a later confirmed change
 
 
 class ConversationType(StrEnum):
-    NORMAL = "normal"  # 普通私聊（按双人复用）
-    TRADE = "trade"  # 交易分支（按笔独立）
+    NORMAL = "normal"  # regular private chat (reused per pair of users)
+    TRADE = "trade"  # trade branch (independent per trade)
 
 
 class MessageKind(StrEnum):
@@ -86,25 +86,25 @@ class ReportTargetType(StrEnum):
 
 
 class ReportStatus(StrEnum):
-    PENDING = "pending"  # 待处理（共享池）
-    PROCESSING = "processing"  # 处理中（已认领）
-    UNFOUNDED = "unfounded"  # 无法认定/不予处理
-    HANDLED = "handled"  # 认定违规并处置
+    PENDING = "pending"  # pending (shared pool)
+    PROCESSING = "processing"  # processing (claimed)
+    UNFOUNDED = "unfounded"  # cannot be established / no action taken
+    HANDLED = "handled"  # violation established and handled
 
 
 class CaseType(StrEnum):
     AVATAR_REVIEW = "avatar_review"
-    PRODUCT_REVIEW = "product_review"  # 商品审核事项
-    REPORT = "report"  # 举报事项
-    TRADE_DISPUTE = "trade_dispute"  # 交易争议
-    ABNORMAL_TRADE = "abnormal_trade"  # 异常交易
-    ACCOUNT_BAN = "account_ban"  # 账户封禁事项
+    PRODUCT_REVIEW = "product_review"  # product review case
+    REPORT = "report"  # report case
+    TRADE_DISPUTE = "trade_dispute"  # trade dispute
+    ABNORMAL_TRADE = "abnormal_trade"  # abnormal trade
+    ACCOUNT_BAN = "account_ban"  # account ban case
 
 
 class CaseStatus(StrEnum):
-    PENDING = "pending"  # 待处理（共享池）
-    PROCESSING = "processing"  # 处理中（已认领）
-    DISPOSED = "disposed"  # 已处置
+    PENDING = "pending"  # pending (shared pool)
+    PROCESSING = "processing"  # processing (claimed)
+    DISPOSED = "disposed"  # disposed
 
 
 class DisposalMessageRole(StrEnum):
@@ -114,15 +114,15 @@ class DisposalMessageRole(StrEnum):
 
 
 class DisposalMessageKind(StrEnum):
-    INQUIRY = "inquiry"  # 管理员问询
-    STATEMENT = "statement"  # 用户说明（问询阶段）
-    APPEAL = "appeal"  # 用户申辩（处置后）
-    REPLY = "reply"  # 管理员回复结论
-    NOTICE = "notice"  # 系统留痕（处置/解除等通知记录）
+    INQUIRY = "inquiry"  # administrator inquiry
+    STATEMENT = "statement"  # user statement (inquiry stage)
+    APPEAL = "appeal"  # user appeal (after disposal)
+    REPLY = "reply"  # administrator reply with the conclusion
+    NOTICE = "notice"  # system record (notification of disposal/lifting, etc.)
 
 
 class RestrictionType(StrEnum):
-    BAN = "ban"  # 账户封禁（C-14）；交易冻结由 trades.frozen 表达
+    BAN = "ban"  # account ban (C-14); trade freezing is expressed by trades.frozen
 
 
 class RestrictionStatus(StrEnum):
@@ -131,34 +131,34 @@ class RestrictionStatus(StrEnum):
 
 
 class NotificationType(StrEnum):
-    REVIEW_RESULT = "review_result"  # 审核通过/未过
-    REQUEST_CREATED = "request_created"  # 成功购买请求（→卖方）
+    REVIEW_RESULT = "review_result"  # review passed/failed
+    REQUEST_CREATED = "request_created"  # purchase request created (→seller)
     REQUEST_ACCEPTED = "request_accepted"
     REQUEST_REJECTED = "request_rejected"
-    REQUEST_CLOSED = "request_closed"  # 其他用户锁单/商品下架
+    REQUEST_CLOSED = "request_closed"  # another user locked the product / product delisted
     REQUEST_WITHDRAWN = "request_withdrawn"
-    AGREEMENT_PROPOSED = "agreement_proposed"  # 提出约定/变更（→对方）
-    AGREEMENT_DECIDED = "agreement_decided"  # 对方同意/拒绝约定（→提出方）
-    CONFIRM_PROGRESS = "confirm_progress"  # 单方完成确认（→另一方）
+    AGREEMENT_PROPOSED = "agreement_proposed"  # agreement/change proposed (→counterparty)
+    AGREEMENT_DECIDED = "agreement_decided"  # counterparty accepted/rejected the agreement (→proposer)
+    CONFIRM_PROGRESS = "confirm_progress"  # unilateral completion confirmation (→other party)
     TRADE_COMPLETED = "trade_completed"
-    CANCEL_REQUESTED = "cancel_requested"  # 取消申请待确认
-    CANCEL_REJECTED = "cancel_rejected"  # 取消申请被对方拒绝
+    CANCEL_REQUESTED = "cancel_requested"  # cancellation request awaiting confirmation
+    CANCEL_REJECTED = "cancel_rejected"  # cancellation request rejected by the counterparty
     TRADE_TERMINATED = "trade_terminated"
-    PRODUCT_EDITED = "product_edited"  # 商品编辑（→未结束请求/交易买方）
-    TRADE_FROZEN = "trade_frozen"  # 冻结/管理调整（→双方）
+    PRODUCT_EDITED = "product_edited"  # product edited (→buyer of an unfinished request/trade)
+    TRADE_FROZEN = "trade_frozen"  # freeze/administrative adjustment (→both parties)
     TRADE_UNFROZEN = "trade_unfrozen"
     TRADE_ADJUSTED = "trade_adjusted"
-    TRADE_DISPUTE = "trade_dispute"  # 对方发起争议
+    TRADE_DISPUTE = "trade_dispute"  # counterparty opened a dispute
     DISPUTE_RESOLVED = "dispute_resolved"
-    TRADE_ABNORMAL = "trade_abnormal"  # 超时转异常（→双方）
-    REPORT_RESULT = "report_result"  # 举报处理确认（→举报人）
-    INQUIRY = "inquiry"  # 问询（→被询问用户）
-    DISPOSAL = "disposal"  # 实际处置（→受影响者）
-    APPEAL_RESULT = "appeal_result"  # 申辩处理结果（→申辩用户）
+    TRADE_ABNORMAL = "trade_abnormal"  # timeout turned the trade abnormal (→both parties)
+    REPORT_RESULT = "report_result"  # report handling confirmed (→reporter)
+    INQUIRY = "inquiry"  # inquiry (→user being asked)
+    DISPOSAL = "disposal"  # actual disposal (→affected user)
+    APPEAL_RESULT = "appeal_result"  # appeal outcome (→appealing user)
 
 
 class AdminActionType(StrEnum):
-    """管理动作留痕类型（写入处置/状态转移依据）。"""
+    """Administrative action audit types (recorded as disposal/state-transition basis)."""
 
     PRODUCT_REVIEW = "product_review"
     CONTENT_REMOVAL = "content_removal"

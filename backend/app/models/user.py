@@ -1,4 +1,4 @@
-"""C-01 用户账户 与 C-14 账户限制记录。"""
+"""C-01 user accounts and C-14 account restriction records."""
 
 from datetime import datetime
 from typing import Any, cast
@@ -15,7 +15,7 @@ class User(Base, table=True):
     __tablename__ = cast(Any, "users")
 
     id: int = Field(default=None, sa_column=Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True))
-    email: str = Field(sa_column=Column(String(254), unique=True, index=True, nullable=False))  # 登录标识，全平台唯一（BR-20/21）
+    email: str = Field(sa_column=Column(String(254), unique=True, index=True, nullable=False))  # login identifier, unique platform-wide (BR-20/21)
     password_hash: str = Field(sa_column=Column(String(128), nullable=False))
     display_name: str = Field(sa_column=Column(Text, nullable=False))
     avatar_key: str | None = Field(default=None, sa_column=Column(String(512), nullable=True))
@@ -32,7 +32,7 @@ class User(Base, table=True):
 
 
 class AccountRestriction(Base, table=True):
-    """C-14：封禁记录（执行者、理由、生效与解除）。交易冻结不入本表（BR-33）。"""
+    """C-14: ban records (actor, reason, activation, and lifting). Trade freezing is not stored in this table (BR-33)."""
 
     __tablename__ = cast(Any, "account_restrictions")
 
@@ -41,7 +41,7 @@ class AccountRestriction(Base, table=True):
     type: str = Field(default=RestrictionType.BAN.value, sa_column=Column(String(16), default=RestrictionType.BAN.value, nullable=False))
     status: str = Field(default=RestrictionStatus.ACTIVE.value, sa_column=Column(String(16), default=RestrictionStatus.ACTIVE.value, index=True, nullable=False))
     reason: str = Field(sa_column=Column(Text, nullable=False))
-    basis: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # 关联处置依据
+    basis: str | None = Field(default=None, sa_column=Column(Text, nullable=True))  # related disposal basis
     case_id: int | None = Field(default=None, sa_column=Column(ForeignKey("disposal_cases.id"), nullable=True))
     created_by_id: int = Field(sa_column=Column(ForeignKey("users.id"), nullable=False))
     created_at: datetime = Field(default=None, sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False))

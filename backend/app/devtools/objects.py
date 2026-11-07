@@ -1,7 +1,7 @@
-"""对象登记回收命令：默认只列出，显式 ``--delete`` 才清理未引用 staged 对象。
+"""Object-registration cleanup command: lists by default; only an explicit ``--delete`` removes unreferenced staged objects.
 
-只允许后端 ``.env.dev`` 中配置的开发目标；没有定时任务、
-没有证据 TTL，也不删除任何仍被业务表引用的对象。
+Only the development target configured in backend ``.env.dev`` is allowed. There is no
+scheduled job and no evidence TTL, and objects still referenced by business tables are never deleted.
 """
 
 from __future__ import annotations
@@ -23,16 +23,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="objects",
         description=(
-            "列出或清理 .env.dev test 环境中已确认无业务引用的 staged 对象；"
-            "证据对象默认保留。"
+            "List or clean up staged objects in the .env.dev test environment that are confirmed "
+            "to have no business references; evidence objects are retained by default."
         ),
     )
     parser.add_argument(
         "--delete",
         action="store_true",
-        help="实际删除未引用 staged 对象（证据保留）；默认只列出",
+        help="Actually delete unreferenced staged objects (evidence is retained); list only by default",
     )
-    parser.add_argument("--limit", type=int, default=100, help="单次最多处理对象数")
+    parser.add_argument("--limit", type=int, default=100, help="Maximum number of objects to process per run")
     return parser.parse_args(argv)
 
 
@@ -42,7 +42,7 @@ async def _run(args: argparse.Namespace) -> int:
     try:
         storage = build_storage(settings)
     except StorageError as exc:
-        print(f"objects: 存储配置不可用：{type(exc).__name__}", file=sys.stderr)
+        print(f"objects: storage configuration unavailable: {type(exc).__name__}", file=sys.stderr)
         return 2
 
     engine = make_async_engine(config.database_url)
@@ -69,8 +69,8 @@ async def _run(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         return asyncio.run(_run(_parse_args(argv)))
-    except Exception as exc:  # noqa: BLE001 - CLI 不输出可能含连接串/SDK 正文的异常
-        print(f"objects: 失败：{type(exc).__name__}", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - CLI must not print exceptions that may contain connection strings or SDK bodies
+        print(f"objects: failed: {type(exc).__name__}", file=sys.stderr)
         return 1
 
 

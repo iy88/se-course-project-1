@@ -1,4 +1,4 @@
-"""交易辅助（请求关闭、锁单校验等）；完整状态机见 api/v1/trades.py。"""
+"""Trade helpers (request closing, lock validation, etc.); the full state machine lives in api/v1/trades.py."""
 from typing import NoReturn
 
 from fastapi import HTTPException, status
@@ -15,25 +15,25 @@ BANNED_PENDING_REASON = "相关账户被封禁"
 CLOSED_BY_LOCK = "商品已被其他用户锁单"
 DISPLAY_REVOKED_REASON = "商品公开访问已撤销"
 LOCK_CONFLICT_DETAIL = "商品已存在另一笔锁单交易，请先按该笔交易的适用规则处理后再恢复"
-# 明确可重试的事务级 SQLSTATE：死锁与序列化失败。业务/完整性错误不在此列。
+# Explicitly retryable transaction-level SQLSTATEs: deadlock and serialization failure. Business/integrity errors are not included.
 RETRYABLE_TRANSACTION_SQLSTATES = frozenset({"40P01", "40001"})
 PENDING_REQUEST_CONSTRAINT = "uq_buyer_pending_request"
 
 
 def _sqlstate(exc: BaseException) -> str | None:
-    """从 SQLAlchemy 包装异常中取出数据库 SQLSTATE（不拼接/输出 SQL 参数）。"""
+    """Extract the database SQLSTATE from a wrapped SQLAlchemy exception (does not concatenate/print SQL parameters)."""
     orig = exc.orig if isinstance(exc, DBAPIError) else exc
     value = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
     return str(value) if value else None
 
 
 def is_retryable_transaction_error(exc: DBAPIError) -> bool:
-    """只把明确的死锁/序列化失败视为可重试；其他数据库错误原样抛出。"""
+    """Treat only explicit deadlock/serialization failures as retryable; other database errors propagate unchanged."""
     return _sqlstate(exc) in RETRYABLE_TRANSACTION_SQLSTATES
 
 
 def _is_pending_request_unique_conflict(exc: IntegrityError) -> bool:
-    """精确识别同买方同商品待接受请求的条件唯一索引冲突。"""
+    """Identify exactly the conditional unique-index conflict for a pending-acceptance request from the same buyer for the same product."""
     orig = exc.orig
     sqlstate = _sqlstate(exc)
     message = str(orig)
@@ -42,7 +42,7 @@ def _is_pending_request_unique_conflict(exc: IntegrityError) -> bool:
         if constraint:
             return str(constraint) == PENDING_REQUEST_CONSTRAINT
         return PENDING_REQUEST_CONSTRAINT in message
-    # SQLite 的完整性错误文本不含条件索引名，只含列；仅匹配本索引唯一的列组合。
+    # SQLite integrity-error text lacks the conditional index name and only lists columns; match only the column combination unique to this index.
     lowered = message.lower()
     if PENDING_REQUEST_CONSTRAINT in lowered:
         return True
@@ -56,7 +56,7 @@ def _is_pending_request_unique_conflict(exc: IntegrityError) -> bool:
 async def find_pending_request(
     db: AsyncSession, product_id: int, buyer_id: int
 ) -> Trade | None:
-    """读取同买方对同商品的当前待接受请求（重试一致与并发兜底共用）。"""
+    """Read the current pending-acceptance request from the same buyer for the same product (shared by retry consistency and concurrency fallback)."""
     return (await db.exec(
         select(Trade).where(
             col(Trade.product_id) == product_id,
@@ -67,10 +67,11 @@ async def find_pending_request(
 
 
 async def lock_product_for_update(db: AsyncSession, product_id: int) -> Product | None:
-    """在交易写入前按统一顺序锁定商品行。
+    """Lock the product row in the unified order before a trade write.
 
-    PostgreSQL 使用 ``FOR UPDATE`` 串行化同商品交易；SQLite 方言忽略该子句，
-    兼容路径先执行无值变化的 UPDATE 获取写锁，再重读状态；唯一索引继续兜底。
+    PostgreSQL uses ``FOR UPDATE`` to serialize trades on the same product; the SQLite
+    dialect ignores that clause, so the compatibility path first runs a no-op UPDATE to
+    acquire the write lock, then re-reads state; the unique index remains the backstop.
     """
     if db.get_bind().dialect.name == 'sqlite':
         await db.exec(update(Product).where(col(Product.id) == product_id).values(id=product_id))
@@ -84,10 +85,11 @@ async def lock_product_for_update(db: AsyncSession, product_id: int) -> Product 
 
 
 async def lock_trade_for_update(db: AsyncSession, trade_id: int) -> Trade | None:
-    """在商品行锁之后锁定目标交易，并刷新可能已过期的会话内状态。
+    """Lock the target trade after the product row lock and refresh potentially stale in-session state.
 
-    统一锁序为“商品 → 交易”。``populate_existing`` 保证等待商品锁期间另一事务
-    已提交的 trade.status/商品归属不会被 identity map 中的旧对象覆盖。
+    The unified lock order is "product → trade". ``populate_existing`` ensures a
+    trade.status/product ownership committed by another transaction while waiting for
+    the product lock is not overwritten by a stale identity-map object.
     """
     result = await db.exec(
         select(Trade)
@@ -101,11 +103,13 @@ async def lock_trade_for_update(db: AsyncSession, trade_id: int) -> Trade | None
 async def lock_product_then_trade(
     db: AsyncSession, trade_id: int, product_id: int
 ) -> Trade | None:
-    """用户侧结束/取消路径在写 trade 前先锁商品，再锁并刷新目标交易。
+    """User-side finish/cancel paths lock the product before writing the trade, then lock and refresh the target trade.
 
-    ``finish_trade`` 会先更新 trade、随后下架商品；若不先取商品锁，会与 accept/
-    admin adjust 的“商品 → 交易”顺序形成 trade→product 交叉等待。这里统一为
-    同一顺序，避免反向等待；商品不存在时仍允许完成无商品的异常历史交易。
+    ``finish_trade`` updates the trade and then delists the product; without taking the
+    product lock first, the "product → trade" order used by accept/admin adjust would
+    create a trade→product cross-wait. This helper keeps the same order to avoid reverse
+    waiting; a missing product still allows finishing an abnormal historical trade
+    without a product.
     """
     await lock_product_for_update(db, product_id)
     return await lock_trade_for_update(db, trade_id)
@@ -118,17 +122,17 @@ async def resolve_duplicate_pending_request(
     product_id: int,
     buyer_id: int,
 ) -> Trade:
-    """并发重复请求落在条件唯一索引后，回滚本次写入并返回已存在的请求。
+    """After a concurrent duplicate request hits the conditional unique index, roll back this write and return the existing request.
 
-    只处理 ``uq_buyer_pending_request``；其他完整性错误先回滚再原样抛出，
-    不把真实的数据缺陷伪装成幂等成功。
+    Handles only ``uq_buyer_pending_request``; other integrity errors are rolled back
+    and re-raised unchanged, never disguising a real data defect as idempotent success.
     """
     await db.rollback()
     if not _is_pending_request_unique_conflict(exc):
         raise exc
     existing = await find_pending_request(db, product_id, buyer_id)
     if existing is None:
-        # 冲突已被识别但找不到可返回的既有请求：保留原始错误，避免伪造结果。
+        # The conflict was identified but no existing request can be returned: preserve the original error instead of fabricating a result.
         raise exc
     return existing
 
@@ -139,7 +143,7 @@ async def close_pending_requests_for_product(
     reason: str,
     exclude_trade_ids: set[int] | None = None,
 ) -> list[Trade]:
-    """商品下架/违规处置下架时关闭待接受请求（BR-02、TR-09），并归档对应分支。"""
+    """Close pending-acceptance requests when a product is delisted/removed by disposal (BR-02, TR-09), and archive the corresponding branches."""
     exclude = exclude_trade_ids or set()
     from app.services import conversations as conversation_service
 
@@ -167,9 +171,10 @@ async def close_pending_requests_for_user(
     *,
     reason: str = BANNED_PENDING_REASON,
 ) -> list[Trade]:
-    """D-52：封禁生效时关闭其作为买方或卖方参与的全部待接受请求。
+    """D-52: when a ban takes effect, close all pending-acceptance requests where the user is buyer or seller.
 
-    保留历史并归档分支；通知双方；已接受交易不在此关闭，按冻结规则处理。
+    Retain history and archive branches; notify both parties; accepted trades are not
+    closed here and follow the freeze rules.
     """
     from app.services import conversations as conversation_service
 
@@ -230,9 +235,10 @@ async def get_locking_trade(db: AsyncSession, product_id: int) -> Trade | None:
 
 
 async def ensure_no_locking_conflict(db: AsyncSession, trade: Trade, target_status: str) -> None:
-    """D-48：进入任何需锁单状态前显式检查同商品另一笔锁单。
+    """D-48: explicitly check for another locking trade on the same product before entering any locking status.
 
-    只读查询；冲突时抛 409，调用方尚未修改交易、确认、商品、分支或限制。
+    Read-only query; on conflict it raises 409 before the caller modifies the trade,
+    confirmations, product, branch, or restrictions.
     """
     if target_status not in LOCKING_STATUSES:
         return
@@ -255,10 +261,11 @@ async def resolve_lock_integrity_error(
     *,
     product_id: int,
 ) -> NoReturn:
-    """D-48：预检后另一事务抢先提交锁单时，数据库唯一约束是最终裁决。
+    """D-48: when another transaction commits a lock first after the precheck, the database unique constraint is the final arbiter.
 
-    必须回滚本次全部写入（状态、确认、商品、分支、通知、转移），再确认同商品
-    确有另一笔锁单后映射 409；其他完整性错误原样抛出，避免吞掉真实缺陷。
+    All writes from this attempt (state, confirmations, product, branch, notifications,
+    transitions) must be rolled back; after confirming another lock exists on the same
+    product, map to 409. Other integrity errors propagate unchanged so real defects are not swallowed.
     """
     await db.rollback()
     other_id = (await db.exec(

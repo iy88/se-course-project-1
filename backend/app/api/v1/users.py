@@ -1,4 +1,4 @@
-"""卖方个人页等公开（限登录）用户信息。"""
+"""Public (signed-in only) user information such as seller profiles."""
 
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import col, select
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("/{user_id}/profile")
 async def user_profile(user_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """卖方个人页：展示名称与在售商品，作为普通私聊发起入口（FR-04）。"""
+    """Seller profile: display name and listed products, serving as the entry point for starting a regular private chat (FR-04)."""
     target = await db.get(User, user_id)
     if not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")

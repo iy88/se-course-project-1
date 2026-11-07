@@ -1,7 +1,8 @@
-"""管理端商品列表回归。
+"""Regression coverage for the admin product list.
 
-覆盖：/admin/products 服务端分页与总数；状态、展示限制、分类（标签）筛选；
-关键词匹配名称、描述、分类主名/别名与纯数字精确 ID。
+Covers: /admin/products server-side pagination and total count; status, display-restriction,
+and category (tag) filters; keyword matching against title, description, category primary
+name/alias, and exact numeric IDs.
 """
 
 import pytest
@@ -48,24 +49,24 @@ async def test_admin_product_list_filters_search_pagination(tmp_path):
         async with AsyncSession(engine, expire_on_commit=False) as db:
             admin, products, book = await _seed(db)
 
-            # 分页与总数：page_size=2 第二页
+            # Pagination and total: page_size=2, second page
             data = await list_products(admin, db, page=2, page_size=2, product_status='all', category_id=None, display_restricted='all', keyword=None)
             assert data['total'] == 4 and data['page'] == 2
             assert [i['id'] for i in data['items']] == sorted((p.id for p in products), reverse=True)[2:4]
 
-            # 状态筛选
+            # Status filter
             data = await list_products(admin, db, page=1, page_size=20, product_status='listed', category_id=None, display_restricted='all', keyword=None)
             assert data['total'] == 1 and data['items'][0]['title'] == '高等数学教材'
 
-            # 展示限制筛选
+            # Display-restriction filter
             data = await list_products(admin, db, page=1, page_size=20, product_status='all', category_id=None, display_restricted='yes', keyword=None)
             assert data['total'] == 1 and data['items'][0]['display_restricted'] is True
 
-            # 分类（标签）筛选
+            # Category (tag) filter
             data = await list_products(admin, db, page=1, page_size=20, product_status='all', category_id=book.id, display_restricted='all', keyword=None)
             assert data['total'] == 2
 
-            # 关键词：名称子串 / 描述子串 / 分类主名 / 纯数字精确 ID
+            # Keyword: title substring / description substring / category primary name / exact numeric ID
             data = await list_products(admin, db, page=1, page_size=20, product_status='all', category_id=None, display_restricted='all', keyword='教材')
             assert data['total'] == 2
             data = await list_products(admin, db, page=1, page_size=20, product_status='all', category_id=None, display_restricted='all', keyword='考研英语')
@@ -77,7 +78,7 @@ async def test_admin_product_list_filters_search_pagination(tmp_path):
             data = await list_products(admin, db, page=1, page_size=20, product_status='all', category_id=None, display_restricted='all', keyword='999999')
             assert data['total'] == 0
 
-            # 卖方名称随条目返回
+            # Seller name is returned with each item
             data = await list_products(admin, db, page=1, page_size=20, product_status='all', category_id=None, display_restricted='all', keyword=None)
             assert all(i['seller_name'] == '张同学' for i in data['items'])
     finally:

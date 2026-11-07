@@ -1,8 +1,9 @@
-"""SMTP 发信连接策略：优先 IPv4，避免 IPv6 不可达时逐地址等待超时。
+"""SMTP delivery connection strategy: prefer IPv4 so unreachable IPv6 does not cause per-address timeout waits.
 
-背景：smtp.163.com 有 2 个 A 与 2 个 AAAA 记录。服务器 IPv6 出站不可达时，
-stdlib 会按解析顺序对两个 IPv6 地址各等待一次 SMTP_TIMEOUT（默认 10s），
-总耗时可达 20s 以上；此时邮件最终仍经 IPv4 送达，但接口早已超过前端超时。
+Background: smtp.163.com has two A and two AAAA records. When the server's IPv6 egress is
+unreachable, the stdlib waits once for SMTP_TIMEOUT (10s by default) on each of the two
+IPv6 addresses in resolution order, for 20s or more in total; the mail is eventually
+delivered over IPv4, but the API call has long exceeded the frontend timeout.
 """
 
 import socket
@@ -62,7 +63,7 @@ def test_connect_ipv4_only_requests_ipv4_and_skips_failed_addresses(monkeypatch)
     monkeypatch.setattr(mail.socket, 'socket', FakeSocket)
 
     sock = mail._connect_ipv4('smtp.example.com', 465, 10)
-    assert requested_families == [socket.AF_INET], '只应请求 IPv4 地址'
+    assert requested_families == [socket.AF_INET], 'only IPv4 addresses should be requested'
     assert calls == ['192.0.2.1', '192.0.2.2']
     assert sock.family == socket.AF_INET
 
@@ -81,7 +82,7 @@ def test_ssl_connect_wraps_ipv4_socket_with_original_hostname(monkeypatch):
     class FakeContext:
         def wrap_socket(self, sock, server_hostname=None):
             assert sock is plain
-            assert server_hostname == 'smtp.example.com', 'TLS 必须按原主机名校验证书'
+            assert server_hostname == 'smtp.example.com', 'TLS must validate the certificate against the original hostname'
             return wrapped
 
     smtp = mail._IPv4SMTP_SSL.__new__(mail._IPv4SMTP_SSL)

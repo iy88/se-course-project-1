@@ -1,7 +1,8 @@
-"""短时 KV 抽象：验证码、频控计数、一次性 ticket 与 owner-token lease。
+"""Short-lived KV abstraction: verification codes, rate-limit counters, one-time tickets, and owner-token leases.
 
-生产/多进程只允许 Redis。``MemoryKV`` 只用于离线单进程开发与测试；它实现与
-Redis 相同的方法语义，但明确不提供跨进程共享状态。
+Production/multi-process deployments allow Redis only. ``MemoryKV`` is only for offline
+single-process development and tests; it implements the same method semantics as Redis
+but explicitly provides no cross-process shared state.
 """
 
 from __future__ import annotations

@@ -1,8 +1,9 @@
-"""对象存储抽象、key 约定与本地实现。
+"""Object storage abstraction, key conventions, and local implementation.
 
-生产使用阿里云 OSS 私有双桶（媒体 / 举报证据），开发与离线测试使用
-``LocalStorage``。两者共享同步 ``StorageBackend`` 合约；网络 I/O 的路由层
-负责放入线程池，避免阻塞事件循环。
+Production uses Alibaba Cloud OSS with private dual buckets (media / report evidence);
+development and offline tests use ``LocalStorage``. Both share the synchronous
+``StorageBackend`` contract; the routing layer that performs network I/O places calls
+in a thread pool to avoid blocking the event loop.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from typing import Any
 from app.core.config import get_settings
 from app.core.security import sign_file_key
 
-# namespace 到桶的映射固定，未知 namespace 一律拒绝；不能由调用方自行指定 bucket。
+# The namespace-to-bucket mapping is fixed and unknown namespaces are rejected; callers cannot choose the bucket themselves.
 MEDIA_NAMESPACES = frozenset({"product", "avatar", "chat"})
 EVIDENCE_NAMESPACES = frozenset({"report"})
 ALLOWED_NAMESPACES = MEDIA_NAMESPACES | EVIDENCE_NAMESPACES
@@ -33,33 +34,33 @@ EXTENSION_CONTENT_TYPES = {
 }
 
 _SAFE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-# 兼容历史常量：至少一个子路径，最后一段带受支持的图片扩展名。
+# Legacy-compatible constant: at least one subpath, with a supported image extension on the last segment.
 SAFE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)+\.[A-Za-z0-9]+$")
 MAX_KEY_LENGTH = 512
 
 
 class StorageError(Exception):
-    """存储层可安全展示给调用方的错误基类。"""
+    """Base class for storage-layer errors that are safe to show to callers."""
 
 
 class StorageConfigError(StorageError):
-    """配置缺失、依赖缺失或客户端初始化失败。"""
+    """Missing configuration, missing dependency, or client initialization failure."""
 
 
 class StorageInvalidKey(StorageError):
-    """key / namespace 不符合约定，或路径试图逃逸存储根。"""
+    """The key/namespace violates the convention, or the path attempts to escape the storage root."""
 
 
 class StorageNotFound(StorageError):
-    """对象不存在。"""
+    """The object does not exist."""
 
 
 class StoragePermissionDenied(StorageError):
-    """对象存储拒绝授权（服务端凭据/策略问题，不是终端用户权限）。"""
+    """Object storage denied authorization (server credentials/policy, not end-user permission)."""
 
 
 class StorageUnavailable(StorageError):
-    """网络、超时、服务端 5xx 等临时不可用；不得回退到本地。"""
+    """Temporary unavailability such as network errors, timeouts, or server 5xx; must not fall back to local storage."""
 
 
 class StorageAlreadyExists(StorageError):
@@ -67,7 +68,7 @@ class StorageAlreadyExists(StorageError):
 
 
 def bucket_role_for_namespace(namespace: str) -> str:
-    """返回 ``media`` 或 ``evidence``；未知 namespace 直接拒绝。"""
+    """Return ``media`` or ``evidence``; reject unknown namespaces outright."""
     if namespace in EVIDENCE_NAMESPACES:
         return "evidence"
     if namespace in MEDIA_NAMESPACES:
@@ -81,7 +82,7 @@ def namespace_for_key(key: str) -> str:
 
 
 def validate_key(key: object) -> str:
-    """校验逻辑 key：只允许受支持 namespace、安全路径段和图片扩展名。"""
+    """Validate a logical key: only supported namespaces, safe path segments, and image extensions are allowed."""
     if not isinstance(key, str):
         raise StorageInvalidKey("非法文件 key")
     if not key or len(key) > MAX_KEY_LENGTH:
@@ -109,7 +110,7 @@ def validate_key(key: object) -> str:
 
 
 def make_key(namespace: str, filename: str) -> str:
-    """生成 ``namespace/YYYYMM/<uuid4hex>.<ext>`` 形式的逻辑 key。"""
+    """Generate a logical key of the form ``namespace/YYYYMM/<uuid4hex>.<ext>``."""
     if namespace not in ALLOWED_NAMESPACES:
         raise StorageInvalidKey("非法的文件命名空间")
     suffix = Path(filename).suffix.lower().lstrip(".")
@@ -129,9 +130,10 @@ def content_type_for_key(key: str) -> str:
 class StorageBackend(ABC):
     @abstractmethod
     def save(self, namespace: str, filename: str, content: bytes) -> str:
-        """保存内容并返回逻辑 key（如 product/202610/ab12.png）。
+        """Save content and return the logical key (e.g. product/202610/ab12.png).
 
-        调用方负责在业务事务中登记引用；本层不创建数据库记录。
+        The caller is responsible for registering the reference in a business
+        transaction; this layer creates no database records.
         """
 
     @abstractmethod
@@ -139,7 +141,7 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def delete(self, key: str) -> None:
-        """删除对象。调用方必须先确认无业务引用、非生产证据，本层不查数据库。"""
+        """Delete an object. The caller must first confirm no business reference and no production evidence; this layer does not query the database."""
 
     @abstractmethod
     def exists(self, key: str) -> bool: ...
@@ -148,21 +150,22 @@ class StorageBackend(ABC):
         raise NotImplementedError
 
     def read_with_metadata(self, key: str) -> tuple[bytes, dict[str, Any]]:
-        """读取用于上传确认的内容与元信息；远端后端可合并请求。"""
+        """Read content and metadata for upload confirmation; remote backends may combine the requests."""
         info = self.stat(key)
         return self.open(key), info
 
     def sign_upload(self, key: str, *, content_type: str, size_bytes: int,
                     expires_seconds: int, sha256: str) -> dict[str, Any]:
-        raise StorageConfigError("当前存储后端不支持 OSS 预签名上传")
+        raise StorageConfigError("The current storage backend does not support OSS presigned uploads")
 
     def save_to_key(self, key: str, content: bytes) -> None:
-        raise StorageConfigError("当前存储后端不支持本地直传写入")
+        raise StorageConfigError("The current storage backend does not support direct local writes")
 
     def public_url(self, key: str) -> str:
-        """后端 HMAC 签名访问 URL，通过 /api/v1/files/{key} 读取。
+        """Backend HMAC-signed access URL, read through /api/v1/files/{key}.
 
-        local 使用此入口；OSS 后端覆盖为临时签名 GET 直链。
+        Local storage uses this entry point; the OSS backend overrides it with a
+        temporary signed direct GET URL.
         """
         return f"/api/v1/files/{key}?{sign_file_key(key)}"
 
@@ -192,11 +195,11 @@ class LocalStorage(StorageBackend):
             with path.open("xb") as stream:
                 stream.write(content)
         except FileExistsError as exc:
-            raise StorageAlreadyExists("文件已存在，不能覆盖") from exc
+            raise StorageAlreadyExists("The file already exists and cannot be overwritten") from exc
         except PermissionError as exc:
-            raise StoragePermissionDenied("文件存储权限不足") from exc
+            raise StoragePermissionDenied("Insufficient file storage permission") from exc
         except OSError as exc:
-            raise StorageUnavailable("文件存储暂不可用") from exc
+            raise StorageUnavailable("File storage is temporarily unavailable") from exc
 
     def stat(self, key: str) -> dict[str, Any]:
         path = self._path(key)
@@ -204,11 +207,11 @@ class LocalStorage(StorageBackend):
             size = path.stat().st_size
             return {"size_bytes": size, "content_type": content_type_for_key(key), "metadata": {}}
         except FileNotFoundError as exc:
-            raise StorageNotFound("文件不存在") from exc
+            raise StorageNotFound("The file does not exist") from exc
         except PermissionError as exc:
-            raise StoragePermissionDenied("文件存储权限不足") from exc
+            raise StoragePermissionDenied("Insufficient file storage permission") from exc
         except OSError as exc:
-            raise StorageUnavailable("文件存储暂不可用") from exc
+            raise StorageUnavailable("File storage is temporarily unavailable") from exc
 
     def open(self, key: str) -> bytes:
         path = self._path(key)
@@ -216,23 +219,23 @@ class LocalStorage(StorageBackend):
             with path.open("rb") as stream:
                 data = stream.read(10 * 1024 * 1024 + 1)
             if len(data) > 10 * 1024 * 1024:
-                raise StorageUnavailable("文件超过读取大小限制")
+                raise StorageUnavailable("The file exceeds the read size limit")
             return data
         except FileNotFoundError as exc:
-            raise StorageNotFound("文件不存在") from exc
+            raise StorageNotFound("The file does not exist") from exc
         except PermissionError as exc:
-            raise StoragePermissionDenied("文件存储权限不足") from exc
+            raise StoragePermissionDenied("Insufficient file storage permission") from exc
         except OSError as exc:
-            raise StorageUnavailable("文件存储暂不可用") from exc
+            raise StorageUnavailable("File storage is temporarily unavailable") from exc
 
     def delete(self, key: str) -> None:
         path = self._path(key)
         try:
             path.unlink(missing_ok=True)
         except PermissionError as exc:
-            raise StoragePermissionDenied("文件存储权限不足") from exc
+            raise StoragePermissionDenied("Insufficient file storage permission") from exc
         except OSError as exc:
-            raise StorageUnavailable("文件存储暂不可用") from exc
+            raise StorageUnavailable("File storage is temporarily unavailable") from exc
 
     def exists(self, key: str) -> bool:
         path = self._path(key)
@@ -241,27 +244,27 @@ class LocalStorage(StorageBackend):
         except FileNotFoundError:
             return False
         except PermissionError as exc:
-            raise StoragePermissionDenied("文件存储权限不足") from exc
+            raise StoragePermissionDenied("Insufficient file storage permission") from exc
         except OSError as exc:
-            raise StorageUnavailable("文件存储暂不可用") from exc
+            raise StorageUnavailable("File storage is temporarily unavailable") from exc
 
 
 def build_storage(settings: Any | None = None) -> StorageBackend:
-    """按配置构建后端；未知后端或缺少字段时显式报错，不静默回退 local。"""
+    """Build the backend from configuration; fail explicitly on an unknown backend or missing field instead of silently falling back to local."""
     settings = settings or get_settings()
     backend = str(getattr(settings, "storage_backend", "") or "").strip().lower()
     if not backend:
-        raise StorageConfigError("无法从资源配置确定存储后端")
+        raise StorageConfigError("Cannot determine the storage backend from the resource configuration")
     if backend == "local":
         root = getattr(settings, "storage_local_root", None)
         if root is None or not str(root).strip():
-            raise StorageConfigError("缺少配置项：STORAGE_LOCAL_ROOT")
+            raise StorageConfigError("Missing configuration item: STORAGE_LOCAL_ROOT")
         return LocalStorage(root)
     if backend == "oss":
         from app.storage.oss import OssConfig, OssStorage
 
         return OssStorage(OssConfig.from_settings(settings))
-    raise StorageConfigError("资源配置对应的存储后端不受支持")
+    raise StorageConfigError("The storage backend selected by the resource configuration is not supported")
 
 
 _storage: StorageBackend | None = None
@@ -275,13 +278,13 @@ def get_storage() -> StorageBackend:
 
 
 def reset_storage() -> None:
-    """清空进程缓存（测试或配置切换使用）。"""
+    """Clear the process cache (used by tests or when switching configuration)."""
     global _storage
     _storage = None
 
 
 def __getattr__(name: str) -> Any:
-    # 兼容 ``from app.storage.base import OssStorage``，同时避免无 SDK 环境导入即失败。
+    # Keep ``from app.storage.base import OssStorage`` working while avoiding import failure in environments without the SDK.
     if name in {"OssConfig", "OssStorage"}:
         from app.storage import oss
 

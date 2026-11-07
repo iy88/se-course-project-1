@@ -1,4 +1,4 @@
-"""持久 demo-seed 的 SQLite/local 回归：真实记录、资源校验与幂等。"""
+"""SQLite/local regression for the persistent demo-seed: real records, resource validation, and idempotency."""
 from __future__ import annotations
 
 import asyncio
@@ -149,7 +149,7 @@ def test_demo_seed_sqlite_local(tmp_path):
         finally:
             await engine.dispose()
 
-    # 重跑幂等：人工修改必须保留，manifest 与计数不变。
+    # Re-run idempotency: manual edits must be preserved, and the manifest and counts stay unchanged.
     async def edit_seeded_data():
         engine, factory = _session(url)
         try:
@@ -179,17 +179,17 @@ def test_demo_seed_sqlite_local(tmp_path):
             await engine.dispose()
     asyncio.run(assert_edits_preserved())
 
-    # 旧版本、目录变化与目标变化都必须明确拒绝，且不写新目标。
+    # Old versions, catalog changes, and target changes must all be rejected explicitly, without writing a new target.
     stale_version = dict(data)
     stale_version['version'] = 1
     manifest.write_bytes(json.dumps(stale_version, ensure_ascii=False).encode())
     refused = _run(env_file, manifest)
-    assert refused.returncode != 0 and '版本' in refused.stderr
+    assert refused.returncode != 0 and 'version' in refused.stderr
     stale_signature = dict(data)
     stale_signature['catalog_signature'] = '0' * 64
     manifest.write_bytes(json.dumps(stale_signature, ensure_ascii=False).encode())
     refused = _run(env_file, manifest)
-    assert refused.returncode != 0 and '目录' in refused.stderr
+    assert refused.returncode != 0 and 'catalog' in refused.stderr
     manifest.write_bytes(before)
 
     other_storage = tmp_path / 'other-storage'

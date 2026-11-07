@@ -1,13 +1,13 @@
-"""Alembic 环境：迁移凭据只在本进程读取，并显式 SET ROLE owner。
+"""Alembic environment: migration credentials are read only in this process, and SET ROLE owner is explicit.
 
-服务进程不会导入本模块；普通 Settings 也不含迁移 URL。
+Service processes do not import this module, and regular Settings do not contain a migration URL.
 """
 
 from __future__ import annotations
 
 import asyncio
 
-import app.models  # noqa: F401 - 注册全部模型到 metadata  # pyright: ignore[reportUnusedImport]
+import app.models  # noqa: F401 - register all models in metadata  # pyright: ignore[reportUnusedImport]
 from alembic import context
 from app.core.config import (
     load_migration_settings,
@@ -27,7 +27,7 @@ def _version_table_schema(dialect_name: str) -> str | None:
 
 
 def _include_object(obj, name, type_, reflected, compare_to) -> bool:
-    # Alembic 自己的版本表不属于应用 metadata，避免 autogenerate 生成删除语句。
+    # Alembic's own version table is not part of application metadata; avoid autogenerate emitting drop statements.
     return not (type_ == "table" and name == "alembic_version")
 
 
@@ -80,7 +80,7 @@ async def run_migrations_online() -> None:
             dialect_name = connection.dialect.name
             if dialect_name == "postgresql":
                 role = settings.migration_owner_role
-                # 标识符已由 MigrationSettings 校验；仍使用双引号固定角色名。
+                # Identifiers were validated by MigrationSettings; quote the role name to keep it fixed.
                 await connection.execute(text(f'SET ROLE "{role}"'))
                 await connection.execute(text(f'SET search_path = "{settings.database_schema}"'))
             await connection.run_sync(lambda sync_connection: _run_sync(sync_connection, dialect_name))

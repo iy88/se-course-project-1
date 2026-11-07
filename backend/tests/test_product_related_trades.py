@@ -1,4 +1,4 @@
-"""商品筛选与本人身份范围通过实际 SQL 和 HTTP Query 校验交集执行。"""
+"""Product filtering and caller-identity scope are exercised through real SQL and HTTP query intersection checks."""
 import httpx
 import pytest
 from fastapi import FastAPI

@@ -1,8 +1,10 @@
-"""对象登记：上传后 staged，业务引用后 committed。
+"""Object registry: staged after upload, committed after a business reference.
 
-物理对象与数据库事务不能跨系统提交，因此上传成功而登记失败时只允许补偿删除
-本次刚创建的对象。业务记录引用对象后，登记状态转为 committed；任何自动清理
-都只能处理 state=staged 且经实时引用查询确认无业务引用的对象。
+A physical object and a database transaction cannot commit across systems, so when
+an upload succeeds but registration fails, only the object just created by that
+attempt may be deleted as compensation. Once a business record references an
+object, its registration state becomes committed; any automatic cleanup may only
+process objects with state=staged that a live reference query confirms are unused.
 """
 
 from datetime import datetime
@@ -25,7 +27,7 @@ from app.db.types import JSONType
 
 
 class StoredObject(Base, table=True):
-    """一个逻辑对象 key 的登记与引用状态，不保存对象内容、签名 URL 或凭据。"""
+    """Registration and reference state for one logical object key; stores no object content, signed URL, or credentials."""
 
     __tablename__ = cast(Any, "stored_objects")
     __table_args__ = (
@@ -53,7 +55,7 @@ class StoredObject(Base, table=True):
     ))
     content_type: str = Field(sa_column=Column(String(64), nullable=False))
     size_bytes: int = Field(sa_column=Column(BigInteger, nullable=False))
-    # 仅保存非敏感描述（原文件名、图片类型等），不得放入 URL、token 或对象正文。
+    # Only non-sensitive metadata (original filename, image type, etc.); never URLs, tokens, or object bodies.
     object_metadata: dict = Field(default_factory=dict, sa_column=Column(JSONType, default=dict, nullable=False))
     state: str = Field(default='staged', sa_column=Column(String(16), default="staged", index=True, nullable=False))
     ref_type: str | None = Field(default=None, sa_column=Column(String(32), nullable=True))

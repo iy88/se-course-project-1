@@ -1,4 +1,4 @@
-"""管理员交易处置（BR-08/33）：冻结/解冻、有依据调整全部状态。"""
+"""Administrator trade handling (BR-08/33): freeze/unfreeze and adjust any status with a basis."""
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -41,7 +41,7 @@ ENDED_TARGETS = {TradeStatus.COMPLETED.value, TradeStatus.TERMINATED.value}
 
 
 async def admin_trade_view(db, trade_id: int) -> dict | None:
-    """管理视角交易概要（含约定/确认/转移历史）。"""
+    """Administrative trade summary (including agreements/confirmations/transition history)."""
     trade = await db.get(Trade, trade_id)
     if not trade:
         return None
@@ -121,25 +121,28 @@ class FreezeIn(BaseModel):
 
 class UnfreezeIn(BaseModel):
     reason: NonBlank500
-    case_id: int | None = None  # 关联处置事项（依据）
+    case_id: int | None = None  # related disposal case (basis)
 
 
 class AdjustIn(BaseModel):
     to_status: str
     reason: NonBlank500
-    case_id: int | None = None  # 关联处置事项（依据）
+    case_id: int | None = None  # related disposal case (basis)
 
 
 async def case_relevant_to_trade(db, case: DisposalCase, trade: Trade) -> bool:
-    """事项须与本笔交易直接相关，而非仅同商品或任意账户。
+    """A case must relate directly to this trade, not merely share a product or any account.
 
-    绑定具体交易的事项只对本笔交易有效；case.trade_id 指向其他交易时，
-    不得再因 product_id 相同而绕过。日常商品审核事项本身不授予后来任何
-    私人交易权限。合法依据限：本笔交易事项、指向本商品的真实违规举报、
-    指向本笔交易评价或本交易分支消息的举报、举报处置实际封禁当事账户
-    留下的限制记录，以及当事账户的封禁事项；已处置/已解除状态不失效。
-    不接受仅凭任意 subject_user 事项、任意用户举报、其他事项的限制记录、
-    普通私聊消息或本人认领事项扩大私人交易访问。
+    A case bound to a specific trade is valid only for that trade; when case.trade_id
+    points to another trade, a matching product_id must not bypass that. Ordinary
+    product review cases grant no later private-trade access by themselves. Valid
+    bases are limited to: a case for this trade, a genuine violation report targeting
+    this product, a report targeting this trade's review or this trade branch's
+    messages, a restriction record left when report handling actually banned the
+    account, and a ban case for the account; disposed/lifted states do not invalidate
+    them. Arbitrary subject_user cases, arbitrary user reports, restriction records
+    from other cases, ordinary private-chat messages, or a self-claimed case must not
+    widen private-trade access.
     """
     if case.trade_id is not None:
         return case.trade_id == trade.id
@@ -148,10 +151,11 @@ async def case_relevant_to_trade(db, case: DisposalCase, trade: Trade) -> bool:
         and case.subject_user_id in (trade.buyer_id, trade.seller_id)
     ):
         return True
-    # 举报处置的 ban_user 以原举报事项记录 AccountRestriction，并未另建
-    # ACCOUNT_BAN 事项；须读取真实限制记录，不能凭 subject_user 推断。
-    # 只认与本事项 id 精确关联、且被封禁者确为本交易一方的 ban 记录；
-    # 不按 active 过滤，封禁后已 lifted 的历史仍支撑后续查看/调整。
+    # Report-handling ban_user records an AccountRestriction under the original report
+    # case and does not create a separate ACCOUNT_BAN case; read the actual restriction
+    # record instead of inferring from subject_user. Only ban records linked exactly to
+    # this case id whose banned account is a party to this trade count; do not filter
+    # by active, since a ban later lifted still supports subsequent viewing/adjustment.
     if case.case_type == CaseType.REPORT.value:
         restriction_id = (await db.exec(
             select(col(AccountRestriction.id))
@@ -177,8 +181,9 @@ async def case_relevant_to_trade(db, case: DisposalCase, trade: Trade) -> bool:
                 if review is not None and review.trade_id == trade.id:
                     return True
             if report.target_type == ReportTargetType.MESSAGE.value:
-                # 仅交易分支消息可定位到本笔交易；普通私聊无 trade_id，
-                # 其他交易分支指向别的 trade_id，均不得借此访问本交易。
+                # Only messages in a trade branch locate this trade; ordinary private
+                # chats have no trade_id, and other trade branches point to a different
+                # trade_id, so neither may be used to access this trade.
                 message = await db.get(Message, report.target_id)
                 if message is not None:
                     conversation = await db.get(Conversation, message.conversation_id)
@@ -190,10 +195,12 @@ async def case_relevant_to_trade(db, case: DisposalCase, trade: Trade) -> bool:
 async def _resolve_trade_case(
     db, trade: Trade, admin_id: int, case_id: int | None
 ) -> DisposalCase:
-    """BR-27/34：私人交易读取与冻结/解冻/调整须由相关事项认领管理员执行。
+    """BR-27/34: reading a private trade and freezing/unfreezing/adjusting it must be done by the administrator who claimed the related case.
 
-    未传 case_id 时只能自动选择本人已认领且确与本交易相关的事项；
-    缺省绝不等于独立维护放行。已处置事项仍可作为后续合法处置依据。
+    When case_id is omitted, select automatically only a case claimed by this
+    administrator that genuinely relates to this trade; omission never means
+    independent maintenance access. A disposed case may still serve as a valid basis
+    for later handling.
     """
     if case_id is not None:
         case = await db.get(DisposalCase, case_id)
@@ -257,7 +264,7 @@ async def get_trade(
     db: DbSession,
     case_id: int | None = Query(default=None),
 ) -> dict:
-    """管理视角交易详情（BR-27：按事项必要范围访问）。"""
+    """Administrative trade detail (BR-27: access limited to the scope necessary for the case)."""
     trade = await db.get(Trade, trade_id)
     if not trade:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
@@ -293,7 +300,7 @@ async def freeze(trade_id: int, body: FreezeIn, admin: CurrentAdmin, db: DbSessi
 
 @router.post("/{trade_id}/unfreeze")
 async def unfreeze(trade_id: int, body: UnfreezeIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """非结束状态的解冻须管理员有依据处理（BR-33）；符合条件时续算剩余等待（D-51）。"""
+    """Unfreezing a non-ended trade requires an administrator basis (BR-33); when eligible, the remaining wait resumes (D-51)."""
     trade = await db.get(Trade, trade_id)
     if trade is not None:
         trade = await trade_service.lock_product_then_trade(db, trade_id, trade.product_id)
@@ -319,15 +326,17 @@ async def unfreeze(trade_id: int, body: UnfreezeIn, admin: CurrentAdmin, db: DbS
 
 @router.post("/{trade_id}/adjust")
 async def adjust_status(trade_id: int, body: AdjustIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """BR-08：认领管理员可有依据调整全部状态（包括直接完成），不伪造双方确认。
+    """BR-08: the claiming administrator may adjust any status with a basis (including completing directly) without fabricating both parties' confirmations.
 
-    锁序固定为“商品 → 目标交易”：先按事项资格定位/校验交易，再锁商品、锁交易并
-    ``populate_existing`` 刷新状态。这样与 accept、create_request 共用同一把商品锁；
-    恢复锁单时在锁后重新执行 D-48 冲突校验，不能依据加锁前的缓存对象放行。
+    The lock order is fixed as "product → target trade": first locate/validate the trade
+    by case eligibility, then lock the product, lock the trade, and refresh state with
+    ``populate_existing``. This shares the same product lock as accept and create_request;
+    when restoring a locking status, rerun the D-48 conflict check after locking and do
+    not rely on a pre-lock cached object.
     """
     if body.to_status not in ALLOWED_ADJUST_TARGETS:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "非法目标状态")
-    # 先完成管理员相关事项资格校验；此后只使用标量 ID，避免回滚后引用过期对象。
+    # Validate administrator case eligibility first; thereafter use only scalar IDs so a rolled-back session never dereferences expired objects.
     trade = await db.get(Trade, trade_id)
     if not trade:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "交易不存在")
@@ -336,12 +345,14 @@ async def adjust_status(trade_id: int, body: AdjustIn, admin: CurrentAdmin, db: 
     product_id = trade.product_id
     case_id = case.id
 
-    # 明确可重试事务错误（40P01/40001）整事务回滚后有限重试；通知、审计、转移
-    # 均在同一事务内，回滚后不会重复。其他数据库错误原样抛出，不盲目映射 409。
+    # Explicit retryable transaction errors (40P01/40001) get a limited whole-transaction
+    # retry after rollback; notifications, audits, and transitions share that transaction
+    # and are not duplicated. Other database errors propagate as-is and are not blindly mapped to 409.
     for attempt in range(2):
         try:
-            # 统一锁序：商品 → 目标交易。锁商品会等待 accept/request 等同类事务；
-            # 锁交易后刷新状态，避免 identity map 中的旧 status 覆盖已提交状态。
+            # Unified lock order: product → target trade. Locking the product waits for
+            # peer transactions such as accept/request; refreshing state after locking the
+            # trade prevents a stale status in the identity map from overwriting committed state.
             product = await trade_service.lock_product_for_update(db, product_id)
             trade = await trade_service.lock_trade_for_update(db, trade_id)
             if trade is None:
@@ -349,8 +360,9 @@ async def adjust_status(trade_id: int, body: AdjustIn, admin: CurrentAdmin, db: 
             if trade.status == body.to_status:
                 raise HTTPException(status.HTTP_409_CONFLICT, "交易已处于目标状态")
 
-            # D-48：锁后再检查同商品另一笔锁单；预检查只用于早期拒绝，不能作为
-            # 恢复依据。冲突时交易、确认、商品、分支与限制均尚未修改。
+            # D-48: after locking, check for another locking trade on the same product; the
+            # precheck only rejects early and cannot justify restoration. On conflict, the
+            # trade, confirmations, product, branch, and restrictions are all still untouched.
             if body.to_status in LOCKING_TARGETS:
                 await trade_service.ensure_no_locking_conflict(db, trade, body.to_status)
 
@@ -358,7 +370,7 @@ async def adjust_status(trade_id: int, body: AdjustIn, admin: CurrentAdmin, db: 
             to_status = TradeStatus(body.to_status)
             reason = body.reason.strip()
             if to_status in (TradeStatus.COMPLETED, TradeStatus.TERMINATED):
-                # 结束联动：解本笔冻结、归档分支、商品默认下架（BR-33/14）
+                # End cascade: unfreeze this trade, archive the branch, delist the product by default (BR-33/14)
                 await trade_ops.finish_trade(
                     db, trade, to_status=to_status, trigger=f"admin_adjust_{body.to_status}",
                     actor=admin, actor_role="admin", reason=reason, basis_case_id=case_id,
@@ -376,32 +388,32 @@ async def adjust_status(trade_id: int, body: AdjustIn, admin: CurrentAdmin, db: 
                 return {"detail": f"交易状态已调整为 {body.to_status}，已通知双方并留据"}
 
             if to_status == TradeStatus.IN_PROGRESS:
-                # 恢复进行中：清当前确认、结束旧计时、保留历史与有效约定；恢复不启动计时（4.15/D-51）
+                # Resume in progress: clear current confirmations, end the old timer, keep history and the effective agreement; resumption does not start the timer (4.15/D-51)
                 await trade_ops.clear_current_confirmations(db, trade.id)
                 trade_wait.clear_wait_state(trade)
                 trade.resolution_confirmed_by_id = None
                 trade.resolution_confirmed_at = None
             elif to_status in (TradeStatus.DISPUTED, TradeStatus.ABNORMAL):
-                # 进入争议/异常只结束原等待；恢复已完成旧交易时另清当前确认（D-48）
+                # Entering disputed/abnormal only ends the existing wait; restoring a previously completed trade also clears current confirmations (D-48)
                 if from_status in ENDED_TARGETS:
                     await trade_ops.clear_current_confirmations(db, trade.id)
                 trade_wait.clear_wait_state(trade)
             else:
-                # 离开锁单/等待状态：结束旧计时，避免下一阶段继承旧轮暂停
+                # Leaving the locking/waiting state: end the old timer so the next stage does not inherit a previous pause
                 trade_wait.clear_wait_state(trade)
 
             trade.status = to_status.value
-            # 非结束目标不保留结束时间；恢复旧交易时清除原有 finished_at。
+            # Non-ended targets keep no finish time; restoring an old trade clears the existing finished_at.
             trade.finished_at = None
             if to_status in (TradeStatus.IN_PROGRESS, TradeStatus.DISPUTED, TradeStatus.ABNORMAL) and trade.accepted_at is None:
                 trade.accepted_at = trade_ops.now_utc()
 
             if product is not None:
                 if to_status.value in LOCKING_TARGETS:
-                    # 锁单目标：商品进入交易中，解除此前的下架时间标记。
+                    # Locking target: the product enters in-transaction and the previous delist timestamp is cleared.
                     product.status = ProductStatus.IN_TRANSACTION.value
                     product.delisted_at = None
-                    # BR-02/DT-01：进入锁单不得绕过“其余待接受请求自动关闭”的既有规则。
+                    # BR-02/DT-01: entering a locking status must not bypass the existing "close other pending requests automatically" rule.
                     others = await trade_service.close_pending_requests_for_product(
                         db, product.id, trade_service.CLOSED_BY_LOCK, exclude_trade_ids={trade.id}
                     )
@@ -420,8 +432,9 @@ async def adjust_status(trade_id: int, body: AdjustIn, admin: CurrentAdmin, db: 
                     and product.status == ProductStatus.IN_TRANSACTION.value
                     and from_status in LOCKING_TARGETS
                 ):
-                    # 仅本笔交易原持有锁单、确无其他锁单且公开资格未被撤销时释放展示；
-                    # 不因调整旧已完成交易而擅自打断另一笔锁单或让受限商品变 listed。
+                    # Release visibility only when this trade held the lock, no other lock
+                    # exists, and public eligibility was not revoked; adjusting an old completed
+                    # trade must not interrupt another lock or turn a restricted product into listed.
                     other_locking = await trade_service.get_locking_trade(db, product_id)
                     if other_locking is None and not product.display_restricted:
                         product.status = ProductStatus.LISTED.value
@@ -447,15 +460,15 @@ async def adjust_status(trade_id: int, body: AdjustIn, admin: CurrentAdmin, db: 
             await db.commit()
             return {"detail": f"交易状态已调整为 {body.to_status}，已通知双方并留据"}
         except IntegrityError as exc:
-            # D-48：锁后校验仍可能被不遵守商品锁的旧写入抢跑；唯一索引是最终裁决。
+            # D-48: a legacy writer that ignores the product lock may still race the post-lock check; the unique index is the final arbiter.
             await trade_service.resolve_lock_integrity_error(db, exc, product_id=product_id)
         except DBAPIError as exc:
             await db.rollback()
             if not trade_service.is_retryable_transaction_error(exc):
                 raise
             if attempt == 0:
-                # 回滚会 expire 当前 ORM 对象；重试前重新加载，禁止失败后读取
-                # expired admin.id/角色触发 MissingGreenlet。
+                # Rollback expires current ORM objects; reload before retrying and never read
+                # an expired admin.id/role after failure, which would trigger MissingGreenlet.
                 reloaded_admin = await db.get(User, admin_id, populate_existing=True)
                 if reloaded_admin is None:
                     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "管理员账户不存在")

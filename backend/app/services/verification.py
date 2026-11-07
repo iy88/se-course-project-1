@@ -1,7 +1,7 @@
-"""邮箱验证码：注册前验证、忘记密码、更换邮箱（新旧邮箱各一码）。
+"""Email verification codes: pre-registration verification, forgot password, and email change (one code each for old and new email).
 
-验证码存放于配置指定的 KV，过期时间与发送间隔由配置控制。
-通过邮件发送验证码，不在接口响应中返回。
+Codes are stored in the configured KV, with expiration and send interval controlled by
+configuration. Codes are delivered by email and never returned in API responses.
 """
 
 import secrets
@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.kv.base import KVError, get_kv
 from app.services.mail_delivery import deliver_code
 
-PURPOSE_REGISTER = "register"  # D-47：注册前验证当前邮箱控制权
+PURPOSE_REGISTER = "register"  # D-47: verify control of the current email before registration
 PURPOSE_RESET = "reset_password"
 PURPOSE_EMAIL_OLD = "change_email_old"
 PURPOSE_EMAIL_NEW = "change_email_new"

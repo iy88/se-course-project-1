@@ -1,7 +1,8 @@
-"""场景目录的静态校验与对象清单。
+"""Static validation and object inventory for the scenario catalog.
 
-``validate_catalog()`` 不连数据库、不读环境文件，可被 CLI、测试和 seed 启动前
-共用；任何重复 key、悬空引用、未映射场景或互斥分支共用对象都会在这里失败。
+``validate_catalog()`` connects to no database and reads no environment file, so it can be
+shared by the CLI, tests, and seed startup; duplicate keys, dangling references, unmapped
+scenarios, or objects shared by mutually exclusive branches all fail here.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from app.devtools.demo_scenarios.model import ScenarioSpec
 
 
 class CatalogError(ValueError):
-    """场景目录自相矛盾；调用方只展示本类消息。"""
+    """The scenario catalog is self-contradictory; callers show only this class of message."""
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ def conversation_key(trade) -> str:
 
 
 def message_key(owner_key: str, index: int) -> str:
-    """owner_key 为 trade_* 或 conversation_*，index 从 1 开始。"""
+    """owner_key is trade_* or conversation_*; index starts at 1."""
     return f"message_{owner_key}_{index}"
 
 
@@ -84,12 +85,12 @@ def product_case_key(product) -> str:
 
 
 def object_inventory() -> dict[str, str]:
-    """返回目录中可被 manifest/场景引用的全部对象 key -> kind。"""
+    """Return all object key -> kind entries in the catalog that a manifest/scenario may reference."""
     inventory: dict[str, str] = {}
 
     def add(key: str, kind: str) -> None:
         if key in inventory:
-            raise CatalogError(f"对象 key 重复：{key}")
+            raise CatalogError(f"Duplicate object key: {key}")
         inventory[key] = kind
 
     for account in catalog.ACCOUNTS:
@@ -148,105 +149,105 @@ def object_inventory() -> dict[str, str]:
 
 def _validate_unique_fixture_keys() -> None:
     groups = {
-        "账号": [item.key for item in catalog.ACCOUNTS],
-        "分类": [item.key for item in catalog.CATEGORIES],
-        "商品": [item.key for item in catalog.PRODUCTS],
-        "交易": [item.key for item in catalog.TRADES],
-        "举报": [item.key for item in catalog.REPORTS],
-        "事项": [item.key for item in [*catalog.CASES, *(t.case for t in catalog.TRADES if t.case), *(r.case for r in catalog.REPORTS if r.case), *(a.case for a in catalog.AVATARS)]],
-        "限制": [item.key for item in catalog.RESTRICTIONS],
-        "通知": [item.key for item in catalog.NOTIFICATIONS],
-        "普通会话": [item.key for item in catalog.NORMAL_CONVERSATIONS],
+        "accounts": [item.key for item in catalog.ACCOUNTS],
+        "categories": [item.key for item in catalog.CATEGORIES],
+        "products": [item.key for item in catalog.PRODUCTS],
+        "trades": [item.key for item in catalog.TRADES],
+        "reports": [item.key for item in catalog.REPORTS],
+        "cases": [item.key for item in [*catalog.CASES, *(t.case for t in catalog.TRADES if t.case), *(r.case for r in catalog.REPORTS if r.case), *(a.case for a in catalog.AVATARS)]],
+        "restrictions": [item.key for item in catalog.RESTRICTIONS],
+        "notifications": [item.key for item in catalog.NOTIFICATIONS],
+        "normal conversations": [item.key for item in catalog.NORMAL_CONVERSATIONS],
     }
     for label, keys in groups.items():
         duplicated = [key for key, count in Counter(keys).items() if count > 1]
         if duplicated:
-            raise CatalogError(f"{label} key 重复：" + "、".join(sorted(duplicated)))
+            raise CatalogError(f"Duplicate {label} key: " + ", ".join(sorted(duplicated)))
 
 
 def _validate_accounts_and_refs() -> None:
     accounts = {item.key: item for item in catalog.ACCOUNTS}
     if not any(item.role == "admin" for item in accounts.values()):
-        raise CatalogError("至少需要一个管理员账号")
+        raise CatalogError("At least one admin account is required")
     categories = {item.key for item in catalog.CATEGORIES}
     tags_by_product = {}
     for product in catalog.PRODUCTS:
         if product.seller not in accounts:
-            raise CatalogError(f"{product.key} 的卖家不存在")
+            raise CatalogError(f"Seller for {product.key} does not exist")
         if product.status not in {"pending_review", "rejected", "listed", "in_transaction", "delisted"}:
-            raise CatalogError(f"{product.key} 状态非法")
+            raise CatalogError(f"Invalid status for {product.key}")
         if not product.description or len(product.description) < 40:
-            raise CatalogError(f"{product.key} 描述过短，缺少使用/成色/交付信息")
+            raise CatalogError(f"Description for {product.key} is too short; missing usage/condition/delivery information")
         if product.price_cents <= 0:
-            raise CatalogError(f"{product.key} 价格非法")
+            raise CatalogError(f"Invalid price for {product.key}")
         unknown = [tag for tag in product.all_tags if tag not in categories]
         if unknown:
-            raise CatalogError(f"{product.key} 引用未知分类：" + "、".join(unknown))
+            raise CatalogError(f"Unknown category referenced by {product.key}: " + ", ".join(unknown))
         tags_by_product[product.key] = set(product.all_tags)
     if len({product.description for product in catalog.PRODUCTS}) != len(catalog.PRODUCTS):
-        raise CatalogError("商品描述存在机械重复")
+        raise CatalogError("Product descriptions are mechanically duplicated")
     if len({product.price_cents for product in catalog.PRODUCTS}) < 10:
-        raise CatalogError("商品价格过于单一")
+        raise CatalogError("Product prices are too uniform")
 
     for trade in catalog.TRADES:
         product = next((item for item in catalog.PRODUCTS if item.key == trade.product), None)
         if product is None:
-            raise CatalogError(f"{trade.key} 引用未知商品")
+            raise CatalogError(f"Unknown product referenced by {trade.key}")
         if trade.buyer not in accounts:
-            raise CatalogError(f"{trade.key} 买方不存在")
+            raise CatalogError(f"Buyer for {trade.key} does not exist")
         if product.seller == trade.buyer:
-            raise CatalogError(f"{trade.key} 买方与卖方相同")
+            raise CatalogError(f"Buyer and seller are the same for {trade.key}")
         if trade.status not in {
             "pending_acceptance", "rejected", "withdrawn", "closed", "in_progress",
             "disputed", "abnormal", "terminated", "completed",
         }:
-            raise CatalogError(f"{trade.key} 状态非法")
+            raise CatalogError(f"Invalid status for {trade.key}")
         rounds = [agreement.round_no for agreement in trade.agreements]
         if rounds != sorted(set(rounds)):
-            raise CatalogError(f"{trade.key} 约定轮次不唯一或不递增")
+            raise CatalogError(f"Agreement rounds for {trade.key} are not unique or not increasing")
         if trade.current_round is not None:
             current = [agreement for agreement in trade.agreements if agreement.round_no == trade.current_round]
             if not current or current[0].status != "confirmed":
-                raise CatalogError(f"{trade.key} current_round 未指向 confirmed 约定")
+                raise CatalogError(f"current_round for {trade.key} does not point to a confirmed agreement")
         confirmed = [agreement for agreement in trade.agreements if agreement.status == "confirmed"]
         if len(confirmed) > 1:
-            raise CatalogError(f"{trade.key} 同时存在多个 confirmed 约定")
+            raise CatalogError(f"Multiple confirmed agreements exist for {trade.key}")
         if trade.status in {"in_progress", "disputed", "abnormal", "completed", "terminated"} and trade.accepted_days_ago is None:
-            raise CatalogError(f"{trade.key} 缺少接受时间")
+            raise CatalogError(f"Acceptance time is missing for {trade.key}")
         if trade.status in {"pending_acceptance", "rejected", "withdrawn", "closed"} and trade.accepted_days_ago is not None:
-            raise CatalogError(f"{trade.key} 未接受却记录接受时间")
+            raise CatalogError(f"Acceptance time is recorded but the trade was not accepted for {trade.key}")
         if trade.frozen and trade.frozen_days_ago is None:
-            raise CatalogError(f"{trade.key} 冻结缺少时间")
+            raise CatalogError(f"Freeze time is missing for {trade.key}")
         if not trade.frozen and trade.frozen_case:
-            raise CatalogError(f"{trade.key} 未冻结却关联冻结事项")
+            raise CatalogError(f"A frozen case is linked but the trade is not frozen for {trade.key}")
         for confirmation in trade.confirmations:
             if confirmation.confirmer not in (trade.buyer, product.seller):
-                raise CatalogError(f"{trade.key} 确认人不是交易一方")
+                raise CatalogError(f"Confirmer is not a party to {trade.key}")
         for review in trade.reviews:
             if review.reviewer not in (trade.buyer, product.seller):
-                raise CatalogError(f"{trade.key} 评价人不是交易一方")
+                raise CatalogError(f"Reviewer is not a party to {trade.key}")
             if not 1 <= review.rating <= 5:
-                raise CatalogError(f"{trade.key} 评价分数非法")
+                raise CatalogError(f"Invalid review rating for {trade.key}")
         if trade.status != "completed" and trade.reviews:
-            raise CatalogError(f"{trade.key} 未完成却有评价")
+            raise CatalogError(f"Review exists but the trade is not completed for {trade.key}")
 
     for report in catalog.REPORTS:
         if report.reporter not in accounts:
-            raise CatalogError(f"{report.key} 举报人不存在")
+            raise CatalogError(f"Reporter for {report.key} does not exist")
         if report.target_type not in {"product", "comment", "message", "review", "user"}:
-            raise CatalogError(f"{report.key} 目标类型非法")
+            raise CatalogError(f"Invalid target type for {report.key}")
     for restriction in catalog.RESTRICTIONS:
         if restriction.user not in accounts or restriction.created_by not in accounts:
-            raise CatalogError(f"{restriction.key} 用户或执行人不存在")
+            raise CatalogError(f"User or actor for {restriction.key} does not exist")
         if restriction.status not in {"active", "lifted"}:
-            raise CatalogError(f"{restriction.key} 状态非法")
+            raise CatalogError(f"Invalid status for {restriction.key}")
         if restriction.status == "lifted" and (not restriction.lifted_by or restriction.lifted_days_ago is None):
-            raise CatalogError(f"{restriction.key} 已解除但缺少解除信息")
+            raise CatalogError(f"Restriction {restriction.key} is lifted but lift information is missing")
     for notification in catalog.NOTIFICATIONS:
         if notification.user not in accounts:
-            raise CatalogError(f"{notification.key} 接收人不存在")
+            raise CatalogError(f"Recipient for {notification.key} does not exist")
         if accounts[notification.user].role == "admin":
-            raise CatalogError(f"{notification.key} 不能给管理员发个人通知")
+            raise CatalogError(f"{notification.key} cannot send a personal notification to an admin")
 
 
 def _validate_scenarios(inventory: dict[str, str]) -> None:
@@ -254,52 +255,52 @@ def _validate_scenarios(inventory: dict[str, str]) -> None:
     mapped: set[str] = set()
     for scenario in catalog.SCENARIOS:
         if scenario.key in by_key:
-            raise CatalogError(f"场景 key 重复：{scenario.key}")
+            raise CatalogError(f"Duplicate scenario key: {scenario.key}")
         by_key[scenario.key] = scenario
         if not scenario.title or not scenario.initial_state:
-            raise CatalogError(f"{scenario.key} 缺少标题或初始状态")
+            raise CatalogError(f"{scenario.key} is missing a title or initial state")
         if not scenario.timeline or not scenario.actions or not scenario.expected:
-            raise CatalogError(f"{scenario.key} 缺少时间线/允许操作/预期")
+            raise CatalogError(f"{scenario.key} is missing timeline/allowed actions/expected results")
         if len(scenario.checks) < 2:
-            raise CatalogError(f"{scenario.key} 验证项不足")
+            raise CatalogError(f"Not enough checks for {scenario.key}")
         if not scenario.mappings:
-            raise CatalogError(f"{scenario.key} 缺少 US/UC/SC 映射")
+            raise CatalogError(f"Missing US/UC/SC mappings for {scenario.key}")
         for mapping in scenario.mappings:
             if not (mapping.startswith("US-") or mapping.startswith("UC-") or mapping.startswith("SC-")):
-                raise CatalogError(f"{scenario.key} 映射格式非法：{mapping}")
+                raise CatalogError(f"Invalid mapping format for {scenario.key}: {mapping}")
             mapped.add(mapping)
         duplicated = [key for key, count in Counter(scenario.objects).items() if count > 1]
         if duplicated:
-            raise CatalogError(f"{scenario.key} 重复列出对象：" + "、".join(duplicated))
+            raise CatalogError(f"Duplicate objects listed for {scenario.key}: " + ", ".join(duplicated))
         for object_key in scenario.objects:
             if object_key not in inventory:
-                raise CatalogError(f"{scenario.key} 引用未知对象 {object_key}")
+                raise CatalogError(f"Unknown object {object_key} referenced by {scenario.key}")
         for check in scenario.checks:
             prefix, _, value = check.partition(":")
             if prefix not in {"state", "history", "live"} or not value:
-                raise CatalogError(f"{scenario.key} 验证项格式非法：{check}")
+                raise CatalogError(f"Invalid check format for {scenario.key}: {check}")
             if prefix in {"state", "history"} and value not in inventory:
-                raise CatalogError(f"{scenario.key} 验证项引用未知对象 {value}")
+                raise CatalogError(f"Check for {scenario.key} references unknown object {value}")
 
     missing_us = set(catalog.US_ALL) - mapped
     missing_uc = set(catalog.UC_ALL) - mapped
     missing_sc = set(catalog.SC_ALL) - mapped
     if missing_us or missing_uc or missing_sc:
         raise CatalogError(
-            "场景映射未覆盖："
-            + "、".join(sorted(missing_us | missing_uc | missing_sc))
+            "Scenario mappings do not cover: "
+            + ", ".join(sorted(missing_us | missing_uc | missing_sc))
         )
 
     for scenario in catalog.SCENARIOS:
         for other_key in scenario.exclusive_with:
             if other_key not in by_key:
-                raise CatalogError(f"{scenario.key} 引用未知互斥场景 {other_key}")
+                raise CatalogError(f"Unknown mutually exclusive scenario {other_key} referenced by {scenario.key}")
             other = by_key[other_key]
             shared = set(scenario.objects) & set(other.objects)
             if shared:
                 raise CatalogError(
-                    f"互斥场景 {scenario.key} 与 {other_key} 共用对象："
-                    + "、".join(sorted(shared))
+                    f"Mutually exclusive scenarios {scenario.key} and {other_key} share objects: "
+                    + ", ".join(sorted(shared))
                 )
 
 
@@ -317,24 +318,24 @@ def _validate_content() -> None:
     ]
     duplicated = [content for content, count in Counter(user_messages).items() if count > 1]
     if duplicated:
-        raise CatalogError("存在重复的用户对话：" + "；".join(duplicated[:3]))
+        raise CatalogError("Duplicate user conversations exist: " + "; ".join(duplicated[:3]))
     if any("演示" in product.title for product in catalog.PRODUCTS):
-        raise CatalogError("商品标题不应带“演示”前缀")
+        raise CatalogError('Product titles must not use the "演示" prefix')
     banned_words = ("微信号", "手机号", "身份证", "密码")
     for product in catalog.PRODUCTS:
         text = product.title + product.description
         if any(word in text for word in banned_words):
-            raise CatalogError(f"{product.key} 含疑似隐私或凭据字样")
+            raise CatalogError(f"{product.key} contains text that looks like privacy or credentials")
         dimensions = {
-            "使用时间": any(word in text for word in ("购入", "买了", "用了", "使用", "大二", "去年", "上月", "202")),
-            "成色或缺陷": any(word in text for word in ("划痕", "磕碰", "磨损", "掉漆", "痕迹", "正常", "无坏点", "泛黄", "水垢", "鼓包", "变形", "笔痕", "无缺页", "衰减")),
-            "配件": "附" in text or "无其他配件" in text or "含" in text,
-            "交付地点或时间": any(word in text for word in ("交付", "自提", "楼下", "门口", "取", "车棚", "看台", "实验楼", "体育馆", "验货", "试机", "试投", "校园内")),
-            "价格": "元" in text,
+            "usage time": any(word in text for word in ("购入", "买了", "用了", "使用", "大二", "去年", "上月", "202")),
+            "condition or defects": any(word in text for word in ("划痕", "磕碰", "磨损", "掉漆", "痕迹", "正常", "无坏点", "泛黄", "水垢", "鼓包", "变形", "笔痕", "无缺页", "衰减")),
+            "accessories": "附" in text or "无其他配件" in text or "含" in text,
+            "delivery place or time": any(word in text for word in ("交付", "自提", "楼下", "门口", "取", "车棚", "看台", "实验楼", "体育馆", "验货", "试机", "试投", "校园内")),
+            "price": "元" in text,
         }
         missing = [name for name, present in dimensions.items() if not present]
         if missing:
-            raise CatalogError(f"{product.key} 描述缺少：" + "、".join(missing))
+            raise CatalogError(f"Description for {product.key} is missing: " + ", ".join(missing))
 
 
 def validate_catalog() -> CatalogSummary:

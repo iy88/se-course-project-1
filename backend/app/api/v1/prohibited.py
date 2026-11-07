@@ -1,4 +1,4 @@
-"""禁发范围（C-16）：登录用户发布前查看；仅管理员维护（BR-13/22）。"""
+"""Prohibited items (C-16): signed-in users view them before publishing; only administrators maintain them (BR-13/22)."""
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,7 +28,7 @@ class ProhibitedItemOut(BaseModel):
 
 @router.get("", response_model=list[ProhibitedItemOut])
 async def list_items(db: DbSession, user: CurrentUser) -> list[ProhibitedItemOut]:
-    """已登录用户可独立查看当前禁发范围，不以已提交商品为前提（US-02-AC-08）。"""
+    """Signed-in users can view current prohibited items independently, without having submitted a product (US-02-AC-08)."""
     from app.models import ProhibitedItem
 
     result = await db.exec(select(ProhibitedItem).order_by(col(ProhibitedItem.sort), col(ProhibitedItem.id)))

@@ -1,1 +1,1 @@
-"""真实资源验收工具包（显式 opt-in；默认 pytest 不触远端）。"""
+"""Real-resource acceptance toolkit (explicit opt-in; default pytest runs do not touch remote resources)."""

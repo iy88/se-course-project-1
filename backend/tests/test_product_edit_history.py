@@ -1,4 +1,4 @@
-"""编辑历史补充展示字段沿用原买卖双方资格，签名不越过时间过滤。"""
+"""Edit-history supplemental display fields keep the original buyer/seller eligibility, and signing does not bypass the time filter."""
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 

@@ -1,4 +1,4 @@
-"""共享场景目录的静态回归：不启动服务、不读环境文件。"""
+"""Static regression for the shared scenario catalog: starts no service and reads no environment file."""
 from __future__ import annotations
 
 
@@ -28,7 +28,7 @@ def test_report_targets_cover_all_types_and_product_entries_are_traceable():
     referenced = {key for scenario in catalog.SCENARIOS for key in scenario.objects}
     for product in catalog.PRODUCTS:
         assert product.key in inventory
-        # 商品既可作为场景入口，也可通过场景引用的交易/商品关联出现。
+        # A product may be either a scenario entry point or appear through a trade/product reference used by a scenario.
         assert product.key in referenced or any(trade.product == product.key for trade in catalog.TRADES)
     for trade in catalog.TRADES:
         assert trade.key in referenced

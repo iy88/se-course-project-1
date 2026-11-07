@@ -1,4 +1,4 @@
-"""WebSocket 连接管理器：用户级在线注册与事件推送。"""
+"""WebSocket connection manager: per-user online registration and event pushing."""
 
 import asyncio
 from collections import defaultdict
@@ -23,7 +23,7 @@ class ConnectionManager:
             self._connections.pop(user_id, None)
 
     async def push_to_user(self, user_id: int, payload: dict) -> None:
-        """向该用户全部在线连接推送 JSON；离线则跳过（消息已落库）。"""
+        """Push JSON to all of the user's online connections; skip when offline (the message is already persisted)."""
         for ws in list(self._connections.get(user_id, ())):
             try:
                 await ws.send_json(payload)

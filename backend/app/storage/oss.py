@@ -1,10 +1,10 @@
-"""阿里云 OSS 私有双桶实现。
+"""Alibaba Cloud OSS private dual-bucket implementation.
 
-- 使用 OSS Python SDK V2 + HTTPS endpoint + region；
-- report → evidence bucket，product/avatar/chat → media bucket，未知 namespace 拒绝；
-- 同步 SDK 操作保持同步合约，由路由层放入线程池；
-- 每次网络调用有超时和有限重试，明确区分 404/403/连接失败，不静默回退 local；
-- 读取流使用上下文管理器及时关闭。
+- Uses OSS Python SDK V2 + HTTPS endpoint + region;
+- report → evidence bucket, product/avatar/chat → media bucket; unknown namespaces are rejected;
+- Synchronous SDK operations keep the synchronous contract and are run in a thread pool by the routing layer;
+- Every network call has a timeout and bounded retries, distinguishes 404/403/connection failures explicitly, and never silently falls back to local;
+- Read streams use context managers for prompt closure.
 """
 
 from __future__ import annotations
@@ -66,11 +66,11 @@ class OssConfig:
         try:
             prefix = validate_storage_key_prefix(self.key_prefix)
         except ValueError as exc:
-            raise StorageConfigError("配置项格式错误：STORAGE_KEY_PREFIX") from exc
+            raise StorageConfigError("Invalid configuration format: STORAGE_KEY_PREFIX") from exc
         object.__setattr__(self, "key_prefix", prefix)
         if self.operation_journal is not None:
             if not re.fullmatch(r"acceptance_[A-Za-z0-9_-]+/", prefix):
-                raise StorageConfigError("对象日志仅允许独立的 acceptance 前缀")
+                raise StorageConfigError("Object journaling only allows a standalone acceptance prefix")
             object.__setattr__(self, "operation_journal", Path(self.operation_journal))
 
     @classmethod
@@ -78,7 +78,7 @@ class OssConfig:
         def required(name: str) -> str:
             value = getattr(settings, name, None)
             if value is None or not str(value).strip():
-                raise StorageConfigError(f"缺少配置项：{name.upper()}")
+                raise StorageConfigError(f"Missing configuration item: {name.upper()}")
             return str(value).strip()
 
         endpoint = required("oss_endpoint").rstrip("/")
@@ -89,35 +89,35 @@ class OssConfig:
             or parsed.query
             or parsed.fragment
         ):
-            raise StorageConfigError("OSS_ENDPOINT 必须是 HTTPS 地址")
+            raise StorageConfigError("OSS_ENDPOINT must be an HTTPS address")
 
         region = required("oss_region")
         media_bucket = required("oss_media_bucket")
         evidence_bucket = required("oss_evidence_bucket")
         if media_bucket == evidence_bucket:
-            raise StorageConfigError("OSS_MEDIA_BUCKET 与 OSS_EVIDENCE_BUCKET 不能相同")
+            raise StorageConfigError("OSS_MEDIA_BUCKET and OSS_EVIDENCE_BUCKET must differ")
         for label, bucket_name in (
             ("OSS_MEDIA_BUCKET", media_bucket),
             ("OSS_EVIDENCE_BUCKET", evidence_bucket),
         ):
             if any(ch.isspace() for ch in bucket_name) or "/" in bucket_name:
-                raise StorageConfigError(f"配置项格式错误：{label}")
+                raise StorageConfigError(f"Invalid configuration format: {label}")
 
         raw_timeout = getattr(settings, "oss_timeout_seconds", 15.0)
         try:
             timeout = float(raw_timeout)
         except (TypeError, ValueError) as exc:
-            raise StorageConfigError("配置项格式错误：OSS_TIMEOUT_SECONDS") from exc
+            raise StorageConfigError("Invalid configuration format: OSS_TIMEOUT_SECONDS") from exc
         if not 0 < timeout <= 300:
-            raise StorageConfigError("OSS_TIMEOUT_SECONDS 必须在 0–300 秒之间")
+            raise StorageConfigError("OSS_TIMEOUT_SECONDS must be between 0 and 300 seconds")
 
         raw_retries = getattr(settings, "oss_max_retries", 2)
         try:
             retries = int(raw_retries)
         except (TypeError, ValueError) as exc:
-            raise StorageConfigError("配置项格式错误：OSS_MAX_RETRIES") from exc
+            raise StorageConfigError("Invalid configuration format: OSS_MAX_RETRIES") from exc
         if not 0 <= retries <= 10:
-            raise StorageConfigError("OSS_MAX_RETRIES 必须在 0–10 之间")
+            raise StorageConfigError("OSS_MAX_RETRIES must be between 0 and 10")
 
         return cls(
             region=region,
@@ -135,7 +135,7 @@ class OssConfig:
 
 
 def _close_result(result: Any) -> None:
-    """释放 HEAD/PUT/DELETE 等非流式 SDK 响应连接；GET 由上下文管理器关闭。"""
+    """Release non-streaming SDK response connections such as HEAD/PUT/DELETE; GET is closed by a context manager."""
     response = getattr(getattr(result, "resp", None), "response", None)
     close = getattr(response, "close", None)
     if callable(close):
@@ -197,7 +197,7 @@ def _create_bucket(config: OssConfig, bucket_name: str) -> Any:
         )
         return _V2Bucket(oss.Client(sdk_config), bucket_name)
     except Exception as exc:
-        raise StorageConfigError("OSS 客户端初始化失败") from exc
+        raise StorageConfigError("Failed to initialize the OSS client") from exc
 
 
 def _unwrap(exc: Exception) -> Exception:
@@ -262,7 +262,7 @@ def _is_retryable(exc: Exception) -> bool:
 
 
 def _translate_error(exc: Exception) -> StorageError:
-    """把 SDK 异常转换为稳定的存储错误，不携带 endpoint/bucket/AK。"""
+    """Translate SDK exceptions into stable storage errors without endpoint/bucket/AK details."""
     if isinstance(exc, StorageError):
         return exc
 
@@ -271,20 +271,20 @@ def _translate_error(exc: Exception) -> StorageError:
     code = str(getattr(exc, "code", "") or "")
 
     if "FileAlreadyExists" in code or "ObjectAlreadyExists" in code:
-        return StorageAlreadyExists("文件已存在，不能覆盖")
+        return StorageAlreadyExists("The file already exists and cannot be overwritten")
     if "NoSuchBucket" in code:
-        return StorageConfigError("文件存储配置异常")
+        return StorageConfigError("File storage configuration error")
     if "NoSuchKey" in code or "NotFound" in code or status == 404:
-        return StorageNotFound("文件不存在")
+        return StorageNotFound("The file does not exist")
     if "AccessDenied" in code or "SignatureDoesNotMatch" in code or status == 403:
-        return StoragePermissionDenied("文件存储权限配置异常")
+        return StoragePermissionDenied("File storage permission configuration error")
     if "InvalidObjectName" in code or "InvalidArgument" in code:
         return StorageInvalidKey("非法文件 key")
     if isinstance(status, int) and status == 0:
-        return StorageUnavailable("文件存储连接失败")
+        return StorageUnavailable("File storage connection failed")
     if isinstance(status, int) and (status >= 500 or status in {408, 429}):
-        return StorageUnavailable("文件存储暂不可用")
-    return StorageUnavailable("文件存储暂不可用")
+        return StorageUnavailable("File storage is temporarily unavailable")
+    return StorageUnavailable("File storage is temporarily unavailable")
 
 
 class OssStorage(StorageBackend):
@@ -307,7 +307,7 @@ class OssStorage(StorageBackend):
             except StorageError:
                 raise
             except Exception as exc:
-                raise StorageConfigError("OSS 客户端初始化失败") from exc
+                raise StorageConfigError("Failed to initialize the OSS client") from exc
             self._buckets[bucket_name] = bucket
         return bucket
 
@@ -326,7 +326,7 @@ class OssStorage(StorageBackend):
                     logger.info('storage_%s_recovered attempts=%s elapsed_ms=%.1f',
                                 operation, attempt + 1, (time.monotonic() - started) * 1000)
                 return result
-            except Exception as exc:  # noqa: BLE001 - SDK 异常统一翻译，日志仅输出白名单元数据
+            except Exception as exc:  # noqa: BLE001 - translate SDK exceptions uniformly; logs contain only allowlisted metadata
                 retryable = _is_retryable(exc)
                 retry = attempt + 1 < attempts and retryable
                 translated = _translate_error(exc)
@@ -348,8 +348,8 @@ class OssStorage(StorageBackend):
                     continue
                 raise translated from None
         raise StorageUnavailable(
-            "文件存储暂不可用"
-        )  # pragma: no cover - 循环必然返回/抛出
+            "File storage is temporarily unavailable"
+        )  # pragma: no cover - the loop always returns or raises
 
     def save(self, namespace: str, filename: str, content: bytes) -> str:
         key = make_key(namespace, filename)
@@ -382,12 +382,12 @@ class OssStorage(StorageBackend):
         headers = dict(result.signed_headers or {})
         headers = {k: v for k, v in headers.items() if k.lower() not in {"host", "content-length"}}
         if result.expiration is None:
-            raise StorageConfigError("SDK 未返回上传签名到期时间")
+            raise StorageConfigError("The SDK returned no upload signature expiration")
         return {"method": result.method, "url": result.url, "headers": headers,
                 "expires_at": result.expiration.isoformat()}
 
     def public_url(self, key: str) -> str:
-        """私有桶临时 GET 直链；在有效期内复用 URL，避免资料刷新触发图片重载。"""
+        """Temporary private-bucket GET link; reuse the URL while valid so profile refreshes do not retrigger image loads."""
         now = time.monotonic()
         cached = self._download_urls.get(key)
         if cached and cached[1] > now:
@@ -397,7 +397,7 @@ class OssStorage(StorageBackend):
         ttl = self.config.download_expire_seconds
         result = self._run('presign_get', lambda: bucket.presign_get(self.config.key_prefix + key, ttl))
         if not result.url or result.expiration is None:
-            raise StorageConfigError('SDK 未返回有效的读取签名')
+            raise StorageConfigError('The SDK returned no valid read signature')
         self._download_urls[key] = (result.url, now + max(0, ttl - min(60, ttl / 2)))
         self._download_urls.move_to_end(key)
         while len(self._download_urls) > 2048:
@@ -429,7 +429,7 @@ class OssStorage(StorageBackend):
                 for chunk in body.iter_bytes():
                     data.extend(chunk)
                     if len(data) > 10 * 1024 * 1024:
-                        raise StorageUnavailable("文件超过读取大小限制")
+                        raise StorageUnavailable("The file exceeds the read size limit")
                 return bytes(data), info
             finally:
                 body.close()
@@ -444,7 +444,7 @@ class OssStorage(StorageBackend):
         try:
             self._run("delete", _delete)
         except StorageNotFound:
-            # 与 LocalStorage 一致：删除不存在对象保持幂等。
+            # As with LocalStorage, deleting a missing object stays idempotent.
             return
 
     def exists(self, key: str) -> bool:
@@ -462,7 +462,7 @@ class OssStorage(StorageBackend):
     def _open_journal(self, *, create: bool) -> int:
         path = self.config.operation_journal
         if path is None:
-            raise StorageConfigError("未配置对象操作日志")
+            raise StorageConfigError("No object operation journal is configured")
         flags = os.O_RDWR | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
         if create:
             flags |= os.O_CREAT
@@ -475,7 +475,7 @@ class OssStorage(StorageBackend):
                 raise
             return fd
         except OSError:
-            raise StorageUnavailable("无法访问对象操作日志") from None
+            raise StorageUnavailable("Cannot access the object operation journal") from None
 
     def _journal_write(self, key: str, role: str) -> None:
         if self.config.operation_journal is None:
@@ -494,14 +494,14 @@ class OssStorage(StorageBackend):
                     data = data[count:]
                 os.fsync(fd)
         except OSError:
-            raise StorageUnavailable("无法写入对象操作日志") from None
+            raise StorageUnavailable("Cannot write to the object operation journal") from None
         finally:
             os.close(fd)
 
     def cleanup_from_journal(self) -> int:
-        """清理当前 acceptance 前缀的写前日志对象，不需要列桶权限。"""
+        """Clean up write-ahead journal objects for the current acceptance prefix without ListBucket permission."""
         if not re.fullmatch(r"acceptance_[A-Za-z0-9_-]+/", self.config.key_prefix):
-            raise StorageConfigError("清理仅允许独立的 acceptance 前缀")
+            raise StorageConfigError("Cleanup only allows a standalone acceptance prefix")
         fd = self._open_journal(create=False)
         try:
             with exclusive_lock(fd):
@@ -542,10 +542,10 @@ class OssStorage(StorageBackend):
                     else:
                         failures += 1
                 if failures:
-                    raise StorageUnavailable("验收对象清理未完全成功，请重试同一日志")
+                    raise StorageUnavailable("Acceptance object cleanup did not fully succeed; retry with the same journal")
                 return removed
         except (OSError, UnicodeError, ValueError, TypeError, KeyError, StorageInvalidKey):
-            raise StorageConfigError("对象操作日志无效或不可读取") from None
+            raise StorageConfigError("The object operation journal is invalid or unreadable") from None
         finally:
             os.close(fd)
 

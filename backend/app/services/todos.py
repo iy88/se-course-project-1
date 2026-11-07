@@ -1,7 +1,8 @@
-"""用户待办聚合（D-53、4.17）：每次读取按当前有资格且需处理的既有事项派生。
+"""User to-do aggregation (D-53, 4.17): each read derives items from existing matters the user is currently eligible for and must handle.
 
-不新增任务类型、业务记录或权限；通知已读状态不参与待办判定。
-管理员待办来自共享处理池，个人待办恒为空。
+Adds no task types, business records, or permissions; notification read state does not
+affect to-do determination. Administrator to-dos come from the shared processing pool,
+and personal to-dos are always empty for administrators.
 """
 from sqlmodel import col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -25,7 +26,7 @@ from app.models.enums import (
 )
 from app.services.permissions import frozen_trade_party_ids
 
-# 进入聚合的本人事项类型（稳定 key，不随通知或已读变化）
+# Own-matter types included in aggregation (stable keys that do not change with notifications or read state)
 KIND_REQUEST = "request_pending"
 KIND_AGREEMENT = "agreement_pending"
 KIND_CANCEL = "cancel_pending"
@@ -52,15 +53,16 @@ def _item(kind: str, object_id: int, title: str, link_type: str, link_id: int, a
 
 
 async def build_todos(db: AsyncSession, user: User) -> list[dict]:
-    """返回当前用户有动作资格的待办列表；只读，不创建或修改业务记录。"""
+    """Return the to-do list for which the current user is eligible to act; read-only, creating or modifying no business records."""
     if user.role == UserRole.ADMIN.value:
         return []
 
     items: list[dict] = []
     banned = user.status == AccountStatus.BANNED.value
 
-    # 交易类待办：封禁或本人/对方存在任一有效交易冻结时动作被禁止，不列出；
-    # BR-33 的冻结是用户级交易限制，IM 的双方作用域不在此处混用。
+    # Trade to-dos: actions are blocked and the item is omitted while banned or when the
+    # user/counterparty has any active trade freeze; BR-33 freezes are user-level trade
+    # restrictions and the IM pair scope is not mixed in here.
     if not banned:
         frozen_users = await frozen_trade_party_ids(db)
         trades = list(
@@ -109,7 +111,7 @@ async def build_todos(db: AsyncSession, user: User) -> list[dict]:
 
         for trade in trades:
             other_id = trade.seller_id if trade.buyer_id == user.id else trade.buyer_id
-            # 本人或本笔对方被任一有效交易冻结：双方交易写操作均暂停（BR-33）。
+            # The user or this trade's counterparty has an active trade freeze: both parties' trade writes are suspended (BR-33).
             if user.id in frozen_users or other_id in frozen_users:
                 continue
             if trade.status == TradeStatus.PENDING_ACCEPTANCE.value:
@@ -126,7 +128,7 @@ async def build_todos(db: AsyncSession, user: User) -> list[dict]:
                     )
                 continue
 
-            # 约定确认仅在交易进行中可操作；争议中提案不能作为可执行约定确认。
+            # Agreement confirmation is actionable only while the trade is in progress; a proposal made during a dispute cannot serve as an actionable agreement confirmation.
             if trade.status == TradeStatus.IN_PROGRESS.value:
                 agreement = pending_agreements.get(trade.id)
                 if agreement and agreement.proposer_id != user.id:
@@ -140,7 +142,7 @@ async def build_todos(db: AsyncSession, user: User) -> list[dict]:
                             "confirm_agreement",
                         )
                     )
-                # 有效约定存在且本人尚未确认即可操作，不要求对方先确认（BR-04/FR-06）。
+                # Actionable once an effective agreement exists and the user has not confirmed; the counterparty need not confirm first (BR-04/FR-06).
                 if (
                     trade.current_agreement_id
                     and trade.current_agreement_id in effective_agreement_ids
@@ -183,7 +185,7 @@ async def build_todos(db: AsyncSession, user: User) -> list[dict]:
                     )
                 )
 
-    # 管理沟通：本人作为被询问人的当前未回答问询；封禁/冻结时仍保留
+    # Management communication: unanswered inquiries where the user is the person asked; retained even while banned/frozen
     cases = list(
 
             await db.exec(
@@ -219,5 +221,5 @@ async def build_todos(db: AsyncSession, user: User) -> list[dict]:
                 )
             )
 
-    # 稳定顺序；key 由 kind + 对象 id 组成，同一事项重复读取结果一致
+    # Stable order; the key is kind + object id, so repeated reads of the same matter are consistent
     return sorted(items, key=lambda item: (item["kind"], item["link_id"], item["key"]))

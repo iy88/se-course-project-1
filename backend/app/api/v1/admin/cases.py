@@ -1,4 +1,4 @@
-"""管理事项（C-13/BR-34）：共享池、认领、详情、问询、沟通与结论。"""
+"""Management cases (C-13/BR-34): shared pool, claiming, detail, inquiry, communication, and conclusions."""
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -25,7 +25,7 @@ class CaseMessageIn(BaseModel):
 
 
 class InquiryIn(BaseModel):
-    # 需要本人说明的内容范围；先去空白再校验，全空白不得写入沟通单。
+    # Scope of the statement requested from the user; trim before validation, and never write an all-whitespace value to the communication case.
     content: NonBlank2000
 
 
@@ -90,10 +90,11 @@ async def list_cases(
 
 
 async def _claim_pending_case(db, case_id: int, admin_id: int, claimed_at) -> bool:
-    """以数据库条件更新竞争待处理事项；仅当行仍为 pending 且未认领时成功。
+    """Race for a pending case with a conditional database update; succeeds only while the row is still pending and unclaimed.
 
-    条件与赋值在同一条 UPDATE 中执行，由数据库判定唯一胜者，不依赖先前读取。
-    synchronize_session="evaluate" 同步会话内可能存在的旧对象，避免其后续 flush 覆盖。
+    Conditions and assignments execute in one UPDATE, so the database determines the
+    single winner without relying on an earlier read. synchronize_session="evaluate"
+    refreshes any stale in-session object so a later flush cannot overwrite it.
     """
     result = await db.exec(
         update(DisposalCase)
@@ -114,17 +115,17 @@ async def _claim_pending_case(db, case_id: int, admin_id: int, claimed_at) -> bo
 
 @router.post("/{case_id}/claim", response_model=ClaimOut)
 async def claim_case(case_id: int, admin: CurrentAdmin, db: DbSession) -> ClaimOut:
-    """共享池主动认领：同一事项同时仅一名管理员（BR-34）。"""
+    """Claim from the shared pool: only one administrator may hold a case at a time (BR-34)."""
     admin_id = admin.id
     won = await _claim_pending_case(db, case_id, admin_id, case_service.now_utc())
     if not won:
-        # 失败不保留任何写入；先结束事务再区分不存在与被抢先/已处置。
+        # Keep no writes on failure; end the transaction before distinguishing nonexistence from a lost race/already-disposed case.
         await db.rollback()
         exists = (await db.exec(select(col(DisposalCase.id)).where(col(DisposalCase.id) == case_id))).first()
         if exists is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已被认领或已处置")
-    # 成功以数据库中的真实 owner 为准，而不是请求参数或内存对象。
+    # Success is determined by the real owner in the database, not by request parameters or in-memory objects.
     row = (
         await db.exec(
             select(col(DisposalCase.claimed_by_id), col(DisposalCase.status)).where(col(DisposalCase.id) == case_id)
@@ -133,7 +134,7 @@ async def claim_case(case_id: int, admin: CurrentAdmin, db: DbSession) -> ClaimO
     if row is None or row[0] != admin_id or row[1] != CaseStatus.PROCESSING.value:
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已被认领或已处置")
-    # 举报事项认领后同步举报状态为处理中（BR-25/US-07）；与认领同一事务提交。
+    # Claiming a report case also moves the report to processing (BR-25/US-07); commit it in the same transaction as the claim.
     claimed_case = await db.get(DisposalCase, case_id)
     report_status = None
     if claimed_case is not None and claimed_case.report_id is not None:
@@ -154,7 +155,7 @@ async def claim_case(case_id: int, admin: CurrentAdmin, db: DbSession) -> ClaimO
 
 @router.get("/{case_id}")
 async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
-    """事项详情：仅认领人可查看非公开内容与沟通记录（BR-19/34）。"""
+    """Case detail: only the claimant may view non-public content and communication records (BR-19/34)."""
     case = await _case_or_404(db, case_id)
     if case.claimed_by_id != admin.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "仅该事项认领管理员可查看详情")
@@ -174,7 +175,7 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
         }
         for m in case.messages
     ]
-    # 沟通资格参与方：问询通知对象，展示名称供事项页标注问询对象。
+    # Eligible communication participants: inquiry notification recipients, with display names for labeling the inquiry target on the case page.
     participant_ids = await case_service.case_participant_ids(db, case)
     participants = []
     if participant_ids:
@@ -188,7 +189,7 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
         ]
     data["participants"] = participants
 
-    # 附加上下文
+    # Additional context
     if case.product_id:
         product = await db.get(Product, case.product_id)
         data["product"] = None
@@ -259,7 +260,7 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
                 "status": report.status,
                 "result_confirmed": report.result_confirmed,
             }
-            # 举报目标内容（限必要范围展示）
+            # Reported target content (shown only to the necessary extent)
             from app.api.v1.admin.reports import target_snapshot
 
             data["report_target"] = await target_snapshot(db, report)
@@ -286,14 +287,15 @@ async def case_detail(case_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
 
 @router.post("/{case_id}/inquiry")
 async def send_inquiry(case_id: int, body: InquiryIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """发起问询：向全部有沟通资格的参与方发送问询通知（BR-26/33）。"""
+    """Start an inquiry: send inquiry notifications to all participants eligible for communication (BR-26/33)."""
     case = await _case_or_404(db, case_id)
-    # 待处理事项尚未进入认领者的处理上下文，直接按状态拒绝；其余状态先校验认领人，
-    # 避免非认领管理员借问询接口探测他人在办/已处置事项。
+    # A pending case has not entered any claimant's handling context, so reject by status
+    # directly; for other statuses validate the claimant first, preventing a non-claimant
+    # administrator from probing another administrator's active/processed cases through this endpoint.
     if case.status == CaseStatus.PENDING.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "仅处理中的事项可发起问询")
     await ensure_claimant(case, admin.id)
-    # 问询只在认领后的处理中阶段开放；disposed 已归档。
+    # Inquiries are open only in the processing stage after claiming; disposed cases are archived.
     if case.status == CaseStatus.DISPOSED.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置，不能重新发起问询")
     if case.status != CaseStatus.PROCESSING.value:
@@ -327,7 +329,7 @@ async def send_inquiry(case_id: int, body: InquiryIn, admin: CurrentAdmin, db: D
 
 @router.post("/{case_id}/messages")
 async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """管理员在事项沟通单回复结论/说明（BR-32/33）。"""
+    """Administrator replies with a conclusion/explanation in the case communication thread (BR-32/33)."""
     case = await _case_or_404(db, case_id)
     await ensure_claimant(case, admin.id)
     await case_service.add_case_message(
@@ -336,7 +338,7 @@ async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db
         kind=case_service.DisposalMessageKind.REPLY,
         content=body.content.strip(),
     )
-    # 统一按事项资格取接收人并去重，避免同一用户收到多条相同通知。
+    # Collect recipients uniformly by case eligibility and deduplicate them so no user receives duplicate notifications.
     recipients = await case_service.case_participant_ids(db, case)
     if recipients:
         from app.services.notifications import notify
@@ -359,7 +361,7 @@ async def admin_reply(case_id: int, body: CaseMessageIn, admin: CurrentAdmin, db
 
 @router.post("/{case_id}/dispose")
 async def dispose_case(case_id: int, body: DisposeIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """形成处置结论并留依据（BR-26）；具体处置动作由各专项接口执行。"""
+    """Record a disposal conclusion with a basis (BR-26); specific disposal actions are performed by the dedicated endpoints."""
     case = await case_service.lock_case_for_update(db, case_id)
     if case is None:
         raise HTTPException(404, '事项不存在')

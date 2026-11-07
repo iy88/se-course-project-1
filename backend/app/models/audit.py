@@ -1,7 +1,8 @@
-"""P3 登录与变更审计：独立、只追加的事件表（表名固定 audit_events）。
+"""P3 login and change audit: an independent, append-only event table (fixed name audit_events).
 
-成功业务变更与审计由调用方在同一 SQLAlchemy 事务中提交；本模型不提供更新/
-删除入口。表级 SELECT/INSERT 授权及撤销 UPDATE/DELETE/TRUNCATE 由迁移负责。
+Successful business changes and their audit rows are committed by the caller in the
+same SQLAlchemy transaction; this model exposes no update/delete entry points.
+Table-level SELECT/INSERT grants and revoked UPDATE/DELETE/TRUNCATE are handled by migrations.
 """
 
 from datetime import UTC, datetime
@@ -16,7 +17,7 @@ from app.db.session import Base
 
 
 class AuditEvent(Base, table=True):
-    """审计事件：字段范围为稳定契约，前后值只存脱敏后的必要字段。"""
+    """Audit event: the field set is a stable contract; before/after values contain only the necessary redacted fields."""
 
     __tablename__ = cast(Any, "audit_events")
     __table_args__ = (

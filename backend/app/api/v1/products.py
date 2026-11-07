@@ -1,4 +1,4 @@
-"""商品：发布、重提、编辑、上下架、搜索、详情、编辑历史（FR-02/03/09）。"""
+"""Products: publish, resubmit, edit, delist/relist, search, detail, and edit history (FR-02/03/09)."""
 
 from datetime import UTC, datetime
 from typing import Annotated, cast
@@ -74,7 +74,7 @@ async def _out(db: AsyncSession, product: Product, user: User, include_pending_c
     pending_tag_applications: list[PendingTagApplicationOut] = []
     decided_tag_applications: list[DecidedTagApplicationOut] = []
     if user.id == product.seller_id:
-        # 仅本人可见标签申请：pending 供前端枚举撤回 ID（R11），已处理项返回结果与原因。
+        # Tag applications visible only to the seller: pending ones let the frontend enumerate withdrawal IDs (R11); handled ones return results and reasons.
         applications = (
             await db.exec(
                 select(ProductTagApplication)
@@ -95,7 +95,7 @@ async def _out(db: AsyncSession, product: Product, user: User, include_pending_c
             select(ReviewRecord).where(col(ReviewRecord.product_id) == product.id).order_by(col(ReviewRecord.id).desc()).limit(1)
         )).first()
         if product.status == ProductStatus.PENDING_REVIEW.value:
-            # 认领前可撤回；认领后旧审核只能由认领管理员处理
+            # Withdrawable before claim; once claimed, only the claiming administrator may handle the old review
             can_withdraw_review = bool(latest_review and latest_review.result == ReviewResult.PENDING.value)
             if can_withdraw_review and latest_review and latest_review.case_id:
                 review_case = await db.get(DisposalCase, latest_review.case_id)
@@ -107,7 +107,7 @@ async def _out(db: AsyncSession, product: Product, user: User, include_pending_c
             and latest_review
             and latest_review.result == ReviewResult.WITHDRAWN.value
         ):
-            # 仅“认领前撤回审核”形成的已下架可重提，普通已下架已审商品走重新上架
+            # Only a delisted product created by "withdraw review before claim" can be resubmitted; a normally delisted reviewed product is relisted
             can_resubmit = True
     restriction_result = await _restriction_result(db, product)
     return ProductOut(
@@ -149,7 +149,7 @@ async def _restriction_result(db: AsyncSession, product: Product) -> str | None:
 
 @router.get("/{product_id}/restriction-result")
 async def restriction_result(product_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """原入口的匿名处置提示；不开放受限商品正文或私人事项。"""
+    """Anonymous disposal notice for the original route; does not expose restricted product content or private case details."""
     product = await db.get(Product, product_id)
     result = await _restriction_result(db, product) if product else None
     if not result:
@@ -191,7 +191,7 @@ async def _validate_image_keys(db: AsyncSession, image_keys: list[str], owner_id
 
 
 def _ensure_selectable_category(category: Category) -> None:
-    """停用标签不可被新发布/新关联选择；已关联的历史标签保留（4.16）。"""
+    """Disabled tags cannot be chosen for new publications/new links; already-linked historical tags are retained (4.16)."""
     if category.status != "active":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"所选标签已停用：{category.name}")
 
@@ -199,7 +199,7 @@ def _ensure_selectable_category(category: Category) -> None:
 async def _resolve_tags_for_submit(
     db: AsyncSession, product: Product, tags_in: list
 ) -> tuple[list[int], list[ProductTagApplication]]:
-    """返回(关联已有标签ID列表, 新标签申请列表)。至少一个已有标签或一个新申请（BR-12）。"""
+    """Return (linked existing tag IDs, new tag applications). At least one existing tag or one new application (BR-12)."""
     category_ids: list[int] = []
     applications: list[ProductTagApplication] = []
     for tag_in in tags_in:
@@ -245,9 +245,10 @@ async def publish_product(
     db: DbSession,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> ProductOut:
-    """发布：进入待审核并进入共享待处理池（BR-10、BR-34）；冻结禁发（D-50）。
+    """Publish: enter pending review and the shared pending pool (BR-10, BR-34); publishing is blocked while frozen (D-50).
 
-    可选 Idempotency-Key 与商品、审核、审计和事件同事务；未传时行为不变。
+    An optional Idempotency-Key shares the transaction with the product, review, audit,
+    and event rows; when omitted, behavior is unchanged.
     """
     key = idempotency_service.parse_key(idempotency_key)
     async with idempotency_service.guard(db, user.id, "product.publish", key, body.model_dump()) as idem:
@@ -284,7 +285,7 @@ async def publish_product(
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "图片已被回收，请重新上传"
             ) from None
-        # 当次审核内容快照 + 审核事项进入共享池
+        # Snapshot the content under review and put the review case into the shared pool
         content = await _snapshot_content(db, product)
         case = await case_service.create_case(
             db,
@@ -321,9 +322,10 @@ async def search(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> ProductSearchOut:
-    """在售搜索：关键词/多标签（全部匹配）/价格区间组合（BR-15）。
+    """Search listed products by keyword/multiple tags (all must match)/price range (BR-15).
 
-    D-45：显式 category_names 按当前主名及活跃别名解析；任一未知名称返回无匹配。
+    D-45: explicit category_names resolve against current primary names and active
+    aliases; any unknown name produces no matches.
     """
     if category_names:
         resolved_names = await product_service.resolve_category_names(db, category_names)
@@ -355,7 +357,7 @@ async def search(
 
 @router.get("/mine", response_model=list[ProductOut])
 async def my_products(user: CurrentUser, db: DbSession) -> list[ProductOut]:
-    """我的商品：覆盖全部状态及审核原因、待接受请求数（FR-12、4.18）。"""
+    """My products: all statuses plus review reasons and pending-acceptance request counts (FR-12, 4.18)."""
     result = await db.exec(
         select(Product).where(col(Product.seller_id) == user.id).order_by(col(Product.created_at).desc())
     )
@@ -368,10 +370,10 @@ async def detail(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在或不可见")
-    # 管理端商品预览：管理员可查看任意状态详情，不改变普通用户资格（评论等仍按原规则）。
+    # Admin product preview: administrators may view details in any status without changing regular-user eligibility (comments etc. still follow the original rules).
     visible = user.role == "admin" or product_service.is_detail_visible(user, product)
     if not visible and not product.display_restricted:
-        # D-43：本人曾有请求／交易的买方，结束后仍可看当前详情及之后变更
+        # D-43: a buyer who once had a request/trade can still see current details and later changes after it ends
         visible = await product_service.has_product_request_history(db, user.id, product.id)
     if not visible:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在或不可见")
@@ -380,7 +382,7 @@ async def detail(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
 
 @router.get("/{product_id}/edit-history", response_model=list[ProductEditHistoryOut])
 async def edit_history(product_id: int, user: CurrentUser, db: DbSession) -> list[ProductEditHistoryOut]:
-    """卖方看完整历史；买方看本人请求对应内容及之后变更；管理员限必要范围（4.18、D-43）。"""
+    """Sellers see full history; buyers see the content matching their own request and later changes; administrators are limited to the necessary scope (4.18, D-43)."""
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
@@ -401,11 +403,11 @@ async def edit_history(product_id: int, user: CurrentUser, db: DbSession) -> lis
         )).first()
         if first_trade is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "仅本人请求对应内容及之后变更有访问权")
-        # 请求结束后仍可查看该商品后续变更，但不开放请求前历史（D-43）
+        # After the request ends the buyer can still see later product changes, but not history from before the request (D-43)
         histories = [
             h for h in histories if h.created_at >= first_trade.created_at
         ]
-    # 在原有资格与时间范围过滤后，才为可见快照签发图片地址。
+    # Sign image URLs for visible snapshots only after the eligibility and time-range filters.
     editor_ids = {h.editor_id for h in histories}
     names = {}
     if editor_ids:
@@ -436,10 +438,11 @@ async def review_records(product_id: int, user: CurrentUser, db: DbSession) -> l
 
 
 async def _dispose_review_case_atomically(db: AsyncSession, case_id: int, *, now: datetime) -> bool:
-    """撤回与认领对同一事项的数据库条件竞争：仅 pending 且未认领的事项可被撤回。
+    """Database race between withdrawal and claiming the same case: only a pending, unclaimed case may be withdrawn.
 
-    UPDATE 的条件与处置结论在同一条语句中由数据库判定；失败时不产生任何业务写入。
-    synchronize_session="evaluate" 同步会话内可能存在的旧事项对象，避免其后续 flush 覆盖。
+    The database evaluates the UPDATE conditions and the disposal conclusion in one
+    statement; on failure no business write occurs. synchronize_session="evaluate"
+    refreshes any stale in-session case object so a later flush cannot overwrite it.
     """
     result = await db.exec(
         update(DisposalCase)
@@ -462,7 +465,7 @@ async def _dispose_review_case_atomically(db: AsyncSession, case_id: int, *, now
 
 @router.post("/{product_id}/withdraw-review", response_model=ProductOut)
 async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> ProductOut:
-    """D-46/TR-20：卖方在审核认领前撤回，商品置为已下架，旧审核事项失效但保留历史。"""
+    """D-46/TR-20: the seller withdraws before the review is claimed; the product becomes delisted and the old review case is closed but retained in history."""
     ensure_can_write(user)
     product = await trade_service.lock_product_for_update(db, product_id)
     if not product or product.seller_id != user.id:
@@ -478,7 +481,7 @@ async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> 
     if not review:
         raise HTTPException(status.HTTP_409_CONFLICT, "当前没有可撤回的待审核记录")
     now = datetime.now(UTC)
-    # 在修改商品/审核记录/申请/消息之前先与认领原子竞争同一事项；失败即整体回滚。
+    # Atomically race the claim on the same case before changing the product/review record/applications/messages; any failure rolls back everything.
     if review.case_id and not await _dispose_review_case_atomically(db, review.case_id, now=now):
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "审核事项已被管理员认领或已处置，不能再撤回")
@@ -487,7 +490,7 @@ async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> 
     product.reject_reason = None
     review.result = ReviewResult.WITHDRAWN.value
     review.reviewed_at = now
-    # 旧审核的标签申请一并结束，避免在后续新审核中被误批准
+    # Also close tag applications from the old review so they cannot be approved by mistake in a later review
     applications = (
         await db.exec(
             select(ProductTagApplication).where(
@@ -500,7 +503,7 @@ async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> 
         application.status = "withdrawn"
         application.decided_at = now
     if review.case_id:
-        # 原子更新后重新读取事项，避免使用更新前的旧 ORM 状态。
+        # Re-read the case after the atomic update instead of using stale pre-update ORM state.
         review_case = await db.get(DisposalCase, review.case_id, populate_existing=True)
         if review_case and review_case.status == CaseStatus.DISPOSED.value:
             await case_service.add_case_message(
@@ -528,7 +531,7 @@ async def withdraw_review(product_id: int, user: CurrentUser, db: DbSession) -> 
 async def resubmit(
     product_id: int, body: ProductUpdateIn, user: CurrentUser, db: DbSession
 ) -> ProductOut:
-    """TR-03/TR-21：审核拒绝或认领前撤回后的已下架商品可修改后重提，形成独立审核记录。"""
+    """TR-03/TR-21: a delisted product rejected in review or withdrawn before claim can be edited and resubmitted, creating a separate review record."""
     ensure_can_write(user)
     product = await trade_service.lock_product_for_update(db, product_id)
     if not product or product.seller_id != user.id:
@@ -574,7 +577,7 @@ async def resubmit(
             category = await db.get(Category, cid)
             if not category or category.deleted_at is not None:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, "所选标签不存在")
-            # 历史已关联的停用标签可继续保留，但不得新选择停用标签。
+            # Disabled tags already linked historically may remain, but disabled tags cannot be newly selected.
             if category.status != "active" and cid not in current_ids:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, f"所选标签已停用：{category.name}")
             db.add(ProductTag(product_id=product.id, category_id=cid))
@@ -606,7 +609,7 @@ async def resubmit(
 
 @router.patch("/{product_id}", response_model=ProductOut)
 async def edit_product(product_id: int, body: ProductUpdateIn, user: CurrentUser, db: DbSession) -> ProductOut:
-    """信息微调（BR-11/TR-04）：不二审、不暂停展示、不关闭请求；交易中禁改关键内容。"""
+    """Minor information edits (BR-11/TR-04): no second review, no display pause, no closing requests; key content cannot change during a trade."""
     ensure_can_write(user)
     product = await trade_service.lock_product_for_update(db, product_id)
     if not product or product.seller_id != user.id:
@@ -654,7 +657,7 @@ async def edit_product(product_id: int, body: ProductUpdateIn, user: CurrentUser
                 category = await db.get(Category, cid)
                 if not category or category.deleted_at is not None:
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, "所选标签不存在")
-                # 只允许保留历史已有关联的停用标签，不能新关联停用标签。
+                # Only historically linked disabled tags may remain; disabled tags cannot be newly linked.
                 if category.status != "active" and cid not in current_ids:
                     raise HTTPException(status.HTTP_400_BAD_REQUEST, f"所选标签已停用：{category.name}")
                 db.add(ProductTag(product_id=product.id, category_id=cid))
@@ -702,7 +705,7 @@ async def edit_product(product_id: int, body: ProductUpdateIn, user: CurrentUser
 
 @router.post("/{product_id}/delist", response_model=ProductOut)
 async def delist(product_id: int, user: CurrentUser, db: DbSession) -> ProductOut:
-    """主动下架（BR-09/14）：无未结束锁单交易；关闭待接受请求并注明原因；冻结禁下架（D-50）。"""
+    """Delist voluntarily (BR-09/14): no unfinished locking trade; close pending-acceptance requests with a reason; delisting is blocked while frozen (D-50)."""
     ensure_can_write(user)
     if await permissions.has_active_frozen_trade(db, user.id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "存在有效交易冻结，暂不能主动下架商品")
@@ -742,7 +745,7 @@ async def delist(product_id: int, user: CurrentUser, db: DbSession) -> ProductOu
 
 @router.post("/{product_id}/relist", response_model=ProductOut)
 async def relist(product_id: int, user: CurrentUser, db: DbSession) -> ProductOut:
-    """重新上架/继续上架（TR-08）：已下架、审核有效且当前账户及商品限制允许；冻结禁上架（D-50）。"""
+    """Relist/continue listing (TR-08): the product is delisted, its review is valid, and current account/product restrictions allow it; listing is blocked while frozen (D-50)."""
     ensure_can_write(user)
     if await permissions.has_active_frozen_trade(db, user.id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "存在有效交易冻结，暂不能上架或重新上架商品")

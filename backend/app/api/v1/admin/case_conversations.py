@@ -1,14 +1,16 @@
-"""管理员按认领事项必要范围读取会话（BR-19/27/34；SC-04-07、SC-06-04）。
+"""Administrators read conversations only to the extent necessary for a claimed case (BR-19/27/34; SC-04-07, SC-06-04).
 
-本模块只提供“明确事项 + 明确会话”的只读入口：不提供会话列表，不把管理员
-加入普通会话成员，也不改变任何一方的已读进度。可读取范围严格限于现有规则
-能够确定的两种关联：
+This module exposes only a read-only entry point for an "explicit case + explicit
+conversation": it provides no conversation list, does not add administrators as
+members of regular conversations, and does not change either party's read progress.
+Readable scope is strictly limited to the two relations current rules can determine:
 
-- 消息举报事项：仅被举报目标消息所在的那一个会话；
-- 交易争议／异常交易事项：仅事项直接关联交易的交易分支。
+- Message report case: only the single conversation containing the reported target message;
+- Trade dispute/abnormal trade case: only the trade branch of the trade directly linked to the case.
 
-商品审核、账户封禁及商品／评论／评价／用户举报等事项，现行规则没有授予
-私聊读取依据，统一拒绝；不因商品相同、审核历史或其他事项扩大访问范围。
+For product review, account ban, and product/comment/review/user report cases, current
+rules grant no private-chat access basis, so all are rejected; a shared product, review
+history, or other case never widens the access scope.
 """
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -22,14 +24,14 @@ from app.services.cases import ensure_claimant
 
 router = APIRouter(prefix="/admin/cases", tags=["admin-cases"])
 
-# 稳定审计契约：访问本身留痕，但不写入消息正文或用户资料。
+# Stable audit contract: the access itself is recorded, but message bodies and user profiles are not written.
 EVENT_ADMIN_CASE_CONVERSATION_READ = "admin.case_conversation_read"
 
 _TRADE_BRANCH_CASE_TYPES = (CaseType.TRADE_DISPUTE.value, CaseType.ABNORMAL_TRADE.value)
 
 
 async def _message_report_target(db, case: DisposalCase) -> tuple[int, int] | None:
-    """消息举报的（目标消息 ID，所属会话 ID）；其他举报没有可读会话。"""
+    """(target message ID, containing conversation ID) for a message report; other reports have no readable conversation."""
     if case.report_id is None:
         return None
     report = await db.get(Report, case.report_id)
@@ -42,7 +44,7 @@ async def _message_report_target(db, case: DisposalCase) -> tuple[int, int] | No
 
 
 async def _trade_branch_conversation_id(db, case: DisposalCase) -> int | None:
-    """事项直接关联交易的唯一分支；不按商品或用户组合推断其他分支。"""
+    """The single branch of the trade directly linked to the case; never infer other branches from a product or user combination."""
     if case.trade_id is None:
         return None
     trade = await db.get(Trade, case.trade_id)
@@ -68,11 +70,11 @@ async def read_case_conversation(
     before_id: int | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
 ) -> dict:
-    """按事项必要范围读取单个会话历史；只读，不推进已读、不发消息、不改成员。"""
+    """Read one conversation's history within the case's necessary scope; read-only, advancing no read state, sending no messages, and changing no members."""
     case = await db.get(DisposalCase, case_id)
     if case is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "事项不存在")
-    # 先校验认领归属：未认领或他人认领的管理员不进入任何关联解析。
+    # Validate claim ownership first: a case that is unclaimed or claimed by another administrator never enters any relation resolution.
     await ensure_claimant(case, admin.id)
 
     related_message_id: int | None = None
@@ -96,7 +98,7 @@ async def read_case_conversation(
             )
         relation = "trade_branch"
     else:
-        # 商品审核、账户封禁及其他举报类型没有私聊读取依据，明确拒绝。
+        # Product review, account ban, and other report types have no private-chat access basis and are rejected explicitly.
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "该事项类型不授予会话读取范围",
@@ -108,7 +110,7 @@ async def read_case_conversation(
     conversation = await db.get(Conversation, conversation_id)
     if conversation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "会话不存在")
-    # 二次确认解析结果仍指向当前会话本身；以后新增事项类型也不得跳过该检查。
+    # Confirm again that the resolved result still points to this conversation; future case types must not skip this check.
     if case.case_type in _TRADE_BRANCH_CASE_TYPES and (
         conversation.type != ConversationType.TRADE.value
         or conversation.trade_id != case.trade_id
@@ -125,7 +127,7 @@ async def read_case_conversation(
     page = rows[:limit]
     page.reverse()
 
-    # 访问本身留痕：与本次读取同事务提交；不写消息正文、成员资料或已读值。
+    # Record the access itself in the same transaction as this read; do not write message bodies, member profiles, or read values.
     await audit_service.record_event(
         db,
         EVENT_ADMIN_CASE_CONVERSATION_READ,

@@ -1,4 +1,4 @@
-"""商品相关 Pydantic 模型。"""
+"""Pydantic models for products."""
 
 from datetime import datetime
 
@@ -9,8 +9,8 @@ from app.models.enums import ProductStatus
 
 
 class TagIn(BaseModel):
-    category_id: int | None = None  # 已有标签
-    new_name: Text64 | None = Field(default=None)  # 或申请新标签
+    category_id: int | None = None  # existing tag
+    new_name: Text64 | None = Field(default=None)  # or request a new tag
 
 
 class ProductCreateIn(BaseModel):
@@ -18,30 +18,30 @@ class ProductCreateIn(BaseModel):
     description: NonBlank5000
     price_cents: int = Field(ge=0, le=100_000_000)
     image_keys: list[str] = Field(min_length=1)
-    tags: list[TagIn]  # 至少一个已有标签或一个新标签申请（BR-12）
+    tags: list[TagIn]  # at least one existing tag or one new tag application (BR-12)
 
 
 class ProductUpdateIn(BaseModel):
-    """信息微调（BR-11）：允许状态下编辑不二审；交易中禁改（由服务层拒绝）。"""
+    """Minor information edits (BR-11): edits in allowed states need no second review; edits during a trade are rejected by the service layer."""
 
     title: NonBlank120 | None = Field(default=None)
     description: NonBlank5000 | None = Field(default=None)
     price_cents: int | None = Field(default=None, ge=0, le=100_000_000)
     image_keys: list[str] | None = None
-    category_ids: list[int] | None = None  # 仅允许在已有标签间调整；新标签须重新走审核
-    # 待审核期间撤回随商品提交的新标签申请（BR-10、D-46）
+    category_ids: list[int] | None = None  # adjustment is only allowed among existing tags; new tags must go through review again
+    # withdraw new tag applications submitted with the product while it is pending review (BR-10, D-46)
     withdraw_tag_application_ids: list[int] | None = None
 
 
 class PendingTagApplicationOut(BaseModel):
-    """卖方本人待审核期间可撤回的新标签申请（D-46/R11）。"""
+    """A new tag application the seller may withdraw while it is pending review (D-46/R11)."""
 
     id: int
     requested_name: str
 
 
 class DecidedTagApplicationOut(BaseModel):
-    """卖方本人已处理的标签申请结果（含拒绝原因；历史记录原因可空）。"""
+    """Results of tag applications already handled for the seller (including rejection reasons; historical reasons may be null)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,26 +64,26 @@ class ProductOut(BaseModel):
     status: ProductStatus
     display_restricted: bool = False
     display_restricted_reason: str | None = None
-    # 受限商品的匿名公开结果（BR-25）：经原举报事项关联，仅确认后非空
+    # Anonymous public result for a restricted product (BR-25): linked through the original report and non-null only after confirmation
     restriction_result: str | None = None
     reject_reason: str | None = None
     image_keys: list[str] = []
     image_urls: list[str] = []
     tag_ids: list[int] = []
     tag_names: list[str] = []
-    # 仅卖方本人可见的当前有效待审标签申请；其他查看者恒为空
+    # Active pending tag applications visible only to the seller; always empty for other viewers
     pending_tag_applications: list[PendingTagApplicationOut] = []
-    # 仅卖方本人可见的已处理标签申请及原因；历史记录原因可为空
+    # Handled tag applications and reasons visible only to the seller; historical reasons may be null
     decided_tag_applications: list[DecidedTagApplicationOut] = []
     created_at: datetime
     updated_at: datetime
-    pending_request_count: int = 0  # 卖方视角：待接受请求数
-    can_withdraw_review: bool = False  # 卖方视角：待审核且未被认领，可撤回本次审核
-    can_resubmit: bool = False  # 卖方视角：审核拒绝或认领前撤回后的已下架商品可重提
+    pending_request_count: int = 0  # seller view: number of pending-acceptance requests
+    can_withdraw_review: bool = False  # seller view: pending review and unclaimed, so this review can be withdrawn
+    can_resubmit: bool = False  # seller view: a delisted product rejected in review or withdrawn before claim can be resubmitted
 
 
 class ProductCardOut(BaseModel):
-    """搜索/列表卡片。"""
+    """Search/list card."""
 
     id: int
     title: str
@@ -100,7 +100,7 @@ class ProductCardOut(BaseModel):
 class ProductSearchOut(BaseModel):
     items: list[ProductCardOut]
     total: int
-    message: str | None = None  # 无匹配商品提示（BR-15）
+    message: str | None = None  # no-matching-products hint (BR-15)
 
 
 class ProductEditHistoryOut(BaseModel):

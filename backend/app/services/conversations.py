@@ -1,4 +1,4 @@
-"""IM 会话辅助（C-07/C-08）：普通私聊复用、交易分支、系统消息、归档。"""
+"""IM conversation helpers (C-07/C-08): regular private-chat reuse, trade branches, system messages, and archiving."""
 from datetime import UTC, datetime
 
 from sqlmodel import col, select
@@ -10,7 +10,7 @@ from app.realtime.events import emit_events
 
 
 async def get_or_create_normal_conversation(db: AsyncSession, user_a: int, user_b: int) -> Conversation:
-    """同一对用户复用普通私聊（BR-18）。"""
+    """Reuse one regular private chat for the same pair of users (BR-18)."""
     low, high = sorted((user_a, user_b))
     result = await db.exec(
         select(Conversation).where(
@@ -28,7 +28,7 @@ async def get_or_create_normal_conversation(db: AsyncSession, user_a: int, user_
 
 
 async def create_trade_branch(db: AsyncSession, trade_id: int, buyer_id: int, seller_id: int) -> Conversation:
-    """每笔有效请求一个独立交易分支（BR-01/18）。"""
+    """One dedicated trade branch per active request (BR-01/18)."""
     low, high = sorted((buyer_id, seller_id))
     conversation = Conversation(
         type=ConversationType.TRADE.value,
@@ -51,10 +51,11 @@ async def send_system_message(db: AsyncSession, conversation_id: int, content: s
 async def send_text_message(
     db: AsyncSession, conversation: Conversation, sender_id: int, content: str
 ) -> Message:
-    """保存文字消息，并在同一事务内为双方写入 durable event。
+    """Save a text message and write durable events for both parties in the same transaction.
 
-    同时通知发送者本人的其他设备，避免多设备状态不一致；发送消息的 HTTP
-    请求不等待任何 socket。调用方（API）负责与审计一起提交或整体回滚。
+    The sender's other devices are notified too, avoiding multi-device inconsistency;
+    the message-sending HTTP request waits on no socket. The caller (API) commits or
+    rolls back everything together with the audit.
     """
     message = Message(conversation_id=conversation.id, sender_id=sender_id, kind=MessageKind.TEXT.value, content=content)
     db.add(message)
@@ -81,7 +82,7 @@ async def send_text_message(
 
 
 async def archive_trade_branch(db: AsyncSession, trade_id: int) -> None:
-    """请求/交易结束默认归档分支，历史保留（BR-18）。"""
+    """Archive the branch by default when a request/trade ends, retaining history (BR-18)."""
     result = await db.exec(
         select(Conversation).where(col(Conversation.type) == ConversationType.TRADE.value, col(Conversation.trade_id) == trade_id)
     )

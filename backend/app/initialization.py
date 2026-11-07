@@ -1,4 +1,4 @@
-"""持久部署初始化：明确创建管理员和可选分类，不执行自动化测试场景。"""
+"""Persistent deployment initialization: explicitly creates an administrator and optional categories; no automated test scenarios."""
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -20,7 +20,7 @@ from app.services.audit import record_event
 
 
 class InitialPasswordRequired(ConfigurationError):
-    """新管理员尚无密码；CLI应安全提示输入。"""
+    """The new administrator has no password; the CLI should prompt for it securely."""
 
 
 @dataclass(frozen=True)
@@ -35,22 +35,22 @@ def _email(value: str) -> str:
     try:
         normalized = validate_email(value.strip(), check_deliverability=False).normalized.lower()
     except EmailNotValidError:
-        raise ConfigurationError("管理员邮箱格式无效") from None
+        raise ConfigurationError("Invalid administrator email address") from None
     if len(normalized) > 254:
-        raise ConfigurationError("管理员邮箱过长")
+        raise ConfigurationError("Administrator email address is too long")
     return normalized
 
 
 async def initialize(settings: Settings, *, admin_email: str, password: str | None = None,
                      admin_name: str = "管理员", categories: Sequence[str] = ()) -> InitializationResult:
-    """独立事务：已有账户不提权、改密或解除限制；SQLite建表，PG先显式迁移。"""
+    """Standalone transaction: existing accounts are not elevated, re-passworded, or unrestricted; SQLite creates tables, PostgreSQL is migrated explicitly first."""
     email = _email(admin_email)
     try:
         rule = TextLimit(64, required=True)
         name = rule.validate(admin_name)
         names = list(dict.fromkeys(rule.validate(value) for value in categories))
     except ValueError as exc:
-        raise ConfigurationError(f"管理员显示名称或分类名称无效：{exc}") from None
+        raise ConfigurationError(f"Invalid administrator display name or category name: {exc}") from None
     settings.prepare_runtime_paths()
     options: dict[str, Any] = {}
     if settings.database_url.startswith("postgresql+asyncpg:"):
@@ -67,16 +67,16 @@ async def initialize(settings: Settings, *, admin_email: str, password: str | No
             created = admin is None
             if admin is None:
                 if password is None:
-                    raise InitialPasswordRequired("请输入新管理员的初始密码")
+                    raise InitialPasswordRequired("Enter the initial password for the new administrator")
                 if len(password) < 12 or len(password.encode("utf-8")) > 72:
-                    raise ConfigurationError("初始密码须至少12个字符，UTF-8编码不超过72字节")
+                    raise ConfigurationError("The initial password must be at least 12 characters and at most 72 bytes in UTF-8")
                 admin = User(email=email, display_name=name, password_hash=hash_password(password), role="admin", status="normal")
                 db.add(admin)
                 await db.flush()
                 await record_event(db, "system.admin_initialize", target_type="user", target_id=admin.id,
                                    actor_id=admin.id, actor_role="system", reason_code="explicit_cli", after={"role": "admin"})
             elif admin.role != "admin" or admin.status != "normal":
-                raise ConfigurationError("同邮箱账户已存在且不是正常管理员；拒绝提权或解除限制")
+                raise ConfigurationError("An account with this email already exists and is not a normal administrator; refusing to elevate it or lift restrictions")
             count_new = count_existing = 0
             for category_name in names:
                 existing = (await db.exec(select(Category).where(col(Category.name) == category_name, col(Category.deleted_at).is_(None)))).first()

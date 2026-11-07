@@ -3,9 +3,10 @@
 The manifest is private and binds a seed to its database and storage target. Existing
 business data is never cleared or adopted. Re-running preserves subsequent edits.
 
-场景内容、对象 key 与断言由 ``app.devtools.demo_scenarios`` 提供，持久 seed 与自动化
-回归测试共用同一份目录。manifest version 2 记录目录摘要，旧版本或目录变化会明确
-拒绝，不会在 ``complete=true`` 时静默跳过新增场景。
+Scenario content, object keys, and assertions come from ``app.devtools.demo_scenarios``,
+shared by the persistent seed and automated regression tests. Manifest version 2 records
+the catalog digest; old versions or catalog changes are rejected explicitly instead of
+silently skipping new scenarios when ``complete=true``.
 """
 from __future__ import annotations
 
@@ -48,11 +49,11 @@ def _load(path: Path, target: str) -> dict:
         require_private(path)
         data = json.loads(path.read_text(encoding='utf-8'))
         if data.get('version') != MANIFEST_VERSION:
-            raise ValueError('manifest 版本不支持；请使用新的 manifest 或按开发文档迁移，不接管旧版本')
+            raise ValueError('Unsupported manifest version; use a new manifest or migrate per the development docs; old versions are not adopted')
         if data.get('target') != target:
-            raise ValueError('manifest 版本或资源目标不匹配')
+            raise ValueError('Manifest version or resource target does not match')
         if data.get('catalog_signature') != signature:
-            raise ValueError('场景目录已更新，旧 manifest 不能跳过新增场景；请使用新 manifest 重新 seed')
+            raise ValueError('The scenario catalog has changed; the old manifest cannot skip new scenarios; re-seed with a new manifest')
         return data
     tag = secrets.token_hex(8)
     return {
@@ -132,7 +133,7 @@ def _object_models():
 
 
 async def _verify_existing(session, storage, data: dict, *, require_stored_objects: bool) -> None:
-    """校验已存在的清单对象；只读，不接管、不覆盖。"""
+    """Validate existing manifest objects; read-only, no adoption or overwrite."""
     from app.core.security import verify_password
     from app.models.stored_object import StoredObject
     from app.models.user import User
@@ -140,25 +141,25 @@ async def _verify_existing(session, storage, data: dict, *, require_stored_objec
     for key, account in data['accounts'].items():
         user = await session.get(User, account.get('id'))
         if user is None or user.email != account['email'] or user.role != account['role']:
-            raise ValueError(f'清单中的演示账号不存在或已更换（{key}）；不自动接管')
+            raise ValueError(f'Demo account in the manifest is missing or has changed ({key}); refusing automatic adoption')
         if not verify_password(account['password'], user.password_hash):
-            raise ValueError(f'清单中的演示账号密码已变更（{key}）；不自动接管')
+            raise ValueError(f'Demo account password in the manifest has changed ({key}); refusing automatic adoption')
     models = _object_models()
     for key, entry in data.get('objects', {}).items():
         if not isinstance(entry, dict) or 'id' not in entry or 'kind' not in entry:
-            raise ValueError(f'清单对象结构不支持（{key}）；请使用新的 manifest')
+            raise ValueError(f'Manifest object structure is unsupported ({key}); use a new manifest')
         model = models.get(entry['kind'])
         if model is None or await session.get(model, entry['id']) is None:
-            raise ValueError(f'清单中的业务记录不完整（{key}）；请人工核对')
+            raise ValueError(f'Business record in the manifest is incomplete ({key}); check manually')
     for name, entry in data['files'].items():
         if not storage.exists(entry['key']):
-            raise ValueError(f'清单中的文件缺失（{name}）；请人工检查存储')
+            raise ValueError(f'File in the manifest is missing ({name}); check storage manually')
         if require_stored_objects:
             registered = await session.get(StoredObject, entry['key'])
             if registered is None or registered.state != 'committed':
-                raise ValueError(f'清单中的对象登记不完整（{name}）；请人工核对')
+                raise ValueError(f'Object registration in the manifest is incomplete ({name}); check manually')
         if hashlib.sha256(storage.open(entry['key'])).hexdigest() != entry.get('sha256'):
-            raise ValueError(f'已登记演示文件内容不一致（{name}）；拒绝覆盖')
+            raise ValueError(f'Registered demo file content does not match ({name}); refusing to overwrite')
 
 
 async def _seed(settings, manifest: Path, data: dict) -> None:
@@ -208,7 +209,7 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
             # A retry can encounter an object uploaded before a lost response.
             pass
         if storage.open(key) != content:
-            raise ValueError('已登记演示文件内容不一致；拒绝覆盖')
+            raise ValueError('Registered demo file content does not match; refusing to overwrite')
     try:
         async with factory() as session:
             if data['complete']:
@@ -222,7 +223,7 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
                     any(user is None or user.id != account.get('id') or user.role != account['role'] or
                         not verify_password(account['password'], user.password_hash)
                         for user, account in zip(found_accounts, data['accounts'].values()))):
-                    raise ValueError('检测到部分或冲突账号；拒绝接管，请人工核对')
+                    raise ValueError('Partial or conflicting accounts detected; refusing adoption; check manually')
                 await _verify_existing(session, storage, data, require_stored_objects=True)
                 data['complete'] = True
                 write_private_json(manifest, data)
@@ -231,7 +232,7 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
             for key, account in data['accounts'].items():
                 found = (await session.exec(select(User).where(User.email == account['email']))).first()
                 if found is not None:
-                    raise ValueError(f'演示邮箱已存在（{key}）；拒绝接管')
+                    raise ValueError(f'Demo email already exists ({key}); refusing adoption')
             validate_catalog()
             now = datetime.now(UTC)
             await build(session, data=data, settings=settings, ensure_file=register_file, now=now)
@@ -249,13 +250,13 @@ async def _seed(settings, manifest: Path, data: dict) -> None:
 
 
 def verify_manifest(manifest: Path, settings) -> dict:
-    """只读校验入口：供 ``demo-verify`` 与测试复用，不修改业务状态。"""
+    """Read-only validation entry point shared by ``demo-verify`` and tests; does not change business state."""
     from app.devtools.demo_scenarios.checks import validate_catalog
 
     summary = validate_catalog()
     data = _load(manifest, _target(settings))
     if not data.get('complete'):
-        raise ValueError('manifest 尚未完成初始化')
+        raise ValueError('Manifest initialization is not complete')
     return {
         'accounts': len(data['accounts']),
         'objects': len(data['objects']),
@@ -291,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f'demo seed failed: {exc}', file=sys.stderr)
         return 1
     except Exception as exc:  # noqa: BLE001 - CLI boundary avoids disclosing resource credentials
-        print(f'demo seed failed: {type(exc).__name__}; 请检查迁移、配置及资源访问', file=sys.stderr)
+        print(f'demo seed failed: {type(exc).__name__}; check migrations, configuration, and resource access', file=sys.stderr)
         return 1
 
 

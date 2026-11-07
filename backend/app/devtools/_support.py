@@ -1,7 +1,8 @@
-"""测试 seed / 验收工具的服务指纹与共享安全辅助。
+"""Service fingerprint and shared safety helpers for test seed / acceptance tools.
 
-只被 ``app.devtools`` 使用，不参与服务启动。所有错误消息、报告和日志都避免
-输出连接串、密码、AK、JWT、签名 URL、响应正文或真实数据库内容。
+Used only by ``app.devtools`` and never loaded at service startup. All error messages,
+reports, and logs avoid exposing connection strings, passwords, access keys, JWTs,
+signed URLs, response bodies, or real database content.
 """
 
 from __future__ import annotations
@@ -71,23 +72,23 @@ _PLACEHOLDER_MARKERS = ("replace", "change-me", "changeme", "your-", "todo", "<"
 
 
 class DevtoolError(RuntimeError):
-    """可安全展示给操作者的错误；调用方只输出本类消息。"""
+    """An error that is safe to show to the operator; callers print only this class of message."""
 
 
 class GuardError(DevtoolError):
-    """环境或目标未通过测试保护校验。"""
+    """The environment or target failed test-protection validation."""
 
 
 class SeedError(DevtoolError):
-    """seed 账号状态或凭据文件不一致。"""
+    """Seed account state or credentials file is inconsistent."""
 
 
 class StorageProbeError(DevtoolError):
-    """受控存储落点核验失败。"""
+    """Controlled-storage location verification failed."""
 
 
 # ---------------------------------------------------------------------------
-# 环境选择与校验
+# Environment selection and validation
 # ---------------------------------------------------------------------------
 
 
@@ -96,10 +97,10 @@ def _env(environ: Mapping[str, str] | None) -> Mapping[str, str]:
 
 
 def check_inherited_overrides(environ: Mapping[str, str] | None = None) -> None:
-    """拒绝进程环境对连接/密钥/行为的覆盖；只报告变量名，不报告值。"""
+    """Reject process-environment overrides of connections, keys, or behavior; report names only, never values."""
     present = sorted(name for name in FORBIDDEN_INHERITED_ENV if name in _env(environ))
     if present:
-        raise GuardError("检测到继承的配置覆盖，拒绝运行：" + ", ".join(present))
+        raise GuardError("Inherited configuration overrides detected; refusing to run: " + ", ".join(present))
 
 
 def resolve_dev_env_file(
@@ -107,41 +108,41 @@ def resolve_dev_env_file(
     *,
     backend_root: Path = BACKEND_ROOT,
 ) -> Path:
-    """只允许后端目录的 .env.dev；显式 .env.prod 或其他路径一律拒绝。"""
+    """Allow only the backend-directory .env.dev; reject an explicit .env.prod or any other path."""
     expected = (backend_root / ".env.dev").resolve()
     raw = _env(environ).get("APP_ENV_FILE")
     if raw is None:
         if not expected.is_file():
-            raise GuardError("缺少后端 .env.dev 配置文件")
+            raise GuardError("Missing backend .env.dev configuration file")
         return expected
     if not str(raw).strip():
-        raise GuardError("APP_ENV_FILE 不能为空")
+        raise GuardError("APP_ENV_FILE must not be empty")
 
     path = Path(str(raw)).expanduser()
     if not path.is_absolute():
         path = backend_root / path
     resolved = path.resolve()
     if resolved == PROD_ENV_FILE.resolve() or resolved.name == ".env.prod":
-        raise GuardError("拒绝使用 .env.prod；测试 seed/验收只允许后端 .env.dev")
+        raise GuardError("Refusing to use .env.prod; test seed/acceptance may only use backend .env.dev")
     if resolved != expected:
-        raise GuardError("APP_ENV_FILE 必须指向后端 .env.dev")
+        raise GuardError("APP_ENV_FILE must point to the backend .env.dev")
     if not resolved.is_file():
-        raise GuardError("缺少后端 .env.dev 配置文件")
+        raise GuardError("Missing backend .env.dev configuration file")
     return resolved
 
 
 def resolve_explicit_dev_env_file(env_file: str | Path) -> Path:
-    """A 的 manage 已解析出的 env_file 也必须精确等于后端 .env.dev。"""
+    """An env_file already resolved by the manage command must also equal backend .env.dev exactly."""
     path = Path(env_file).expanduser()
     if not path.is_absolute():
         path = BACKEND_ROOT / path
     resolved = path.resolve()
     if resolved == PROD_ENV_FILE.resolve() or resolved.name == ".env.prod":
-        raise GuardError("拒绝使用 .env.prod；测试 seed/验收只允许后端 .env.dev")
+        raise GuardError("Refusing to use .env.prod; test seed/acceptance may only use backend .env.dev")
     if resolved != DEFAULT_ENV_FILE.resolve():
-        raise GuardError("env_file 必须指向后端 .env.dev")
+        raise GuardError("env_file must point to the backend .env.dev")
     if not resolved.is_file():
-        raise GuardError("缺少后端 .env.dev 配置文件")
+        raise GuardError("Missing backend .env.dev configuration file")
     return resolved
 
 
@@ -180,7 +181,7 @@ class DevConfig:
 
     @property
     def environment_fingerprint(self) -> str:
-        """由已选目标生成摘要，用于报告关联，不含秘密。"""
+        """Digest derived from the selected target for report correlation; contains no secrets."""
         db = self.database
         raw = repr((db.drivername, db.host, db.port, db.database, db.username,
                     self.storage_backend, self.oss_endpoint, self.oss_media_bucket,
@@ -203,49 +204,49 @@ def validate_dev_config_values(
     env_file: Path,
     require_storage: bool = True,
 ) -> DevConfig:
-    """纯值校验，供真实加载与离线 guard 测试共用。错误只含字段名。"""
+    """Pure value validation shared by real loading and offline guard tests. Errors contain field names only."""
     if env_file.name == ".env.prod" or env_file.resolve() == PROD_ENV_FILE.resolve():
-        raise GuardError("拒绝使用 .env.prod；测试 seed/验收只允许后端 .env.dev")
+        raise GuardError("Refusing to use .env.prod; test seed/acceptance may only use backend .env.dev")
 
     missing = [name for name in ("ENVIRONMENT", "DATABASE_URL", "JWT_SECRET", "JWT_ALGORITHM") if not str(values.get(name, "")).strip()]
     if missing:
-        raise GuardError("缺少配置字段：" + ", ".join(missing))
+        raise GuardError("Missing configuration fields: " + ", ".join(missing))
 
     environment = str(values["ENVIRONMENT"]).strip().lower()
     if environment not in {"dev", "test"}:
-        raise GuardError("ENVIRONMENT 必须是 dev 或 test")
+        raise GuardError("ENVIRONMENT must be dev or test")
 
     database_url = str(values["DATABASE_URL"]).strip()
     try:
         parsed = make_url(database_url)
     except (ArgumentError, ValueError):
-        raise GuardError("DATABASE_URL 无法解析") from None
+        raise GuardError("DATABASE_URL cannot be parsed") from None
     if parsed.drivername not in {"postgresql+asyncpg", "sqlite+aiosqlite"}:
-        raise GuardError("DATABASE_URL 必须使用 postgresql+asyncpg 或 sqlite+aiosqlite")
+        raise GuardError("DATABASE_URL must use postgresql+asyncpg or sqlite+aiosqlite")
     if parsed.drivername == "postgresql+asyncpg" and not all((parsed.username, parsed.database, parsed.host, parsed.password)):
-        raise GuardError("DATABASE_URL 缺少连接字段")
+        raise GuardError("DATABASE_URL is missing connection fields")
 
     oss_fields=("OSS_REGION","OSS_ENDPOINT","OSS_MEDIA_BUCKET","OSS_EVIDENCE_BUCKET","OSS_ACCESS_KEY_ID","OSS_ACCESS_KEY_SECRET")
     storage_backend = "oss" if any(str(values.get(field," ")).strip() for field in oss_fields) else "local"
     if require_storage:
         if storage_backend == "local" and not str(values.get("STORAGE_LOCAL_ROOT", "")).strip():
-            raise GuardError("本地存储需要 STORAGE_LOCAL_ROOT")
+            raise GuardError("Local storage requires STORAGE_LOCAL_ROOT")
         for name in ("OSS_MEDIA_BUCKET", "OSS_EVIDENCE_BUCKET"):
             if storage_backend == "oss" and not str(values.get(name, "")).strip():
-                raise GuardError(f"{name} 不能为空")
+                raise GuardError(f"{name} must not be empty")
         if storage_backend == "oss" and not str(values.get("OSS_ENDPOINT", "")).strip().lower().startswith("https://"):
-            raise GuardError("OSS_ENDPOINT 必须是 HTTPS 地址")
+            raise GuardError("OSS_ENDPOINT must be an HTTPS URL")
         if storage_backend == "oss" and _is_placeholder(str(values.get("OSS_REGION", ""))):
-            raise GuardError("OSS_REGION 不能为空或占位值")
+            raise GuardError("OSS_REGION must not be empty or a placeholder")
         if storage_backend == "oss" and _is_placeholder(str(values.get("OSS_ACCESS_KEY_ID", ""))):
-            raise GuardError("OSS_ACCESS_KEY_ID 不能为空或占位值")
+            raise GuardError("OSS_ACCESS_KEY_ID must not be empty or a placeholder")
         if storage_backend == "oss" and _is_placeholder(str(values.get("OSS_ACCESS_KEY_SECRET", ""))):
-            raise GuardError("OSS_ACCESS_KEY_SECRET 不能为空或占位值")
+            raise GuardError("OSS_ACCESS_KEY_SECRET must not be empty or a placeholder")
 
     if not str(values["JWT_SECRET"]).strip():
-        raise GuardError("JWT_SECRET 不能为空或占位值")
+        raise GuardError("JWT_SECRET must not be empty or a placeholder")
     if _is_placeholder(str(values["JWT_ALGORITHM"])):
-        raise GuardError("JWT_ALGORITHM 不能为空或占位值")
+        raise GuardError("JWT_ALGORITHM must not be empty or a placeholder")
 
     raw_timeout = str(values.get("OSS_TIMEOUT_SECONDS", "15") or "15")
     raw_retries = str(values.get("OSS_MAX_RETRIES", "2") or "2")
@@ -253,7 +254,7 @@ def validate_dev_config_values(
         timeout = float(raw_timeout)
         retries = int(raw_retries)
     except ValueError:
-        raise GuardError("OSS_TIMEOUT_SECONDS/OSS_MAX_RETRIES 格式错误") from None
+        raise GuardError("OSS_TIMEOUT_SECONDS/OSS_MAX_RETRIES have invalid format") from None
 
     return DevConfig(
         env_file=env_file,
@@ -281,7 +282,7 @@ def load_dev_config(
     env_file: str | Path | None = None,
     for_acceptance: bool = False,
 ) -> DevConfig:
-    """通过 A 的集中配置加载器读取 .env.dev，再校验开发环境与目标字段。"""
+    """Read .env.dev through the centralized configuration loader, then validate the dev environment and target fields."""
     check_inherited_overrides(environ)
     resolved_env_file = (
         resolve_explicit_dev_env_file(env_file)
@@ -294,8 +295,8 @@ def load_dev_config(
             ConfigurationError,
             load_settings,
             )
-    except ModuleNotFoundError as exc:  # pragma: no cover - A 未落地时给出明确依赖
-        raise GuardError(f"缺少配置依赖模块：{exc.name}") from None
+    except ModuleNotFoundError as exc:  # pragma: no cover - explicit dependency error until the config module is available
+        raise GuardError(f"Missing configuration dependency module: {exc.name}") from None
 
     try:
         settings = load_settings(resolved_env_file, for_acceptance=for_acceptance)
@@ -323,7 +324,7 @@ def load_dev_config(
 
 
 # ---------------------------------------------------------------------------
-# 数据库：只读核验 + seed 会话
+# Database: read-only verification + seed session
 # ---------------------------------------------------------------------------
 
 
@@ -356,14 +357,14 @@ async def probe_database(url: str, *, expect_test_target: bool = True) -> Databa
             await _prepare_connection(conn, url)
             row = (await conn.execute(text("SELECT current_database(), current_user"))).one()
     except SQLAlchemyError as exc:
-        raise GuardError(f"无法连接 test 数据库（{type(exc).__name__}）") from None
+        raise GuardError(f"Unable to connect to the test database ({type(exc).__name__})") from None
     finally:
         await engine.dispose()
 
     identity = DatabaseIdentity(database=str(row[0]), user=str(row[1]))
     parsed = make_url(url)
     if expect_test_target and identity != DatabaseIdentity(parsed.database or "", parsed.username or ""):
-        raise GuardError("数据库会话身份与所选配置不一致")
+        raise GuardError("Database session identity does not match the selected configuration")
     return identity
 
 
@@ -401,14 +402,14 @@ def is_undefined_table(exc: BaseException) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# JWT 服务指纹与 HTTP 客户端
+# JWT service fingerprint and HTTP client
 # ---------------------------------------------------------------------------
 
 
 def mint_fingerprint_token(
     config: DevConfig, *, user_id: int, role: str, run_id: str, ttl_seconds: int = 120
 ) -> str:
-    """本地签一个短时 JWT，由真实服务用自己的 .env.dev 密钥验证。"""
+    """Sign a short-lived JWT locally for the real service to verify with its own .env.dev key."""
     now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
@@ -426,7 +427,7 @@ def decode_fingerprint_token(config: DevConfig, token: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# 受控存储探针：只使用 B 的 StorageBackend 与本轮 key，不扫描桶
+# Controlled storage probe: uses only B's StorageBackend and this run's keys; never scans buckets
 # ---------------------------------------------------------------------------
 
 
@@ -441,29 +442,29 @@ class StorageProbe:
             from app.core.config import load_settings
             from app.storage.base import build_storage
         except ModuleNotFoundError as exc:  # pragma: no cover
-            raise StorageProbeError(f"缺少存储依赖模块：{exc.name}") from None
+            raise StorageProbeError(f"Missing storage dependency module: {exc.name}") from None
         try:
             settings = config.settings or load_settings(config.env_file)
-        except Exception as exc:  # noqa: BLE001 - 配置错误不输出值
-            raise StorageProbeError(f"存储配置加载失败（{type(exc).__name__}）") from None
+        except Exception as exc:  # noqa: BLE001 - configuration errors do not expose values
+            raise StorageProbeError(f"Storage configuration failed to load ({type(exc).__name__})") from None
         try:
             backend = build_storage(settings)
-        except Exception as exc:  # noqa: BLE001 - 仅转换为安全消息
+        except Exception as exc:  # noqa: BLE001 - convert to a safe message only
             from app.storage.base import StorageError
 
             if isinstance(exc, StorageError):
                 raise StorageProbeError(str(exc)) from None
-            raise StorageProbeError(f"存储客户端初始化失败（{type(exc).__name__}）") from None
+            raise StorageProbeError(f"Storage client initialization failed ({type(exc).__name__})") from None
         return cls(backend, settings)
 
     def bucket_name_for(self, key: str) -> str:
         try:
             from app.storage.base import bucket_role_for_namespace, namespace_for_key
         except ModuleNotFoundError as exc:  # pragma: no cover
-            raise StorageProbeError(f"缺少存储依赖模块：{exc.name}") from None
+            raise StorageProbeError(f"Missing storage dependency module: {exc.name}") from None
         try:
             role = bucket_role_for_namespace(namespace_for_key(key))
-        except Exception as exc:  # noqa: BLE001 - 存储层异常统一脱敏
+        except Exception as exc:  # noqa: BLE001 - sanitize all storage-layer exceptions
             raise StorageProbeError(str(exc)) from None
         return (
             str(self.settings.oss_media_bucket)
@@ -474,22 +475,22 @@ class StorageProbe:
     def exists(self, key: str) -> bool:
         try:
             return bool(self.backend.exists(key))
-        except Exception as exc:  # noqa: BLE001 - 存储层异常统一脱敏
+        except Exception as exc:  # noqa: BLE001 - sanitize all storage-layer exceptions
             raise self._translated(exc) from None
 
     def read(self, key: str) -> bytes:
         try:
             content = self.backend.open(key)
-        except Exception as exc:  # noqa: BLE001 - 存储层异常统一脱敏
+        except Exception as exc:  # noqa: BLE001 - sanitize all storage-layer exceptions
             raise self._translated(exc) from None
         if not isinstance(content, bytes) or len(content) > MAX_OBJECT_BYTES:
-            raise StorageProbeError("对象读取结果非法或超过 10MB")
+            raise StorageProbeError("Object read returned invalid content or exceeded 10MB")
         return content
 
     def delete(self, key: str) -> None:
         try:
             self.backend.delete(key)
-        except Exception as exc:  # noqa: BLE001 - 存储层异常统一脱敏
+        except Exception as exc:  # noqa: BLE001 - sanitize all storage-layer exceptions
             raise self._translated(exc) from None
 
     @staticmethod
@@ -501,11 +502,11 @@ class StorageProbe:
                 return StorageProbeError(str(exc))
         except ModuleNotFoundError:  # pragma: no cover
             pass
-        return StorageProbeError(f"存储操作失败（{type(exc).__name__}）")
+        return StorageProbeError(f"Storage operation failed ({type(exc).__name__})")
 
 
 # ---------------------------------------------------------------------------
-# 凭据文件权限与原子写入
+# Credentials file permissions and atomic writes
 # ---------------------------------------------------------------------------
 
 
@@ -563,7 +564,7 @@ def credentials_lock(path: Path) -> Iterator[None]:
 
 
 # ---------------------------------------------------------------------------
-# 运行记录
+# Run records
 # ---------------------------------------------------------------------------
 
 def new_run_id() -> str:
@@ -572,5 +573,5 @@ def new_run_id() -> str:
 
 def validate_run_id(run_id: str) -> str:
     if not _SAFE_ID_RE.fullmatch(run_id):
-        raise GuardError("--run-id 只允许字母、数字、点、下划线和短横线，长度 1—64")
+        raise GuardError("--run-id allows only letters, digits, dots, underscores, and hyphens, length 1-64")
     return run_id

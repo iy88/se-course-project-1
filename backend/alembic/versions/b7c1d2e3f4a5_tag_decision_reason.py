@@ -4,7 +4,8 @@ Revision ID: b7c1d2e3f4a5
 Revises: 7c1f2a9b4d6e
 Create Date: 2026-10-30 10:55:00.000000
 
-管理员逐申请拒绝标签时的业务说明。历史申请保持 NULL，不回填、不编造原因。
+Business explanation for an administrator rejecting a tag application one by one.
+Historical applications remain NULL; do not backfill or invent reasons.
 """
 
 from collections.abc import Sequence

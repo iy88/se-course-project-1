@@ -220,7 +220,7 @@ async def complete_lease(lease_id: str, user: CurrentUser, db: DbSession) -> dic
     await audit_service.record_event(db, "file.lease_complete", target_type="upload_lease", target_id=lease_id, actor_id=user.id)
     if lease.namespace == 'avatar':
         from app.api.v1.avatars import AvatarIn, submit_avatar_transaction
-        # 图片确认与待审事项同事务提交，重启或响应丢失时可按租约重试。
+        # Image confirmation and the pending review case commit in one transaction, so a restart or lost response can retry by lease.
         await db.flush()
         await submit_avatar_transaction(AvatarIn(key=lease.key), user, db, commit=False)
     commit_started = time.perf_counter()
@@ -233,7 +233,7 @@ async def complete_lease(lease_id: str, user: CurrentUser, db: DbSession) -> dic
 
 @router.get("/{key:path}")
 async def download(key: str, request: Request) -> Response:
-    """签名 URL 访问：配合 BR-22，未登录不可通过直链读取业务文件。"""
+    """Signed-URL access: per BR-22, unauthenticated users cannot read business files through direct links."""
     exp = request.query_params.get("exp", "")
     sig = request.query_params.get("sig", "")
     if not verify_file_signature(key, exp, sig):
@@ -245,7 +245,7 @@ async def download(key: str, request: Request) -> Response:
     except StorageError as exc:
         raise _download_storage_error(exc) from exc
 
-    # 上传时已校验真实类型；历史本地对象无法识别时退回扩展名映射。
+    # The real type was validated at upload; fall back to extension mapping when a historical local object cannot be identified.
     media_type = detect_image_type(content) or content_type_for_key(key)
     return Response(
         content=content,

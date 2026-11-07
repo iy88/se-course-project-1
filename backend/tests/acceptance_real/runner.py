@@ -1,7 +1,8 @@
-"""真实业务验收运行器（显式 opt-in）。
+"""Real-business acceptance runner (explicit opt-in).
 
-通过时不写测试报告；失败时仅写 ``var/acceptance-real/acceptance-failure-<run_id>.log``，
-只包含未通过检查、清理与调试信息。
+Writes no test report on success; on failure writes only
+``var/acceptance-real/acceptance-failure-<run_id>.log`` with failed checks, cleanup, and
+debug information.
 """
 
 from __future__ import annotations
@@ -116,7 +117,7 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
     from tests.acceptance_real.acceptance import ServerHandle
 
     if not _port_is_free(port):
-        raise CheckFailure(f"端口 {port} 已被占用；拒绝 kill 已有服务，请改 --port 或 --no-start-server")
+        raise CheckFailure(f"Port {port} is already in use; refusing to kill an existing service; change --port or use --no-start-server")
     clock_file = sandbox.root / f"clock-{run_id}.txt"
     clock_file.parent.mkdir(parents=True, exist_ok=True)
     clock_file.write_text("0\n", encoding="ascii")
@@ -157,7 +158,7 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
     last_error = ""
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise CheckFailure(f"测试服务启动失败（exit={process.returncode}）；日志仅保留退出码")
+            raise CheckFailure(f"Test service failed to start (exit={process.returncode}); only the exit code is retained")
         try:
             response = httpx.get(base_url + "/api/health", timeout=3, trust_env=False)
             ws_url = f"http://127.0.0.1:{ws_port}"
@@ -170,7 +171,7 @@ def start_server(*, port: int, run_id: str, sandbox: Any) -> ServerHandle:
         time.sleep(0.5)
     from tests.acceptance_real.processes import stop_server
     stop_server(process, clock_file)
-    raise CheckFailure(f"测试服务未在 45s 内健康（最后 {last_error}）")
+    raise CheckFailure(f"Test service did not become healthy within 45s (last error: {last_error})")
 
 
 def _checks_passed(checks: Sequence[CheckRecord]) -> bool:
@@ -183,14 +184,14 @@ def _call_index(calls: Sequence[Any]) -> dict[int, dict[str, Any]]:
 
 def _json_excerpt(value: Any, limit: int = 4000) -> str:
     rendered = json.dumps(value, ensure_ascii=False, default=str)
-    return rendered if len(rendered) <= limit else rendered[:limit] + "…（截断）"
+    return rendered if len(rendered) <= limit else rendered[:limit] + "… (truncated)"
 
 
 def _append_excerpts(lines: list[str], rows: Sequence[Mapping[str, Any]]) -> None:
     for row in rows[:50]:
         lines.append("- " + _json_excerpt(row, 600))
     if len(rows) > 50:
-        lines.append(f"- … 其余 {len(rows) - 50} 条省略")
+        lines.append(f"- … {len(rows) - 50} more rows omitted")
 
 
 def _append_check_debug(
@@ -201,33 +202,33 @@ def _append_check_debug(
     lines += ["", f"### [{check.get('status')}] `{check.get('check_id')}` {check.get('title')}", ""]
     meta = [f"{key}={check.get(key)}" for key in ("duration_ms", "role") if check.get(key) is not None]
     if meta:
-        lines.append("- " + "；".join(meta))
-    for key, label in (("precondition", "前置"), ("action", "动作"), ("expected", "期望"), ("note", "说明")):
+        lines.append("- " + "; ".join(meta))
+    for key, label in (("precondition", "Precondition"), ("action", "Action"), ("expected", "Expected"), ("note", "Note")):
         value = check.get(key)
         if value:
-            lines.append(f"- {label}：{value}")
+            lines.append(f"- {label}: {value}")
     if check.get("error"):
-        lines.append(f"- 错误：{check['error']}")
+        lines.append(f"- Error: {check['error']}")
     assertions = check.get("assertions") or []
     if assertions:
-        lines.append(f"- 断言：{len(assertions)} 条已通过（通过内容不写入日志）")
+        lines.append(f"- Assertions: {len(assertions)} passed (passing content is not written to the log)")
     calls: list[Mapping[str, Any]] = []
     for seq in check.get("call_seq") or []:
         call = call_index.get(int(seq))
         if call is not None:
             calls.append(call)
     if calls:
-        lines.append("- 实际调用：")
+        lines.append("- Actual calls:")
         for call in calls[:40]:
             lines.append(
                 f"  - #{call.get('seq')} {call.get('method')} {call.get('actual_path')} -> {call.get('status')} "
-                + f"（预期 {call.get('expected')}，{call.get('duration_ms')}ms，{call.get('role')}）"
+                + f" (expected {call.get('expected')}, {call.get('duration_ms')}ms, {call.get('role')})"
             )
         if len(calls) > 40:
-            lines.append(f"  - … 其余 {len(calls) - 40} 条调用省略")
+            lines.append(f"  - … {len(calls) - 40} more calls omitted")
     data = check.get("data") or {}
     if data:
-        lines += ["- 实际数据：", "```json", _json_excerpt(data), "```"]
+        lines += ["- Actual data:", "```json", _json_excerpt(data), "```"]
 
 
 def _failure_log(
@@ -241,50 +242,50 @@ def _failure_log(
     fatal: str | None,
     cleanup: Mapping[str, Any] | None,
 ) -> str:
-    lines = [f"# 验收失败日志 {run_id}", ""]
+    lines = [f"# Acceptance failure log {run_id}", ""]
     if report is not None:
         environment = report.get("environment") or {}
         source = report.get("runtime_source") or {}
         digest = str(source.get("source_digest_sha256") or "")
         lines += [
-            f"- 时间：{report.get('started_at')} — {report.get('finished_at')}",
-            f"- 目标：`{environment.get('base_url')}`（{environment.get('database')} / {environment.get('storage_backend')}；独立服务；端口 {environment.get('port')}）",
-            f"- 源码：HEAD `{source.get('git_head')}`，工作区脏={source.get('working_tree_dirty')}，摘要 `{digest[:16]}…`",
+            f"- Time: {report.get('started_at')} — {report.get('finished_at')}",
+            f"- Target: `{environment.get('base_url')}` ({environment.get('database')} / {environment.get('storage_backend')}; standalone service; port {environment.get('port')})",
+            f"- Source: HEAD `{source.get('git_head')}`, working tree dirty={source.get('working_tree_dirty')}, digest `{digest[:16]}…`",
         ]
     elif context:
         lines += [
-            f"- 时间：{context.get('started_at')}（中断，未正常结束）",
-            f"- 目标：`{context.get('base_url') or '未启动'}`（{context.get('database')} / {context.get('storage_backend')}；独立服务；端口 {context.get('port')}）",
+            f"- Time: {context.get('started_at')} (interrupted; did not finish normally)",
+            f"- Target: `{context.get('base_url') or 'not started'}` ({context.get('database')} / {context.get('storage_backend')}; standalone service; port {context.get('port')})",
         ]
-    lines.append(f"- 退出码：{exit_code}")
+    lines.append(f"- Exit code: {exit_code}")
     if report is not None:
-        lines.append(f"- 摘要：{report.get('summary')}")
+        lines.append(f"- Summary: {report.get('summary')}")
     if fatal:
-        lines += ["", "## 致命错误", "", f"- {fatal}"]
+        lines += ["", "## Fatal error", "", f"- {fatal}"]
     checks = list(report.get("checks") or []) if report is not None else list(partial_checks)
     failed = [check for check in checks if check.get("status") != PASS]
-    lines += ["", f"## 未通过检查（{len(failed)}）"]
+    lines += ["", f"## Failed checks ({len(failed)})"]
     if not failed:
-        lines.append("- 无未通过检查；失败来自运行或清理过程。")
+        lines.append("- No failed checks; the failure came from the run or cleanup process.")
     for check in failed:
         _append_check_debug(lines, check, call_index)
     if report is not None:
         notes = report.get("notes") or []
         if notes:
-            lines += ["", "## 备注", ""]
+            lines += ["", "## Notes", ""]
             _append_excerpts(lines, [{"note": note} for note in notes])
     if cleanup is not None:
-        lines += ["", "## 清理结果", "", f"- {json.dumps(cleanup, ensure_ascii=False)}"]
+        lines += ["", "## Cleanup result", "", f"- {json.dumps(cleanup, ensure_ascii=False)}"]
     return "\n".join(lines) + "\n"
 
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="真实业务验收")
+    parser = argparse.ArgumentParser(description="Real-business acceptance")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--inject-failure", choices=["after-files"], help=argparse.SUPPRESS)
-    parser.add_argument("--only", nargs="*", default=None, help="只跑指定组（调试）")
+    parser.add_argument("--only", nargs="*", default=None, help="Run only the specified groups (debugging)")
     return parser
 
 
@@ -302,7 +303,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
     run_id = validate_run_id(args.run_id or _run_id())
     sandbox.run_id = run_id
     if args.port == 8000:
-        print("acceptance fatal: 拒绝在 8000 启动验收测试服务；请用独立 --port（如 8101/8107）", file=sys.stderr)
+        print("acceptance fatal: refusing to start the acceptance test service on 8000; use a dedicated --port (e.g. 8101/8107)", file=sys.stderr)
         return 2
     ACCEPTANCE_ROOT.mkdir(parents=True, exist_ok=True)
     started_at = _now()
@@ -330,7 +331,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
         )
         if seed_summary.preserved:
             raise CheckFailure(
-                "seed 账号已被用户修改/封禁，拒绝重置；请使用新 --run-id："
+                "Seed accounts were modified/banned by a user; refusing to reset; use a new --run-id: "
                 + ",".join(seed_summary.preserved)
             )
         credentials = load_credentials(
@@ -339,7 +340,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             identities=identities_for_run(run_id),
         )
         if credentials is None:
-            raise CheckFailure("seed 未生成本轮凭据")
+            raise CheckFailure("seed did not produce credentials for this run")
         seed_fingerprint = credentials.fingerprint
         server = start_server(port=args.port, run_id=run_id, sandbox=sandbox)
         base_url = server.base_url
@@ -348,7 +349,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
         try:
             openapi_response = openapi_client.get("/openapi.json")
             if openapi_response.status_code != 200:
-                raise CheckFailure("无法读取 OpenAPI")
+                raise CheckFailure("Unable to read OpenAPI")
             openapi = openapi_response.json()
         finally:
             openapi_client.close()
@@ -361,7 +362,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             server=server,
             only=args.only,
         )
-        # 用运行 OpenAPI 替换初始空索引。
+        # Replace the initial empty index with the running OpenAPI.
         run.route_index = route_index
         run.api.route_index = route_index
         run.openapi = openapi
@@ -385,7 +386,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
                 run.rec.checks.append(
                     CheckRecord(
                         check_id=f"GROUP-{name}",
-                        title=f"场景组 {name} 未完成",
+                        title=f"Scenario group {name} did not complete",
                         status=FAIL,
                         note=None,
                         error=str(exc),
@@ -395,14 +396,14 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
                 run.rec.checks.append(
                     CheckRecord(
                         check_id=f"GROUP-{name}",
-                        title=f"场景组 {name} 异常",
+                        title=f"Scenario group {name} raised",
                         status=FAIL,
                         note=None,
                         error=f"{type(exc).__name__}: {exc}",
                     )
                 )
             if args.inject_failure == "after-files" and name == "files_products":
-                raise CheckFailure("注入失败：商品与对象写入后中止")
+                raise CheckFailure("Injected failure: aborting after product and object writes")
         run.finished_at = datetime.now(UTC)
         check_counts = run.rec.counts()
         checks_payload = [check.as_dict() for check in run.rec.checks]
@@ -435,7 +436,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
             "concurrency": run.concurrency,
             "clock_events": run.clock_events,
             "time_simulation": {
-                "method": "测试服务进程注入 UTC offset（文件控制，now()=真实UTC+offset）；未修改数据库时间字段；未缩短 7 天阈值",
+                "method": "Test service process injects a UTC offset (file-controlled; now()=real UTC+offset); database time fields are unchanged; the 7-day threshold is not shortened",
                 "clock_file_mode": "Windows private ACL" if sys.platform == "win32" else "0600",
                 "scan_interval_seconds": 2,
                 "production_rule_unchanged": True,
@@ -455,7 +456,7 @@ def _run(argv: list[str] | None, sandbox: Any, config: Any) -> int:
                 "call_index": _call_index(run.api.calls),
             }
         return 0 if full_pass else 1
-    except Exception as exc:  # noqa: BLE001 - 顶层只输出安全类型
+    except Exception as exc:  # noqa: BLE001 - top level prints only the safe type
         fatal = str(exc) if isinstance(exc, CheckFailure) else type(exc).__name__
         print(f"acceptance fatal: {fatal}", file=sys.stderr)
         if sandbox is not None:
@@ -483,7 +484,7 @@ def main(argv: list[str] | None = None) -> int:
     actual_args = list(sys.argv[1:] if argv is None else argv)
     if actual_args and actual_args[0] == "--recover":
         if len(actual_args) != 2:
-            print("用法：--recover <ownership.json>", file=sys.stderr)
+            print("Usage: --recover <ownership.json>", file=sys.stderr)
             return 2
         try:
             from app.devtools._support import load_dev_config

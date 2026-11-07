@@ -1,8 +1,10 @@
-"""SQLAlchemy 异步引擎与会话。
+"""SQLAlchemy async engine and sessions.
 
-引擎/会话工厂延迟到首次使用才读取配置。每个进程创建自己的引擎，退出时由
-生命周期入口显式 ``dispose_engine``；fork 后不能复用父进程连接。连接池大小、
-等待与 PostgreSQL 语句/锁超时按当前角色取自所选 dotenv。
+The engine/session factory is created lazily and reads configuration on first use.
+Each process creates its own engine and the lifecycle entry point explicitly calls
+``dispose_engine`` on exit; a child process must not reuse the parent's connections.
+Pool size, wait time, and PostgreSQL statement/lock timeouts come from the selected
+dotenv for the current role.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import get_settings
 from app.observability import install_sql_observers
 
-# 命名约定使循环外键、唯一约束和索引在所有方言下都有确定名称。
+# The naming convention gives cyclic foreign keys, unique constraints, and indexes deterministic names in every dialect.
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -69,7 +71,7 @@ def _engine_options(settings) -> dict[str, Any]:
 
 
 def get_engine() -> AsyncEngine:
-    """返回进程级异步引擎（首次访问才读取配置）。"""
+    """Return the process-level async engine (configuration is read on first access)."""
     global _engine
     if _engine is None:
         settings = get_settings()
@@ -101,7 +103,7 @@ async def dispose_engine() -> None:
 
 
 class _LazyEngine:
-    """兼容既有 ``from app.db.session import engine``，但不在导入期建引擎。"""
+    """Keep existing ``from app.db.session import engine`` imports working without creating the engine at import time."""
 
     def __getattr__(self, name: str) -> Any:
         return getattr(get_engine(), name)

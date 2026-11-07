@@ -1,4 +1,4 @@
-"""举报（C-12/BR-25）：提交、补充说明、我的举报与我收到的举报。"""
+"""Reports (C-12/BR-25): submission, supplements, my reports, and reports about me."""
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -40,10 +40,11 @@ class SupplementIn(BaseModel):
 
 
 async def _target_is_reportable(db, target_type: str, target_id: int) -> bool:
-    """按对象实际有效性判断可否新增举报。
+    """Decide whether a new report is allowed based on the object's actual validity.
 
-    逻辑删除的评论/评价及已撤销公开访问的商品不可作为新举报目标；其他类型
-    不做需求未规定的额外失效推断（如下架不等于对象不存在）。
+    Soft-deleted comments/reviews and products whose public access was revoked cannot
+    be new report targets; other types get no extra invalidation inference not required
+    by the specification (for example, delisting does not mean the object is absent).
     """
     if target_type == ReportTargetType.PRODUCT.value:
         product = await db.get(Product, target_id)
@@ -79,9 +80,9 @@ def _report_out(report: Report, include_reporter: bool = False) -> dict:
 
 @router.post("", status_code=201)
 async def create_report(body: ReportCreateIn, user: CurrentUser, db: DbSession) -> dict:
-    """提交举报：明确对象与原因，证据可选；未结举报在原事项补充（BR-25）。"""
+    """Submit a report: explicit target and reason, optional evidence; an open report is supplemented in the original case (BR-25)."""
     ensure_can_write(user)
-    # 已归档的同一用户+对象举报不可重新提交；先查终态/已关闭记录，兼容历史脏数据多条。
+    # An archived report from the same user for the same object cannot be resubmitted; check terminal/closed records first, tolerating multiple legacy dirty rows.
     closed_report_id = (await db.exec(
         select(col(Report.id))
         .where(
@@ -132,7 +133,7 @@ async def create_report(body: ReportCreateIn, user: CurrentUser, db: DbSession) 
         raise HTTPException(
             status.HTTP_409_CONFLICT, "证据已被回收，请重新上传"
         ) from None
-    # 解析被举报内容的责任用户，作为事项沟通对象（问询/申辩）
+    # Resolve the user responsible for the reported content as the case communication subject (inquiry/appeal)
     from app.api.v1.admin.reports import resolve_target_user_sync
 
     subject_user = await resolve_target_user_sync(db, report)
@@ -157,7 +158,7 @@ async def create_report(body: ReportCreateIn, user: CurrentUser, db: DbSession) 
 
 @router.post("/{report_id}/supplements")
 async def add_supplement(report_id: int, body: SupplementIn, user: CurrentUser, db: DbSession) -> dict:
-    """在原举报事项补充说明/证据；结案后归档不再接受（BR-25）。"""
+    """Supplement the original report case with detail/evidence; archived cases accept no more supplements (BR-25)."""
     ensure_can_write(user)
     report = await db.get(Report, report_id)
     if not report or report.reporter_id != user.id:
@@ -246,7 +247,7 @@ async def my_reports(user: CurrentUser, db: DbSession) -> list[dict]:
 
 @router.get("/received")
 async def reports_about_me(user: CurrentUser, db: DbSession) -> list[dict]:
-    """我收到的举报：仅列已实际处置事项，不显示举报人（4.18）。"""
+    """Reports about me: only matters actually handled, without revealing the reporter (4.18)."""
     my_products = (
         await db.exec(select(col(Product.id)).where(col(Product.seller_id) == user.id))
     ).all()

@@ -1,4 +1,4 @@
-"""商品响应与匿名处置提示回归，不访问外部服务。"""
+"""Regression coverage for product responses and anonymized disposition notices; no external services are accessed."""
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
@@ -12,12 +12,12 @@ from app.models import Product, User
 
 
 def _user(user_id: int = 2) -> User:
-    """仅提供 id 的当前用户替身，不触发依赖注入。"""
+    """Current-user stand-in exposing only an id, without triggering dependency injection."""
     return cast(User, SimpleNamespace(id=user_id))
 
 
 def _product(**attrs: object) -> Product:
-    """按需属性构造商品替身，避免访问数据库。"""
+    """Build a product stand-in from the attributes needed, avoiding database access."""
     return cast(Product, SimpleNamespace(**attrs))
 
 

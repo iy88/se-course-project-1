@@ -1,7 +1,7 @@
-"""管理员审计查询（P3）：仅管理员、分页、白名单字段，不提供写/改/删入口。
+"""Administrator audit queries (P3): administrator-only, paginated, allowlisted fields, with no write/update/delete entry points.
 
-app 角色对 audit_events 只有 SELECT/INSERT；本模块只读。保留期限未决定，
-不实现定时清理。
+The app role has only SELECT/INSERT on audit_events; this module is read-only. The
+retention period is undecided, so no scheduled cleanup is implemented.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ _MAX_PAGE_SIZE = 100
 _DEFAULT_PAGE_SIZE = 20
 
 
-# 分类查询与概览共用同一表达式，避免统计和明细口径不一致。
+# Category queries and the overview share one expression so statistics and details use the same definition.
 CATEGORY_PATTERNS = {
     'account': ('auth.%', 'user.%'),
     'product': ('product.%', 'admin.product%'),
@@ -42,7 +42,7 @@ def _category_expression():
 
 @router.get('/summary')
 async def audit_summary(admin: CurrentAdmin, db: DbSession, days: int = Query(default=7, ge=1, le=30)) -> dict:
-    """北京时间范围内数据库分组聚合；仅返回计数。"""
+    """Database grouping/aggregation within the Beijing-time range; returns counts only."""
     zone = ZoneInfo('Asia/Shanghai')
     today = datetime.now(zone).date()
     start = datetime.combine(today - timedelta(days=days - 1), time.min, tzinfo=zone).astimezone(UTC)
@@ -86,7 +86,7 @@ def _parse_datetime(value: str | None, *, end_of_day: bool = False) -> datetime 
 
 
 def _event_out(event: AuditEvent) -> dict:
-    """白名单输出；before/after 在写入时已脱敏。"""
+    """Allowlisted output; before/after are already redacted when written."""
     return {
         "event_id": event.event_id,
         "created_at": event.created_at.isoformat() if event.created_at else None,
@@ -152,7 +152,7 @@ async def list_audit_events(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=_MAX_PAGE_SIZE)] = _DEFAULT_PAGE_SIZE,
 ) -> dict:
-    """管理员分页查询审计事件；普通用户/匿名不可访问。"""
+    """Administrator paginated audit-event query; regular users/anonymous access is denied."""
     start = _parse_datetime(date_from)
     end = _parse_datetime(date_to, end_of_day=True)
     conditions = _filters(

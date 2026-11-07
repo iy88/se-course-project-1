@@ -1,4 +1,4 @@
-"""分类标签：登录用户可选标签/查看；管理员维护（4.16）。"""
+"""Category tags: signed-in users view/select tags; administrators maintain them (4.16)."""
 
 from datetime import UTC, datetime
 
@@ -28,7 +28,7 @@ async def get_active_category_or_404(db: AsyncSession, category_id: int) -> Cate
 
 @router.get("", response_model=list[CategoryOut])
 async def list_categories(db: DbSession, user: CurrentUser) -> list[CategoryOut]:
-    """登录用户可查看可选标签（含别名），供筛选与发布使用。"""
+    """Signed-in users can view selectable tags (including aliases) for filtering and publishing."""
     result = await db.exec(
         select(Category)
         .where(col(Category.deleted_at).is_(None))
@@ -53,7 +53,7 @@ async def list_categories(db: DbSession, user: CurrentUser) -> list[CategoryOut]
 
 @router.post("", response_model=CategoryOut)
 async def create_category(body: CategoryCreateIn, admin: CurrentAdmin, db: DbSession) -> CategoryOut:
-    """管理员主动创建公共标签（4.16）。"""
+    """Administrators create a public tag explicitly (4.16)."""
     name = body.name.strip()
     if not name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签名称不能为空")
@@ -79,7 +79,7 @@ async def create_category(body: CategoryCreateIn, admin: CurrentAdmin, db: DbSes
 
 @router.patch("/{category_id}", response_model=CategoryOut)
 async def update_category(category_id: int, body: CategoryUpdateIn, admin: CurrentAdmin, db: DbSession) -> CategoryOut:
-    """改主名：旧名保留为别名，当前展示新名（4.16）；可停用/启用。"""
+    """Rename: the old name is retained as an alias and the new name is displayed (4.16); the tag can be disabled/enabled."""
     category = await get_active_category_or_404(db, category_id)
     old_status = category.status
     changed_fields: list[str] = []
@@ -93,7 +93,7 @@ async def update_category(category_id: int, body: CategoryUpdateIn, admin: Curre
         )).first()
         if conflict or alias_conflict:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "目标名称已被使用")
-        # 旧主名转为别名
+        # Convert the old primary name into an alias
         old_alias = CategoryAlias(
             category_id=category.id, name=category.name, created_by_id=admin.id
         )
@@ -131,7 +131,7 @@ async def add_alias(category_id: int, body: CategoryAliasIn, admin: CurrentAdmin
     name = body.name.strip()
     if not name or name == category.name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "别名不能为空且不能与主名相同")
-    # 别名不得与其他分类当前主名冲突（4.16）；同名同义只能指向一个分类。
+    # An alias must not conflict with another category's current primary name (4.16); the same synonymous name may point to only one category.
     principal_conflict = (await db.exec(
         select(Category).where(col(Category.name) == name, col(Category.deleted_at).is_(None))
     )).first()
@@ -163,7 +163,7 @@ async def add_alias(category_id: int, body: CategoryAliasIn, admin: CurrentAdmin
 async def remove_alias_by_name(
     category_id: int, name: str, admin: CurrentAdmin, db: DbSession
 ) -> dict:
-    """按名称移除别名（管理端列表仅展示名称）。"""
+    """Remove an alias by name (the admin list exposes names only)."""
     await get_active_category_or_404(db, category_id)
     alias = (await db.exec(
         select(CategoryAlias).where(
@@ -188,7 +188,7 @@ async def remove_alias_by_name(
 
 @router.delete("/{category_id}/aliases/{alias_id}", response_model=CategoryOut)
 async def remove_alias(category_id: int, alias_id: int, admin: CurrentAdmin, db: DbSession) -> CategoryOut:
-    """移除别名不改变归属及历史（4.16）。"""
+    """Removing an alias changes neither ownership nor history (4.16)."""
     category = await get_active_category_or_404(db, category_id)
     alias = await db.get(CategoryAlias, alias_id)
     if not alias or alias.category_id != category_id or alias.removed_at is not None:
@@ -212,7 +212,7 @@ async def remove_alias(category_id: int, alias_id: int, admin: CurrentAdmin, db:
 
 @router.delete("/{category_id}")
 async def delete_category(category_id: int, admin: CurrentAdmin, db: DbSession) -> dict:
-    """逻辑删除：仅从未关联商品的标签可删（4.16），关联检查在服务层执行。"""
+    """Soft delete: only a tag never linked to a product may be deleted (4.16); the service layer performs the link check."""
     from sqlmodel import func
 
     from app.models import ProductTag

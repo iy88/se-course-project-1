@@ -1,7 +1,8 @@
-"""单方确认 7 天未回应超时识别（BR-05、TR-14）：系统转异常并冻结，进入共享池。
+"""Detect timeouts when a unilateral confirmation gets no response for 7 days (BR-05, TR-14): the system turns the trade abnormal, freezes it, and moves it to the shared pool.
 
-D-51：冻结中的交易绝不按自然墙钟累计；解冻后由 trade_wait 续算剩余时间。
-SQLite 可能返回 naive datetime，统一按 UTC 解释后再比较。
+D-51: frozen trades never accrue by wall-clock time; after unfreezing, trade_wait
+resumes the remaining time. SQLite may return naive datetimes, so interpret them
+consistently as UTC before comparing.
 """
 from datetime import UTC, datetime, timedelta
 
@@ -22,7 +23,7 @@ SYSTEM = "system"
 
 
 async def scan_once(db: AsyncSession | None = None, *, trade_ids: tuple[int, ...] | None = None) -> int:
-    """扫描全部超时交易并转异常；返回处理笔数。供后台循环与测试使用。"""
+    """Scan all timed-out trades and turn them abnormal; return the number processed. Used by the background loop and tests."""
     own_db = db is None
     if own_db:
         db = SessionLocal()
@@ -30,7 +31,7 @@ async def scan_once(db: AsyncSession | None = None, *, trade_ids: tuple[int, ...
         days = get_settings().trade_confirm_timeout_days
         threshold = timedelta(days=days)
         now = datetime.now(UTC)
-        # 只收集候选 ID；逐笔按商品→交易加锁后重新检查，避免使用扫描快照。
+        # Collect candidate IDs only; re-check each trade after locking in product→trade order instead of using the scan snapshot.
         statement = select(Trade.product_id, Trade.id).where(
             col(Trade.status) == TradeStatus.IN_PROGRESS.value,
             col(Trade.confirm_wait_started_at).is_not(None),
@@ -54,7 +55,7 @@ async def scan_once(db: AsyncSession | None = None, *, trade_ids: tuple[int, ...
                         and now - started >= threshold and len(set(confirmed)) == 1):
                     await _to_abnormal(db, trade)
                     processed += 1
-            # 每笔释放锁；多个扫描器和人工写入沿用相同顺序。
+            # Release locks per trade; multiple scanners and manual writes follow the same order.
             await db.commit()
         return processed
     finally:

@@ -1,11 +1,14 @@
-"""P3 审计服务：请求上下文、同事务成功事件、独立失败事件与敏感字段脱敏。
+"""P3 audit service: request context, same-transaction success events, standalone failure events, and sensitive-field redaction.
 
-设计要点：
-- 成功业务变更只调用 ``record_event`` 把事件加入当前 Session，不自行 commit；
-  调用方与业务写入一起 commit。审计 INSERT 失败会抛出并回滚业务。
-- ``record_standalone_failure`` 用请求同一 engine 的新会话独立提交，供登录失败/
-  拒绝操作使用；绝不读取 .env、打印异常正文或写入业务事务。
-- 中间件只处理 status >= 400，不得在业务 commit 后补写成功事件。
+Design notes:
+- A successful business change only calls ``record_event`` to add an event to the
+  current Session; it does not commit on its own. The caller commits it together with
+  the business writes. A failed audit INSERT raises and rolls back the business change.
+- ``record_standalone_failure`` commits independently in a new session on the request's
+  engine for failed logins/denied operations; it never reads .env, prints exception
+  bodies, or writes into the business transaction.
+- Middleware handles only status >= 400 and must never add success events after a
+  business commit.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ logger = logging.getLogger(__name__)
 AsyncBind = AsyncEngine | AsyncConnection
 
 # ---------------------------------------------------------------------------
-# 事件名（稳定契约；不要写自由文本或对象内容）
+# Event names (stable contract; never write free text or object content)
 # ---------------------------------------------------------------------------
 
 EVENT_AUTH_REGISTER: Final = "auth.register"
@@ -102,7 +105,7 @@ _ALLOWED_RESULTS: Final = {"success", "failure", "denied"}
 _ALLOWED_ROLES: Final = {"user", "admin", "system", "anonymous"}
 
 # ---------------------------------------------------------------------------
-# 请求上下文（contextvars；中间件在请求开始/结束处绑定与还原）
+# Request context (contextvars; middleware binds and restores it at request start/end)
 # ---------------------------------------------------------------------------
 
 _REQUEST_ID: ContextVar[str | None] = ContextVar("audit_request_id", default=None)
@@ -114,14 +117,14 @@ _AUDIT_BIND: ContextVar[AsyncBind | None] = ContextVar("audit_bind", default=Non
 
 
 class _Unset:
-    """区分“未传”与显式 None（后台/匿名 actor 需要显式 None）。"""
+    """Distinguish "not passed" from an explicit None (background/anonymous actors need an explicit None)."""
 
 
 _UNSET: Final = _Unset()
 
 
 def bind_request_context(*, request_id: str | None, ip: str | None, user_agent: str | None) -> dict[str, Token[Any]]:
-    """绑定一次请求的审计上下文；返回值交给 ``reset_request_context``。"""
+    """Bind the audit context for one request; pass the return value to ``reset_request_context``."""
     return {
         "request_id": _REQUEST_ID.set(_clean_request_id(request_id)),
         "actor_id": _ACTOR_ID.set(None),
@@ -136,7 +139,7 @@ def reset_request_context(tokens: dict[str, Token[Any]]) -> None:
     for token in reversed(list(tokens.values())):
         try:
             token.var.reset(token)
-        except (ValueError, RuntimeError):  # pragma: no cover - 防御性还原
+        except (ValueError, RuntimeError):  # pragma: no cover - defensive restore
             pass
 
 
@@ -158,7 +161,7 @@ def current_request_id() -> str | None:
 
 
 def set_audit_bind(bind: AsyncBind | None) -> None:
-    """由 DbSession 依赖把业务会话 engine 放入上下文，供失败审计开独立会话。"""
+    """The DbSession dependency puts the business-session engine into the context so failure audits can open an independent session."""
     _AUDIT_BIND.set(bind)
 
 
@@ -167,7 +170,7 @@ def current_audit_bind() -> AsyncBind | None:
 
 
 # ---------------------------------------------------------------------------
-# 脱敏
+# Redaction
 # ---------------------------------------------------------------------------
 
 _SENSITIVE_KEY_TOKENS: Final = (
@@ -253,10 +256,11 @@ def _sanitize_string(value: str) -> str:
 
 
 def sanitize_payload(value: Any, *, _depth: int = 0) -> Any:
-    """递归脱敏，保证可 JSON 序列化并限制深度/数量/总大小。
+    """Recursively redact so the result is JSON-serializable with bounded depth/count/size.
 
-    键名包含密码、哈希、token、AK、验证码、URL、聊天正文、邮箱等敏感词时整体
-    替换；字符串中的 URL/JWT/AK/邮箱也会被识别替换。
+    A value is replaced wholesale when its key contains sensitive words such as
+    password, hash, token, AK, verification code, URL, chat body, or email; URLs/JWTs/
+    AKs/emails inside strings are detected and replaced too.
     """
     if value is None or isinstance(value, bool):
         return value
@@ -285,14 +289,14 @@ def sanitize_payload(value: Any, *, _depth: int = 0) -> Any:
         if len(items) > _MAX_LIST:
             result.append("[truncated]")
         return result
-    # 不把任意对象 repr 写入审计，避免把模型/连接/异常正文带出。
+    # Never write arbitrary object reprs to the audit, avoiding leaking models/connections/exception bodies.
     return "[unserializable]"
 
 
 def _cap_payload(value: Any) -> Any:
     try:
         encoded = json.dumps(value, ensure_ascii=False, default=str)
-    except (TypeError, ValueError):  # pragma: no cover - sanitize 后理论上可序列化
+    except (TypeError, ValueError):  # pragma: no cover - should be serializable after sanitization
         return {"truncated": True}
     if len(encoded) <= _MAX_PAYLOAD_CHARS:
         return value
@@ -302,7 +306,7 @@ def _cap_payload(value: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# 请求元数据（IP/UA 只信显式配置代理并限长）
+# Request metadata (IP/UA trusted only from explicitly configured proxies and length-limited)
 # ---------------------------------------------------------------------------
 
 
@@ -330,7 +334,7 @@ def _clean_ip(value: str | None) -> str | None:
 def _clean_user_agent(value: str | None) -> str | None:
     if not value:
         return None
-    # 列宽 255；截断省略号占 1 字符，因此内容限制为 254。
+    # Column width is 255; the truncation ellipsis takes 1 character, so content is limited to 254.
     cleaned = _clean_string(value, limit=254)
     return cleaned or None
 
@@ -345,7 +349,7 @@ def _clean_request_id(value: str | None) -> str | None:
 
 
 def request_client_ip(request: Request) -> str | None:
-    """仅当直连地址属于 AUDIT_TRUSTED_PROXIES 时才信 X-Forwarded-For 首项。"""
+    """Trust the first X-Forwarded-For entry only when the direct address belongs to AUDIT_TRUSTED_PROXIES."""
     direct = _clean_ip(request.client.host if request.client else None)
     trusted = _trusted_proxies()
     if direct and any(ipaddress.ip_address(direct) in network for network in trusted):
@@ -361,7 +365,7 @@ def request_user_agent(request: Request) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# 事件构造与写入
+# Event construction and writing
 # ---------------------------------------------------------------------------
 
 _EVENT_TYPE_RE = re.compile(r"^[a-z][a-z0-9_.]{1,63}$")
@@ -445,7 +449,7 @@ def _build_event(
 
 
 def should_record_actor(actor_id: int | None, actor_role: str | None) -> bool:
-    """只留存可归属到账户或明确系统任务的事件。"""
+    """Retain only events attributable to an account or to an explicit system task."""
     return actor_role != 'anonymous' and (actor_id is not None or actor_role == 'system')
 
 
@@ -463,7 +467,7 @@ async def record_event(
     actor_role: str | None = None,
     request_id: str | None | _Unset = _UNSET,
 ) -> AuditEvent | None:
-    """可归属事件加入当前事务；匿名事件跳过，不改变业务事务。"""
+    """Add attributable events to the current transaction; skip anonymous events without changing the business transaction."""
     effective_actor = _ACTOR_ID.get() if isinstance(actor_id, _Unset) else actor_id
     effective_role = actor_role or _ACTOR_ROLE.get()
     if effective_actor is not None and actor_role is None and effective_role == 'anonymous':
@@ -502,11 +506,11 @@ async def record_standalone_failure(
     after: dict | None = None,
     request_id: str | None | _Unset = _UNSET,
 ) -> None:
-    """在独立短事务中记录失败/拒绝事件；不让审计故障影响原响应。"""
+    """Record failure/denied events in an independent short transaction; an audit failure must not affect the original response."""
     if bind is None or not should_record_actor(actor_id, actor_role):
         return
     if isinstance(bind, AsyncConnection):
-        # 若业务会话绑定在单独连接上，独立事务使用其 engine；不能用同一连接。
+        # If the business session is bound to a separate connection, the independent transaction uses its engine and must not reuse the same connection.
         bind = bind.engine
     try:
         marker = async_sessionmaker(bind, expire_on_commit=False, class_=AsyncSession)
@@ -527,12 +531,12 @@ async def record_standalone_failure(
             )
             session.add(event)
             await session.commit()
-    except Exception as exc:  # noqa: BLE001 - 审计失败不得泄露正文或改变原响应
+    except Exception as exc:  # noqa: BLE001 - an audit failure must not leak bodies or change the original response
         logger.warning("audit standalone write failed: %s", type(exc).__name__)
 
 
 # ---------------------------------------------------------------------------
-# 失败/拒绝事件分类（中间件使用；不读取请求体）
+# Failure/denied event classification (used by middleware; does not read request bodies)
 # ---------------------------------------------------------------------------
 
 _TRADE_ID_RE = re.compile(r"/(?:trades|admin/trades)/(\d+)")
@@ -569,7 +573,7 @@ def _target_from_path(path: str) -> tuple[str | None, str | None]:
 
 
 def classify_denied(method: str, path: str, status_code: int) -> dict[str, Any]:
-    """把 HTTP 失败映射为稳定审计事件，不把 URL query/请求体写入事件。"""
+    """Map an HTTP failure to a stable audit event without writing URL queries or request bodies into the event."""
     normalized_path = path.rstrip("/") or "/"
     result = "denied" if status_code in (401, 403) else "failure"
     reason = _status_reason(status_code)

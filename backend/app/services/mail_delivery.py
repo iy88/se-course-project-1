@@ -16,16 +16,18 @@ from app.core.private_files import exclusive_lock, require_private
 
 
 class _NoIPv4AddressError(OSError):
-    """SMTP 主机没有可用的 IPv4 地址（需要回退到系统默认解析）。"""
+    """The SMTP host has no usable IPv4 address (fall back to system-default resolution)."""
 
 
 def _connect_ipv4(host: str, port: int, timeout: float) -> socket.socket:
-    """只按 IPv4 解析并连接 SMTP 主机。
+    """Resolve and connect to the SMTP host over IPv4 only.
 
-    部分服务器的 IPv6 出站不可达时，stdlib 会按地址顺序逐个等待到 socket
-    超时（smtp.163.com 有 2 个 AAAA，可累积 2×SMTP_TIMEOUT），导致发信请求
-    远超前端超时但邮件最终仍送达。SMTP 发信不需要依赖 IPv6，这里显式只用
-    IPv4；若主机没有 IPv4 记录再回退到 stdlib 默认行为。
+    When IPv6 egress is unreachable on some servers, the stdlib waits on each address
+    in turn until the socket times out (smtp.163.com has 2 AAAA records, potentially
+    accumulating 2×SMTP_TIMEOUT), so a send request far exceeds the frontend timeout
+    even though the mail eventually arrives. SMTP sending does not need IPv6, so use
+    IPv4 explicitly here; fall back to stdlib default behavior only when the host has
+    no IPv4 record.
     """
     addresses = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
     if not addresses:
@@ -44,7 +46,7 @@ def _connect_ipv4(host: str, port: int, timeout: float) -> socket.socket:
 
 
 class _IPv4SMTP(smtplib.SMTP):
-    """STARTTLS 模式：连接阶段强制 IPv4。"""
+    """STARTTLS mode: force IPv4 during connection."""
 
     def _get_socket(self, host: str, port: int, timeout: float) -> socket.socket:
         if self.debuglevel > 0:
@@ -53,7 +55,7 @@ class _IPv4SMTP(smtplib.SMTP):
 
 
 class _IPv4SMTP_SSL(smtplib.SMTP_SSL):
-    """SSL 模式：连接阶段强制 IPv4，TLS 仍按原主机名校验证书。"""
+    """SSL mode: force IPv4 during connection while TLS still validates the certificate against the original hostname."""
 
     def _get_socket(self, host: str, port: int, timeout: float) -> socket.socket:
         if self.debuglevel > 0:

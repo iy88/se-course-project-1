@@ -1,11 +1,11 @@
-"""跨域业务限制辅助：交易冻结的用户级影响（BR-33、D-50）。"""
+"""Cross-domain business restriction helpers: user-level effects of trade freezes (BR-33, D-50)."""
 from sqlmodel import col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import Trade
 from app.models.enums import TradeStatus
 
-# 仍处于有效生命周期、可能被管理冻结的交易状态（已结束交易冻结自动解除）
+# Trade statuses still in an active lifecycle that may be administratively frozen (ended trades are unfrozen automatically)
 ACTIVE_TRADE_STATUSES = (
     TradeStatus.PENDING_ACCEPTANCE.value,
     TradeStatus.IN_PROGRESS.value,
@@ -15,10 +15,11 @@ ACTIVE_TRADE_STATUSES = (
 
 
 async def has_active_frozen_trade(db: AsyncSession, user_id: int) -> bool:
-    """账户是否存在任一有效交易冻结（双方任一方身份命中）。
+    """Whether the account has any active trade freeze (matching either party role).
 
-    D-50：仅交易冻结且账户未封禁时，也禁止发布新商品、主动下架、上架及重新上架；
-    无关商品合规编辑不因此禁止。封禁的禁写限制由 ensure_can_write 优先执行。
+    D-50: a trade freeze alone, even without an account ban, also blocks publishing new
+    products, voluntary delisting, listing, and relisting; unrelated compliant product
+    edits are not blocked. Ban write restrictions are enforced first by ensure_can_write.
     """
     result = await db.exec(
         select(col(Trade.id))
@@ -33,10 +34,11 @@ async def has_active_frozen_trade(db: AsyncSession, user_id: int) -> bool:
 
 
 async def frozen_trade_party_ids(db: AsyncSession) -> set[int]:
-    """任一有效冻结交易的双方用户 ID。
+    """User IDs of both parties for every actively frozen trade.
 
-    BR-33 的“暂停双方上架及交易操作”是用户级限制：被冻结用户在其他交易中
-    也不能推进交易。待办派生用此集合判断 self/other 是否受限。
+    BR-33's "suspend both parties' listing and trade actions" is a user-level
+    restriction: a frozen user cannot advance trades in other trades either. To-do
+    derivation uses this set to decide whether self/other is restricted.
     """
     result = await db.exec(
         select(col(Trade.buyer_id), col(Trade.seller_id)).where(

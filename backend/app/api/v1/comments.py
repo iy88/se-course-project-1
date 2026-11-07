@@ -1,4 +1,4 @@
-"""商品页评论（C-06/BR-17）：登录用户评论，卖方回复，作者删除本人评论。"""
+"""Product-page comments (C-06/BR-17): signed-in users comment, the seller replies, and authors delete their own comments."""
 
 from datetime import UTC, datetime
 
@@ -28,7 +28,7 @@ async def _check_product_commentable(db: AsyncSession, product_id: int) -> Produ
     product = await db.get(Product, product_id)
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "商品不存在")
-    # 公开可交易或交易中可评论；已下架或撤销公开访问禁止新增（BR-17）
+    # Comments are allowed on publicly tradable or in-transaction products; new comments are blocked once delisted or display-revoked (BR-17)
     if product.display_restricted or product.status not in (
         ProductStatus.LISTED.value,
         ProductStatus.IN_TRANSACTION.value,
@@ -86,7 +86,7 @@ async def list_comments(product_id: int, user: CurrentUser, db: DbSession) -> li
 
 @router.post("", status_code=201)
 async def add_comment(product_id: int, body: CommentIn, user: CurrentUser, db: DbSession) -> dict:
-    """登录用户评论公开可交易或交易中的商品（BR-17）。"""
+    """Signed-in users comment on publicly tradable or in-transaction products (BR-17)."""
     ensure_can_write(user)
     settings = get_settings()
     content = body.content.strip()
@@ -107,7 +107,7 @@ async def add_comment(product_id: int, body: CommentIn, user: CurrentUser, db: D
         reply_to_comment = await db.get(Comment, body.reply_to_comment_id)
         if not reply_to_comment or reply_to_comment.product_id != product_id or reply_to_comment.deleted_at:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "回复目标评论不存在")
-        # 仅该商品卖方可回复买方评论；不支持买方互相回复（BR-17）
+        # Only this product's seller may reply to buyer comments; buyer-to-buyer replies are unsupported (BR-17)
         if user.id != product.seller_id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "仅商品卖方可回复评论")
         if reply_to_comment.author_id == product.seller_id:
@@ -134,7 +134,7 @@ async def add_comment(product_id: int, body: CommentIn, user: CurrentUser, db: D
 
 @router.delete("/{comment_id}")
 async def delete_comment(product_id: int, comment_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """作者删除本人评论：逻辑删除保留历史（BR-17/4.18）。"""
+    """The author deletes their own comment: soft deletion retains history (BR-17/4.18)."""
     ensure_can_write(user)
     comment = await db.get(Comment, comment_id)
     if not comment or comment.product_id != product_id:

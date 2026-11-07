@@ -1,7 +1,8 @@
-"""把共享场景目录物化为持久演示数据。
+"""Materialize the shared scenario catalog into persistent demo data.
 
-只由 ``demo_seed`` 调用。构建器不自行判断“是否已初始化”，也不读取秘密；
-恢复、目标绑定、文件登记与上传由 CLI 层负责。
+Called only by ``demo_seed``. The builder does not decide whether initialization has
+already happened and never reads secrets; recovery, target binding, file registration,
+and upload are handled by the CLI layer.
 """
 
 from __future__ import annotations
@@ -98,7 +99,7 @@ class _Builder:
         self.messages: dict[str, Message] = {}
 
     # ------------------------------------------------------------------
-    # 基础工具
+    # Basic helpers
     # ------------------------------------------------------------------
     @overload
     def at(self, days_ago: float) -> datetime: ...
@@ -119,7 +120,7 @@ class _Builder:
         self.session.add(obj)
         await self.session.flush()
         if key in self.objects:
-            raise ValueError(f"演示对象 key 重复：{key}")
+            raise ValueError(f"Duplicate demo object key: {key}")
         self.objects[key] = {"id": int(getattr(obj, "id")), "kind": kind}
         return obj
 
@@ -139,11 +140,11 @@ class _Builder:
         if key.startswith("account_"):
             return self.users[key.removeprefix("account_")].id
         if key not in self.objects:
-            raise ValueError(f"演示对象尚未创建：{key}")
+            raise ValueError(f"Demo object has not been created: {key}")
         return int(self.objects[key]["id"])
 
     # ------------------------------------------------------------------
-    # 账号、分类、禁发范围
+    # Accounts, categories, prohibited scope
     # ------------------------------------------------------------------
     async def build_accounts(self) -> None:
         from app.core.security import hash_password
@@ -196,7 +197,7 @@ class _Builder:
             ))
 
     # ------------------------------------------------------------------
-    # 商品
+    # Products
     # ------------------------------------------------------------------
     async def _review_case(self, product: Product, spec, *, case_key: str) -> DisposalCase:
         if spec.result == "pending":
@@ -319,7 +320,7 @@ class _Builder:
             for comment_spec in spec.comments:
                 parent = self.comments.get(comment_spec.reply_to) if comment_spec.reply_to else None
                 if comment_spec.reply_to and parent is None:
-                    raise ValueError(f"评论回复目标不存在：{comment_spec.key}")
+                    raise ValueError(f"Comment reply target does not exist: {comment_spec.key}")
                 comment = Comment(
                     product_id=product.id,
                     author_id=self.user(comment_spec.author).id,
@@ -355,7 +356,7 @@ class _Builder:
         ))
 
     # ------------------------------------------------------------------
-    # 交易
+    # Trades
     # ------------------------------------------------------------------
     def _final_transition(self, spec, product: Product) -> catalog.TransitionSpec | None:
         buyer_key = spec.buyer
@@ -494,7 +495,7 @@ class _Builder:
             self._apply_trade_final_effects(trade, spec, product)
 
     def _apply_trade_final_effects(self, trade: Trade, spec, product: Product) -> None:
-        # 已结束交易：商品默认下架；结束同时解本笔冻结。
+        # Finished trade: the product is delisted by default and this trade's freeze is lifted.
         if spec.status in {"completed", "terminated"}:
             trade.frozen = False
             trade.frozen_at = None
@@ -567,7 +568,7 @@ class _Builder:
             message_ids.append(message.id)
         for user_key, count in spec.reads:
             if count <= 0 or count > len(message_ids):
-                raise ValueError(f"{spec.key} 已读位置越界")
+                raise ValueError(f"Read position for {spec.key} is out of range")
             self.session.add(ConversationRead(
                 conversation_id=conversation.id,
                 user_id=self.user(user_key).id,
@@ -576,7 +577,7 @@ class _Builder:
             ))
 
     # ------------------------------------------------------------------
-    # 举报、事项与限制
+    # Reports, cases, and restrictions
     # ------------------------------------------------------------------
     async def _evidence(self, spec: catalog.EvidenceSpec, *, owner_id: int, ref_type: str, ref_id: int, days_ago: float) -> str:
         content = _asset_bytes(spec.asset)
@@ -693,7 +694,7 @@ class _Builder:
                 self.user(spec.user).status = "banned"
 
     # ------------------------------------------------------------------
-    # 普通私聊、头像、通知
+    # Normal conversations, avatars, and notifications
     # ------------------------------------------------------------------
     async def build_normal_conversations(self) -> None:
         for spec in catalog.NORMAL_CONVERSATIONS:
@@ -742,7 +743,7 @@ class _Builder:
             case = self.cases[spec.case.key]
             case.avatar_key = entry["key"]
             if spec.slug in self.objects:
-                raise ValueError(f"演示对象 key 重复：{spec.slug}")
+                raise ValueError(f"Duplicate demo object key: {spec.slug}")
             self.objects[spec.slug] = {"id": user.id, "kind": "avatar"}
 
     async def build_notifications(self) -> None:
@@ -763,12 +764,12 @@ class _Builder:
             await self.flush_add(spec.key, notification, "notification")
 
     async def finish(self) -> dict[str, dict]:
-        # 所有场景/核验引用对象必须已物化，防止目录与构建器漂移。
+        # Every scenario/verification reference object must be materialized to prevent catalog/builder drift.
         from app.devtools.demo_scenarios.checks import object_inventory
 
         missing = sorted(set(object_inventory()) - set(self.objects))
         if missing:
-            raise ValueError("场景对象未构建：" + "、".join(missing[:10]))
+            raise ValueError("Scenario objects not built: " + ", ".join(missing[:10]))
         self.data["objects"] = self.objects
         self.data["object_kinds"] = {key: value["kind"] for key, value in self.objects.items()}
         self.data["scenarios"] = [scenario.key for scenario in catalog.SCENARIOS]

@@ -1,4 +1,4 @@
-"""IM 业务校验辅助：成员、封禁、双人冻结范围（BR-32/33/18）。"""
+"""IM business-validation helpers: membership, bans, and pair-freeze scope (BR-32/33/18)."""
 from sqlmodel import and_, col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -13,7 +13,7 @@ async def ensure_member(conversation: Conversation, user_id: int) -> None:
         raise PermissionError("非会话成员无权访问")
 
 async def pair_frozen(db: AsyncSession, user_a: int, user_b: int) -> bool:
-    """双方之间存在任一有效交易冻结：两人之间普通私聊与全部交易分支禁发（BR-33）。"""
+    """Either direction has an active trade freeze between the pair: sending is blocked in their regular private chat and all trade branches (BR-33)."""
     low, high = sorted((user_a, user_b))
     result = await db.exec(
         select(col(Trade.id)).where(
@@ -45,6 +45,6 @@ async def unread_count(db: AsyncSession, conversation_id: int, user_id: int, las
         .where(
             col(Message.conversation_id) == conversation_id,
             col(Message.id) > last_read_id,
-            or_(col(Message.sender_id) != user_id, col(Message.sender_id).is_(None)),  # 系统消息计入未读
+            or_(col(Message.sender_id) != user_id, col(Message.sender_id).is_(None)),  # count system messages as unread
         )
     )).first() or 0

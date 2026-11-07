@@ -1,8 +1,9 @@
-"""管理事项认领联动、列表筛选与统计参数校验回归。
+"""Regression coverage for admin case-claim synchronization, list filters, and stats parameter validation.
 
-覆盖：认领举报事项同步 report.status=processing（同一事务）；
-非举报事项认领不触碰举报；mine=true 仅返回本人认领事项；
-举报列表按 target_type 筛选；/admin/stats 非法日期参数返回 422 而非 500。
+Covers: claiming a report case syncs report.status=processing in the same transaction;
+claiming a non-report case leaves reports untouched; mine=true returns only the caller's
+claimed cases; report lists filter by target_type; invalid /admin/stats date parameters
+return 422 rather than 500.
 """
 
 import pytest
@@ -55,7 +56,7 @@ async def test_claim_report_case_syncs_processing(tmp_path):
             shared = await list_cases(admin2, db, page=1, page_size=20, case_status='processing', case_type=None, mine=False)
             assert [c['id'] for c in shared['items']] == [case.id]
 
-            # 第二名管理员认领被拒，举报状态不被回退或重复变更。
+            # A second admin claim is rejected, and the report status is neither rolled back nor changed twice.
             with pytest.raises(HTTPException) as exc:
                 await claim_case(case.id, admin2, db)
             assert exc.value.status_code == 409
@@ -87,7 +88,7 @@ async def test_claim_non_report_case_leaves_reports(tmp_path):
             await db.refresh(product_review)
             await db.refresh(report)
             assert product_review.status == 'processing'
-            # 无关联举报的认领不影响任何举报状态。
+            # Claiming a case with no linked report does not affect any report status.
             assert report.status == 'pending'
     finally:
         await engine.dispose()

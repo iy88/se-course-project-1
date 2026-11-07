@@ -1,10 +1,12 @@
-"""验收专用测试服务启动器：只读 .env.dev，向进程注入可受控 UTC 时钟。
+"""Acceptance-only test service launcher: reads .env.dev and injects a controllable UTC clock into the process.
 
-不修改业务代码：在导入 FastAPI 应用之前，把会读取墙上时间的服务/路由模块的
-``datetime`` 名称替换成 ``ClockDateTime``。``now()`` 返回
-``真实UTC + offset``，offset 从运行目录的普通文本文件读取，每步动态生效。
+Does not modify business code: before importing the FastAPI app, it replaces the
+``datetime`` name in service/route modules that read wall-clock time with
+``ClockDateTime``. ``now()`` returns ``real UTC + offset``; the offset is read from a plain
+text file in the run directory and takes effect dynamically at each step.
 
-用途仅限 7 天等待/冻结暂停场景；不修改数据库时间字段，不缩短 7 天规则。
+Use is limited to the 7-day wait/freeze-pause scenarios; database time fields are not
+modified and the 7-day rule is not shortened.
 """
 
 from __future__ import annotations
@@ -81,7 +83,7 @@ def _install_clock(clock_file: Path) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="启动验收专用测试服务（.env.dev + 受控时钟）")
+    parser = argparse.ArgumentParser(description="Start the acceptance-only test service (.env.dev + controlled clock)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8101)
     parser.add_argument("--ws-port", type=int, required=True)
@@ -94,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         clock_file.write_text("0\n", encoding="ascii")
         protect_private(clock_file)
 
-    # 仅允许本轮私有隔离目录内的临时配置，与时钟文件位于同一目录。
+    # Allow only temporary configuration inside this run's private isolated directory, alongside the clock file.
     selected = os.environ.get("APP_ENV_FILE", "")
     if not selected:
         raise RuntimeError("acceptance server requires a private dotenv")

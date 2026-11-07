@@ -1,4 +1,4 @@
-"""交易取消申请：被申请方可拒绝，只结束申请、不改变交易状态（#17 可选补强）。"""
+"""Trade cancellation requests: the counterparty may reject, which only ends the request without changing trade state (#17 optional hardening)."""
 
 import pytest
 from fastapi import HTTPException

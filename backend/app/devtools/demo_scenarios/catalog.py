@@ -1,16 +1,18 @@
-"""共享的持久演示场景目录（校园二手交易全流程）。
+"""Shared persistent demo scenario catalog (the full campus second-hand trading flow).
 
-这里是 demo-seed 与自动化测试的唯一业务事实来源：
+This is the single source of business truth for demo-seed and automated tests:
 
-- 账号、分类、商品、交易、约定、确认、举报、事项、限制与通知均在此声明；
-- 每个场景有稳定 key、中文标题、角色、初始状态、时间线、允许操作、预期、
-  US／UC／SC 映射和互斥分支；
-- seed 只按本目录落库，测试读取 seed 的真实记录并执行状态转换与拒绝路径，
-  不另外复制文案。
+- accounts, categories, products, trades, agreements, confirmations, reports, cases,
+  restrictions, and notifications are all declared here;
+- every scenario has a stable key, Chinese title, roles, initial state, timeline,
+  allowed actions, expected results, US/UC/SC mappings, and mutually exclusive branches;
+- the seed persists only this catalog, while tests read the seed's real records and
+  exercise state transitions and rejection paths without duplicating the text.
 
-内容均为虚构。商品描述包含使用时间、成色、缺陷、配件、交付地点与时间；不写
-真实手机号、微信、住址等隐私信息。对话中的付款/交付均为当事人约定，不代表
-平台托管或平台认定。
+All content is fictional. Product descriptions cover usage time, condition, defects,
+accessories, and delivery place/time; no real phone numbers, WeChat IDs, addresses, or
+other private data are written. Payments/deliveries in conversations are arrangements
+between the parties, not platform escrow or platform determination.
 """
 
 from __future__ import annotations
@@ -46,7 +48,7 @@ from app.devtools.demo_scenarios.model import (
 CATALOG_VERSION = 2
 
 # ---------------------------------------------------------------------------
-# 身份与基础资料
+# Identities and basic records
 # ---------------------------------------------------------------------------
 
 ACCOUNTS: tuple[AccountSpec, ...] = (
@@ -93,7 +95,7 @@ PROHIBITED: tuple[ProhibitedSpec, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# 商品：待审、拒绝重提、撤回重提、标签、编辑、下架、受限
+# Products: pending review, rejected resubmission, withdrawn resubmission, tags, edits, delisting, restriction
 # ---------------------------------------------------------------------------
 
 PRODUCTS: tuple[ProductSpec, ...] = (
@@ -408,7 +410,7 @@ PRODUCTS: tuple[ProductSpec, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# 交易：竞争请求、拒绝撤回、多轮约定、确认、完成、争议、取消、超时、限制
+# Trades: competing requests, rejection/withdrawal, multi-round agreements, confirmation, completion, disputes, cancellation, timeout, restrictions
 # ---------------------------------------------------------------------------
 
 TRADES: tuple[TradeSpec, ...] = (
@@ -976,7 +978,7 @@ TRADES: tuple[TradeSpec, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# 举报核查：商品/评论/消息/评价/用户，待核查、问询、处置与匿名结果
+# Report review: product/comment/message/review/user targets, pending review, inquiry, disposition, and anonymized results
 # ---------------------------------------------------------------------------
 
 REPORTS: tuple[ReportSpec, ...] = (
@@ -1169,7 +1171,7 @@ REPORTS: tuple[ReportSpec, ...] = (
     ),
 )
 
-# 封禁与限制：一个账户的旧封禁已解除、当前封禁仍生效；另一个账户叠加交易冻结。
+# Bans and restrictions: one account has an old lifted ban and an active ban; another has an additional trade freeze.
 RESTRICTIONS: tuple[RestrictionSpec, ...] = (
     RestrictionSpec("restriction_ban_old", "banned", "发布违规内容且未在提醒后修改", "历史处置", "case_ban_old", "admin", 25,
                     status="lifted", lifted_by="admin", lift_reason="首次违规，完成整改后解除", lifted_days_ago=20),
@@ -1205,7 +1207,7 @@ CASES: tuple[CaseSpec, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# 普通私聊、通知与头像
+# Normal direct messages, notifications, and avatars
 # ---------------------------------------------------------------------------
 
 NORMAL_CONVERSATIONS: tuple[NormalConversationSpec, ...] = (
@@ -1307,7 +1309,7 @@ NOTIFICATIONS: tuple[NotificationSpec, ...] = (
 )
 
 # ---------------------------------------------------------------------------
-# 场景目录：一条场景一个现场起点，互斥分支使用不同对象
+# Scenario catalog: one live start per scenario; mutually exclusive branches use different objects
 # ---------------------------------------------------------------------------
 
 US_ALL = tuple(f"US-{index:02d}" for index in range(1, 15))
@@ -1949,7 +1951,7 @@ def scenario_by_key(key: str) -> ScenarioSpec:
 
 
 def catalog_signature() -> str:
-    """稳定的目录摘要：任何账号、商品、交易、举报、通知或场景变化都会改变。"""
+    """Stable catalog digest: any account, product, trade, report, notification, or scenario change alters it."""
     import hashlib
     import json
     from dataclasses import asdict

@@ -1,4 +1,4 @@
-"""举报管理（C-12/BR-25/26）：核查、结论与处置动作、匿名公开结果。"""
+"""Report management (C-12/BR-25/26): verification, conclusions and disposal actions, and anonymous public results."""
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -35,15 +35,15 @@ class ReportActionsIn(BaseModel):
 
 
 class ReportDecisionIn(BaseModel):
-    outcome: str = Field(pattern="^(unfounded|handled)$")  # 无法认定/不予处理 或 认定违规并处置
+    outcome: str = Field(pattern="^(unfounded|handled)$")  # cannot be established/no action taken, or violation established and handled
     reason: NonBlank500
-    public_summary: Text500 | None = Field(default=None)  # 匿名公开的结果说明
+    public_summary: Text500 | None = Field(default=None)  # anonymous public result description
     basis: Text500 | None = Field(default=None)
     actions: ReportActionsIn = ReportActionsIn()
 
 
 async def target_snapshot(db, report: Report) -> dict | None:
-    """举报对象内容快照（限认领事项必要范围，BR-19）。"""
+    """Snapshot of the reported target content (limited to the scope necessary for the claimed case, BR-19)."""
     ttype, tid = report.target_type, report.target_id
     if ttype == "product":
         product = await db.get(Product, tid)
@@ -110,7 +110,7 @@ async def _report_case(db, case_id: int, admin) -> tuple[DisposalCase, Report]:
 
 
 async def resolve_target_user_sync(db, report: Report) -> User | None:
-    """被举报内容的责任用户（封禁对象）。"""
+    """User responsible for the reported content (the ban target)."""
     ttype, tid = report.target_type, report.target_id
     if ttype == "user":
         return await db.get(User, tid)
@@ -132,7 +132,7 @@ async def resolve_target_user_sync(db, report: Report) -> User | None:
 
 
 async def _resolve_related_trades(db, report: Report, case: DisposalCase) -> list[Trade]:
-    """违规涉及的交易（冻结对象）。"""
+    """Trades involved in the violation (the freeze targets)."""
     trades: list[Trade] = []
     if case.trade_id:
         trade = await db.get(Trade, case.trade_id)
@@ -159,7 +159,7 @@ async def _resolve_related_trades(db, report: Report, case: DisposalCase) -> lis
                 trade = await db.get(Trade, conversation.trade_id)
                 if trade:
                     trades.append(trade)
-    # 去重
+    # Deduplicate
     seen: set[int] = set()
     unique: list[Trade] = []
     for trade in trades:
@@ -214,7 +214,7 @@ async def list_reports(
 
 @router.post("/cases/{case_id}/decision")
 async def decide_report(case_id: int, body: ReportDecisionIn, admin: CurrentAdmin, db: DbSession) -> dict:
-    """举报核查结论（BR-26/DT-05）：不予处理不告知被举报人；实际处置告知受影响者。"""
+    """Report verification conclusion (BR-26/DT-05): no action means the reported user is not told; actual disposal notifies affected users."""
     case, report = await _report_case(db, case_id, admin)
     if case.status == CaseStatus.DISPOSED.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "该事项已处置")
@@ -247,7 +247,7 @@ async def decide_report(case_id: int, body: ReportDecisionIn, admin: CurrentAdmi
         await db.commit()
         return {"detail": "已记录不予处理并通知举报人"}
 
-    # 认定违规并处置
+    # Violation established and handled
     actions = body.actions
     report.status = ReportStatus.HANDLED.value
     report.result_confirmed = True
@@ -311,7 +311,7 @@ async def decide_report(case_id: int, body: ReportDecisionIn, admin: CurrentAdmi
     )
     await case_service.dispose_case(db, case, conclusion="认定违规并处置", reason=body.reason, basis=body.basis or f"举报#{report.id}")
 
-    # 受影响者告知（隐去举报人身份）；举报人获结果通知
+    # Notify affected users (without revealing the reporter); the reporter receives the result notification
     if affected_users:
         await notify(
             db, sorted(affected_users), "disposal", "平台处置通知",

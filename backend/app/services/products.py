@@ -1,4 +1,4 @@
-"""商品域服务：快照、可见性、编辑历史、变更通知、搜索条件。"""
+"""Product-domain services: snapshots, visibility, edit history, change notifications, and search conditions."""
 from typing import cast
 
 from sqlalchemy.orm import QueryableAttribute, selectinload
@@ -39,7 +39,7 @@ async def load_product_images(db: AsyncSession, product_id: int) -> list[Product
 
 
 async def snapshot_content(db: AsyncSession, product: Product) -> dict:
-    """按当前持久内容生成审核快照（管理员提交结论时刷新为最新内容，D-46）。"""
+    """Build a review snapshot from current persisted content (refreshed to the latest content when an administrator submits a conclusion, D-46)."""
     images = await load_product_images(db, product.id)
     tags = await load_product_tags(db, product.id)
     return product_content_dict(product, [i.file_key for i in images], [t.name for t in tags])
@@ -56,7 +56,7 @@ async def load_product_tags(db: AsyncSession, product_id: int) -> list[Category]
 
 
 def is_detail_visible(user: User, product: Product) -> bool:
-    """公开详情资格（BR-14/15、4.10）：违规撤销公开优先；已下架不向普通第三方开放。"""
+    """Public detail eligibility (BR-14/15, 4.10): a display revocation for a violation takes precedence; a delisted product is not exposed to ordinary third parties."""
     if user.id == product.seller_id:
         return True
     if product.display_restricted:
@@ -65,7 +65,7 @@ def is_detail_visible(user: User, product: Product) -> bool:
 
 
 def is_favorite_valid(product: Product) -> bool:
-    """收藏有效资格（BR-16/D-44）：公开可交易或交易中且未撤销公开；不复用历史详情资格。"""
+    """Favorite eligibility (BR-16/D-44): publicly tradable or in a transaction, with display not revoked; does not reuse historical detail eligibility."""
     return (not product.display_restricted) and product.status in (
         ProductStatus.LISTED.value,
         ProductStatus.IN_TRANSACTION.value,
@@ -73,7 +73,7 @@ def is_favorite_valid(product: Product) -> bool:
 
 
 async def has_product_request_history(db: AsyncSession, user_id: int, product_id: int) -> bool:
-    """是否曾对该商品发起请求／交易（D-43：结束后仍可看当前详情及之后变更）。"""
+    """Whether the user ever created a request/trade for this product (D-43: current details and later changes remain visible after it ends)."""
     return (
         (await db.exec(
             select(col(Trade.id))
@@ -106,7 +106,7 @@ async def record_edit_history(
 
 
 async def notify_open_request_buyers(db: AsyncSession, product: Product, title: str, content: str) -> None:
-    """商品编辑时通知未结束请求/交易的相关买方（BR-11、4.17/4.18）。"""
+    """Notify relevant buyers of unfinished requests/trades when a product is edited (BR-11, 4.17/4.18)."""
     result = await db.exec(
         select(col(Trade.buyer_id))
         .where(
@@ -132,10 +132,11 @@ async def notify_open_request_buyers(db: AsyncSession, product: Product, title: 
 
 
 async def resolve_category_names(db: AsyncSession, names: list[str]) -> list[int] | None:
-    """D-45：按当前主名/活跃别名严格解析分类名称。
+    """D-45: strictly resolve category names against current primary names/active aliases.
 
-    任一名称未知、为空或指向已移除别名时返回 None（调用方应返回无匹配），
-    不得忽略未知项后放宽过滤。主名优先于同名历史别名。
+    Return None when any name is unknown, empty, or points to a removed alias (the caller
+    should return no matches); never ignore unknown entries and loosen the filter. Primary
+    names take precedence over historical aliases with the same name.
     """
     resolved: list[int] = []
     for raw in names:
@@ -172,7 +173,7 @@ async def search_products(
     page_size: int,
     seller_id: int | None = None,
 ):
-    """在售搜索（BR-15）：仅公开可交易且未被撤销公开的商品；多标签须全部匹配。"""
+    """Listed-product search (BR-15): only publicly tradable products whose display is not revoked; multiple tags must all match."""
     from sqlmodel import and_, func
 
     conditions = [col(Product.status) == ProductStatus.LISTED.value, col(Product.display_restricted).is_(False)]
@@ -180,8 +181,8 @@ async def search_products(
         conditions.append(col(Product.seller_id) == seller_id)
     if keyword:
         like = f"%{keyword}%"
-        # 自由关键词同时匹配商品文本、所关联分类的当前主名及活跃别名。
-        # 用 IN 子查询而非联表，避免多标签/多别名命中导致商品与总数重复。
+        # Free-text keywords match product text and the current primary names/active aliases of linked categories.
+        # Use IN subqueries instead of joins so multiple tag/alias hits do not duplicate products or totals.
         keyword_tag_ids = (
             select(col(ProductTag.product_id))
             .join(Category, col(Category.id) == col(ProductTag.category_id))
@@ -201,7 +202,7 @@ async def search_products(
     if price_max_cents is not None:
         conditions.append(col(Product.price_cents) <= price_max_cents)
     if category_ids:
-        # 多标签全部匹配：商品关联标签数 ≥ 所选数量
+        # All tags must match: the product's linked tag count is >= the selected count
         sub = (
             select(col(ProductTag.product_id), func.count().label("match_count"))
             .where(col(ProductTag.category_id).in_(category_ids))

@@ -1,4 +1,4 @@
-"""站内通知（C-15/4.17）：列表、未读数；仅打开具体通知才已读。"""
+"""In-site notifications (C-15/4.17): list and unread count; a notification is read only when opened specifically."""
 
 from datetime import UTC, datetime
 
@@ -22,7 +22,7 @@ async def list_notifications(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=50),
 ) -> dict:
-    # 4.17：管理员不接收站内通知。历史误发的个人通知保留但不再作为当前通知暴露。
+    # 4.17: administrators receive no in-site notifications. Historical misdirected personal notifications are retained but no longer exposed as current notifications.
     if user.role == UserRole.ADMIN.value:
         return {"total": 0, "items": []}
 
@@ -54,7 +54,7 @@ async def list_notifications(
 
 @router.get("/todos")
 async def list_todos(user: CurrentUser, db: DbSession) -> dict:
-    """D-53：按当前有资格事项聚合待办；通知已读不改变待办，管理员无个人待办。"""
+    """D-53: aggregate to-dos from currently eligible matters; notification read state does not change to-dos, and administrators have no personal to-dos."""
     items = await todo_service.build_todos(db, user)
     return {"total": len(items), "items": items}
 
@@ -73,8 +73,8 @@ async def unread_count(user: CurrentUser, db: DbSession) -> dict:
 
 @router.post("/{notification_id}/read")
 async def mark_read(notification_id: int, user: CurrentUser, db: DbSession) -> dict:
-    """打开具体通知才已读；进入列表不算（4.17）。"""
-    # 管理员历史个人通知不可作为当前通知操作，也不能借标读改写旧行。
+    """A notification is read only when opened specifically; entering the list does not count (4.17)."""
+    # Historical personal notifications for administrators cannot be operated on as current notifications, nor used to mark old rows read.
     if user.role == UserRole.ADMIN.value:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "通知不存在")
     notification = await db.get(Notification, notification_id)

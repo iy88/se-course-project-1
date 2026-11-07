@@ -1,4 +1,4 @@
-"""管理统计（FR-10/BR-31）：账户、商品状态、待办与交易结果，时间范围或全部。"""
+"""Admin statistics (FR-10/BR-31): accounts, product status, to-dos, and trade outcomes over a time range or all time."""
 
 from datetime import UTC, datetime
 
@@ -45,7 +45,7 @@ async def stats(
     date_from: str | None = Query(default=None, alias="from"),
     date_to: str | None = Query(default=None, alias="to"),
 ) -> dict:
-    """BR-31：不统计真实付款金额；状态数按查询时点，时间范围按结果确认时间。"""
+    """BR-31: real payment amounts are not counted; status counts reflect the query instant, and time ranges use result-confirmation time."""
     users_total = (await db.exec(select(func.count()).select_from(User))).first() or 0
     banned_total = (await db.exec(
         select(func.count()).select_from(User).where(col(User.status) == AccountStatus.BANNED.value)
