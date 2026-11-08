@@ -47,3 +47,12 @@ def test_catalog_rejects_unknown_scenario_object():
             validate_catalog()
     finally:
         object.__setattr__(broken, "objects", tuple(item for item in broken.objects if item != "does-not-exist"))
+
+
+def test_catalog_allows_admin_personal_notification(monkeypatch):
+    from dataclasses import replace
+
+    admin = next(account.key for account in catalog.ACCOUNTS if account.role == "admin")
+    notification = replace(catalog.NOTIFICATIONS[0], user=admin)
+    monkeypatch.setattr(catalog, "NOTIFICATIONS", (notification, *catalog.NOTIFICATIONS[1:]))
+    validate_catalog()

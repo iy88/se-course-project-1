@@ -10,7 +10,6 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models import Notification, User
-from app.models.enums import UserRole
 from app.realtime.events import emit_event_intents, validate_payload
 
 
@@ -24,12 +23,11 @@ async def notify(
     link_id: int | None = None,
     payload: dict | None = None,
 ) -> list[Notification]:
-    """Create one notification and event per valid regular user.
+    """Create a personal notification and event for every existing recipient.
 
-    4.17: administrator to-dos come from the shared processing pool and receive no
-    personal in-site notifications; unknown users are not persisted, avoiding invalid
-    foreign keys. BR-32: banned accounts can still read their own notifications, so
-    account status is not filtered.
+    Administrators receive events addressed to them as business participants.
+    Management work remains in the shared processing pool; this function does not
+    discover or broadcast to administrators. Banned recipients may still read notices.
     """
     candidates = list(dict.fromkeys(uid for uid in user_ids if uid is not None))
     if not candidates:
@@ -40,7 +38,6 @@ async def notify(
             await db.exec(
                 select(col(User.id)).where(
                     col(User.id).in_(candidates),
-                    col(User.role) != UserRole.ADMIN.value,
                 )
             )
         ).all()

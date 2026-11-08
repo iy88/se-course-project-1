@@ -1,8 +1,8 @@
 """User to-do aggregation (D-53, 4.17): each read derives items from existing matters the user is currently eligible for and must handle.
 
 Adds no task types, business records, or permissions; notification read state does not
-affect to-do determination. Administrator to-dos come from the shared processing pool,
-and personal to-dos are always empty for administrators.
+affect to-do determination. Personal matters use participant eligibility for every
+account role; management work stays in the shared processing pool.
 """
 from sqlmodel import col, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -22,7 +22,6 @@ from app.models.enums import (
     DisposalMessageKind,
     DisposalMessageRole,
     TradeStatus,
-    UserRole,
 )
 from app.services.permissions import frozen_trade_party_ids
 
@@ -54,9 +53,6 @@ def _item(kind: str, object_id: int, title: str, link_type: str, link_id: int, a
 
 async def build_todos(db: AsyncSession, user: User) -> list[dict]:
     """Return the to-do list for which the current user is eligible to act; read-only, creating or modifying no business records."""
-    if user.role == UserRole.ADMIN.value:
-        return []
-
     items: list[dict] = []
     banned = user.status == AccountStatus.BANNED.value
 

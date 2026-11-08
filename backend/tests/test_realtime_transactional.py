@@ -41,11 +41,12 @@ async def test_message_and_events_rollback_together(tmp_path):
     await engine.dispose()
 
 
-async def test_message_and_events_commit_together(tmp_path):
+@pytest.mark.parametrize("recipient_role", ["user", "admin"])
+async def test_message_and_events_commit_together(tmp_path, recipient_role):
     engine, maker = await _db(tmp_path, "commit.db")
     async with maker() as db, db.begin():
         a = User(email="ca@example.com", password_hash="x", display_name="a", role="user", status="normal")
-        b = User(email="cb@example.com", password_hash="x", display_name="b", role="user", status="normal")
+        b = User(email="cb@example.com", password_hash="x", display_name="b", role=recipient_role, status="normal")
         db.add_all([a, b])
         await db.flush()
         conversation = Conversation(type="normal", user_low_id=min(a.id, b.id), user_high_id=max(a.id, b.id))
@@ -59,10 +60,11 @@ async def test_message_and_events_commit_together(tmp_path):
     await engine.dispose()
 
 
-async def test_notify_creates_notification_and_event_in_same_transaction(tmp_path):
+@pytest.mark.parametrize("role", ["user", "admin"])
+async def test_notify_creates_notification_and_event_in_same_transaction(tmp_path, role):
     engine, maker = await _db(tmp_path, "notify.db")
     async with maker() as db, db.begin():
-        user = User(email="n@example.com", password_hash="x", display_name="n", role="user", status="normal")
+        user = User(email="n@example.com", password_hash="x", display_name="n", role=role, status="normal")
         db.add(user)
         await db.flush()
         created = await notify(db, [user.id], "trade_completed", "完成", link_type="trade", link_id=9)

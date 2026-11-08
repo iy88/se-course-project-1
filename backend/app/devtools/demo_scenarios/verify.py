@@ -561,7 +561,7 @@ async def _verify_notifications(session: AsyncSession, data: dict, report: Verif
             report.check(item.link_id == _resolve_link(data, spec.link, spec.link_type),
                          f"Notification link mismatch: {spec.key}")
         user = await session.get(User, item.user_id)
-        report.check(user is not None and user.role != "admin", f"Admin received a personal notification: {spec.key}")
+        report.check(user is not None, f"Notification recipient is missing: {spec.key}")
     report.counts["notifications"] = len(catalog.NOTIFICATIONS)
 
 

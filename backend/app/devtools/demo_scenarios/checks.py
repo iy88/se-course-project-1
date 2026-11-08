@@ -246,8 +246,6 @@ def _validate_accounts_and_refs() -> None:
     for notification in catalog.NOTIFICATIONS:
         if notification.user not in accounts:
             raise CatalogError(f"Recipient for {notification.key} does not exist")
-        if accounts[notification.user].role == "admin":
-            raise CatalogError(f"{notification.key} cannot send a personal notification to an admin")
 
 
 def _validate_scenarios(inventory: dict[str, str]) -> None:

@@ -4404,11 +4404,46 @@ class AcceptanceRun:
                 self._call("POST", f"/api/v1/notifications/{other_items[0]['id']}/read", user="buyer", expected=404)
             else:
                 self.rec.must(False, 'buyer2 has no notification usable for the unauthorized test')
-            # Admins receive no personal notifications
-            admin_list = self._dict(self._call("GET", "/api/v1/notifications", user="admin", expected=200))
-            self.rec.must_eq(int(admin_list.get("total") or 0), 0, 'Admin personal notifications empty')
+            # Private messages retain their own unread counts for administrator participants.
+            admin_messages_before = self._dict(self._call("GET", "/api/v1/conversations/unread-summary", user="admin", expected=200))
+            admin_chat = self._dict(self._call("POST", "/api/v1/conversations/normal", user="buyer2", expected=201,
+                                              json_body={"peer_user_id": self._uid("admin")}))
+            self._call("POST", f"/api/v1/conversations/{admin_chat['id']}/messages", user="buyer2", expected=200,
+                       json_body={"content": f"管理员本人私聊-{self.run_id}"})
+            admin_messages_after = self._dict(self._call("GET", "/api/v1/conversations/unread-summary", user="admin", expected=200))
+            self.rec.must_eq(admin_messages_after["unread"], admin_messages_before["unread"] + 1,
+                             'Administrator receives private messages and unread reminders')
+            # An administrator acting as a seller receives personal trade notifications.
+            admin_before = self._dict(self._call("GET", "/api/v1/notifications/unread-count", user="admin", expected=200))
+            self._publish("P_ADMIN_NOTIFICATIONS", "admin", f"管理员本人出售-{self.run_id}",
+                          category_ids=[self.categories["main"]["id"]])
+            # Submission creates shared review work, not personal work reminders for admins.
+            admin_after_submit = self._dict(self._call("GET", "/api/v1/notifications/unread-count", user="admin", expected=200))
+            self.rec.must_eq(admin_after_submit["unread"], admin_before["unread"],
+                             'Review work does not generate administrator personal reminders')
+            self._approve("P_ADMIN_NOTIFICATIONS", user="admin2")
+            admin_trade = self._request_trade("T_ADMIN_NOTIFICATIONS", "buyer2", "P_ADMIN_NOTIFICATIONS")
+            admin_list = self._notifications("admin")
+            admin_notice = next((item for item in admin_list if item.get("type") == "request_created"
+                                 and (item.get("payload") or {}).get("trade_id") == admin_trade["id"]), None)
+            self.rec.must(admin_notice is not None, 'Administrator seller receives purchase request notification')
+            if admin_notice is None:
+                raise CheckFailure('Administrator purchase request notification missing')
+            admin_unread = self._dict(self._call("GET", "/api/v1/notifications/unread-count", user="admin", expected=200))
+            self.rec.must(int(admin_unread["unread"]) > 0, 'Administrator unread notifications counted')
+            self._call("POST", f"/api/v1/notifications/{admin_notice['id']}/read", user="admin2", expected=404)
+            self._call("POST", f"/api/v1/notifications/{target['id']}/read", user="admin", expected=404)
+            self._call("POST", f"/api/v1/notifications/{admin_notice['id']}/read", user="admin", expected=200)
+            admin_after_read = self._dict(self._call("GET", "/api/v1/notifications/unread-count", user="admin", expected=200))
+            self.rec.must_eq(admin_after_read["unread"], admin_unread["unread"] - 1,
+                             'Administrator can mark own notification read only')
             admin_todos = self._dict(self._call("GET", "/api/v1/notifications/todos", user="admin", expected=200))
-            self.rec.must_eq(int(admin_todos.get("total") or 0), 0, 'Admin personal todos empty')
+            self.rec.must(any(item.get("kind") == "request_pending" and item.get("link_id") == admin_trade["id"]
+                              for item in admin_todos["items"]), 'Administrator seller has own purchase-request todo')
+            self.rec.must(all(item.get("link_type") in {"trade", "case"} for item in admin_todos["items"]),
+                          'Personal todos contain participant matters, not shared management tasks')
+            admin2_todos = self._dict(self._call("GET", "/api/v1/notifications/todos", user="admin2", expected=200))
+            self.rec.must_eq(admin2_todos["total"], 0, 'Claiming management work does not create personal todos')
 
         with self.rec.step(
             "NOTIF-02",

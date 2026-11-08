@@ -7,7 +7,6 @@ from sqlmodel import col, func, select
 
 from app.api.deps import CurrentUser, DbSession
 from app.models import Notification
-from app.models.enums import UserRole
 from app.services import audit as audit_service
 from app.services import todos as todo_service
 
@@ -22,10 +21,6 @@ async def list_notifications(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=50),
 ) -> dict:
-    # 4.17: administrators receive no in-site notifications. Historical misdirected personal notifications are retained but no longer exposed as current notifications.
-    if user.role == UserRole.ADMIN.value:
-        return {"total": 0, "items": []}
-
     query = select(Notification).where(col(Notification.user_id) == user.id)
     if unread_only:
         query = query.where(col(Notification.is_read).is_(False))
@@ -54,15 +49,13 @@ async def list_notifications(
 
 @router.get("/todos")
 async def list_todos(user: CurrentUser, db: DbSession) -> dict:
-    """D-53: aggregate to-dos from currently eligible matters; notification read state does not change to-dos, and administrators have no personal to-dos."""
+    """D-53: aggregate to-dos from currently eligible matters; notification read state does not change to-dos; account role does not exclude personal matters."""
     items = await todo_service.build_todos(db, user)
     return {"total": len(items), "items": items}
 
 
 @router.get("/unread-count")
 async def unread_count(user: CurrentUser, db: DbSession) -> dict:
-    if user.role == UserRole.ADMIN.value:
-        return {"unread": 0}
     count = (await db.exec(
         select(func.count()).select_from(Notification).where(
             col(Notification.user_id) == user.id, col(Notification.is_read).is_(False)
@@ -74,9 +67,6 @@ async def unread_count(user: CurrentUser, db: DbSession) -> dict:
 @router.post("/{notification_id}/read")
 async def mark_read(notification_id: int, user: CurrentUser, db: DbSession) -> dict:
     """A notification is read only when opened specifically; entering the list does not count (4.17)."""
-    # Historical personal notifications for administrators cannot be operated on as current notifications, nor used to mark old rows read.
-    if user.role == UserRole.ADMIN.value:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "通知不存在")
     notification = await db.get(Notification, notification_id)
     if not notification or notification.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "通知不存在")
