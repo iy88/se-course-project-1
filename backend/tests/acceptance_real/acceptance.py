@@ -1829,7 +1829,7 @@ class AcceptanceRun:
 
         with self.rec.step(
             "SEARCH-01",
-            'Combined search: keyword/all tags match/price/alias/no match; unauthenticated rejected',
+            'Combined search: category OR with keyword/price AND; aliases/no match; unauthenticated rejected',
         ):
             self._publish(
                 "P_MULTI",
@@ -1864,6 +1864,19 @@ class AcceptanceRun:
                 )
             )
             self.rec.must_eq(price_miss.get("total"), 0, 'Price does not match')
+            # Single-category controls distinguish OR from AND. Boundary prices
+            # also verify that category matches cannot bypass the price range.
+            for key, title, price, category in (
+                ("P_SEARCH_A", f"{keyword}-仅分类A", 5000, "main"),
+                ("P_SEARCH_B", f"{keyword}-仅分类B", 5300, "second"),
+                ("P_SEARCH_EXPENSIVE", f"{keyword}-超出价格", 5301, "main"),
+                ("P_SEARCH_OTHER_KEYWORD", f"其他关键词对照-{self.run_id}", 5200, "main"),
+            ):
+                self._publish(key, "seller", title, price=price,
+                              category_ids=[self.categories[category]["id"]])
+                self._approve(key)
+            expected_ids = {self.products[key]["id"] for key in
+                            ("P_MULTI", "P_SEARCH_A", "P_SEARCH_B", "P_SEARCH_EXPENSIVE")}
             multi = self._dict(
                 self._call(
                     "GET",
@@ -1876,7 +1889,24 @@ class AcceptanceRun:
                     },
                 )
             )
-            self.rec.must_eq(multi.get("total"), 1, 'All tags match')
+            self.rec.must_eq(multi.get("total"), 4, 'Either selected category matches; keyword still required')
+            self.rec.must_eq({item["id"] for item in multi["items"]}, expected_ids,
+                             'Category union includes A-only/B-only products and excludes other keywords')
+            self.rec.must_eq(len(multi["items"]), 4, 'A product in both categories appears only once')
+            bounded = self._dict(
+                self._call(
+                    "GET", "/api/v1/products/search", user="outsider", expected=200,
+                    params={
+                        "category_ids": [self.categories["main"]["id"], self.categories["second"]["id"]],
+                        "keyword": keyword, "price_min_cents": 5000, "price_max_cents": 5300,
+                    },
+                )
+            )
+            self.rec.must_eq(bounded.get("total"), 3, 'Category OR intersects keyword and inclusive price range')
+            self.rec.must_eq({item["id"] for item in bounded["items"]},
+                             expected_ids - {self.products["P_SEARCH_EXPENSIVE"]["id"]},
+                             'Both price boundaries match; category match does not bypass price')
+            self.rec.must_eq(len(bounded["items"]), 3, 'Combined filtering does not duplicate products')
             by_names = self._dict(
                 self._call(
                     "GET",
@@ -1889,7 +1919,9 @@ class AcceptanceRun:
                     },
                 )
             )
-            self.rec.must_eq(by_names.get("total"), 1, 'Category names/aliases participate in filtering')
+            self.rec.must_eq(by_names.get("total"), 4, 'Category names also use OR')
+            self.rec.must_eq({item["id"] for item in by_names["items"]}, expected_ids,
+                             'Category-name union has the same products as category-ID union')
             unknown = self._dict(
                 self._call(
                     "GET",

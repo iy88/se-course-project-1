@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.48
-Version-Datetime: 2026-11-08T00:05:28+08:00
+Version: 0.1.49
+Version-Datetime: 2026-11-08T20:40:36+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -83,7 +83,7 @@ Windows PowerShell／BAT 入口支持同一参数。此模式只使用 dotenv �
 
 在 `backend/` 目录运行 `.venv/bin/python -m app.devtools.reset` 预览目标；实际执行使用 `.venv/bin/python -m app.devtools.reset --execute --confirm <数据库名>`。执行前先停止后端和所有测试进程，并确认不需要保留本轮人工测试数据。
 
-此命令默认接受 `.env.dev` 的 dev/test 配置；生产须显式使用 `--env-file .env.prod --allow-production`，先备份并停止服务，操作步骤见[生产重置](docs/development/guidance.md#生产环境重置与重新生成演示数据)。删除应用 schema 内的全部表（含管理员、业务数据与审计），保留 schema 及其默认授权，再执行正式迁移；Redis 只删除 `REDIS_KEY_PREFIX` 下的键；OSS 删除媒体桶和证据桶中 `STORAGE_KEY_PREFIX` 下的当前对象，不删除桶，也不清除版本历史或未完成的分片上传。Redis 前缀必须非空；OSS 空前缀表示整个桶，执行须额外指定 `--whole-buckets`。开发与生产资源须隔离。先前存放在其他前缀的对象不会被清理。
+此命令默认接受 `.env.dev` 的 dev/test 配置；生产须显式使用 `--env-file .env.prod --allow-production`，先备份并停止服务，操作步骤见[生产重置](docs/development/部署说明.md#生产数据重新初始化)。删除应用 schema 内的全部表（含管理员、业务数据与审计），保留 schema 及其默认授权，再执行正式迁移；Redis 只删除 `REDIS_KEY_PREFIX` 下的键；OSS 删除媒体桶和证据桶中 `STORAGE_KEY_PREFIX` 下的当前对象，不删除桶，也不清除版本历史或未完成的分片上传。Redis 前缀必须非空；OSS 空前缀表示整个桶，执行须额外指定 `--whole-buckets`。开发与生产资源须隔离。先前存放在其他前缀的对象不会被清理。
 
 重置后运行 `.venv/bin/python -m app.manage seed` 重新初始化管理员及指定分类，并清除浏览器原有登录状态后重新登录。跨服务操作没有整体事务；失败时核对资源状态，修复原因后重跑。命令不会自动恢复备份。
 

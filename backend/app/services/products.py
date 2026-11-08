@@ -173,7 +173,7 @@ async def search_products(
     page_size: int,
     seller_id: int | None = None,
 ):
-    """Listed-product search (BR-15): only publicly tradable products whose display is not revoked; multiple tags must all match."""
+    """Listed-product search (BR-15): only publicly tradable products whose display is not revoked; any selected category may match."""
     from sqlmodel import and_, func
 
     conditions = [col(Product.status) == ProductStatus.LISTED.value, col(Product.display_restricted).is_(False)]
@@ -202,15 +202,11 @@ async def search_products(
     if price_max_cents is not None:
         conditions.append(col(Product.price_cents) <= price_max_cents)
     if category_ids:
-        # All tags must match: the product's linked tag count is >= the selected count
-        sub = (
-            select(col(ProductTag.product_id), func.count().label("match_count"))
-            .where(col(ProductTag.category_id).in_(category_ids))
-            .group_by(col(ProductTag.product_id))
-            .having(func.count() >= len(category_ids))
-            .subquery()
+        # Match any selected category; keyword and price conditions still all apply.
+        matching_products = select(col(ProductTag.product_id)).where(
+            col(ProductTag.category_id).in_(category_ids)
         )
-        conditions.append(col(Product.id).in_(select(sub.c.product_id)))
+        conditions.append(col(Product.id).in_(matching_products))
 
     total = (await db.exec(select(func.count()).select_from(Product).where(and_(*conditions)))).first()
     result = await db.exec(
