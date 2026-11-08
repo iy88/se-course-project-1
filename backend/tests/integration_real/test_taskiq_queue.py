@@ -68,6 +68,29 @@ async def _wait_value(client, key: str, predicate, timeout: float = 25.0) -> dic
     raise AssertionError(f"timed out waiting for {key}: {last}")
 
 
+async def _wait_terminal_heartbeat(settings, task_id: str, timeout: float = 10.0) -> dict:
+    # Redis terminal visibility precedes the SQL heartbeat commit. Read fresh
+    # sessions until the same task is observable, rather than choosing an arbitrary
+    # worker row (possibly from another process or an earlier test).
+    deadline = time.monotonic() + timeout
+    observed = []
+    while time.monotonic() < deadline:
+        async with session() as db:
+            rows = (await db.exec(
+                select(ServiceHeartbeat).where(
+                    ServiceHeartbeat.role == "worker",
+                    ServiceHeartbeat.release_id == settings.release_id,
+                )
+            )).all()
+            observed = [dict(row.details or {}) for row in rows]
+        for details in observed:
+            terminal = details.get("last_terminal_failure") or {}
+            if terminal.get("task_id") == task_id and int(details.get("terminal_failures") or 0) >= 1:
+                return details
+        await asyncio.sleep(0.2)
+    raise AssertionError(f"timed out waiting for terminal heartbeat for task {task_id}: {observed}")
+
+
 async def _wait_cli(role: str, env_file: Path, timeout: float = 40.0) -> dict:
     deadline = time.monotonic() + timeout
     last = ""
@@ -87,7 +110,7 @@ async def _wait_cli(role: str, env_file: Path, timeout: float = 40.0) -> dict:
     raise AssertionError(f"{role} readiness failed: {last[-1000:]}")
 
 
-async def _enqueue(name: str, *args) -> None:
+async def _enqueue(name: str, *args) -> str:
     # A fresh broker per call avoids reusing a Redis pool bound to a previous
     # pytest event loop (each integration test gets a fresh loop).
     bundle = build_bundle(probe_tasks._settings)
@@ -95,7 +118,8 @@ async def _enqueue(name: str, *args) -> None:
     task = bundle.broker.find_task(name)
     assert task is not None
     try:
-        await task.kiq(*args)
+        submitted = await task.kiq(*args)
+        return submitted.task_id
     finally:
         await bundle.broker.shutdown()
         if bundle.retry_source is not None:
@@ -155,22 +179,19 @@ async def test_retry_success_and_terminal_failure_are_observable(tmp_path):
         assert success["count"] == 2
 
         failing = secrets.token_hex(8)
-        await _enqueue(probe_tasks.RETRY_PROBE_TASK, failing, 99)
+        failing_task_id = await _enqueue(probe_tasks.RETRY_PROBE_TASK, failing, 99)
         terminal_key = settings.redis_key_prefix + "jobs:terminal-failure:" + settings.release_id
         terminal = await _wait_value(
             client, terminal_key,
-            lambda value: value.get("task_name") == probe_tasks.RETRY_PROBE_TASK,
+            lambda value: value.get("task_name") == probe_tasks.RETRY_PROBE_TASK
+            and value.get("task_id") == failing_task_id,
             timeout=40,
         )
         assert terminal["error"] == "RetryableJobError"
-        async with session() as db:
-            row = (await db.exec(
-                select(ServiceHeartbeat).where(ServiceHeartbeat.role == "worker",
-                                               ServiceHeartbeat.release_id == settings.release_id)
-            )).first()
-            assert row is not None
-            assert int((row.details or {}).get("terminal_failures") or 0) >= 1
-            assert (row.details or {}).get("last_terminal_failure")
+        details = await _wait_terminal_heartbeat(settings, failing_task_id)
+        assert int(details["terminal_failures"]) >= 1
+        assert details["last_terminal_failure"]["task_id"] == terminal["task_id"]
+        assert details["last_terminal_failure"]["error"] == "RetryableJobError"
     finally:
         _stop(worker)
         _stop(scheduler)
