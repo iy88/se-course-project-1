@@ -45,7 +45,7 @@
           <van-button block type="primary" :loading="loading" @click="reset">重置密码</van-button>
         </div>
 
-        <p class="auth-note">验证码仅用于本次密码重置；重置成功后将直接进入已登录状态。</p>
+
       </section>
 
       <p class="auth-foot">想起密码了？<router-link to="/auth/login">返回登录</router-link></p>

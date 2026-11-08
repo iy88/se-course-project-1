@@ -22,6 +22,14 @@
     </div>
 
     <template v-else>
+      <router-link
+        v-if="conversation?.type === 'trade' && conversation.trade?.id"
+        :to="`/trades/${conversation.trade.id}`"
+        class="chat-trade-link"
+      >
+        <span>交易详情</span>
+        <AppIcon name="chevron-right" :size="16" />
+      </router-link>
       <div ref="messagesEl" class="chat-scroll">
         <div v-if="loading" class="chat-skeletons" aria-hidden="true">
           <div class="skeleton chat-skeleton chat-skeleton--left" />
@@ -139,8 +147,8 @@ function messageTime(value) {
 }
 
 const sendBlockReason = computed(() => {
-  if (session.user?.status === 'banned') return '账户封禁中，暂停双方私聊；请通过处置沟通单联系管理员'
-  if (conversation.value?.trade?.frozen) return '本笔交易已冻结，双方消息暂停；历史只读，管理沟通保留'
+  if (session.user?.status === 'banned') return '账户已封禁，暂不能发送消息'
+  if (conversation.value?.trade?.frozen) return '交易已冻结，暂不能发送消息'
   return ''
 })
 
@@ -237,6 +245,19 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.chat-trade-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface, #fff);
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .bubble-stack {
   display: flex;
   flex-direction: column;

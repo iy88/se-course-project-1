@@ -87,7 +87,7 @@
               :before-read="beforeReadImage"
               :preview-options="{ closeable: true }"
             />
-            <p class="form-hint">建议上传清晰实拍图，图片比例会按原图保留。最多 6 张，单张不超过 100 MiB，支持 JPG/PNG/WebP/GIF。</p>
+            <p class="form-hint">JPG、PNG、WebP、GIF，单张不超过 100 MiB。</p>
           </div>
         </section>
 
@@ -109,9 +109,6 @@
             </van-checkbox>
           </van-checkbox-group>
           <div v-if="!categories.length" class="form-hint form-hint--pad">分类暂未加载，请刷新页面后重试。</div>
-          <p v-else-if="hasDisabledCategories" class="form-hint form-hint--pad">
-            已停用标签不能用于新发布或新增关联；编辑时仅保留原已有分类。
-          </p>
 
           <div class="form-fields form-fields--top">
             <TextField :limit="64"
@@ -120,7 +117,6 @@
               label="申请新标签"
               placeholder="没有合适的？申请新标签（随审核生效）"
              />
-            <p v-else class="edit-tag-hint">编辑只能调整已有标签；需要新标签时请在审核未通过后重新提交申请。</p>
           </div>
         </section>
 
@@ -134,16 +130,13 @@
               {{ app.requested_name }}
             </van-checkbox>
           </van-checkbox-group>
-          <p class="edit-tag-hint">
-            勾选表示保存时撤回该申请；只撤回本商品当前待审核的申请，不会重新发布或新造草稿。已有公共标签仍可在上方调整。
-          </p>
+
         </section>
 
         <div class="publish-submit">
           <van-button block type="primary" native-type="submit" :loading="loading" :disabled="blocked">
             {{ submitText }}
           </van-button>
-          <p class="publish-hint">{{ hintText }}</p>
         </div>
       </van-form>
     </div>
@@ -215,9 +208,6 @@ const submitError = ref('')
 const withdrawTagIds = ref([])
 const pendingTagApplications = computed(() => readPendingTagApplications(product.value))
 // Disabled tags are retained only as previously existing categories when editing the original product; selectability is determined by isCategorySelectable against the initial associations.
-const hasDisabledCategories = computed(() =>
-  categories.value.some((category) => category.status === 'disabled'),
-)
 
 // When only a trade is frozen and the account is not banned, editing unrelated products is still allowed; new publishes and listing/unlisting are jointly restricted by the server and buttons.
 const blocked = computed(() => {
@@ -234,22 +224,10 @@ const submitText = computed(() => {
   return isEdit.value ? '保存修改' : '提交审核'
 })
 
-const hintText = computed(() => {
-  if (session.banned) return '封禁期间不能保存商品修改；管理沟通入口仍保留。'
-  if (!isEdit.value && session.hasFrozenTrade) return '交易冻结期间不能发布新商品；无关商品仍可编辑。'
-  if (resubmitMode.value) return '保存后重新进入待审核，不直接公开；原审核记录保留。'
-  if (product.value?.status === 'pending_review') return '待审核期间可修改；审核以管理员提交结论时的最新保存内容为准，不重新排队。'
-  if (isEdit.value) return '保存保留编辑前后内容；不触发二次审核，待接受请求不关闭。'
-  return '提交后进入待审核，认领管理员审核通过后公开展示。'
-})
-
 const editNotice = computed(() => {
   if (!isEdit.value) return ''
-  if (product.value?.status === 'in_transaction') return '商品交易中：禁止修改关键内容，保存会被服务端拒绝。'
-  if (product.value?.display_restricted) return '商品因处置停止公开访问，当前不可编辑。'
-  if (product.value?.status === 'rejected') return '审核未通过：保存将作为修改重提，形成新的审核记录。'
-  if (resubmitMode.value) return '该商品已下架且可重新提交审核；保存将进入待审核，不会直接上架。'
-  if (product.value?.status === 'pending_review') return '待审核商品可修改；撤回审核仅在管理员认领前可用。'
+  if (product.value?.status === 'in_transaction') return '交易中，暂不能编辑。'
+  if (product.value?.display_restricted) return '商品已受限，暂不能编辑。'
   return ''
 })
 
@@ -321,7 +299,7 @@ async function submit() {
     } else {
       const withdrawal = withdrawalSelection(withdrawTagIds.value, pendingTagApplications.value)
       if (withdrawal.stale.length) {
-        submitError.value = '部分待撤回标签申请已在服务端变化，未提交旧申请；请刷新页面后重新选择。'
+        submitError.value = '标签申请已更新，请刷新后重试。'
         return
       }
       if (withdrawal.ids.length) payload.withdraw_tag_application_ids = withdrawal.ids

@@ -52,11 +52,6 @@
         icon="comment"
         title="暂无评价"
       />
-
-      <div class="alert alert--info">
-        <AppIcon name="info" :size="16" />
-        <span>评价仅在本人“我的评价”中查看，不公开展示；提交后不可自行修改或删除。</span>
-      </div>
     </div>
   </div>
 </template>

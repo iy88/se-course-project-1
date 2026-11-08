@@ -1,7 +1,7 @@
 <template>
   <el-card class="case-conversation">
     <template #header><div class="conversation-head"><strong>事项关联会话（只读）</strong><el-button :loading="loading" @click="load(false)">{{ opened ? '刷新会话' : '读取会话' }}</el-button></div></template>
-    <p class="hint">仅查看本事项直接关联的会话；读取会留审计记录，不加入会话、不发送消息、不改变参与方已读。</p>
+
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <template v-if="opened">
       <div v-if="conversation" class="conversation-chips">

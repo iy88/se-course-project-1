@@ -86,9 +86,7 @@
           </div>
         </van-form>
 
-        <p class="auth-note">
-          验证码只对发送时的邮箱和注册用途有效；更换注册邮箱后需重新获取。验证失败不会创建账户。
-        </p>
+
       </section>
 
       <p class="auth-foot">已有账户？<router-link to="/auth/login">返回登录</router-link></p>

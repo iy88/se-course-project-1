@@ -26,11 +26,11 @@
 
       <div v-if="session.user?.has_frozen_trade && session.user?.status !== 'banned'" class="alert alert--warn">
         <AppIcon name="alert" :size="17" />
-        <span>交易冻结期间禁止发布新商品、主动上下架；无关商品合规编辑、收藏与管理沟通仍可用。</span>
+        <span>交易冻结中，暂不能发布或上下架商品。</span>
       </div>
       <div v-if="session.user?.status === 'banned'" class="alert alert--danger">
         <AppIcon name="alert" :size="17" />
-        <span>账户封禁中：业务写操作暂停，本人记录只读；处置通知与沟通单仍可用于说明/申辩。</span>
+        <span>账户已封禁，当前仅可查看记录。</span>
       </div>
 
       <section class="surface me-section">
@@ -129,7 +129,7 @@
 <script setup>
 import { computed, onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { showConfirmDialog, showToast } from 'vant'
+import { showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -173,7 +173,6 @@ const hasHiddenTradeTodos = computed(
 )
 
 async function logout() {
-  await showConfirmDialog({ title: '退出登录' })
   await http.post('/auth/logout').catch(() => {})
   session.clear()
   showToast('已退出登录')

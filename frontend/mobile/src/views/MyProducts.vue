@@ -69,7 +69,7 @@
 <script setup>
 import { onActivated, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { showConfirmDialog, showToast } from 'vant'
+import { showToast } from 'vant'
 import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -114,14 +114,6 @@ function edit(p, resubmit = false) {
 }
 
 async function withdraw(p) {
-  try {
-    await showConfirmDialog({
-      title: '撤回商品审核',
-      message: '仅管理员认领前可撤回；撤回后商品置为已下架，需修改后重新提交审核，不会直接上架。',
-    })
-  } catch {
-    return
-  }
   try {
     const data = await http.post(`/products/${p.id}/withdraw-review`)
     showToast(data.detail || '已撤回审核并下架')

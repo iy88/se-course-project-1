@@ -110,15 +110,13 @@
                   :value="c.id"
                 />
               </el-select>
-              <p class="muted-text correction-hint">
-                已停用分类不可用于新增关联；仅保留原商品已有关联（可取消）。
-              </p>
+
             </el-form-item>
             <el-form-item label="依据说明">
               <TextInput :limit="500"
                 v-model="reason"
                 type="textarea"
-                placeholder="纠正原因（必填，将通知卖方并留痕）"
+                placeholder="请输入纠正原因"
                 :autosize="{ minRows: 3, maxRows: 8 }"
                />
             </el-form-item>

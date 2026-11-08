@@ -39,7 +39,7 @@
         <el-form-item :label="`结束时间（${localZone}）`"><input v-model="form.to" type="datetime-local" class="time-input" aria-label="结束时间" /></el-form-item>
         <div class="filter-actions"><el-button type="primary" native-type="submit" :loading="loading">查询</el-button><el-button @click="reset">重置</el-button><el-button v-if="queried" :loading="loading" @click="load(page)">刷新记录</el-button></div>
       </el-form>
-      <p class="hint">筛选字段精确匹配；时间按浏览器时区输入，列表时间显示为北京时间。翻页沿用上次提交的条件。</p>
+
     </el-card>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="audit-error"><el-button size="small" @click="load(page)">重试查询</el-button></el-alert>
     <el-card v-if="!queried" class="query-placeholder"><el-icon :size="24"><Search /></el-icon><h3>查询审计明细</h3><p>选择分类、时间或操作人后点击查询，明细将按页展示。</p></el-card>

@@ -5,7 +5,7 @@
         <span class="query-label">交易编号</span>
         <el-input-number v-model="tradeIdInput" :min="1" :controls="false" @change="onTradeIdChange" />
         <el-button :disabled="!tradeIdInput || actionBusy" :loading="tradeLoading" @click="load()">加载交易</el-button>
-        <span class="query-hint">服务端按本事项与交易的关联校验访问资格。</span>
+
       </div>
 
 
@@ -241,11 +241,11 @@ const waitText = computed(() => {
   if (!t) return ''
   const remaining = fmtDuration(t.confirm_wait_remaining_seconds)
   if (t.frozen && t.confirm_wait_paused_at) {
-    return `暂停于 ${fmt(t.confirm_wait_paused_at)}${remaining ? `，剩余 ${remaining}` : ''}（服务端记录）`
+    return `暂停于 ${fmt(t.confirm_wait_paused_at)}${remaining ? `，剩余 ${remaining}` : ''}`
   }
   if (t.frozen) return '冻结期间不累计等待时间'
   if (t.confirm_wait_started_at) {
-    return `自 ${fmt(t.confirm_wait_started_at)} 起算${remaining ? `，剩余 ${remaining}` : '，剩余以服务端为准'}`
+    return `自 ${fmt(t.confirm_wait_started_at)} 起算${remaining ? `，剩余 ${remaining}` : ''}`
   }
   return '无'
 })
@@ -372,7 +372,7 @@ async function doAdjust() {
   }
   try {
     await ElMessageBox.confirm(
-      '状态调整须留据并通知双方；不会生成双方确认。确认执行？',
+      '确定调整交易状态？',
       '确认调整',
       { type: 'warning' },
     )

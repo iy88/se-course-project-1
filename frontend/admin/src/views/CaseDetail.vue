@@ -143,9 +143,7 @@
             <div v-if="detail.product.display_restricted" class="restore-display">
               <template v-if="canRestoreDisplay">
                 <strong>解除公开展示限制</strong>
-                <p class="hint">
-                  仅解除由本事项产生的公开展示限制；不解除交易冻结，也不把商品自动重新上架。其他账户封禁或其他处置限制不受影响。
-                </p>
+
                 <TextInput :limit="500"
                   v-model="restoreReason"
                   type="textarea"
@@ -162,12 +160,12 @@
                 </el-button>
               </template>
               <p v-else class="hint">
-                当前展示限制不由本事项产生，或缺少原限制事项上下文；请返回对应相关事项处理，本页不提供任意解除入口。
+                请在对应处置事项中解除限制。
               </p>
             </div>
 
             <div class="card-actions">
-              <span class="hint">提交审核结论前会重新读取服务端内容；审核依据提交结论时的最新保存内容，页面停留过久请刷新。</span>
+
             </div>
           </el-card>
 
@@ -337,7 +335,7 @@
                     <el-radio value="rejected">不通过</el-radio>
                   </el-radio-group>
                 </el-form-item>
-                <el-form-item v-if="reviewForm.result === 'rejected'" label="拒绝原因（不通过须记录理由）">
+                <el-form-item v-if="reviewForm.result === 'rejected'" label="拒绝原因">
                   <TextInput :limit="500" v-model="reviewForm.reason" type="textarea"  :autosize="{ minRows: 3, maxRows: 8 }" />
                 </el-form-item>
                 <el-button
@@ -347,7 +345,7 @@
                 >
                   提交审核结论
                 </el-button>
-                <p v-if="!canAct" class="hint">仅事项认领管理员在处理中可提交审核结论</p>
+                <p v-if="!canAct" class="hint">请先认领此事项。</p>
                 <p v-else-if="detail.product?.status !== 'pending_review'" class="hint">
                   商品当前状态为 {{ detail.product?.status }}，不再可审核；请刷新后按当前状态处理。
                 </p>
@@ -369,7 +367,7 @@
                   <TextInput :limit="500"
                     v-model="reportForm.public_summary"
                     type="textarea"
-                    placeholder="将展示在被处置内容的原入口（BR-25）"
+                    placeholder="请输入公开结果"
                    :autosize="{ minRows: 3, maxRows: 8 }" />
                 </el-form-item>
                 <template v-if="reportForm.outcome === 'handled'">
@@ -386,8 +384,8 @@
                 <el-button type="danger" :disabled="!canAct" @click="submitReportDecision">
                   提交结论并办结
                 </el-button>
-                <p class="hint">提交后事项办结归档；认定违规时，匿名结果显示在被处置内容的原入口</p>
-                <p v-if="!canAct" class="hint">仅事项认领管理员在处理中可提交核查结论</p>
+
+                <p v-if="!canAct" class="hint">请先认领此事项。</p>
               </el-form>
             </template>
 
@@ -412,7 +410,7 @@
             <template v-if="canAct">
               <div class="case-composer">
               <h3>发起问询</h3>
-              <p>要求参与方在事项内作出说明，将推送站内通知</p>
+
               <div v-if="detail.participants?.length" class="participant-row">
                 <span class="participant-label">问询对象</span>
                 <el-tag v-for="u in detail.participants" :key="u.id" effect="plain" size="small">
@@ -428,7 +426,7 @@
               </div>
               <div class="case-composer">
               <h3>事项回复</h3>
-              <p>在沟通单记录处理说明或结论；将推送站内通知，参与方从通知进入查看</p>
+
               <div v-if="detail.participants?.length" class="participant-row">
                 <span class="participant-label">可见对象</span>
                 <el-tag v-for="u in detail.participants" :key="u.id" effect="plain" size="small">
@@ -443,7 +441,7 @@
               </div>
               <div v-if="showDisposeForm" class="case-composer dispose-composer">
               <h3>办结事项</h3>
-              <p>记录处置结论后事项归档；已办结事项仍可作为后续交易处置的依据</p>
+
               <TextInput :limit="200"
                 v-model="disposeForm.conclusion"
                 placeholder="处置结论（必填，如：异常已处理，交易维持完成）"
@@ -549,7 +547,7 @@ async function submitDispose() {
     return ElMessage.warning('请填写处置结论')
   }
   try {
-    await ElMessageBox.confirm('办结后事项归档，不再接收问询与回复；确认提交？', '办结事项', {
+    await ElMessageBox.confirm('确定办结此事项？', '办结事项', {
       type: 'warning',
       confirmButtonText: '办结',
       cancelButtonText: '取消',
@@ -613,7 +611,7 @@ async function load(keepActionError = false) {
     detailRevision.value += 1
   } catch (err) {
     if (version !== loadVersion) return
-    loadError.value = `事项详情加载失败：${serverDetail(err)}。仅该事项认领管理员可查看非公开内容；请先在共享池认领。`
+    loadError.value = `事项详情加载失败：${serverDetail(err)}。请先认领此事项。`
     return
   } finally {
     if (version === loadVersion) loading.value = false
@@ -670,7 +668,7 @@ async function submitReportDecision() {
   if (!canAct.value) return ElMessage.warning('仅认领管理员在处理中可提交核查结论')
   if (!reportForm.reason.trim()) return ElMessage.warning('须填写结论理由')
   try {
-    await ElMessageBox.confirm('提交后举报事项将结案归档，不再接受补充。确认提交？', '确认处置', { type: 'warning' })
+    await ElMessageBox.confirm('确定提交处置结果并结案？', '确认处置', { type: 'warning' })
   } catch {
     return
   }

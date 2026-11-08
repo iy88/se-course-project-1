@@ -117,7 +117,7 @@
           </div>
           <TextField :limit="2000" ref="commentInput" v-model="commentDraft" type="textarea" rows="2" autosize label="评论内容"
             placeholder="输入商品咨询内容" :disabled="!canComment || commentSubmitting"  />
-          <p v-if="!canComment" class="hint">{{ session.banned ? '账号已封禁，暂不能发表评论或回复。' : '当前商品不可新增评论或回复，历史评论仍按访问权限保留。' }}</p>
+          <p v-if="!canComment" class="hint">{{ session.banned ? '账号已封禁，暂不能发表评论或回复。' : '当前商品不能评论或回复。' }}</p>
           <van-button native-type="submit" size="small" type="primary" :loading="commentSubmitting"
             :disabled="!canComment || !commentDraft.trim() || commentSubmitting || !!textError(commentDraft, 2000)">{{ replyTarget ? '发表回复' : '发表评论' }}</van-button>
           <p v-if="commentError" role="alert" class="comment-compose__error">{{ commentError }}</p>
@@ -404,11 +404,6 @@ async function toggleFavorite() {
 
 async function requestTrade() {
   try {
-    await showConfirmDialog({ title: '提交购买请求', message: '将创建独立交易分支并通知卖方，接受前不锁单。' })
-  } catch {
-    return
-  }
-  try {
     const data = await http.post('/trades/requests', { product_id: Number(route.params.id) })
     showToast(data.detail)
     if (data.id) router.push(`/trades/${data.id}`)
@@ -424,14 +419,6 @@ function edit(resubmit) {
 
 async function withdrawReview() {
   try {
-    await showConfirmDialog({
-      title: '撤回商品审核',
-      message: '仅管理员认领前可撤回；撤回后商品置为已下架，需修改后重新提交审核，不会直接上架。',
-    })
-  } catch {
-    return
-  }
-  try {
     const data = await http.post(`/products/${route.params.id}/withdraw-review`)
     showToast(data.detail || '已撤回审核并下架')
   } catch {
@@ -442,7 +429,7 @@ async function withdrawReview() {
 
 async function delist() {
   try {
-    await showConfirmDialog({ title: '下架商品', message: '下架将关闭待接受请求并注明原因。' })
+    await showConfirmDialog({ title: '下架商品', message: '下架将关闭待接受请求，确定下架？' })
   } catch {
     return
   }
@@ -457,11 +444,6 @@ async function delist() {
 
 async function relist() {
   try {
-    await showConfirmDialog({ title: '重新上架', message: '审核有效且当前限制允许时恢复公开可交易。' })
-  } catch {
-    return
-  }
-  try {
     await http.post(`/products/${route.params.id}/relist`)
     showToast('已重新上架')
   } catch {
@@ -472,7 +454,7 @@ async function relist() {
 
 async function removeComment(c) {
   try {
-    await showConfirmDialog({ title: '删除评论', message: '删除为逻辑删除，历史保留。' })
+    await showConfirmDialog({ title: '删除评论', message: '确定删除这条评论？' })
   } catch {
     return
   }

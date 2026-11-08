@@ -248,7 +248,7 @@ async def create_request(body: RequestCreateIn, user: CurrentUser, db: DbSession
         await conversation_service.send_system_message(
             db,
             branch.id,
-            f"买方发起了对商品「{product.title}」的购买请求，请卖方在交易分支或通知中心处理。",
+            f"买方申请购买「{product.title}」。请点击上方“交易详情”处理请求并商定交易安排。",
         )
         await trade_ops.record_transition(db, trade, None, TradeStatus.PENDING_ACCEPTANCE.value, trigger="request_created", actor=user, actor_role="buyer")
         await notify(

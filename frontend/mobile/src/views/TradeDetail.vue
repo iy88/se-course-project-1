@@ -19,9 +19,9 @@
           <AppIcon name="alert" :size="18" />
           <span>交易已暂停</span>
         </div>
-        <p>原因：{{ trade.frozen_reason || '处置冻结' }}。冻结期间推进、确认、取消、争议及双方互发消息暂停，历史只读；处置沟通保留。</p>
+        <p>原因：{{ trade.frozen_reason || '处置冻结' }}</p>
         <p v-if="waitPausedText" class="freeze-box__wait">完成确认等待：{{ waitPausedText }}</p>
-        <p v-else-if="hasCurrentConfirmation" class="freeze-box__wait">当前完成声明保留；冻结期间不累计等待时间。</p>
+        <p v-else-if="hasCurrentConfirmation" class="freeze-box__wait">等待计时已暂停。</p>
       </div>
 
       <section class="surface trade-section">
@@ -55,7 +55,7 @@
           <van-button size="small" type="warning" plain :disabled="!canWithdrawRequest" @click="withdrawRequest">撤回请求</van-button>
         </div>
         <p v-if="!requestActionAllowed" class="hint">
-          当前状态下不能推进该购买请求；交易冻结、账户封禁或请求已处理时以服务端结果为准。
+          当前无法处理该请求。
         </p>
       </section>
 
@@ -78,7 +78,7 @@
         <van-cell v-else title="尚无有效约定" value="进行中可提出约定" />
 
         <div v-if="hasCurrentConfirmation" class="reset-hint">
-          一方或双方已有当前完成确认。变更约定须对方明确同意；同意生效后将清空双方当前确认并结束旧计时，原约定、确认及计时历史保留。
+          变更约定生效后，需要双方重新确认完成。
         </div>
 
         <div v-if="pendingForMe" class="pending-box">
@@ -136,7 +136,7 @@
           <van-button size="small" type="primary" @click="openCompletion">提交完成确认</van-button>
         </div>
         <div v-else-if="trade.frozen" class="action-row">
-          <span class="muted">冻结期间暂停完成确认；解冻且原确认有效时按服务端剩余时间续算。</span>
+          <span class="muted">冻结中，完成确认已暂停。</span>
         </div>
 
         <van-collapse v-if="confirmationHistory.length" v-model="confirmationOpen" class="history-collapse">
@@ -175,7 +175,7 @@
             <van-button size="small" plain :disabled="!canWithdrawCancel" :loading="withdrawingCancel" @click="withdrawCancel">撤回取消申请</van-button>
           </template>
         </van-cell>
-        <p v-if="trade.cancel_requested_by" class="hint">未同意前取消不生效，交易继续有效；对方可同意或拒绝，申请人可撤回取消申请。</p>
+        <p v-if="trade.cancel_requested_by" class="hint">等待对方处理取消申请。</p>
         <div class="action-row">
           <van-button size="small" type="warning" plain :disabled="!canCancel" @click="cancel">发起取消</van-button>
           <van-button size="small" type="danger" plain :disabled="!canDispute" @click="dispute">发起争议</van-button>
@@ -184,7 +184,7 @@
             {{ trade.resolution_confirmed_by === session.user.id ? '已确认解决，待对方' : '确认争议已解决' }}
           </van-button>
         </div>
-        <p v-if="trade.frozen" class="hint">交易冻结中：取消、争议及解决操作暂停，仅保留只读与处置沟通。</p>
+        <p v-if="trade.frozen" class="hint">交易已冻结，暂不能操作。</p>
       </section>
 
       <section class="surface trade-section">
@@ -224,7 +224,7 @@
       <div class="popup-panel">
         <h3>{{ trade?.effective_agreement ? '变更约定（须对方同意）' : '提出约定' }}</h3>
         <p v-if="hasCurrentConfirmation" class="popup-warn">
-          当前已有完成确认。变更生效会清空双方当前确认并结束旧计时，需对方同意；不同意则原约定、确认和计时都保留。
+          变更约定生效后，需要双方重新确认完成。
         </p>
         <div class="popup-fields">
           <TextField :limit="200" v-model="agreementForm.delivery_time" label="交付时间" placeholder="如：周六上午十点"  />
@@ -242,7 +242,7 @@
       :close-on-click-overlay="!submittingCompletion">
       <div class="popup-panel">
         <h3>提交完成确认</h3>
-        <p class="hint hint--left">提交即声明线下交付与支付均已完成。双方确认后交易完成，仅一方确认时开始 7 天等待。说明提交后不可自行修改。</p>
+
         <TextField v-model="completionNote" :limit="500" type="textarea" rows="3" placeholder="交付或支付说明（可选）"
           :disabled="submittingCompletion" />
         <p v-if="actionError" role="alert">{{ actionError }}</p>
@@ -260,7 +260,7 @@
         <van-button type="primary" block style="margin-top: 12px" :disabled="trade?.my_reviewed || !canWrite" @click="submitReview">
           {{ trade?.my_reviewed ? '已评价' : '提交评价' }}
         </van-button>
-        <p class="hint hint--left">评价仅在本人"我的评价"中按发表/收到查看，提交后不可修改或删除。</p>
+
       </div>
     </van-popup>
   </div>
@@ -370,13 +370,13 @@ const canResolveDispute = computed(
 const remainingText = computed(() => fmtDuration(trade.value?.confirm_wait_remaining_seconds))
 const waitPausedText = computed(() => {
   if (!trade.value?.frozen || !trade.value?.confirm_wait_paused_at) return ''
-  return `已暂停于 ${fmtTime(trade.value.confirm_wait_paused_at)}${remainingText.value ? `，剩余 ${remainingText.value}` : '，剩余时间以服务端记录为准'}`
+  return `已暂停于 ${fmtTime(trade.value.confirm_wait_paused_at)}${remainingText.value ? `，剩余 ${remainingText.value}` : ''}`
 })
 const waitStatusText = computed(() => {
   if (waitPausedText.value) return waitPausedText.value
   if (trade.value?.frozen) return '冻结期间等待计时暂停'
   if (!trade.value?.confirm_wait_started_at) return ''
-  const suffix = remainingText.value ? `，剩余 ${remainingText.value}` : '，剩余时间以服务端为准'
+  const suffix = remainingText.value ? `，剩余 ${remainingText.value}` : ''
   return `自 ${fmtTime(trade.value.confirm_wait_started_at)} 起算${suffix}（页面不按自然时间倒数）`
 })
 
@@ -396,7 +396,7 @@ const serverDetail = (err) =>
 
 function keepStateOnFailure(prefix, err) {
   // Do not rewrite page state from a failed response; keep the current trade and form so the user can reload or retry.
-  actionError.value = `${prefix}：${serverDetail(err)}。已保留当前页面与表单状态，未显示成功。`
+  actionError.value = `${prefix}：${serverDetail(err)}`
   if (err?.response?.status === 403) {
     // A freeze/ban or identity change may be rejected first by the server; refresh user-level eligibility to promptly hide unavailable actions.
     session.refreshUser().catch(() => {})
@@ -420,7 +420,7 @@ async function acceptRequest() {
   try {
     await showConfirmDialog({
       title: '接受购买请求',
-      message: '接受后锁单，商品进入交易中，并关闭该商品其他待接受请求。',
+      message: '接受后将关闭该商品的其他购买请求，确定接受？',
     })
   } catch {
     return
@@ -456,11 +456,6 @@ async function rejectRequest() {
 
 async function withdrawRequest() {
   if (!canWithdrawRequest.value) return
-  try {
-    await showConfirmDialog({ title: '撤回购买请求', message: '撤回后该请求结束，可在商品页重新发起。' })
-  } catch {
-    return
-  }
   actionError.value = ''
   try {
     const data = await http.post(`/trades/${route.params.id}/withdraw`, {})
@@ -508,17 +503,12 @@ async function proposeAgreement() {
 async function decideAgreement(accept) {
   const a = pendingForMe.value
   if (!a || !canDecideAgreement.value) return
-  try {
-    await showConfirmDialog({
-      title: accept ? '同意约定' : '拒绝提案',
-      message: accept
-        ? (hasCurrentConfirmation.value
-          ? '同意后新约定生效：双方当前完成确认将被清空、旧计时结束并保留历史；之后任一方重新确认才重新计时。'
-          : '同意后约定生效，可分别提交完成确认。')
-        : '拒绝只结束本次提案，可重新提出；原约定、当前确认和计时不变。',
-    })
-  } catch {
-    return
+  if (accept && hasCurrentConfirmation.value) {
+    try {
+      await showConfirmDialog({ title: '变更约定', message: '变更后双方需要重新确认完成，确定同意？' })
+    } catch {
+      return
+    }
   }
   if (!canDecideAgreement.value) return
   actionError.value = ''
@@ -591,11 +581,6 @@ async function withdrawCancel() {
 
 async function rejectCancel() {
   if (!canRejectCancel.value) return
-  try {
-    await showConfirmDialog({ title: '拒绝取消', message: '拒绝后取消申请结束，交易继续有效。' })
-  } catch {
-    return
-  }
   if (!canRejectCancel.value) return
   rejectingCancel.value = true
   actionError.value = ''
@@ -613,7 +598,7 @@ async function rejectCancel() {
 async function confirmCancel() {
   if (!canDecideCancel.value) return
   try {
-    await showConfirmDialog({ title: '同意取消', message: '双方同意后交易终止并计为失败。' })
+    await showConfirmDialog({ title: '同意取消', message: '确定取消这笔交易？' })
   } catch {
     return
   }
@@ -632,7 +617,7 @@ async function dispute() {
   if (!canDispute.value) return
   const { value } = await showDialog({
     title: '发起争议',
-    message: '争议须填写说明；交易保持锁单，不自动冻结。',
+    message: '请填写争议原因。',
     showCancelButton: true,
   }).catch(() => ({ value: null }))
   if (!value) return

@@ -12,9 +12,7 @@
 
         <p class="intro-eyebrow">ADMIN CONSOLE</p>
         <h1>审核、处置与留痕，在同一个工作台完成</h1>
-        <p class="intro-lead">
-          面向平台管理员的内容审核与交易处置控制台。登录后可认领事项、核查举报、冻结交易，并维护账户与分类。
-        </p>
+
 
         <ul class="intro-points">
           <li>

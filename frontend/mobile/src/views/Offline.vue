@@ -3,7 +3,7 @@
     <section class="offline-card" role="status">
       <AppIcon name="alert" :size="32" />
       <h1>暂时无法连接</h1>
-      <p>网络或服务器暂时不可用，且此设备没有可验证的本地账户缓存。为保护账户内容，当前不会显示需要登录的业务页面。</p>
+      <p>暂时无法连接服务器，请稍后重试。</p>
       <van-button block type="primary" @click="retry">重新连接</van-button>
     </section>
   </main>

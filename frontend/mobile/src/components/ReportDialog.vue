@@ -10,7 +10,7 @@
   >
     <div class="popup-panel report-dialog">
       <h3>{{ title }}</h3>
-      <p class="report-dialog__hint">填写举报原因；补充说明与截图证据可选，证据仅管理员可见。</p>
+
       <TextField :limit="500"
         v-model="reason"
         label="原因"

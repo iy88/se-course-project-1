@@ -92,13 +92,6 @@
         </el-table>
       </div>
     </el-card>
-
-    <el-alert
-      type="info"
-      :closable="false"
-      show-icon
-      title="停用后新发布不能选择该标签；从未关联商品的标签可逻辑删除；改名后当前展示新名、历史保留旧名为别名。"
-    />
   </div>
 </template>
 
@@ -145,7 +138,7 @@ async function create() {
 async function rename(row) {
   let value
   try {
-    ;({ value } = await ElMessageBox.prompt('新的主名称（旧主名将保留为别名）', '修改主名', {
+    ;({ value } = await ElMessageBox.prompt('新的分类名称', '修改主名', {
       inputValue: row.name,
     }))
   } catch {
@@ -158,23 +151,6 @@ async function rename(row) {
 
 async function toggleStatus(row) {
   const disabling = row.status === 'active'
-  try {
-    if (disabling) {
-      await ElMessageBox.confirm(
-        `停用分类「${row.name}」？停用后新发布不能选择该标签，已有商品归属与历史保留。`,
-        '停用分类',
-        { type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消' },
-      )
-    } else {
-      await ElMessageBox.confirm(
-        `启用分类「${row.name}」？启用后发布与筛选恢复可用。`,
-        '启用分类',
-        { type: 'info', confirmButtonText: '启用', cancelButtonText: '取消' },
-      )
-    }
-  } catch {
-    return
-  }
   await http.patch(`/categories/${row.id}`, {
     status: disabling ? 'disabled' : 'active',
   })
@@ -196,7 +172,7 @@ async function addAlias(row) {
 async function removeAlias(row, alias) {
   try {
     await ElMessageBox.confirm(
-      `移除别名「${alias}」？不改变商品归属及历史；移除后不再按该别名识别。`,
+      `确定移除别名「${alias}」？`,
       '移除别名',
     )
   } catch {
@@ -213,7 +189,7 @@ async function removeAlias(row, alias) {
 
 async function remove(row) {
   try {
-    await ElMessageBox.confirm('仅从未关联商品的标签可删除，确认删除？', '删除标签', { type: 'warning' })
+    await ElMessageBox.confirm('确定删除这个分类？', '删除标签', { type: 'warning' })
   } catch {
     return
   }
