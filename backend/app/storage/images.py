@@ -14,7 +14,7 @@ from app.storage.base import (
     StorageError,
 )
 
-MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_BYTES = 100 * 1024 * 1024
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _JPEG_MAGIC = b"\xff\xd8\xff"
@@ -45,7 +45,7 @@ def validate_image(content: bytes, filename: str) -> str:
     if not content:
         raise ImageValidationError("空文件")
     if len(content) > MAX_IMAGE_BYTES:
-        raise ImageValidationError("文件过大（上限 10MB）")
+        raise ImageValidationError("文件过大（上限 100 MiB）")
 
     detected = detect_image_type(content)
     if detected is None:

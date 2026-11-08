@@ -428,7 +428,7 @@ class OssStorage(StorageBackend):
                 data = bytearray()
                 for chunk in body.iter_bytes():
                     data.extend(chunk)
-                    if len(data) > 10 * 1024 * 1024:
+                    if len(data) > 100 * 1024 * 1024:
                         raise StorageUnavailable("The file exceeds the read size limit")
                 return bytes(data), info
             finally:

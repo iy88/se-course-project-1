@@ -217,8 +217,8 @@ class LocalStorage(StorageBackend):
         path = self._path(key)
         try:
             with path.open("rb") as stream:
-                data = stream.read(10 * 1024 * 1024 + 1)
-            if len(data) > 10 * 1024 * 1024:
+                data = stream.read(100 * 1024 * 1024 + 1)
+            if len(data) > 100 * 1024 * 1024:
                 raise StorageUnavailable("The file exceeds the read size limit")
             return data
         except FileNotFoundError as exc:

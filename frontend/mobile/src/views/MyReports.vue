@@ -71,10 +71,11 @@
                 <van-uploader
                   v-model="supplementFiles"
                   :max-count="3"
+                  :preview-options="{ closeable: true }"
                   accept="image/jpeg,image/png,image/webp,image/gif"
-                  :max-size="10 * 1024 * 1024"
+                  :max-size="100 * 1024 * 1024"
                   :disabled="supplement.submitting"
-                  @oversize="showToast('图片不能超过 10 MiB')"
+                  @oversize="showToast('图片不能超过 100 MiB')"
                 />
               </div>
               <p v-if="supplement.error" class="report-card__error">{{ supplement.error }}</p>

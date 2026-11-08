@@ -51,3 +51,19 @@ def upgrade_additive_schema(conn: Connection) -> list[str]:
     if 'audit_events' in existing_tables:
         conn.execute(text("DELETE FROM audit_events WHERE actor_role='anonymous' OR (actor_id IS NULL AND actor_role<>'system')"))
     return applied
+
+
+def drop_upload_size_constraint(conn: Connection) -> None:
+    """Preserve old SQLite leases while removing the fixed upload size constraint."""
+    if conn.dialect.name != "sqlite" or "upload_leases" not in inspect(conn).get_table_names():
+        return
+    constraints = inspect(conn).get_check_constraints("upload_leases")
+    old = next((item for item in constraints if "size_bytes" in item["sqltext"]), None)
+    if old is None:
+        return
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    operations = Operations(MigrationContext.configure(conn))
+    with operations.batch_alter_table("upload_leases") as batch:
+        batch.drop_constraint(old["name"], type_="check")

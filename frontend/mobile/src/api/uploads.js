@@ -1,6 +1,6 @@
 import http from './http'
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_IMAGE_BYTES = 100 * 1024 * 1024
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const EXTENSION_TYPES = new Map([
   ['jpg', 'image/jpeg'],
@@ -29,14 +29,20 @@ function resolveUploadUrl(uploadUrl) {
   return new URL(uploadUrl, apiRoot).toString()
 }
 
-/** Obtain a short-lived upload lease, upload bytes directly, then commit the verified object. */
-export async function uploadImage(file, namespace = 'product') {
+/** Validate before adding a file to the picker or starting an upload. */
+export function validateImageFile(file) {
   if (!(file instanceof File)) throw new Error('请选择有效图片')
   if (file.size <= 0) throw new Error('图片不能为空')
-  if (file.size > MAX_IMAGE_BYTES) throw new Error('图片不能超过 10 MiB')
+  if (file.size > MAX_IMAGE_BYTES) throw new Error('图片不能超过 100 MiB')
 
   const contentType = contentTypeFor(file)
   if (!IMAGE_TYPES.has(contentType)) throw new Error('仅支持 JPG、PNG、WebP 或 GIF 图片')
+  return contentType
+}
+
+/** Obtain a short-lived upload lease, upload bytes directly, then commit the verified object. */
+export async function uploadImage(file, namespace = 'product') {
+  const contentType = validateImageFile(file)
   const sha256 = await sha256Hex(file)
   const lease = await http.post('/files/upload-leases', {
     namespace,

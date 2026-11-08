@@ -80,8 +80,14 @@
             <span>至少一张，最多 6 张</span>
           </header>
           <div class="upload-wrap">
-            <van-uploader v-model="fileList" :max-count="6" />
-            <p class="form-hint">建议上传清晰实拍图，图片比例会按原图保留。最多 6 张，单张不超过 10 MiB，支持 JPG/PNG/WebP/GIF。</p>
+            <van-uploader
+              v-model="fileList"
+              :max-count="6"
+              accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
+              :before-read="beforeReadImage"
+              :preview-options="{ closeable: true }"
+            />
+            <p class="form-hint">建议上传清晰实拍图，图片比例会按原图保留。最多 6 张，单张不超过 100 MiB，支持 JPG/PNG/WebP/GIF。</p>
           </div>
         </section>
 
@@ -167,7 +173,7 @@ import AppIcon from '../components/AppIcon.vue'
 import AppNavBar from '../components/AppNavBar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import http from '../api/http'
-import { uploadImage } from '../api/uploads'
+import { uploadImage, validateImageFile } from '../api/uploads'
 import { uploadErrorMessage } from '../api/uploadErrors'
 import {
   isCategorySelectable,
@@ -186,6 +192,17 @@ const isEdit = computed(() => editId.value > 0)
 const form = reactive({ title: '', description: '' })
 const priceYuan = ref('')
 const fileList = ref([])
+
+function beforeReadImage(files) {
+  try {
+    for (const file of Array.isArray(files) ? files : [files]) validateImageFile(file)
+    return true
+  } catch (error) {
+    showToast(error.message)
+    return false
+  }
+}
+
 const categories = ref([])
 const selectedCategoryIds = ref([])
 const initialCategoryIds = ref([])
@@ -253,7 +270,7 @@ async function uploadAll() {
       keys.push(key)
     } catch (error) {
       file.status = 'failed'
-      // Show the specific reason (empty file / over 10 MiB / unsupported type / server rejection, etc.) so the user can correct it.
+      // Show the specific reason (empty file / over 100 MiB / unsupported type / server rejection, etc.) so the user can correct it.
       file.message = uploadErrorMessage(error)
       throw error
     }

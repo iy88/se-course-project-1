@@ -24,10 +24,10 @@
             class="avatar-editor__upload"
             accept="image/jpeg,image/png,image/webp,image/gif"
             :preview-image="false"
-            :max-size="10 * 1024 * 1024"
+            :max-size="100 * 1024 * 1024"
             :disabled="avatarUploading || session.user?.avatar_review_status === 'pending'"
             :after-read="submitAvatar"
-            @oversize="showToast('图片不能超过 10 MiB')"
+            @oversize="showToast('图片不能超过 100 MiB')"
           >
             <van-button class="avatar-editor__button" size="small" round type="primary" plain :loading="avatarUploading" :disabled="session.user?.avatar_review_status === 'pending'">
               {{ session.user?.avatar_review_status === 'pending' ? '审核中' : '更换头像' }}
@@ -157,7 +157,7 @@ const avatarFile = ref(null)
 function submitAvatar(item) {
   const file = item.file
   if (!file) return
-  if (file.size > 10 * 1024 * 1024) return showToast('图片不能超过 10 MiB')
+  if (file.size > 100 * 1024 * 1024) return showToast('图片不能超过 100 MiB')
   avatarFile.value = file
 }
 async function uploadAvatar(file) {

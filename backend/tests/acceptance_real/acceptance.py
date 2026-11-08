@@ -1310,7 +1310,7 @@ class AcceptanceRun:
             for body, expected, note in [
                 ({**base,"namespace":"unknown"},400,"invalid-namespace"),
                 ({**base,"filename":"x.txt","content_type":"text/plain"},400,"non-image"),
-                ({**base,"size_bytes":10*1024*1024+1},422,"oversized"),
+                ({**base,"size_bytes":100*1024*1024+1},422,"oversized"),
                 ({**base,"sha256":"invalid"},422,"invalid-hash"),
             ]:
                 self._call("POST","/api/v1/files/upload-leases",user="seller",json_body=body,expected=expected,note=note)

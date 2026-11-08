@@ -172,7 +172,7 @@ def test_nginx_fragment_keeps_static_host_and_hides_ws_query_log():
     assert "$request" not in text
     assert "location /ws" in text
     assert not any(line.strip().startswith("server {") for line in text.splitlines())
-    assert "client_max_body_size 10m" in text
+    assert "client_max_body_size 101m" in text
 
 
 def test_systemd_units_are_non_root_and_allow_managed_python_reads():

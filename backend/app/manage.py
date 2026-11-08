@@ -91,7 +91,7 @@ def run_migrate(revision: str) -> int:
         from sqlalchemy.ext.asyncio import create_async_engine
 
         import app.models  # noqa: F401 - register metadata  # pyright: ignore[reportUnusedImport]
-        from app.db.migrations import upgrade_additive_schema
+        from app.db.migrations import upgrade_additive_schema, drop_upload_size_constraint
         from app.db.session import Base
 
         async def migrate_local() -> None:
@@ -101,6 +101,7 @@ def run_migrate(revision: str) -> int:
                 async with engine.begin() as connection:
                     await connection.run_sync(Base.metadata.create_all)
                     await connection.run_sync(upgrade_additive_schema)
+                    await connection.run_sync(drop_upload_size_constraint)
             finally:
                 await engine.dispose()
 

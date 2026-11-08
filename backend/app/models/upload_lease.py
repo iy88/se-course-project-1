@@ -12,7 +12,6 @@ class UploadLease(Base, table=True):
     __tablename__ = cast(Any, 'upload_leases')
     __table_args__ = (
         CheckConstraint("state IN ('pending','completed','failed')",name="upload_state_allowed"),
-        CheckConstraint("size_bytes > 0 AND size_bytes <= 10485760",name="upload_size_allowed"),
         CheckConstraint("length(sha256) = 64",name="upload_sha256_length"),
     )
     id: str = Field(sa_column=Column(String(32), primary_key=True))

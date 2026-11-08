@@ -33,7 +33,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_ROOT.parent
 DEFAULT_ENV_FILE = BACKEND_ROOT / ".env.dev"
 PROD_ENV_FILE = BACKEND_ROOT / ".env.prod"
-MAX_OBJECT_BYTES = 10 * 1024 * 1024
+MAX_OBJECT_BYTES = 100 * 1024 * 1024
 
 FORBIDDEN_INHERITED_ENV = frozenset(
     {
@@ -484,7 +484,7 @@ class StorageProbe:
         except Exception as exc:  # noqa: BLE001 - sanitize all storage-layer exceptions
             raise self._translated(exc) from None
         if not isinstance(content, bytes) or len(content) > MAX_OBJECT_BYTES:
-            raise StorageProbeError("Object read returned invalid content or exceeded 10MB")
+            raise StorageProbeError("Object read returned invalid content or exceeded 100 MiB")
         return content
 
     def delete(self, key: str) -> None:
