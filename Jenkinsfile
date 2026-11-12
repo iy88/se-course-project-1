@@ -38,7 +38,7 @@ pipeline {
                 dir('source') {
                     deleteDir()
 
-                    sshagent(credentials: ['gitea-deploy-readonly']) {
+                    sshagent(credentials: ['se-project1-gitea-readonly']) {
                         sh '''
                             set -eu
 
@@ -52,7 +52,7 @@ pipeline {
                                 -o ServerAliveCountMax=2'
 
                             git clone \
-                                --branch main \
+                                --branch legacy \
                                 --single-branch \
                                 git@192.168.3.223:iy88/se-course-project-1.git \
                                 .

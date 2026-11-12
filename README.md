@@ -1,13 +1,13 @@
 <!--
-Version: 0.1.49
-Version-Datetime: 2026-11-08T20:40:36+08:00
+Version: 0.1.50
+Version-Datetime: 2026-11-12T19:02:54+08:00
 -->
 
 # 校园二手交易与物品流转平台
 
-## dev 开发分支说明
+## legacy 分支说明
 
-`dev` 分支用于持续开发，包含后端 `backend/`、桌面管理端 `frontend/admin/` 和移动PWA `frontend/mobile/` 的开发实现，运行期数据位于被忽略的 `var/`。开发决策与技术口径见[开发技术决策](docs/development/技术决策.md)，运行与数据管理命令见[开发指南](docs/development/guidance.md)。
+`legacy` 分支保存前一阶段实现，包含后端 `backend/`、桌面管理端 `frontend/admin/` 和移动PWA `frontend/mobile/` 的开发实现，运行期数据位于被忽略的 `var/`。开发决策与技术口径见[开发技术决策](docs/development/技术决策.md)，运行与数据管理命令见[开发指南](docs/development/guidance.md)。
 
 2026-10-28同步需求主线 `c4ee232`，A／B报告均已确认。随后按合并后的需求完成三端实现对齐、隔离副本并行开发和多轮代码审查；历史测试及人工核验仅代表各自记录的范围，本轮自动化回归不替代系统人工验收，历次实现与验证记录由 Git 提交历史追踪。下文需求阶段范围约束适用于需求材料维护。
 
@@ -27,7 +27,7 @@ ORM模型和业务查询采用SQLModel，数据库引擎与迁移保留必要SQL
 
 ### 环境与目录
 
-本节介绍 `dev` 分支的开发环境与运行方式。准备 Python 3.12及以上、uv、Node.js 22及以上及npm；Python依赖由 [uv.lock](backend/uv.lock) 固定，两个前端分别使用各自的 `package-lock.json`。优先使用下方统一后台入口；手动启动备选方案需要三个独立终端。
+本节介绍 `legacy` 分支的开发环境与运行方式。准备 Python 3.12及以上、uv、Node.js 22及以上及npm；Python依赖由 [uv.lock](backend/uv.lock) 固定，两个前端分别使用各自的 `package-lock.json`。优先使用下方统一后台入口；手动启动备选方案需要三个独立终端。
 
 | 服务／数据 | 位置 | 本地地址／用途 |
 |---|---|---|
