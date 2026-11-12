@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.3
-Version-Datetime: 2026-10-27T21:54:13+08:00
+Version: 0.1.4
+Version-Datetime: 2026-11-12T23:59:36+08:00
 -->
 
 <html lang="zh-CN">
@@ -594,7 +594,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
               <div class="hr"></div>
               <p class="label">当次内容</p>
               <p>“宿舍台灯，9 成新，暖光三档，35 元，可在东区宿舍楼下自提。” 附图片 2 张。</p>
-              <p class="muted">分类标签“学习用品 / 台灯”随本次审核结果生效。</p>
+              <p class="muted">分类“学习用品 / 台灯”随本次审核结果生效。</p>
               <div class="row">
                 <button type="button" class="btn primary" id="us08-pass">审核通过</button>
                 <button type="button" class="btn" id="us08-return">退回补充</button>
@@ -732,7 +732,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
     <div class="card-head">验收要点 <span class="muted">关键 AC，界面据此设计</span></div>
     <ul class="list">
       <li class="list-item">US-08-AC-01：事项在共享池且未认领 → 界面显示“待认领”；认领后仅认领人出现处理入口，其他人的处理按钮保持禁用。</li>
-      <li class="list-item">US-08-AC-02：待审商品已被本人认领 → 审核面板显示当次内容与当前禁发范围；通过或退回都要记录原因并通知发布者，标签随审批生效。</li>
+      <li class="list-item">US-08-AC-02：待审商品已被本人认领 → 审核面板显示当次内容与当前禁发范围；通过或退回都要记录原因并通知发布者，分类随审批生效。</li>
       <li class="list-item">US-08-AC-03：举报证据不足且没有实际处置 → 可记录“无法认定／不予处理”并通知举报人；被举报人处不出现该告知。</li>
       <li class="list-item">US-08-AC-04：内容移除、封禁或交易冻结生效 → 受影响者在通知与事项页看到原因、范围及本人沟通入口，举报人身份不可见。</li>
       <li class="list-item">US-08-AC-05：问询阶段或处置之后 → 分别在原事项提交说明与申辩，管理员回复结论及原因并通知；问询不改变状态，申辩不自动撤销处置。</li>
@@ -798,7 +798,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       passBtn.addEventListener('click', function () {
         result.hidden = false;
         result.className = 'banner info';
-        result.textContent = '审核通过：商品进入公开可交易，结果已通知发布者；分类标签随本次审核生效。';
+        result.textContent = '审核通过：商品进入公开可交易，结果已通知发布者；分类随本次审核生效。';
         reviewState.textContent = '已通过';
         reviewState.className = 'state ok';
         passBtn.disabled = true;

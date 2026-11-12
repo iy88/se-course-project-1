@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.0
-' Version-Datetime: 2026-10-26T12:37:57+08:00
+' Version: 0.1.1
+' Version-Datetime: 2026-11-12T23:59:36+08:00
 title UC-15 · UC-C13 维护商品分类
 
 skinparam backgroundColor #FFFFFF
@@ -24,11 +24,11 @@ actor 平台管理员 as Admin
 actor 卖方 as Seller
 
 rectangle "校园二手交易与物品流转平台" {
-  usecase (UC-C13-01 新增分类标签) as C1301
+  usecase (UC-C13-01 新增分类) as C1301
   usecase (UC-C13-02 分类主名称修改) as C1302
   usecase (UC-C13-03 停用或删除分类) as C1303
   usecase (UC-C13-04 维护别名及纠正商品分类) as C1304
-  usecase (随商品申请新分类标签或别名) as C13A1 <<辅助>>
+  usecase (随商品申请新分类或别名) as C13A1 <<辅助>>
 }
 
 Admin --> C1301
@@ -38,7 +38,7 @@ Admin --> C1304
 Seller --> C13A1
 
 ' note right of C1301
-'   管理员可主动创建公共分类标签，不依赖商品；
+'   管理员可主动创建公共分类，不依赖商品；
 '   初始条目由管理员准备（FR-13、4.16）。
 ' end note
 
@@ -61,7 +61,7 @@ Seller --> C13A1
 
 ' note bottom of C13A1
 '   卖方仅随本人商品提交申请，不直接创建公共
-'   标签；商品审核通过时一并生效，未通过不单独
+'   分类；商品审核通过时一并生效，未通过不单独
 '   公开；由认领审核管理员处理，见 UC-C02 与
 '   UC-C08-06。
 ' end note
@@ -70,7 +70,7 @@ Seller --> C13A1
 ' 目标，无 include/extend；卖方申请用无编号辅助
 ' 用例，避免把管理员创建权与卖方申请权混同。
 legend bottom
-管理员创建公共标签；卖方申请随商品审核通过生效。
+管理员创建公共分类；卖方申请随商品审核通过生效。
 分类身份稳定；更名、停用、别名移除及纠类不改历史交易内容。
 endlegend
 @enduml

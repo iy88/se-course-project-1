@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.4
-Version-Datetime: 2026-10-27T21:54:13+08:00
+Version: 0.1.5
+Version-Datetime: 2026-11-12T23:59:36+08:00
 -->
 
 <html lang="zh-CN">
@@ -564,7 +564,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
               <textarea class="textarea" id="us-02-desc" rows="3" placeholder="成色、使用情况、取货地点等，如：九成新，少量荧光笔标记，东区自提"></textarea>
             </div>
             <div class="field">
-              <span class="label">标签（至少选择一个，或申请新标签）</span>
+              <span class="label">分类（至少选择一个，或申请新分类）</span>
               <div class="form-row">
                 <button class="chip tag-btn" type="button" data-tag="教材" aria-pressed="false">教材</button>
                 <button class="chip tag-btn" type="button" data-tag="习题册" aria-pressed="false">习题册</button>
@@ -573,7 +573,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
                 <button class="chip tag-btn" type="button" data-tag="宿舍用品" aria-pressed="false">宿舍用品</button>
               </div>
               <div class="form-row">
-                <input class="input" id="us-02-new-tag" type="text" placeholder="新标签申请，如：考研资料">
+                <input class="input" id="us-02-new-tag" type="text" placeholder="新分类申请，如：考研资料">
                 <span class="mini-note">申请随本次审核结果生效</span>
               </div>
             </div>
@@ -625,7 +625,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
                     <span class="pill">10-22 提交；尚未认领（示例）</span>
                   </div>
                   <div class="prod-actions">
-                    <button class="btn ghost" type="button" data-toast="待审核期认领前后均可修改内容或标签，不重新排队；审核以提交结论时最新内容为准（演示）">修改待审内容</button>
+                    <button class="btn ghost" type="button" data-toast="待审核期认领前后均可修改内容或分类，不重新排队；审核以提交结论时最新内容为准（演示）">修改待审内容</button>
                     <button class="btn ghost" type="button" data-toast="审核中：结果将出现在“我的商品”和站内通知">查看审核状态</button>
                     <button class="btn ghost" type="button" data-toast="仅审核认领前可撤回；认领后拒绝撤回且状态保持。撤回后商品置为已下架，不产生公开内容；修改后可重新提交审核（演示）">撤回</button>
                   </div>
@@ -759,7 +759,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <span class="muted">以 US-02 为验收依据，不展开规则细节</span>
     </div>
     <div class="list">
-      <div class="list-item"><div><strong>US-02-AC-01</strong>：提交完整商品与标签或标签申请 → 商品显示“待审核”，通过后公开可交易，申请标签随本次审核生效。</div></div>
+      <div class="list-item"><div><strong>US-02-AC-01</strong>：提交完整商品与分类或分类申请 → 商品显示“待审核”，通过后公开可交易，申请分类随本次审核生效。</div></div>
       <div class="list-item"><div><strong>US-02-AC-02</strong>：审核未通过 → 卖方可见拒绝原因；修改重提保留当次内容并形成独立审核记录，旧结论保留。</div></div>
       <div class="list-item"><div><strong>US-02-AC-03</strong>：商品允许编辑且存在未结束请求 → 可编辑并保留历史与展示，待接受请求不关闭，相关买方收到变更通知。</div></div>
       <div class="list-item"><div><strong>US-02-AC-04</strong>：商品处于交易中修改关键内容 → 界面拒绝编辑；有权限管理员的分类纠正另行留依据并通知卖方。</div></div>
@@ -767,7 +767,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <div class="list-item"><div><strong>US-02-AC-06</strong>：已下架商品原审核有效且当前资格允许 → 重新上架后恢复公开可交易，后续新交易使用独立记录及分支。</div></div>
       <div class="list-item"><div><strong>US-02-AC-07</strong>：仅交易冻结、账户未封禁 → 允许合规编辑无关商品，发布、主动下架及上架均被拒绝并提示冻结原因；封禁账户另按写操作限制。</div></div>
       <div class="list-item"><div><strong>US-02-AC-08</strong>：尚未提交商品时查看禁发范围 → 直接展示管理员维护的当前禁发细目，无需先创建商品；管理员保存更新后查看可见最新范围。</div></div>
-      <div class="list-item"><div><strong>US-02-AC-09</strong>：本人商品处于待审核 → 可修改内容或标签、撤回标签申请或撤回商品；认领前后均可修改，以提交审核结论时最新内容为准、不重新排队；撤回商品仅限认领前，认领后拒绝撤回且状态保持；撤回后置为已下架、修改后可重新提交审核。</div></div>
+      <div class="list-item"><div><strong>US-02-AC-09</strong>：本人商品处于待审核 → 可修改内容或分类、撤回分类申请或撤回商品；认领前后均可修改，以提交审核结论时最新内容为准、不重新排队；撤回商品仅限认领前，认领后拒绝撤回且状态保持；撤回后置为已下架、修改后可重新提交审核。</div></div>
     </div>
   </div>
 
@@ -806,7 +806,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           problems.push('请填写大于 0 的价格');
         }
         if (selectedTags.length === 0 && !newTag) {
-          problems.push('至少选择一个已有标签，或填写新标签申请');
+          problems.push('至少选择一个已有分类，或填写新分类申请');
         }
         if (problems.length > 0) {
           formError.textContent = problems.join('；') + '。';
@@ -817,7 +817,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         }
         formError.hidden = true;
         if (frozen) { toast('发布被拒绝：交易冻结期间禁止发布新商品'); return; }
-        publishOk.textContent = '已提交审核：商品状态“待审核”，不公开展示，进入管理员共享待处理池。' + (newTag ? '新标签“' + newTag + '”随本次审核一并处理：商品通过前不公开、不可被他人选择。' : '审核结果将出现在“我的商品”和站内通知中。');
+        publishOk.textContent = '已提交审核：商品状态“待审核”，不公开展示，进入管理员共享待处理池。' + (newTag ? '新分类“' + newTag + '”随本次审核一并处理：商品通过前不公开、不可被他人选择。' : '审核结果将出现在“我的商品”和站内通知中。');
         publishOk.hidden = false;
         toast('已提交审核，当前状态：待审核');
       });

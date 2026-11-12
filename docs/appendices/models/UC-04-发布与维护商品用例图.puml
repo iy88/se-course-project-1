@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.1
-' Version-Datetime: 2026-10-29T14:58:36+08:00
+' Version: 0.1.2
+' Version-Datetime: 2026-11-12T23:59:36+08:00
 title UC-04 · UC-C02 发布与维护商品
 
 skinparam backgroundColor #FFFFFF
@@ -61,8 +61,8 @@ ClaimAdmin --> C02A4
 ' end note
 
 ' note bottom of C02A2
-'   认领前后均可修改内容、更换分类标签或撤回
-'   标签申请；不因修改重新排队，审核以提交结论
+'   认领前后均可修改内容、更换分类或撤回
+'   分类申请；不因修改重新排队，审核以提交结论
 '   时最新内容为准（BR-10）。
 ' end note
 
@@ -83,7 +83,7 @@ ClaimAdmin --> C02A4
 
 ' note top of C02A4
 '   与 UC-C08-06 是同一次商品审核协作：读取当次
-'   内容及标签申请，记录结论与原因并通知发布者；
+'   内容及分类申请，记录结论与原因并通知发布者；
 '   交易中分类纠正见 UC-C13-04，不新增全局编号。
 ' end note
 

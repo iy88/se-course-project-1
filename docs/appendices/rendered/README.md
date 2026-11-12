@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.9
-Version-Datetime: 2026-10-29T16:36:24+08:00
+Version: 0.1.10
+Version-Datetime: 2026-11-12T23:59:36+08:00
 -->
 
 # 图源渲染索引
@@ -41,5 +41,5 @@ PNG 使用单一字体 PingFang SC（苹方），中文与西文均按该字体�
 | UC-12-查看管理统计用例图 | [PlantUML](../../appendices/models/UC-12-查看管理统计用例图.puml) | [PNG](UC-12-查看管理统计用例图.png) | 900 × 670 | 200 |
 | UC-13-接收通知与待办用例图 | [PlantUML](../../appendices/models/UC-13-接收通知与待办用例图.puml) | [PNG](UC-13-接收通知与待办用例图.png) | 837 × 836 | 200 |
 | UC-14-管理本人业务用例图 | [PlantUML](../../appendices/models/UC-14-管理本人业务用例图.puml) | [PNG](UC-14-管理本人业务用例图.png) | 951 × 889 | 200 |
-| UC-15-维护商品分类用例图 | [PlantUML](../../appendices/models/UC-15-维护商品分类用例图.puml) | [PNG](UC-15-维护商品分类用例图.png) | 929 × 1116 | 200 |
+| UC-15-维护商品分类用例图 | [PlantUML](../../appendices/models/UC-15-维护商品分类用例图.puml) | [PNG](UC-15-维护商品分类用例图.png) | 929 × 1106 | 200 |
 | UC-16-处理异常交易用例图 | [PlantUML](../../appendices/models/UC-16-处理异常交易用例图.puml) | [PNG](UC-16-处理异常交易用例图.png) | 987 × 1034 | 200 |
