@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.2
-Version-Datetime: 2026-10-29T17:51:11+08:00
+Version: 0.2.3
+Version-Datetime: 2026-11-13T01:47:49+08:00
 -->
 
 # 文档构建
@@ -23,7 +23,8 @@ scripts/
   doc_tools/
     common.py            # 原子写入、版本元数据与公共常量
     markdown.py          # Markdown展开、链接重定位与锚点
-    report.py            # 章节同步与整合说明书
+    report.py            # 需求章节同步与整合说明书
+    design.py            # 按清单拼合设计文档
     diagrams.py          # PlantUML渲染、PNG和DPI
     checks.py            # 本地文档引用检查
     pdf/
@@ -99,3 +100,17 @@ python3 scripts/cli.py pdf --force --only docs/requirements/01-项目概述.md
 导出不修改源 Markdown。本地 `.md` 链接改写为相对 `.pdf` 路径并保留片段；标题同时登记 Pandoc ID 与 GitHub 风格片段别名，正文中的 `<a id="…">` 转为 LaTeX 目标，使目录链接可用。ASCII 片段保持原样；非 ASCII 片段在 PDF 目标中映射为稳定的 ASCII 目标名，避免 XeLaTeX 目标名编码不一致。外部 URL 原样保留；PNG、PUML 等非 Markdown 附件复制到对应目录。`docs/` 之外的仓库文档不导出；对应链接在PDF中保留标题与仓库相对路径文字，不生成点击动作或 `_repository/`。PDF间文件跳转使用显式UTF-16BE文件描述（`/Filespec`、`/UF`），保留真实中文文件名和空格，避免短中文名被误解为PDFDocEncoding，不把文件名编码为URI；网页和普通附件仍按URI处理。不展开索引目录，只处理实际链接。
 
 输出为 A4，正文使用中文字体，长代码与 URL 自动换行，图片缩放至版心并按正文位置放置，避免漂移到长表之后；列数达到 6 的宽表自动使用横向页（`--no-landscape-tables` 可关闭）。字体、页边距、字号及宽表阈值可通过 `--cjk-main-font`、`--margin`、`--fontsize`、`--wide-table-columns` 等参数调整。`scripts/doc_tools/pdf/header.tex` 将正文使用的箭头（`→`、`↔` 等）映射到数学字形，并把带圈数字 `①`—`⑳` 声明为 CJK 字符，避免中文字体缺字形成空框。
+
+## 设计文档拼合
+
+设计源文件位于 `docs/design/`，`docs/design/基线索引.md` 为统一入口。`docs/design/拼合清单.json` 逐份列明文档标识、标题、输出文件和有序源文件。新增 Q、ADR、模块接口及关键设计专题后，在对应文档的 `sources` 中登记相对于 `docs/design/` 的源文件路径。
+
+```text
+python3 scripts/cli.py report --documents design
+python3 scripts/cli.py check --documents design
+python3 scripts/cli.py report --documents requirements
+```
+
+`--documents` 支持 `requirements`、`design` 和 `all`，默认 `all`。需求组继续使用 `docs/requirements/01—08` 及原摘录同步规则。设计组生成架构讨论稿、架构确认与决策记录、接口与关键设计说明书、分阶段实现与测试计划，保留章节来源链接并检查相对链接、目录和标题层级。架构基线版作为独立占位文件维护。模板用于建立后续条目，条目形成后按清单纳入整合文档。
+
+设计组检查以只读方式核对生成结果；`check --documents design` 执行设计文档与仓库 Markdown 引用检查。相同内容重复生成保持结果稳定。
