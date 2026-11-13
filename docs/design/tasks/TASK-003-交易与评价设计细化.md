@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.4
-Version-Datetime: 2026-11-13T11:39:16+08:00
+Version: 0.1.5
+Version-Datetime: 2026-11-13T13:44:44+08:00
 -->
 
 # TASK-003 交易与评价设计细化
@@ -55,6 +55,8 @@ T1／T2 主体、转换与计时及 T3 本域接口持续推进，T5 业务预�
 
 ## 扩展：多批次分支、提交与 PR
 
+命令中的 `<目标远端>` 通过 `git remote -v` 核对，填写本机指向协作仓库的实际远端别名；`<GitHub仓库>` 填写 GitHub 的 `OWNER/REPO`（本项目为 `iy88/se-course-project-1`）。执行前将尖括号占位符替换为实际值。Git 的远端别名与 gh 的仓库标识分别填写。
+
 每份任务必须按下表拆成多个 PR，各批次使用独立分支，PR 目标统一为 `design`。每份 PR 内按独立目的组织多个小 commit，保持正文、引用及必要案例一致；较大子项继续按接口组或状态规则拆分。
 
 | 批次 | 指定分支 | PR 交付范围 | 就绪输入与并行安排 |
@@ -65,7 +67,7 @@ T1／T2 主体、转换与计时及 T3 本域接口持续推进，T5 业务预�
 | 4 | `task-003/04-cross-subject-adaptation` | T4：商品、会话及处置的签名绑定和事务适配 | R0、R1、R2a、R2b 与 C1／C3 的评审版本 |
 | 5 | `task-003/05-validation` | T5：并发、恢复及关联验证预期 | 本域预期随各批次编写；关联部分采用第4批版本 |
 
-1. Issue 登记设计输入提交；每个批次从可用的 `design` 提交建立表列分支。首批为 `task-003/01-product-trade-contract`，首次推送使用 `git push -u github refs/heads/task-003/01-product-trade-contract:refs/heads/task-003/01-product-trade-contract`。
+1. Issue 登记设计输入提交；每个批次从可用的 `design` 提交建立表列分支。首批为 `task-003/01-product-trade-contract`，首次推送使用 `git push -u <目标远端> refs/heads/task-003/01-product-trade-contract:refs/heads/task-003/01-product-trade-contract`。
 2. 首个可审阅 commit 后提出 Draft PR，关联任务 Issue，并列出本批目标、前置输入及后续批次。
 3. 每个 commit 聚焦一项完整变更，尽量缩小差异；格式整理与独立设计修改分别提交。提交前审阅差异并精确暂存。
 4. 每批审查通过后合入 `design`，后续批次从已集成版本建立。可独立的批次可并行建立，跨批次依赖在 Issue 登记。
@@ -74,7 +76,7 @@ T1／T2 主体、转换与计时及 T3 本域接口持续推进，T5 业务预�
 
 ## Issue 发布与 PR reviewer
 
-每个批次的 PR 必须请求袁尚峰（`iy88`）作为 reviewer，可使用 `gh pr edit <PR编号> --add-reviewer iy88`；review 通过后按集成流程合入。 Issue 发布时沿用本任务内容，并保留该 reviewer 要求。
+每个批次的 PR 必须请求袁尚峰（`iy88`）作为 reviewer，可使用 `gh pr edit <PR编号> --repo <GitHub仓库> --add-reviewer iy88`；review 通过后按集成流程合入。 Issue 发布时沿用本任务内容，并保留该 reviewer 要求。
 
 ## 文件及协作边界
 

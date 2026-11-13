@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.1
-Version-Datetime: 2026-11-13T11:37:30+08:00
+Version: 0.2.2
+Version-Datetime: 2026-11-13T13:44:44+08:00
 -->
 
 # v2 设计与分阶段实现协作规范
@@ -30,11 +30,13 @@ Version-Datetime: 2026-11-13T11:37:30+08:00
 
 ## 分支、commit、PR 与 Issue
 
+命令中的 `<目标远端>` 通过 `git remote -v` 核对，填写本机指向协作仓库的实际远端别名；`<GitHub仓库>` 填写 GitHub 的 `OWNER/REPO`（本项目为 `iy88/se-course-project-1`）。执行前将尖括号占位符替换为实际值。Git 的远端别名与 gh 的仓库标识分别填写。
+
 1. 每份任务按[任务卡](docs/design/tasks/索引.md)的批次表拆成多个 PR，每批使用指定独立分支，目标为 `design`。分支起点采用 Issue 登记的实际提交。
-2. 首次推送使用 `git push -u github <分支>` 建立跟踪。首个可审阅内容提交后建立 Draft PR，关联任务 Issue。
+2. 首次推送使用 `git push -u <目标远端> refs/heads/<分支>:refs/heads/<分支>` 建立跟踪。首个可审阅内容提交后建立 Draft PR，关联任务 Issue。
 3. 每个 PR 内按独立目的组织多个小 commit。每个 commit 保持单一职责，尽量缩小差异；正文、契约、引用及必要案例按同一变更目的同步。格式整理与独立业务设计分别提交。
 4. 每批审查通过后集成到 `design`，后续批次采用已集成版本建立分支；可独立批次按依赖并行。Issue 逐批关联 PR、提交及交付结果。
-5. 金婉怡、孙含佳、张新悦的 PR reviewer 统一请求袁尚峰（`iy88`）。每份任务 Issue 正文写明该要求；PR 可使用 `gh pr edit <PR编号> --add-reviewer iy88` 请求审核。
+5. 金婉怡、孙含佳、张新悦的 PR reviewer 统一请求袁尚峰（`iy88`）。每份任务 Issue 正文写明该要求；PR 可使用 `gh pr edit <PR编号> --repo <GitHub仓库> --add-reviewer iy88` 请求审核。
 6. 公共契约交叉复核安排金婉怡，实际姓名、日期及结果随交付记录登记。
 7. PR 描述包含业务结果、关联依据、源文件范围、输入版本、实际检查与证据、待核验项及交界影响。正式决定写入 Q／ADR 和源文件，Issue 承载进度与协作。
 
