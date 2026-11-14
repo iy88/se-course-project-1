@@ -1,6 +1,6 @@
 <!--
 Version: 0.1.2
-Version-Datetime: 2026-11-14T21:38:32+08:00
+Version-Datetime: 2026-11-14T21:44:43+08:00
 -->
 
 # ADR-007 OSS 私有文件与授权直传
