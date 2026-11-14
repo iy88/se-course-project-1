@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.6
-Version-Datetime: 2026-11-13T13:44:44+08:00
+Version: 0.1.7
+Version-Datetime: 2026-11-15T00:17:00+08:00
 -->
 
 # TASK-001 公共能力与部署总体细化
@@ -129,3 +129,7 @@ C9 随账户、文件、事件及任务专题并行细化，第7批汇总其公�
 ## 首批交接记录
 
 [PR #42](https://github.com/iy88/se-course-project-1/pull/42)：`task-001/01-handover` → `design`；实际起点 `6250473`。源文件范围、案例、实际检查与后续就绪条件见[交接检查记录](../reviews/TASK-001-首批公共交接检查.md)。
+
+## 第7批公共数据模型交接
+
+[PR #50](https://github.com/iy88/se-course-project-1/pull/50)，输入design `2a7cb17`及PR #46—49专题评审输入。C9提供公共数据维护方、字段／关系／约束／索引、原授权依据和保留清理，TC-COM-033／034及[交接检查](../reviews/TASK-001-第7批公共数据模型检查.md)同步。主体任务绑定具体跨模块外键；运行DDL与迁移验证进入对应编码任务。
