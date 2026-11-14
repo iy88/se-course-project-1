@@ -46,7 +46,7 @@ def relocate(text: str, source: Path, destination: Path,
         elif not parts.path and source.resolve() == destination.resolve():
             return match[0]
         else:
-            updated = os.path.relpath(target, destination.parent)
+            updated = Path(os.path.relpath(target, destination.parent)).as_posix()
             if parts.query:
                 updated += "?" + parts.query
             if parts.fragment:

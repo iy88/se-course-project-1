@@ -1,6 +1,6 @@
 <!--
 Version: 0.1.10
-Version-Datetime: 2026-11-12T23:59:36+08:00
+Version-Datetime: 2026-11-14T15:41:51+08:00
 -->
 
 # 图源渲染索引
@@ -11,7 +11,7 @@ PNG 使用单一字体 PingFang SC（苹方），中文与西文均按该字体�
 |---|---|---|---|---|
 | ACT-01-发布与首次审核 | [PlantUML](../../appendices/models/ACT-01-发布与首次审核.puml) | [PNG](ACT-01-发布与首次审核.png) | 3132 × 2621 | 200 |
 | ACT-02-交易请求与双方确认 | [PlantUML](../../appendices/models/ACT-02-交易请求与双方确认.puml) | [PNG](ACT-02-交易请求与双方确认.png) | 7864 × 2944 | 200 |
-| ACT-03-交易争议与恢复 | [PlantUML](../../appendices/models/ACT-03-交易争议与恢复.puml) | [PNG](ACT-03-交易争议与恢复.png) | 4337 × 2700 | 200 |
+| ACT-03-交易争议与恢复 | [PlantUML](../../appendices/models/ACT-03-交易争议与恢复.puml) | [PNG](ACT-03-交易争议与恢复.png) | 4370 × 2700 | 200 |
 | ACT-04-修改锁单与下架 | [PlantUML](../../appendices/models/ACT-04-修改锁单与下架.puml) | [PNG](ACT-04-修改锁单与下架.png) | 5424 × 2413 | 200 |
 | ACT-05-账户与访问控制 | [PlantUML](../../appendices/models/ACT-05-账户与访问控制.puml) | [PNG](ACT-05-账户与访问控制.png) | 5328 × 2159 | 200 |
 | ACT-06-检索详情与收藏 | [PlantUML](../../appendices/models/ACT-06-检索详情与收藏.puml) | [PNG](ACT-06-检索详情与收藏.png) | 4613 × 3777 | 200 |
@@ -19,7 +19,7 @@ PNG 使用单一字体 PingFang SC（苹方），中文与西文均按该字体�
 | ACT-08-完成交易评价 | [PlantUML](../../appendices/models/ACT-08-完成交易评价.puml) | [PNG](ACT-08-完成交易评价.png) | 1743 × 1844 | 200 |
 | ACT-09-举报认领与处置 | [PlantUML](../../appendices/models/ACT-09-举报认领与处置.puml) | [PNG](ACT-09-举报认领与处置.png) | 4151 × 5509 | 200 |
 | ACT-10-管理员统计 | [PlantUML](../../appendices/models/ACT-10-管理员统计.puml) | [PNG](ACT-10-管理员统计.png) | 1774 × 1325 | 200 |
-| ACT-11-异常交易处置 | [PlantUML](../../appendices/models/ACT-11-异常交易处置.puml) | [PNG](ACT-11-异常交易处置.png) | 3237 × 2357 | 200 |
+| ACT-11-异常交易处置 | [PlantUML](../../appendices/models/ACT-11-异常交易处置.puml) | [PNG](ACT-11-异常交易处置.png) | 3264 × 2357 | 200 |
 | CL-01-核心领域类图 | [PlantUML](../../appendices/models/CL-01-核心领域类图.puml) | [PNG](CL-01-核心领域类图.png) | 2790 × 2527 | 200 |
 | CL-02-账户与商品类图 | [PlantUML](../../appendices/models/CL-02-账户与商品类图.puml) | [PNG](CL-02-账户与商品类图.png) | 1752 × 1808 | 200 |
 | CL-03-交易与沟通类图 | [PlantUML](../../appendices/models/CL-03-交易与沟通类图.puml) | [PNG](CL-03-交易与沟通类图.png) | 3308 × 1975 | 200 |
