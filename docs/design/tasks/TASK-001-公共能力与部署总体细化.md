@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.6
-Version-Datetime: 2026-11-13T13:44:44+08:00
+Version: 0.1.7
+Version-Datetime: 2026-11-15T00:03:06+08:00
 -->
 
 # TASK-001 公共能力与部署总体细化
@@ -129,3 +129,7 @@ C9 随账户、文件、事件及任务专题并行细化，第7批汇总其公�
 ## 首批交接记录
 
 [PR #42](https://github.com/iy88/se-course-project-1/pull/42)：`task-001/01-handover` → `design`；实际起点 `6250473`。源文件范围、案例、实际检查与后续就绪条件见[交接检查记录](../reviews/TASK-001-首批公共交接检查.md)。
+
+## 第5批配置、审计与查询交接
+
+[PR #49](https://github.com/iy88/se-course-project-1/pull/49)，输入design `2a7cb17`及PR #46—48专题评审输入。配置／审计、公开能力、本人概览与分类查询、本人／管理待办及管理统计共6项API，TC-COM-029—032及[交接检查](../reviews/TASK-001-第5批配置审计与查询检查.md)同步。各主体按本批契约提供字段、状态／结果时间与等义SQL适配，阶段配置采用值随准入登记。
