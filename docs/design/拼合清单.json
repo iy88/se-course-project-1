@@ -46,6 +46,7 @@
         "detailed-design/03-公共契约交付清单.md",
         "detailed-design/04-并行对接与交界归属.md",
         "detailed-design/key-designs/公共事务与权限.md",
+        "detailed-design/key-designs/会话与身份.md",
         "detailed-design/key-designs/文件与邮件.md",
         "detailed-design/interfaces/账户与通知.md",
         "detailed-design/key-designs/商品与交易协同.md",
