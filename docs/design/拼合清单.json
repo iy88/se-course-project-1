@@ -32,7 +32,8 @@
         "decisions/adr/ADR-011-单机多实例CI-CD.md",
         "decisions/questions/Q-001-Session撤销与Redis故障恢复.md",
         "decisions/questions/Q-002-直传授权后的对象覆盖控制.md",
-        "decisions/questions/Q-003-异步邮件敏感投递内容保护.md"
+        "decisions/questions/Q-003-异步邮件敏感投递内容保护.md",
+        "decisions/questions/Q-004-换绑邮箱后的Session失效.md"
       ]
     },
     {
