@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.7
-Version-Datetime: 2026-11-14T22:54:05+08:00
+Version: 0.1.8
+Version-Datetime: 2026-11-14T23:29:59+08:00
 -->
 
 # TASK-001 公共能力与部署总体细化
@@ -132,4 +132,4 @@ C9 随账户、文件、事件及任务专题并行细化，第7批汇总其公�
 
 ## 第3批身份与邮件交接
 
-[PR #47](https://github.com/iy88/se-course-project-1/pull/47)，输入design `2a7cb17`。首个契约提交 `e959b39` 落实Q-001的B方案，交付SessionGuard、当前身份及退出接口、C1会话锁序及恢复语义；TC-COM-015—017及部署输入见[会话撤销检查](../reviews/TASK-001-第3批会话撤销检查.md)。C4账户／邮件及通知查询接口继续在本批按接口组细化，Q-003采用逐轮决策。
+[PR #47](https://github.com/iy88/se-course-project-1/pull/47)，输入design `2a7cb17`。首个契约提交 `e959b39` 落实Q-001的B方案，交付SessionGuard、当前身份及退出接口、C1会话锁序及恢复语义；TC-COM-015—017及部署输入见[会话撤销检查](../reviews/TASK-001-第3批会话撤销检查.md)。本批补齐C4账户／邮件及通知查询接口；Q-003采用单表短期明文决定，Q-004采用换绑后全部旧Session失效，TC-COM-018—022补充对应预期。
