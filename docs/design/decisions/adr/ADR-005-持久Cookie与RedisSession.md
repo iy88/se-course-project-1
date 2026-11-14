@@ -1,6 +1,6 @@
 <!--
 Version: 0.1.2
-Version-Datetime: 2026-11-14T22:48:46+08:00
+Version-Datetime: 2026-11-14T22:54:05+08:00
 -->
 
 # ADR-005 持久 Cookie 与 Redis Session
