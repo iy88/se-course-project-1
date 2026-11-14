@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.6
-Version-Datetime: 2026-11-13T13:44:44+08:00
+Version: 0.1.7
+Version-Datetime: 2026-11-14T23:49:09+08:00
 -->
 
 # TASK-001 公共能力与部署总体细化
@@ -129,3 +129,9 @@ C9 随账户、文件、事件及任务专题并行细化，第7批汇总其公�
 ## 首批交接记录
 
 [PR #42](https://github.com/iy88/se-course-project-1/pull/42)：`task-001/01-handover` → `design`；实际起点 `6250473`。源文件范围、案例、实际检查与后续就绪条件见[交接检查记录](../reviews/TASK-001-首批公共交接检查.md)。
+
+## 第4批实时与任务交接
+
+[PR #48](https://github.com/iy88/se-course-project-1/pull/48)，输入design `2a7cb17`，R2a采用已集成会话模型，C4身份及邮箱评审输入为PR #47提交 `2fc423b`。提供C2、API-COM-RT-001—003、TC-COM-023—028、C1事件批次及任务子锁序、C3映射、配置输入及[交接检查](../reviews/TASK-001-第4批实时与任务检查.md)。
+
+用户已确定部署沿用类似legacy的同机并存方案，数据库名／用户、目录、域名及OSS独立，Redis共用并隔离前缀；具体配置留后续部署阶段。本批只将前缀落实到实时／Taskiq／连接协议输入。
