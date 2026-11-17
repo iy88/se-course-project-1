@@ -51,7 +51,8 @@
         "detailed-design/interfaces/文件上传.md",
         "detailed-design/interfaces/账户与通知.md",
         "detailed-design/key-designs/商品与交易协同.md",
-        "detailed-design/key-designs/处置与主体协同.md"
+        "detailed-design/key-designs/处置与主体协同.md",
+        "detailed-design/key-designs/公共能力扩展边界.md"
       ]
     },
     {
