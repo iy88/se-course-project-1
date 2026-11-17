@@ -10,7 +10,8 @@
         "architecture/03-模块协作与关键业务流程.md",
         "architecture/04-数据架构.md",
         "architecture/05-部署与运行架构.md",
-        "architecture/06-质量要求实现策略.md"
+        "architecture/06-质量要求实现策略.md",
+        "architecture/07-技术栈独立的应用架构.md"
       ]
     },
     {
