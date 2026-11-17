@@ -52,7 +52,8 @@
         "detailed-design/key-designs/商品与交易协同.md",
         "detailed-design/key-designs/处置与主体协同.md",
         "detailed-design/key-designs/配置与可观测性.md",
-        "detailed-design/interfaces/聚合与管理查询.md"
+        "detailed-design/interfaces/聚合与管理查询.md",
+        "detailed-design/key-designs/公共能力扩展边界.md"
       ]
     },
     {
