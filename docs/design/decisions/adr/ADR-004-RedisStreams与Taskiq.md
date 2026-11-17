@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.2
-Version-Datetime: 2026-11-14T23:49:09+08:00
+Version: 0.1.3
+Version-Datetime: 2026-11-17T14:33:29+08:00
 -->
 
 # ADR-004 Redis Streams 与 Taskiq
@@ -11,7 +11,7 @@ Version-Datetime: 2026-11-14T23:49:09+08:00
 | 协作入口 | [任务 Issue](https://github.com/iy88/se-course-project-1/issues/38) |
 | 背景 | FR-04、FR-05、FR-11、FR-14；实时及任务恢复。 关联 Q：按实际问题登记。 |
 | 比较 | 见下表可行方案及影响 |
-| 决定 | 采用 Redis Streams＋Taskiq 适配器；IM 各实例独立游标读取并分发本机连接，worker 同组分担，数据库事件及调度记录支持认领和接管。 |
+| 决定 | 采用 Redis Streams及任务执行适配器；IM 各实例独立游标读取并分发本机连接，worker 同组分担，数据库事件及调度记录支持认领和接管。 |
 | 理由 | 复用 Redis 共享控制体系，控制当前组件数量，持久恢复依据留在数据库。 |
 | 代价 | IM 全流读取开销随实例数增长；需要定义保留、缺口补取、ACK 与重复处理。 |
 | 验证 | 两个 IM／worker 实例验证覆盖投递、竞争领取、崩溃接管和重连。 预期由对应任务的实际审查人核验，执行版本、环境、命令和结果在任务证据中登记。 结果位置随任务证据登记。 |
@@ -26,7 +26,7 @@ Version-Datetime: 2026-11-14T23:49:09+08:00
 | 方案 A | Redis Streams 复用既有 Redis，需明确独立读取／消费组与恢复 |
 | 方案 B | RabbitMQ 提供路由与投递机制，增加一套部署及运维组件 |
 
-Taskiq 为执行层，可接不同 broker；当前选择 Redis 适配器。
+任务执行层通过适配器接入Redis；Taskiq是Python候选映射，最终任务库随后端技术栈选定。
 
 ## 第4批协议细化
 

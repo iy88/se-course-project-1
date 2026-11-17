@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-11-13T11:38:32+08:00
+Version: 0.1.2
+Version-Datetime: 2026-11-17T14:32:27+08:00
 -->
 
 # ADR-010 RESTful 契约与技术栈
@@ -11,7 +11,7 @@ Version-Datetime: 2026-11-13T11:38:32+08:00
 | 协作入口 | [任务 Issue](https://github.com/iy88/se-course-project-1/issues/38) |
 | 背景 | FR-01—FR-14；独立前端与类型检查。 关联 Q：按实际问题登记。 |
 | 比较 | 见下表可行方案及影响 |
-| 决定 | RESTful、snake_case、字符串对外 ID、整数分及 UTC 时间；Python/FastAPI/Pydantic/SQLAlchemy/Alembic；Vue/TypeScript/Vite；OpenAPI 类型生成；Pyright strict＋Ruff。 |
+| 决定 | RESTful、snake_case、字符串对外 ID、整数分及 UTC 时间；后端语言与框架按技术映射选定；Vue/TypeScript/Vite；OpenAPI 类型生成；所选后端技术栈的严格类型与静态检查。 |
 | 理由 | 公共语义支持独立模块及前端细化，静态检查与白盒审查衔接。 |
 | 代价 | 需要维护接口与模型映射、错误码和版本兼容。 |
 | 验证 | 类型及契约检查，复杂业务链及输入边界运行验证。 预期由对应任务的实际审查人核验，执行版本、环境、命令和结果在任务证据中登记。 结果位置随任务证据登记。 |
@@ -26,4 +26,8 @@ Version-Datetime: 2026-11-13T11:38:32+08:00
 | 方案 A | 各模块独立定义字段和错误，初始自由，增加对接差异 |
 | 方案 B | 统一 RESTful、数据表示和类型契约，模块专注业务字段 |
 
-选择 SQLAlchemy 持久模型与 Pydantic 外部模型分开，配合静态及运行验证。
+持久模型与外部传输模型分别定义，配合静态及运行验证。
+
+## 2026-11-17 应用技术栈边界调整
+
+袁尚峰要求在Python／Java之间完成选择前采用技术栈独立的应用架构。保留既有协议、前端与基础设施决定；原Python框架和工具作为候选映射，后端语言及框架在编码阶段准入前完成选型，候选为Python与Java；选型结果在本ADR后续决定中记录，并同步实现计划、工具链与部署材料。原Python候选映射包括FastAPI、Pydantic、SQLAlchemy、Alembic、Taskiq、Pyright及Ruff。端口与事务、锁序、幂等、事件及任务语义采用[统一说明](../../architecture/07-技术栈独立的应用架构.md)。
