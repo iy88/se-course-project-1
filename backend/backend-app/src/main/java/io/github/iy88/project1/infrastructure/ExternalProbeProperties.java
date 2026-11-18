@@ -1,10 +1,12 @@
 package io.github.iy88.project1.infrastructure;
 
+import jakarta.mail.internet.AddressException;
+import jakarta.mail.internet.InternetAddress;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.Assert;
 
 @ConfigurationProperties("project1.probe")
-record ExternalProbeProperties(Oss oss) {
+record ExternalProbeProperties(Oss oss, Smtp smtp) {
 
     record Oss(String endpoint, String region, String bucket, String prefix,
                String accessKeyId, String accessKeySecret) {
@@ -23,6 +25,36 @@ record ExternalProbeProperties(Oss oss) {
                     "OSS_PREFIX must be a relative object prefix without a trailing slash");
             required(accessKeyId, "OSS_ACCESS_KEY_ID");
             required(accessKeySecret, "OSS_ACCESS_KEY_SECRET");
+        }
+    }
+
+    enum TlsMode {
+        STARTTLS, SSL
+    }
+
+    record Smtp(String host, int port, TlsMode tlsMode, String username, String password,
+                String from, String to) {
+
+        Smtp {
+            required(host, "SMTP_HOST");
+            Assert.isTrue(host.matches("[A-Za-z0-9.-]+"), "SMTP_HOST must be a hostname");
+            Assert.isTrue(port > 0 && port <= 65535, "SMTP_PORT must be between 1 and 65535");
+            Assert.notNull(tlsMode, "SMTP_TLS_MODE must be starttls or ssl");
+            required(username, "SMTP_USERNAME");
+            required(password, "SMTP_PASSWORD");
+            validateEmail(from, "SMTP_FROM");
+            validateEmail(to, "SMTP_PROBE_TO");
+        }
+
+        private static void validateEmail(String value, String key) {
+            required(value, key);
+            try {
+                var address = new InternetAddress(value, true);
+                address.validate();
+                Assert.isTrue(value.equals(address.getAddress()), key + " must be one email address");
+            } catch (AddressException exception) {
+                throw new IllegalArgumentException(key + " must be one email address");
+            }
         }
     }
 

@@ -25,5 +25,7 @@ class ExternalDependencyProbe implements ApplicationRunner {
         OssConnectivityProbe.verify(properties.oss());
         var logger = LoggerFactory.getLogger(ExternalDependencyProbe.class);
         logger.info("OSS private bucket, versioning, object write, read and cleanup passed.");
+        String probeId = SmtpConnectivityProbe.send(properties.smtp());
+        logger.info("SMTP server accepted test message {}.", probeId);
     }
 }
