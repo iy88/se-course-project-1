@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.6
-Version-Datetime: 2026-11-15T09:45:47+08:00
+Version: 0.1.7
+Version-Datetime: 2026-11-18T20:43:17+08:00
 -->
 
 # TASK-004 会话与处置事项设计细化
@@ -21,7 +21,7 @@ D0期间完成四任务的模型、接口契约、关键规则、验证预期及
 | 负责人/审查人 | 张新悦（`sourmoon-peekaboo`）／袁尚峰（`iy88`）；实际审查日期与结论随 PR 登记 |
 | 关联阶段、需求、ADR、接口和测试 | 阶段 D0 设计准备，后续 S1—S4 按需求分项；FR-04 会话部分、FR-07 举报部分、FR-08 事项部分、FR-14 处置部分；ADR-002、003、004、005、007、009、010；Q-002；API／TC 编号随本任务细化登记 |
 | 目标 | 三类会话及处置事项的资格、接口和主体执行关联足以对接。 |
-| 输入基线 | 需求提交 `ff491a6`；[总体设计与决策](../基线索引.md)；design 派发提交 `953379520661ff4da14dd3d4bf4888348e8bd2bc`；后续公共契约版本随 PR 登记 |
+| 输入基线 | 以最新 `design` 为准，参见[总体设计与决策](../基线索引.md)。 |
 | 允许修改 | detailed-design/interfaces/会话与处置事项.md；detailed-design/key-designs/会话与处置事项.md、事项主体与处置执行.md、处置与主体协同.md；test-cases/会话与处置事项.md；本任务关联 Q 与 reviews 记录；相对位置为 docs/design/ |
 | 协同变更范围 | 其他任务源文件由其归属任务维护；需求、验收预期及共享约定的调整，通过关联 Q／ADR 和 PR 评审完成 |
 | 前置依赖 | 首批基础契约按需求及公共骨架独立发布；本域接口按本任务规则推进；跨主体适配采用批次表列明的具体评审版本。 |
@@ -73,7 +73,7 @@ D0期间完成四任务的模型、接口契约、关键规则、验证预期及
 | 4 | `task-004/04-cross-subject-adaptation` | M4：分支触发、商品／交易执行及公共能力适配 | R0、R1、R2a、R2b 与 C1／C3 的评审版本 |
 | 5 | `task-004/05-validation` | M5：权限、认领及关联验证预期 | 本域预期随各批次编写；关联部分采用第4批版本 |
 
-1. Issue 登记设计输入提交；每个批次从可用的 `design` 提交建立表列分支。首批为 `task-004/01-conversation-model`，首次推送使用 `git push -u <目标远端> refs/heads/task-004/01-conversation-model:refs/heads/task-004/01-conversation-model`。
+1. Issue 的任务输入以最新 `design` 为准，各批次从最新 `design` 建立表列分支，实际起点随 PR 登记。首批为 `task-004/01-conversation-model`，首次推送使用 `git push -u <目标远端> refs/heads/task-004/01-conversation-model:refs/heads/task-004/01-conversation-model`。
 2. 首个可审阅 commit 后提出 Draft PR，关联任务 Issue，并列出本批目标、前置输入及后续批次。
 3. 每个 commit 聚焦一项完整变更，尽量缩小差异；格式整理与独立设计修改分别提交。提交前审阅差异并精确暂存。
 4. 每批审查通过后合入 `design`，后续批次从已集成版本建立。可独立的批次可并行建立，跨批次依赖在 Issue 登记。
@@ -107,4 +107,4 @@ D0期间完成四任务的模型、接口契约、关键规则、验证预期及
 
 ## 发布记录
 
-任务 Issue：[TASK-004](https://github.com/iy88/se-course-project-1/issues/41)；指派账号：`sourmoon-peekaboo`；设计输入提交：`953379520661ff4da14dd3d4bf4888348e8bd2bc`。
+任务 Issue：[TASK-004](https://github.com/iy88/se-course-project-1/issues/41)；指派账号：`sourmoon-peekaboo`；首批实际派发提交为 `953379520661ff4da14dd3d4bf4888348e8bd2bc`。
