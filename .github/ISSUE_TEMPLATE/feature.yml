@@ -1,122 +1,32 @@
-name: 需求缺口（功能或入口缺失）
-description: 需求要求但未实现、部分实现或缺少界面入口；用于核对需求是否完整落地
-title: "[需求缺口] "
+name: 功能需求
+description: 提出新功能，或记录现有需求中缺失的功能、入口和场景。
+title: "[功能] "
 labels: ["feature"]
 body:
-  - type: markdown
+  - type: textarea
+    id: scenario
     attributes:
-      value: |
-        **用途**：核对需求是否完全实现时使用。典型情形：
-        - 接口已实现（自动化 PASS）但界面没有入口，用户无法完成该 AC；
-        - 需求要求的操作/展示/提示缺失或只做了一部分；
-        - 页面流程与需求规则不一致，需要补齐而非修 bug。
-
-        **与缺陷的区别**：需求已实现但行为错误 → 用「缺陷」模板；需求未实现/缺入口/部分实现 → 用本模板。
-        **范围纪律**：只记录缺口与最小补齐建议，不擅自扩大需求或修改需求文档口径；是否本轮补、如何补由负责人书面决定。
-  - type: dropdown
-    id: gap_type
-    attributes:
-      label: 缺口类型
-      options:
-        - 缺界面入口（接口/数据已有，页面无入口）
-        - 未实现（需求要求但完整缺失）
-        - 部分实现（只覆盖部分条件/角色/状态）
-        - 展示或提示缺失（结果/原因/状态不可见）
-        - 与需求规则不一致（需确认是否需求歧义）
-        - BLOCKED-UI（无法验证，附原因）
-    validations:
-      required: true
-  - type: dropdown
-    id: severity
-    attributes:
-      label: 影响级别
-      options:
-        - 阻塞验收（该 AC 无法判定通过）
-        - 影响主流程（可绕过但体验/完整性受损）
-        - 局部缺失（补充项）
-        - 待负责人决定
-    validations:
-      required: true
-  - type: input
-    id: parent_task
-    attributes:
-      label: 发现任务的 Issue
-      placeholder: "#12"
-    validations:
-      required: true
-  - type: input
-    id: requirement
-    attributes:
-      label: 需求依据
-      description: US/UC/SC/AC/BR/章节，尽量精确到 AC 编号
-      placeholder: "US-12-AC-07；D-43；4.18"
+      label: 场景与需求
+      description: 说明谁在什么场景下需要完成什么操作，以及目前缺少的能力。
     validations:
       required: true
   - type: textarea
-    id: current
+    id: acceptance
     attributes:
-      label: 现状
-      description: 页面/接口现状、已有什么、缺什么；附核对步骤
+      label: 预期行为与验收条件
+      description: 写明触发条件、操作以及用户能观察到的结果。涉及多个角色或状态时分别说明。
       placeholder: |
-        页面: ...
-        实际: ...
-        已有接口/数据: ...
-        缺少: ...
+        - [ ] 当……时，执行……，应看到……
     validations:
       required: true
   - type: textarea
-    id: expected
+    id: scope
     attributes:
-      label: 期望（引用需求原文）
-      description: 直接摘录需求条目，不自行改写口径
-    validations:
-      required: true
+      label: 影响范围
+      description: 填写受影响的页面、接口、角色或其他任务。
   - type: textarea
-    id: impact
+    id: references
     attributes:
-      label: 影响与边界
-      description: 影响哪些角色/场景/AC；是否影响其他任务或演示路线；最小补齐范围建议
-    validations:
-      required: true
-  - type: textarea
-    id: evidence
-    attributes:
-      label: 证据（脱敏）
-      description: 截图文件名/路径、关键文本、接口只读核对结果；不粘贴秘密
-  - type: textarea
-    id: decision
-    attributes:
-      label: 负责人决定（负责人填写）
-      description: 本轮补 / 延后 / 不补及理由、决定人与日期；未填写前不得自行扩大实现范围
-      placeholder: |
-        决定: 本轮补 / 延后 / 不补
-        理由: ...
-        决定人: 袁尚峰
-        日期: 2026-11-__
-      render: text
-  - type: textarea
-    id: implementation
-    attributes:
-      label: 实现与验证（本轮补时由实现者填写）
-      description: 分支、PR、改动范围、验证命令、回归证据；PR 正文写 Closes #<本缺口号>
-      placeholder: |
-        Branch: feat/<issue>-<slug>
-        PR: #__
-        改动: ...
-        验证: ...
-        回归: ...
-  - type: checkboxes
-    id: confirm
-    attributes:
-      label: 提交检查
-      options:
-        - label: 已确认这不是"需求已实现但行为错误"（否则改用缺陷模板）
-          required: true
-        - label: 已确认不是自动化已覆盖并通过、且有界面的功能
-          required: true
-        - label: 已引用需求原文，未自行改写业务口径或扩大范围
-          required: true
-        - label: 已脱敏，不含密码/token/连接串/签名 URL
-          required: true
-        - label: 已关联发现任务的 Issue
-          required: true
+      label: 相关依据
+      description: 可附需求编号、关联 Issue、设计链接或脱敏截图。
+      placeholder: "US-02-AC-01、BR-09、#123"
