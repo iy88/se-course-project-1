@@ -51,6 +51,7 @@
         "detailed-design/key-designs/会话与身份.md",
         "detailed-design/key-designs/邮箱验证与投递.md",
         "detailed-design/key-designs/实时与任务.md",
+        "detailed-design/key-designs/公共数据模型.md",
         "detailed-design/key-designs/文件与邮件.md",
         "detailed-design/interfaces/文件上传.md",
         "detailed-design/interfaces/账户与通知.md",
