@@ -1,35 +1,34 @@
+# macOS and IDEs
 .DS_Store
+.idea/
+.vscode/
 
-/docs-pdf/
+# Java / Maven and build artifacts
+target/
+*.class
 
-# Python
+# Node / Vue / Rsbuild and legacy Vite
+node_modules/
+dist/
+.vite
+.pnpm-store/
+*.tsbuildinfo
+coverage/
+
+# Python utilities and legacy backend
 __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
 .ruff_cache/
 
-# Node
-node_modules/
-dist/
-.vite/
-*.local
-
-# Runtime data (database/local object storage/logs)
+# Generated documentation and runtime data
+/docs-pdf/
 /var/
 
-# Environment variables
+# Local environment and configuration
 .env
 .env.*
 !.env.example
-!/backend/.env.dev.example
-!/backend/.env.prod.example
-
-# Editor
-.idea/
-.vscode/
-
-.vite
-
-# Rust load driver
-/loadtest/target/
+!.env.*.example
+*.local
