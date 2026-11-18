@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.3
-Version-Datetime: 2026-11-17T14:33:29+08:00
+Version: 0.1.4
+Version-Datetime: 2026-11-18T18:39:14+08:00
 -->
 
 # ADR-004 Redis Streams 与 Taskiq
@@ -30,4 +30,4 @@ Version-Datetime: 2026-11-17T14:33:29+08:00
 
 ## 第4批协议细化
 
-[实时与任务](../../detailed-design/key-designs/实时与任务.md)定义数据库账户序号及恢复边界、Redis发布与每IM独立XREAD、连接ACK／背压、Taskiq同组任务分担、持久认领及token约束。Redis确认、客户端传输确认与主体已读分别维护。邮箱及文件等来源工作复用其自身持久记录；通用业务调度采用TaskSchedule。验证采用TC-COM-023—028，实际依赖版本随实现锁定。
+[实时与任务](../../detailed-design/key-designs/实时与任务.md)定义数据库账户序号及恢复边界、Redis发布与每IM独立XREAD、连接ACK／背压、worker 同组任务分担、持久认领及token约束。Redis确认、客户端传输确认与主体已读分别维护。邮箱及文件等来源工作复用其自身持久记录；通用业务调度采用TaskSchedule。验证采用TC-COM-023—028，实际依赖版本随实现锁定。
