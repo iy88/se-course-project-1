@@ -1,34 +1,34 @@
+# macOS and IDEs
 .DS_Store
+.idea/
+.vscode/
 
-/docs-pdf/
+# Java / Maven and build artifacts
+target/
+*.class
 
-# Python
+# Node / Vue / Rsbuild and legacy Vite
+node_modules/
+dist/
+.vite
+.pnpm-store/
+*.tsbuildinfo
+coverage/
+
+# Python utilities and legacy backend
 __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
 .ruff_cache/
 
-# Node
-node_modules/
-dist/
-.vite/
-*.local
-
-# 运行期数据（数据库/本地对象存储/日志）
+# Generated documentation and runtime data
+/docs-pdf/
 /var/
 
-# 环境变量
+# Local environment and configuration
 .env
 .env.*
 !.env.example
-!/backend/.env.dev.example
-!/backend/.env.prod.example
-
-# 编辑器
-.idea/
-.vscode/
-
-.vite
-
-target/
+!.env.*.example
+*.local
