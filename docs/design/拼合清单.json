@@ -33,7 +33,8 @@
         "decisions/adr/ADR-011-单机多实例CI-CD.md",
         "decisions/questions/Q-001-Session撤销与Redis故障恢复.md",
         "decisions/questions/Q-002-直传授权后的对象覆盖控制.md",
-        "decisions/questions/Q-003-异步邮件敏感投递内容保护.md"
+        "decisions/questions/Q-003-异步邮件敏感投递内容保护.md",
+        "decisions/questions/Q-004-换绑邮箱后的Session失效.md"
       ]
     },
     {
@@ -47,7 +48,11 @@
         "detailed-design/03-公共契约交付清单.md",
         "detailed-design/04-并行对接与交界归属.md",
         "detailed-design/key-designs/公共事务与权限.md",
+        "detailed-design/key-designs/会话与身份.md",
+        "detailed-design/key-designs/邮箱验证与投递.md",
+        "detailed-design/key-designs/实时与任务.md",
         "detailed-design/key-designs/文件与邮件.md",
+        "detailed-design/interfaces/文件上传.md",
         "detailed-design/interfaces/账户与通知.md",
         "detailed-design/key-designs/商品与交易协同.md",
         "detailed-design/key-designs/处置与主体协同.md",
