@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.7
-Version-Datetime: 2026-11-15T09:45:47+08:00
+Version: 0.1.8
+Version-Datetime: 2026-11-15T09:49:15+08:00
 -->
 
 # TASK-001 公共能力与部署总体细化
@@ -135,3 +135,7 @@ C9 随账户、文件、事件及任务专题并行细化，第7批汇总其公�
 ## 首批交接记录
 
 [PR #42](https://github.com/iy88/se-course-project-1/pull/42)：`task-001/01-handover` → `design`；实际起点 `6250473`。源文件范围、案例、实际检查与后续就绪条件见[交接检查记录](../reviews/TASK-001-首批公共交接检查.md)。
+
+## 第2批文件上传交接
+
+[PR #46](https://github.com/iy88/se-course-project-1/pull/46)，输入 design `2a7cb17`。交付 Q-002实际决定、上传授权／完成核验／公开能力接口、文件配置与回收边界、TC-COM-011—014、部署输入及[交接检查](../reviews/TASK-001-第2批文件上传检查.md)。通知内部能力继续采用 API-COM-NOTIFY-001；通知查询及已读随第3批 C4交付。
