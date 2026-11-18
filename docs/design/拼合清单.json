@@ -1,0 +1,84 @@
+{
+  "documents": [
+    {
+      "id": "architecture",
+      "title": "软件架构设计方案_讨论稿",
+      "output": "软件架构设计方案_讨论稿.md",
+      "sources": [
+        "architecture/01-设计依据与目标.md",
+        "architecture/02-总体架构与模块职责.md",
+        "architecture/03-模块协作与关键业务流程.md",
+        "architecture/04-数据架构.md",
+        "architecture/05-部署与运行架构.md",
+        "architecture/06-质量要求实现策略.md",
+        "architecture/07-技术栈独立的应用架构.md"
+      ]
+    },
+    {
+      "id": "decisions",
+      "title": "架构确认与决策记录",
+      "output": "架构确认与决策记录.md",
+      "sources": [
+        "decisions/01-确认与决策索引.md",
+        "decisions/adr/ADR-001-统一仓库与模块化多实例架构.md",
+        "decisions/adr/ADR-002-主体模块及统一业务数据库.md",
+        "decisions/adr/ADR-003-统一用例事务与幂等.md",
+        "decisions/adr/ADR-004-RedisStreams与Taskiq.md",
+        "decisions/adr/ADR-005-持久Cookie与RedisSession.md",
+        "decisions/adr/ADR-006-分作用域配置与规则版本.md",
+        "decisions/adr/ADR-007-OSS私有文件与授权直传.md",
+        "decisions/adr/ADR-008-异步邮件验证.md",
+        "decisions/adr/ADR-009-统一上下文与AOP日志审计.md",
+        "decisions/adr/ADR-010-RESTful契约与技术栈.md",
+        "decisions/adr/ADR-011-单机多实例CI-CD.md",
+        "decisions/questions/Q-001-Session撤销与Redis故障恢复.md",
+        "decisions/questions/Q-002-直传授权后的对象覆盖控制.md",
+        "decisions/questions/Q-003-异步邮件敏感投递内容保护.md",
+        "decisions/questions/Q-004-换绑邮箱后的Session失效.md"
+      ]
+    },
+    {
+      "id": "interfaces",
+      "title": "接口与关键设计说明书",
+      "output": "接口与关键设计说明书.md",
+      "sources": [
+        "detailed-design/01-需求与接口映射.md",
+        "设计约束与检查规则.md",
+        "detailed-design/02-共享接口约定.md",
+        "detailed-design/03-公共契约交付清单.md",
+        "detailed-design/04-并行对接与交界归属.md",
+        "detailed-design/key-designs/公共事务与权限.md",
+        "detailed-design/key-designs/会话与身份.md",
+        "detailed-design/key-designs/邮箱验证与投递.md",
+        "detailed-design/key-designs/实时与任务.md",
+        "detailed-design/key-designs/公共数据模型.md",
+        "detailed-design/key-designs/文件与邮件.md",
+        "detailed-design/interfaces/文件上传.md",
+        "detailed-design/interfaces/账户与通知.md",
+        "detailed-design/key-designs/商品与分类.md",
+        "detailed-design/interfaces/商品与分类.md",
+        "detailed-design/key-designs/商品与交易协同.md",
+        "detailed-design/key-designs/交易与评价.md",
+        "detailed-design/interfaces/交易与评价.md",
+        "detailed-design/key-designs/会话与处置事项.md",
+        "detailed-design/key-designs/事项主体与处置执行.md",
+        "detailed-design/interfaces/会话与处置事项.md",
+        "detailed-design/key-designs/处置与主体协同.md",
+        "detailed-design/key-designs/配置与可观测性.md",
+        "detailed-design/interfaces/聚合与管理查询.md",
+        "detailed-design/key-designs/公共能力扩展边界.md"
+      ]
+    },
+    {
+      "id": "plan",
+      "title": "分阶段实现与测试计划",
+      "output": "分阶段实现与测试计划.md",
+      "sources": [
+        "implementation-plan/01-阶段划分与依赖.md",
+        "implementation-plan/02-测试策略与依据.md",
+        "implementation-plan/03-阶段准入与验收安排.md",
+        "implementation-plan/04-最终部署验收安排.md"
+      ]
+    }
+  ]
+}

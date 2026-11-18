@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.3
-Version-Datetime: 2026-10-27T21:54:13+08:00
+Version: 0.1.4
+Version-Datetime: 2026-11-12T23:59:36+08:00
 -->
 
 <html lang="zh-CN">
@@ -510,9 +510,9 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
 
 
   <header class="screen-head">
-    <div class="kicker"><span class="badge">US-13</span> 分类与标签维护 · 中优先级 · 批次 2</div>
+    <div class="kicker"><span class="badge">US-13</span> 分类与分类维护 · 中优先级 · 批次 2</div>
     <h1>维护商品分类</h1>
-    <p class="goal">作为有分类管理权限的平台管理员，我希望维护单级多标签及别名，处理卖方随商品提出的标签申请，以便使商品归类、名称变更与检索使用一致依据。</p>
+    <p class="goal">作为有分类管理权限的平台管理员，我希望维护一级分类及其别名，支持商品关联多个分类，处理卖方随商品提出的分类申请，以便使商品归类、名称变更与检索使用一致依据。</p>
     <ul class="meta">
       <li>关联功能 FR-13</li>
       <li>主用例 UC-C13</li>
@@ -523,18 +523,18 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
 
   <div class="stack">
     <div class="frame browser">
-      <div class="frame-bar">管理后台 · 分类与标签（示例数据）</div>
+      <div class="frame-bar">管理后台 · 分类与分类（示例数据）</div>
       <div class="app">
         <div class="topbar">
           <div class="admin-line">
-            <strong>商品分类 · 单级多标签</strong>
+            <strong>商品分类 · 单级分类，商品可关联多个分类</strong>
             <span class="chip">管理员 周（示例）</span>
           </div>
         </div>
 
         <div class="tabs" data-tabs>
           <button class="tab active" data-tab="cats">分类与别名</button>
-          <button class="tab" data-tab="apply">标签申请</button>
+          <button class="tab" data-tab="apply">分类申请</button>
           <button class="tab" data-tab="fix">纠正记录</button>
         </div>
 
@@ -634,13 +634,13 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         </div>
 
         <div class="panel" data-panel="apply" hidden>
-          <div class="banner info">卖方随商品提交新标签申请；仅商品审核通过时，新标签或别名才一并批准公开。</div>
+          <div class="banner info">卖方随商品提交新分类申请；仅商品审核通过时，新分类或别名才一并批准公开。</div>
 
           <div class="list">
             <div class="list-item">
               <div class="entry-main">
                 <strong>商品 XZ-5521 ·「考研数学复习全书」</strong>
-                <div class="muted">申请新标签：考研资料 · 说明：现有「教材」范围过宽，检索不便</div>
+                <div class="muted">申请新分类：考研资料 · 说明：现有「教材」范围过宽，检索不便</div>
                 <div><span class="state info" data-tag-state>待审核</span> <span class="tag">随商品送审</span></div>
               </div>
               <div class="entry-side">
@@ -652,12 +652,12 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           <div class="banner info" id="us13-apply-result" hidden></div>
 
           <div class="card">
-            <div class="card-head">标签不合适的处理</div>
-            <p class="muted">若商品本身合规但申请标签不合适：有合适已有标签时说明原因后通过；否则按不通过记录退回补充原因，不因标签名当然拒绝商品。</p>
+            <div class="card-head">分类不合适的处理</div>
+            <p class="muted">若商品本身合规但申请分类不合适：有合适已有分类时说明原因后通过；否则按不通过记录退回补充原因，不因分类名当然拒绝商品。</p>
             <div class="inline-form">
               <label class="field">
                 <span class="label">退回补充原因</span>
-                <input class="input" id="us13-reject-reason" type="text" placeholder="示例：请改用已有标签「教材 · 考研」">
+                <input class="input" id="us13-reject-reason" type="text" placeholder="示例：请改用已有分类「教材 · 考研」">
               </label>
               <button class="btn ghost" type="button" data-reject-tag>退回补充</button>
             </div>
@@ -728,12 +728,12 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           </label>
           <p class="muted publish-note">已停用分类不出现在可选范围；有在售商品的停用分类仍保留筛选入口。</p>
           <div class="ops">
-            <button class="btn" type="button" data-toast="缺少合适分类时，可随商品提交标签申请；仅在商品审核通过时一并批准生效。">申请新标签</button>
+            <button class="btn" type="button" data-toast="缺少合适分类时，可随商品提交分类申请；仅在商品审核通过时一并批准生效。">申请新分类</button>
             <button class="btn primary" type="button" data-toast="发布校验通过后送审；新发布不能选择已停用的分类。">提交送审</button>
           </div>
         </div>
         <div class="card">
-          <div class="card-head">标签申请记录</div>
+          <div class="card-head">分类申请记录</div>
           <div class="muted">XZ-5521 · 申请「考研资料」· 待商品审核结果</div>
         </div>
       </div>
@@ -743,13 +743,13 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <div class="card">
         <div class="card-head">验收要点</div>
         <div class="list">
-          <div class="list-item"><div class="entry-main">US-13-AC-01：卖方发布时缺少合适已有分类 → 可随商品提交新标签申请，仅在商品通过时一并批准并公开为新标签或别名。</div></div>
-          <div class="list-item"><div class="entry-main">US-13-AC-02：申请标签不合适但商品合规 → 有合适已有标签时说明原因后通过，否则退回补充并写明原因，不因标签名拒绝商品。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-01：卖方发布时缺少合适已有分类 → 可随商品提交新分类申请，仅在商品通过时一并批准并公开为新分类或别名。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-02：申请分类不合适但商品合规 → 有合适已有分类时说明原因后通过，否则退回补充并写明原因，不因分类名拒绝商品。</div></div>
           <div class="list-item"><div class="entry-main">US-13-AC-03：分类存在主名与别名 → 改名后显示新主名、旧名保留为别名，分类身份与商品归属不变，历史交易保留当时名称；移除别名后搜索、筛选及历史链接不再按该别名识别，未命中显示无匹配。</div></div>
           <div class="list-item"><div class="entry-main">US-13-AC-04：分类曾关联商品 → 操作只提供停用；旧商品与交易保留，有在售商品时仍可筛选，新的发布不可选。</div></div>
           <div class="list-item"><div class="entry-main">US-13-AC-05：分类从未关联商品 → 可逻辑删除，并保留必要依据。</div></div>
           <div class="list-item"><div class="entry-main">US-13-AC-06：交易中商品需纠正分类 → 有权限管理员填写依据后调整，记录前后分类、原因、执行者与时间并通知卖方，交易约定、交易状态与历史不变。</div></div>
-          <div class="list-item"><div class="entry-main">US-13-AC-07：商品匹配多个选定标签 → 检索结果同时满足全部所选标签、关键词与价格；同义别名不重复计标签。</div></div>
+          <div class="list-item"><div class="entry-main">US-13-AC-07：商品匹配多个选定分类 → 检索结果同时满足全部所选分类、关键词与价格；同义别名不重复计算分类。</div></div>
         </div>
       </div>
     </div>
@@ -874,8 +874,8 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         tagState.textContent = '已随商品通过';
         var applyResult = section.querySelector('#us13-apply-result');
         applyResult.hidden = false;
-        applyResult.textContent = '已批准：「考研资料」作为「教材」的别名公开；检索时同义别名不重复计标签。';
-        toast('标签申请已随商品审核通过生效，并作为「教材」的别名公开。');
+        applyResult.textContent = '已批准：「考研资料」作为「教材」的别名公开；检索时同义别名不重复计算分类。';
+        toast('分类申请已随商品审核通过生效，并作为「教材」的别名公开。');
       });
 
       section.querySelector('[data-reject-tag]').addEventListener('click', function () {
@@ -889,11 +889,11 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
         section.querySelector('[data-reject-tag]').disabled = true;
         var applyResult = section.querySelector('#us13-apply-result');
         applyResult.hidden = false;
-        applyResult.textContent = '已按不通过记录退回补充原因：' + reason + '。商品可改用已有标签后重新送审，不因标签名拒绝商品。';
+        applyResult.textContent = '已按不通过记录退回补充原因：' + reason + '。商品可改用已有分类后重新送审，不因分类名拒绝商品。';
         var tagState = section.querySelector('[data-tag-state]');
         tagState.className = 'state warn';
         tagState.textContent = '退回补充';
-        toast('已记录退回补充原因；商品本身不因标签不合适被拒绝。');
+        toast('已记录退回补充原因；商品本身不因分类不合适被拒绝。');
       });
 
       section.querySelector('#us13-correct-form').addEventListener('submit', function (event) {

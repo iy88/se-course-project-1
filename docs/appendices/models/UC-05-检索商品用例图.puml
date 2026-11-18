@@ -1,6 +1,6 @@
 @startuml
-' Version: 0.1.0
-' Version-Datetime: 2026-10-26T12:37:57+08:00
+' Version: 0.1.1
+' Version-Datetime: 2026-11-12T23:59:36+08:00
 title UC-05 · UC-C03 检索商品
 
 skinparam backgroundColor #FFFFFF
@@ -37,12 +37,12 @@ CampusUser --> C0304
 CampusUser --> C0305
 
 ' note right of C0302
-'   主名称与别名解析到同一分类；多标签须全部
-'   匹配，别名不重复计标签（BR-15、4.16）。
+'   主名称与别名解析到同一分类；多分类须全部
+'   匹配，别名不重复计算分类（BR-15、4.16）。
 ' end note
 
 ' note right of C0303
-'   价格区间包含端点；关键词、标签、价格条件
+'   价格区间包含端点；关键词、分类、价格条件
 '   同时生效（BR-15）。
 ' end note
 
@@ -65,7 +65,7 @@ CampusUser --> C0305
 ' 组合筛选是同一次查询，不设 include；详情读取
 ' 和空结果提示是独立目标或结果分支。
 legend bottom
-关键词、标签、价格条件同时满足；多标签全部匹配（BR-15）。
+关键词、分类、价格条件同时满足；多分类全部匹配（BR-15）。
 详情重新校验展示资格；无匹配时不返回非公开内容。
 endlegend
 @enduml

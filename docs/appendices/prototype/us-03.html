@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-Version: 0.1.2
-Version-Datetime: 2026-10-27T21:54:13+08:00
+Version: 0.1.3
+Version-Datetime: 2026-11-12T23:59:36+08:00
 -->
 
 <html lang="zh-CN">
@@ -511,7 +511,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
   <header class="screen-head">
     <div class="kicker"><span class="badge">US-03</span> 检索商品 · 高优先级 · 批次 1</div>
     <h1>组合检索与查看商品详情</h1>
-    <p class="goal">作为校园用户，我希望组合关键词、分类标签和价格区间查找商品并查看详情，以便找到符合需要且当前有资格查看的闲置物品。</p>
+    <p class="goal">作为校园用户，我希望组合关键词、分类和价格区间查找商品并查看详情，以便找到符合需要且当前有资格查看的闲置物品。</p>
     <ul class="meta">
       <li>关联功能 FR-03</li>
       <li>主用例 UC-C03</li>
@@ -548,7 +548,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             </div>
           </div>
           <div class="field">
-            <span class="label">分类标签（可多选，需全部匹配）</span>
+            <span class="label">分类（可多选，需全部匹配）</span>
             <div class="chips">
               <button class="chip tag-btn" type="button" data-tag="教材" aria-pressed="false">教材（别名：课本，同属教材分类）</button>
               <button class="chip tag-btn" type="button" data-tag="习题册" aria-pressed="false">习题册</button>
@@ -635,7 +635,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
             </div>
           </div>
         </div>
-        <div id="us-03-empty" class="empty" hidden>没有匹配的商品。请调整关键词、分类标签或价格区间后重试。</div>
+        <div id="us-03-empty" class="empty" hidden>没有匹配的商品。请调整关键词、分类或价格区间后重试。</div>
 
         <div class="card" id="us-03-detail" hidden>
           <div class="card-head">
@@ -667,9 +667,9 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           <span class="muted">组合生效</span>
         </div>
         <div class="side-line"><span class="muted">关键词</span><span id="us-03-side-q">不限</span></div>
-        <div class="side-line"><span class="muted">标签</span><span id="us-03-side-tags">不限</span></div>
+        <div class="side-line"><span class="muted">分类</span><span id="us-03-side-tags">不限</span></div>
         <div class="side-line"><span class="muted">价格</span><span id="us-03-side-price">不限</span></div>
-        <p class="mini-note">多标签需全部匹配；价格区间包含端点；别名不重复计作标签。</p>
+        <p class="mini-note">多分类需全部匹配；价格区间包含端点；别名不重复计作分类。</p>
       </div>
 
       <div class="card">
@@ -701,8 +701,8 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
       <span class="muted">以 US-03 为验收依据，不展开规则细节</span>
     </div>
     <div class="list">
-      <div class="list-item"><div><strong>US-03-AC-01</strong>：同时使用关键词、多标签和价格区间 → 只返回同时满足全部条件的在售商品，价格端点可命中。</div></div>
-      <div class="list-item"><div><strong>US-03-AC-02</strong>：使用分类主名或别名筛选 → 定位同一分类，别名不重复计作标签。</div></div>
+      <div class="list-item"><div><strong>US-03-AC-01</strong>：同时使用关键词、多分类和价格区间 → 只返回同时满足全部条件的在售商品，价格端点可命中。</div></div>
+      <div class="list-item"><div><strong>US-03-AC-02</strong>：使用分类主名或别名筛选 → 定位同一分类，别名不重复计作分类。</div></div>
       <div class="list-item"><div><strong>US-03-AC-03</strong>：没有满足条件的商品 → 显示空列表与“没有匹配商品”提示。</div></div>
       <div class="list-item"><div><strong>US-03-AC-04</strong>：商品处于交易中 → 不进入在售搜索；通过已有链接访问时，登录用户可按展示资格查看详情。</div></div>
       <div class="list-item"><div><strong>US-03-AC-05</strong>：商品已下架或撤销公开 → 拒绝公开详情访问；本人历史与既有事项按对应资格处理。</div></div>
@@ -799,7 +799,7 @@ code,.mono{font-family:var(--mono);font-size:.92em;background:#eef2ef;border:1px
           } else if (count > 0) {
             toast('已按当前条件筛选，命中 ' + count + ' 件在售商品');
           } else {
-            toast('没有匹配商品，请调整关键词、标签或价格区间');
+            toast('没有匹配商品，请调整关键词、分类或价格区间');
           }
         }
       }
