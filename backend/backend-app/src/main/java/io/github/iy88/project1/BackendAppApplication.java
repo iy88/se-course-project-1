@@ -9,7 +9,10 @@ import org.springframework.context.annotation.Bean;
 public class BackendAppApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(BackendAppApplication.class, args);
+        var context = SpringApplication.run(BackendAppApplication.class, args);
+        if (context.getEnvironment().matchesProfiles("dependency-probe")) {
+            context.close();
+        }
     }
 
     @Bean
