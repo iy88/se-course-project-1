@@ -33,7 +33,7 @@ record ExternalProbeProperties(Oss oss, Smtp smtp) {
     }
 
     record Smtp(String host, int port, TlsMode tlsMode, String username, String password,
-                String from, String to) {
+                String from) {
 
         Smtp {
             required(host, "SMTP_HOST");
@@ -43,7 +43,6 @@ record ExternalProbeProperties(Oss oss, Smtp smtp) {
             required(username, "SMTP_USERNAME");
             required(password, "SMTP_PASSWORD");
             validateEmail(from, "SMTP_FROM");
-            validateEmail(to, "SMTP_PROBE_TO");
         }
 
         private static void validateEmail(String value, String key) {
@@ -51,9 +50,9 @@ record ExternalProbeProperties(Oss oss, Smtp smtp) {
             try {
                 var address = new InternetAddress(value, true);
                 address.validate();
-                Assert.isTrue(value.equals(address.getAddress()), key + " must be one email address");
+                Assert.isTrue(!address.isGroup(), key + " must be one mailbox");
             } catch (AddressException exception) {
-                throw new IllegalArgumentException(key + " must be one email address");
+                throw new IllegalArgumentException(key + " must be one mailbox");
             }
         }
     }

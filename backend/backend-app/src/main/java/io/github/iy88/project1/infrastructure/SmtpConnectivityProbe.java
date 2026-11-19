@@ -1,5 +1,6 @@
 package io.github.iy88.project1.infrastructure;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
@@ -7,12 +8,18 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 class SmtpConnectivityProbe {
 
+    private static final String PROBE_RECIPIENT = "recipient@example.invalid";
+
     static String send(ExternalProbeProperties.Smtp settings) {
+        if (PROBE_RECIPIENT.endsWith("@example.invalid")) {
+            throw new IllegalStateException("Set PROBE_RECIPIENT in SmtpConnectivityProbe before sending a test email");
+        }
         var sender = new JavaMailSenderImpl();
         sender.setHost(settings.host());
         sender.setPort(settings.port());
         sender.setUsername(settings.username());
         sender.setPassword(settings.password());
+        sender.setDefaultEncoding(StandardCharsets.UTF_8.name());
         var properties = sender.getJavaMailProperties();
         properties.setProperty("mail.smtp.auth", "true");
         properties.setProperty("mail.smtp.ssl.checkserveridentity", "true");
@@ -27,7 +34,7 @@ class SmtpConnectivityProbe {
         String probeId = UUID.randomUUID().toString();
         var message = new SimpleMailMessage();
         message.setFrom(settings.from());
-        message.setTo(settings.to());
+        message.setTo(PROBE_RECIPIENT);
         message.setSubject("[Project1 S1] SMTP probe " + probeId);
         message.setText("Project1 S1 SMTP connectivity probe. ID: " + probeId);
         try {
