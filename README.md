@@ -1,9 +1,13 @@
 <!--
-Version: 0.1.37
-Version-Datetime: 2026-11-19T12:50:26+08:00
+Version: 0.1.38
+Version-Datetime: 2026-11-19T12:57:53+08:00
 -->
 
 # 校园二手交易与物品流转平台
+
+## GitHub Actions 检查
+
+向 `main` 提交 PR 或推送到 `main` 时，CI 在 Linux 上并行运行后端与前端检查。后端使用 OpenJDK 27 和 Maven Wrapper 执行 `verify`。前端使用 Node.js 26.12.1 和 npm 12.2.1，按锁文件安装依赖，核对 OpenAPI 生成类型、lint 和格式，再对用户端和管理端分别做类型检查与构建。
 
 ## 一键启动开发环境
 
