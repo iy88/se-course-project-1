@@ -1,5 +1,6 @@
 package io.github.iy88.project1.storage.persistence;
 
+import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.OssFileObjects;
 import io.github.iy88.project1.storage.OssFileObjects.Location;
 import java.time.Instant;
@@ -35,7 +36,8 @@ public class FileCleanup {
         objects.requireWritableBucket();
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var retryBefore = now.minusSeconds(rules.cleanupScanSeconds());
-        var ids = files.cleanupCandidates(now, retryBefore, PageRequest.of(0, batchSize));
+        var ids = files.cleanupCandidates(objects.bucket(), objects.purposePrefix(FilePurpose.PRODUCT_IMAGE),
+                objects.purposePrefix(FilePurpose.CASE_EVIDENCE), now, retryBefore, PageRequest.of(0, batchSize));
         var failed = new ArrayList<FailedAttempt>();
         int deleted = 0;
         for (long id : ids) {

@@ -46,8 +46,12 @@ public final class OssFileObjects {
                 + ")/" + UUID_PATTERN);
     }
 
+    public String bucket() { return bucket; }
+
+    public String purposePrefix(FilePurpose purpose) { return prefix + "/" + purpose.value() + "/"; }
+
     public Location newLocation(FilePurpose purpose) {
-        return new Location(bucket, prefix + "/" + purpose.value() + "/" + UUID.randomUUID());
+        return new Location(bucket, purposePrefix(purpose) + UUID.randomUUID());
     }
 
     public void requireWritableBucket() {

@@ -1,11 +1,13 @@
 <!--
-Version: 0.2.11
-Version-Datetime: 2026-11-19T15:50:15+08:00
+Version: 0.2.12
+Version-Datetime: 2026-11-19T17:12:17+08:00
 -->
 
 # Project1 实现协作规范
 
 ## 任务与变更边界
+
+- Before starting implementation, list the planned deliverables and verification steps in the conversation. Check the list against the request and the phase requirements for omissions.
 
 - 开工前核对工作区、分支和任务 Issue。以最新 `main` 中的已确认需求、接口和业务规则为实现依据，从 [README](README.md) 查阅项目入口和操作命令。
 - 按任务 Issue 约定的范围和分支实施。涉及需求、共享契约、模块归属、迁移或依赖的变更时，先核对受影响的调用方，需要业务或架构决策时向用户确认。

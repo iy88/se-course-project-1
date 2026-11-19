@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.42
-Version-Datetime: 2026-11-19T16:03:19+08:00
+Version: 0.1.43
+Version-Datetime: 2026-11-19T17:12:17+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -133,7 +133,7 @@ v2 使用两个私有 Bucket。开发和联调共用开发桶，生产使用独�
 
 `file-storage` 提供文件核验、引用与签名读取。商品、事项等调用方先校验账户和目标对象权限，再在业务事务内建立、保留或释放引用。签名 URL 默认有效 60 秒（`FILE_READ_URL_TTL_SECONDS`），PDF 以附件下载。
 
-回收批次只处理到期且无有效引用的文件，先认领，再删除 OSS 对象，最后保存删除结果。失败与迟到上传按 `FILE_CLEANUP_SCAN_SECONDS` 的间隔重新处理，默认 300 秒。当前通过内部 `FileCleanup.runBatch` 触发，定时调度尚未接入。
+回收批次只处理到期且无有效引用的文件，先认领，再删除 OSS 对象，最后保存删除结果。失败与迟到上传按 `FILE_CLEANUP_SCAN_SECONDS` 的间隔重新处理，默认 300 秒。启用 `delivery-worker,file-cleanup` 后按配置调度，每批仅扫描当前 Bucket 和用途前缀。
 
 在 OSS 控制台将 Bucket ACL 设为 **私有**，启用阻止公共访问，版本控制保持从未启用。以下策略用于独立开发 Bucket。把 `YOUR-DEV-BUCKET` 换为你的 Bucket 名。第一项授权查询 Bucket ACL、版本状态和列举对象。第二项授权读取、写入和删除该 Bucket 中的所有对象。ARN 中的账号字段可填写 Bucket 所有者的阿里云账号 ID。
 
@@ -164,6 +164,24 @@ Build business commands on `backend-core` and call `WriteExecutor.run` with a se
 Use `WriteTransaction.audit` for approved audit facts. The command, audit facts, and idempotency response commit together. Keep credentials and verification codes in their dedicated account protocols.
 
 For browser writes under `/api/v1`, configure `ALLOWED_ORIGINS` and supply a `CsrfGuard.Verifier` bound to the current session or account entry. The API sets `X-Request-Id` for each request. Apply the database migration before running a write use case.
+
+### Event delivery and scheduled work
+
+Apply Flyway V5 before starting the worker. Add the Spring profile `delivery-worker` to enable event dispatch, the task consumer group, and event retention. Add `file-cleanup` to run the file cleanup batch, and `mail-delivery` to provide the configured SMTP sender.
+
+- Use `WriteTransaction.addEventIntent` to append events in the same transaction as the business write. `UserEvents.head` and `UserEvents.scan` read the PostgreSQL cursor. `EventSignals` reads Redis hints with an independent cursor per instance. Use `EventReplay` to project events under the authenticated account and current source permissions.
+- Use `TaskSchedules.schedule` in the business transaction. Register the matching `TaskHandler` on the worker. Deploy the same handler set across instances in the consumer group. A handler uses the shared write transaction for business changes and the task outcome.
+- The worker uses `<REDIS_NAMESPACE>:events` and `<REDIS_NAMESPACE>:work`. Its Redis credential needs XADD and XREAD for events, and XADD, XGROUP CREATE, XREADGROUP, XPENDING, XCLAIM, XACK and XDEL for work. Event readers also use XREVRANGE to start at the current tail.
+- Bind the SMTP sender to the account-owned mail record and call it after committing the mail lease. Keep file, event, and email retry state on the owning record.
+
+### Realtime HTTP and WebSocket
+
+Enable `realtime-api` with `ALLOWED_ORIGINS` and a `RealtimeAccess` bean. The adapter authenticates the Session cookie, rechecks its current state, validates the hello CSRF token, and projects visible event sources.
+
+- `GET /api/v1/account/events/head` returns the account epoch, head sequence, and replay floor. `GET /api/v1/account/events?epoch=<uuid>&after_seq=<seq>` scans a bounded page.
+- `/api/v1/realtime` accepts a version 1 `hello` frame. A valid cursor resumes delivery. After `sync_reset`, load the current snapshots and send `resume` with the new cursor. ACK the last continuously handled sequence with `ack`.
+- Resolve `X-Origin-Connection-Id` through `OriginConnectionLookup` before recording an origin connection in the execution context. Redis scopes the connection lease to the authenticated account and Session.
+- The realtime Redis role uses XREAD, XREVRANGE, EVALSHA/EVAL, TIME, ZREMRANGEBYSCORE, ZSCORE, ZCARD, ZADD, ZREM and PEXPIRE. Scope the role to the configured namespace.
 
 ### File service test page
 
