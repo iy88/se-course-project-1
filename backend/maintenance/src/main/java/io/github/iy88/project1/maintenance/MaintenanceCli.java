@@ -3,6 +3,7 @@ package io.github.iy88.project1.maintenance;
 import io.lettuce.core.RedisException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -15,13 +16,15 @@ import org.flywaydb.core.api.FlywayException;
 public final class MaintenanceCli {
 
     private static final String USAGE = """
-            Usage: java -jar maintenance.jar db init --admin-user USER
-                   java -jar maintenance.jar db migrate
-                   java -jar maintenance.jar db reset
-                   java -jar maintenance.jar db reset --confirm TOKEN --admin-user USER
-                   java -jar maintenance.jar oss reset [--confirm TOKEN]
-            Reads APP_ENV_FILE (defaults to .env). Reset without --confirm previews the configured targets.
-            Reads the owner and application logins from the same .env file. The administrator password is prompted in the terminal.
+            Usage: java -jar maintenance.jar db init --env-file PATH --admin-user USER
+                   java -jar maintenance.jar db migrate --env-file PATH
+                   java -jar maintenance.jar db reset --env-file PATH
+                   java -jar maintenance.jar db reset --env-file PATH --confirm TOKEN [--admin-user USER]
+                   java -jar maintenance.jar oss reset --env-file PATH [--confirm TOKEN]
+            --env-file is required. Reset without --confirm previews the configured targets.
+            Reads the owner and application logins from the same .env file.
+            The administrator password is prompted only for db init and legacy db reset.
+            Database reset uses the configured owner; --admin-user is only for legacy databases not owned by it.
             Stop all writers before executing reset.
             """;
 
@@ -47,8 +50,7 @@ public final class MaintenanceCli {
         }
 
         try {
-            String envPath = System.getenv("APP_ENV_FILE");
-            var config = new MaintenanceConfig(Path.of(envPath == null || envPath.isBlank() ? ".env" : envPath));
+            var config = new MaintenanceConfig(options.envFile());
             String environment = config.matching("APP_ENV", "[A-Za-z0-9_-]+");
             System.out.println("Environment: " + environment);
             DriverManager.setLoginTimeout(5);
@@ -69,7 +71,11 @@ public final class MaintenanceCli {
                     var postgres = new PostgresMaintenance(config);
                     var redis = new RedisMaintenance(config);
                     if (confirmed(options, environment, postgres.scope() + "\n" + redis.scope())) {
-                        provision(postgres, options, redis);
+                        if (options.adminUser() == null) {
+                            redis.resetAfter(postgres::resetAsOwner);
+                        } else {
+                            provision(postgres, options, redis);
+                        }
                     }
                 }
                 case "oss reset" -> {
@@ -134,8 +140,7 @@ public final class MaintenanceCli {
         System.out.println(scopes);
         String token = token(options.command() + "\n" + environment + "\n" + scopes);
         if (options.confirmation() == null) {
-            String adminOption = options.command().equals("db reset") ? " --admin-user USER" : "";
-            System.out.println("Preview only. Stop all writers, then rerun with --confirm " + token + adminOption);
+            System.out.println("Preview only. Stop all writers, then rerun with --confirm " + token);
             return false;
         }
         if (!token.equals(options.confirmation())) {
@@ -149,36 +154,71 @@ public final class MaintenanceCli {
         void run(char[] password) throws SQLException;
     }
 
-    private record Options(String command, String confirmation, String adminUser) {
+    record Options(Path envFile, String command, String confirmation, String adminUser) {
         static Options parse(String[] args) {
-            if (args.length < 2 || args.length > 6 || args.length % 2 != 0) {
+            if (args.length < 3 || args.length > 8) {
                 return null;
             }
             String command = args[0] + " " + args[1];
+            Path envFile = null;
             String confirmation = null;
             String admin = null;
-            for (int index = 2; index < args.length; index += 2) {
-                String option = args[index];
-                String value = args[index + 1];
+            for (int index = 2; index < args.length;) {
+                String argument = args[index];
+                String option;
+                String value;
+                int equals = argument.indexOf('=');
+                if (argument.startsWith("--") && equals > 2) {
+                    option = argument.substring(0, equals);
+                    value = argument.substring(equals + 1);
+                    index++;
+                } else {
+                    if (index + 1 >= args.length) {
+                        return null;
+                    }
+                    option = argument;
+                    value = args[index + 1];
+                    index += 2;
+                }
                 if (value.isBlank() || value.startsWith("--")) {
                     return null;
                 }
-                if (option.equals("--confirm") && confirmation == null) {
-                    confirmation = value;
-                } else if (option.equals("--admin-user") && admin == null) {
-                    admin = value;
-                } else {
-                    return null;
+                switch (option) {
+                    case "--env-file" -> {
+                        if (envFile != null) {
+                            return null;
+                        }
+                        try {
+                            envFile = Path.of(value);
+                        } catch (InvalidPathException ignored) {
+                            return null;
+                        }
+                    }
+                    case "--confirm" -> {
+                        if (confirmation != null) {
+                            return null;
+                        }
+                        confirmation = value;
+                    }
+                    case "--admin-user" -> {
+                        if (admin != null) {
+                            return null;
+                        }
+                        admin = value;
+                    }
+                    default -> {
+                        return null;
+                    }
                 }
             }
             boolean valid = switch (command) {
-                case "db init" -> admin != null && confirmation == null;
-                case "db migrate" -> admin == null && confirmation == null;
-                case "db reset" -> (confirmation == null) == (admin == null);
-                case "oss reset" -> admin == null;
+                case "db init" -> envFile != null && admin != null && confirmation == null;
+                case "db migrate" -> envFile != null && admin == null && confirmation == null;
+                case "db reset" -> envFile != null && (admin == null || confirmation != null);
+                case "oss reset" -> envFile != null && admin == null;
                 default -> false;
             };
-            return valid ? new Options(command, confirmation, admin) : null;
+            return valid ? new Options(envFile, command, confirmation, admin) : null;
         }
     }
 
