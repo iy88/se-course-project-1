@@ -62,7 +62,7 @@ def render(root: Path, dpi: int, check: bool,
         output = destination / (source.stem + ".png")
         sidecar = output.with_suffix(".png.version")
         digest = hashlib.sha256(source.read_bytes()).hexdigest()
-        record = sidecar.read_text() if sidecar.exists() else ""
+        record = sidecar.read_text(encoding="utf-8") if sidecar.exists() else ""
         current = False
         if output.exists() and f"Source-SHA256: {digest}\n" in record:
             current = f"PNG-SHA256: {hashlib.sha256(output.read_bytes()).hexdigest()}\n" in record

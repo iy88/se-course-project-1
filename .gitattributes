@@ -1,0 +1,11 @@
+*.puml text eol=lf
+
+frontend/**/*.css text eol=lf
+frontend/**/*.html text eol=lf
+frontend/**/*.json text eol=lf
+frontend/**/*.mjs text eol=lf
+frontend/**/*.mts text eol=lf
+frontend/**/*.ts text eol=lf
+frontend/**/*.vue text eol=lf
+frontend/**/*.yaml text eol=lf
+frontend/**/*.yml text eol=lf
