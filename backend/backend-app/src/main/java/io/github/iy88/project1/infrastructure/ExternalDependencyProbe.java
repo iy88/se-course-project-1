@@ -15,9 +15,11 @@ import org.springframework.stereotype.Component;
 class ExternalDependencyProbe implements ApplicationRunner {
 
     private final ExternalProbeProperties properties;
+    private final SmtpProbeRecipient recipient;
 
-    ExternalDependencyProbe(ExternalProbeProperties properties) {
+    ExternalDependencyProbe(ExternalProbeProperties properties, SmtpProbeRecipient recipient) {
         this.properties = properties;
+        this.recipient = recipient;
     }
 
     @Override
@@ -25,7 +27,7 @@ class ExternalDependencyProbe implements ApplicationRunner {
         OssConnectivityProbe.verify(properties.oss());
         var logger = LoggerFactory.getLogger(ExternalDependencyProbe.class);
         logger.info("OSS private bucket, versioning, object write, read and cleanup passed.");
-        String probeId = SmtpConnectivityProbe.send(properties.smtp());
+        String probeId = SmtpConnectivityProbe.send(properties.smtp(), recipient);
         logger.info("SMTP server accepted test message {}.", probeId);
     }
 }

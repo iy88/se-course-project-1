@@ -8,12 +8,7 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 class SmtpConnectivityProbe {
 
-    private static final String PROBE_RECIPIENT = "recipient@example.invalid";
-
-    static String send(ExternalProbeProperties.Smtp settings) {
-        if (PROBE_RECIPIENT.endsWith("@example.invalid")) {
-            throw new IllegalStateException("Set PROBE_RECIPIENT in SmtpConnectivityProbe before sending a test email");
-        }
+    static String send(ExternalProbeProperties.Smtp settings, SmtpProbeRecipient recipient) {
         var sender = new JavaMailSenderImpl();
         sender.setHost(settings.host());
         sender.setPort(settings.port());
@@ -34,7 +29,7 @@ class SmtpConnectivityProbe {
         String probeId = UUID.randomUUID().toString();
         var message = new SimpleMailMessage();
         message.setFrom(settings.from());
-        message.setTo(PROBE_RECIPIENT);
+        message.setTo(recipient.address());
         message.setSubject("[Project1 S1] SMTP probe " + probeId);
         message.setText("Project1 S1 SMTP connectivity probe. ID: " + probeId);
         try {

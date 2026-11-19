@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.32
-Version-Datetime: 2026-11-19T10:14:19+08:00
+Version: 0.1.33
+Version-Datetime: 2026-11-19T10:18:36+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -86,11 +86,12 @@ APP_ENV_FILE="$PWD/.env.dev" java -jar backend-app/target/backend-app-0.0.1-SNAP
   --spring.profiles.active=infrastructure
 ```
 
-运行一次性探针前，把 [SmtpConnectivityProbe.java](backend/backend-app/src/main/java/io/github/iy88/project1/infrastructure/SmtpConnectivityProbe.java) 中的 `PROBE_RECIPIENT` 改成测试收件地址，再运行 `mvn verify` 重新打包。探针先检查 PostgreSQL 和 Redis，再核对 OSS Bucket 和探针对象的写入、读回、删除，最后发送一封邮件。进程完成后退出，失败返回非零状态。SMTP 日志显示服务器接收结果和邮件 ID，在收件箱查找同 ID 的 `[Project1 S1] SMTP probe` 邮件以验证投递。
+运行一次性探针时，通过 `--smtp-probe-to` 指定一个测试收件地址。替换下面命令中的示例地址即可。探针在启动时校验收件地址，再检查 PostgreSQL 和 Redis、核对 OSS Bucket 并验证探针对象的写入、读回和删除，最后发送一封邮件。进程完成后退出，失败返回非零状态。SMTP 日志显示服务器接收结果和邮件 ID，在收件箱查找同 ID 的 `[Project1 S1] SMTP probe` 邮件以验证投递。
 
 ```bash
 APP_ENV_FILE="$PWD/.env.dev" java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
-  --spring.profiles.active=dependency-probe
+  --spring.profiles.active=dependency-probe \
+  --smtp-probe-to=you@example.com
 ```
 
 ### 初始化与全量重置
