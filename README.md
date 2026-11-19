@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.33
-Version-Datetime: 2026-11-19T10:18:36+08:00
+Version: 0.1.34
+Version-Datetime: 2026-11-19T10:47:23+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -17,6 +17,22 @@ java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --server.address=127
 ```
 
 应用默认监听本机 8080，可加 `--server.port=8081` 调整。另开一个终端检查 `curl -fsS http://127.0.0.1:8080/api/v1/hello` 和 `curl -fsS http://127.0.0.1:8080/actuator/health`。服务在前台运行，在启动终端按 `Ctrl+C` 停止。默认模式只运行 Hello World 和健康端点。
+
+### 安装内部模块到本机 Maven 仓库
+
+在 `backend/` 下运行 `mvn install`，按依赖顺序构建所有模块，执行测试和验证，并把生成的 JAR 和 POM 安装到本机 Maven 仓库（默认 `~/.m2/repository`）。IDE 或独立构建的子模块可以从这里解析项目内部依赖。
+
+```bash
+mvn install
+```
+
+只需要后端应用、维护工具及它们依赖的模块时，可以按需安装：
+
+```bash
+mvn -pl backend-app,maintenance -am install
+```
+
+整仓或 CI 构建检查用 `mvn verify` 即可。同一次多模块构建会直接解析参与构建的内部模块。
 
 ## S1 开发环境与依赖探针
 
@@ -79,24 +95,26 @@ ACL SETUSER project1_dev reset on >替换为随机密码 ~project1:dev:iy88:* -@
 
 ### 运行方式
 
-从 `backend/` 运行，`APP_ENV_FILE` 支持绝对路径。常驻开发服务使用 `infrastructure` profile。首次启动前先执行下文的 `db init`，并在 `.env.dev` 中填写 `HTTP_BIND_HOST` 和 `HTTP_BIND_PORT`。核对相应地址上的 HTTP 接口，按 `Ctrl+C` 停止服务。
+从 `backend/` 运行。常驻开发服务使用 `infrastructure` profile，通过必填参数 `--env-file` 指定配置文件，支持绝对路径和相对于当前目录的路径。首次启动前先执行下文的 `db init`，并在 `.env.dev` 中填写 `HTTP_BIND_HOST` 和 `HTTP_BIND_PORT`。核对相应地址上的 HTTP 接口，按 `Ctrl+C` 停止服务。
 
 ```bash
-APP_ENV_FILE="$PWD/.env.dev" java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
-  --spring.profiles.active=infrastructure
+java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
+  --spring.profiles.active=infrastructure \
+  --env-file="$PWD/.env.dev"
 ```
 
 运行一次性探针时，通过 `--smtp-probe-to` 指定一个测试收件地址。替换下面命令中的示例地址即可。探针在启动时校验收件地址，再检查 PostgreSQL 和 Redis、核对 OSS Bucket 并验证探针对象的写入、读回和删除，最后发送一封邮件。进程完成后退出，失败返回非零状态。SMTP 日志显示服务器接收结果和邮件 ID，在收件箱查找同 ID 的 `[Project1 S1] SMTP probe` 邮件以验证投递。
 
 ```bash
-APP_ENV_FILE="$PWD/.env.dev" java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
+java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
   --spring.profiles.active=dependency-probe \
+  --env-file="$PWD/.env.dev" \
   --smtp-probe-to=you@example.com
 ```
 
 ### 初始化与全量重置
 
-从 `backend/` 构建独立维护 JAR。维护工具执行 Flyway，应用启动时由 Hibernate 校验表结构。两者从由 `APP_ENV_FILE` 指定的项目 `.env` 读取各自需要的参数。
+从 `backend/` 构建独立维护 JAR。维护工具执行 Flyway，应用启动时由 Hibernate 校验表结构。维护工具通过 `APP_ENV_FILE` 指定项目 `.env` 路径。
 
 `--admin-user` 填目标 PostgreSQL 实例上**已有的管理员登录名**。该账号需要能创建角色和数据库，并将新库的所有权授予 `DATABASE_OWNER_USERNAME`。执行重置时，还需要删除目标库的权限。工具使用该账号连接同一实例的 `postgres` 维护库。`postgres` 是这里的数据库名，管理员登录名由你的实例配置决定。
 
