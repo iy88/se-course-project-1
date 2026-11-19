@@ -1,13 +1,13 @@
 <!--
-Version: 0.1.38
-Version-Datetime: 2026-11-19T12:57:53+08:00
+Version: 0.1.39
+Version-Datetime: 2026-11-19T13:03:27+08:00
 -->
 
 # 校园二手交易与物品流转平台
 
 ## GitHub Actions 检查
 
-向 `main` 提交 PR 或推送到 `main` 时，CI 在 Linux 上并行运行后端与前端检查。后端使用 OpenJDK 27 和 Maven Wrapper 执行 `verify`。前端使用 Node.js 26.12.1 和 npm 12.2.1，按锁文件安装依赖，核对 OpenAPI 生成类型、lint 和格式，再对用户端和管理端分别做类型检查与构建。
+向 `main` 提交 PR 或推送到 `main` 时，CI 在 Linux 上并行运行后端与前端检查。后端使用 OpenJDK 27 和 Maven Wrapper 执行 `verify`。前端使用 Node.js 26.13.1 和 pnpm 12.5.1，按锁文件安装依赖，核对 OpenAPI 生成类型、lint 和格式，再对用户端和管理端分别做类型检查与构建。
 
 ## 一键启动开发环境
 
@@ -15,7 +15,7 @@ Version-Datetime: 2026-11-19T12:57:53+08:00
 
 ```bash
 mvn -f backend/pom.xml verify
-npm --prefix frontend ci
+pnpm --dir frontend install --frozen-lockfile
 python3 scripts/dev.py start
 python3 scripts/dev.py status
 python3 scripts/dev.py restart
@@ -28,14 +28,14 @@ PID 记录在 `var/dev/dev.pid`，日志写入 `var/dev/dev.log`，可用 `tail 
 
 ## 前端安装、启停与构建
 
-前端使用 Node.js 26、npm 12、Vue 3、TypeScript 和 Rsbuild（Rspack）。仓库的 `frontend/` 使用 npm workspaces，共用一份锁文件。首次安装或锁文件更新后，在该目录运行 `npm ci`。
+前端使用 Node.js 26.13.1、pnpm 12.5.1、Vue 3、TypeScript 和 Rsbuild（Rspack）。Node.js 版本记录在 `frontend/.nvmrc`，pnpm 版本记录在 `frontend/package.json`。两个应用共用 `frontend/pnpm-lock.yaml`。首次安装或锁文件更新后，在 `frontend/` 运行 `pnpm install --frozen-lockfile`。
 
 先按下节启动后端。另开终端，在 `frontend/` 用以下任一命令启动。
 
 ```bash
-npm run dev            # 同时启动两端
-npm run dev -- user    # 仅启动用户端
-npm run dev -- admin   # 仅启动管理端
+pnpm dev         # 同时启动两端
+pnpm dev user    # 仅启动用户端
+pnpm dev admin   # 仅启动管理端
 ```
 
 两端共用 `frontend/shared/rsbuild.ts` 的开发代理，默认将 `/api/v1` 转发到 `http://127.0.0.1:8080`。后端使用其他地址时，可通过环境变量 `API_PROXY_TARGET` 覆盖 Rsbuild 的代理目标。
@@ -43,16 +43,16 @@ npm run dev -- admin   # 仅启动管理端
 在浏览器打开用户端 `http://127.0.0.1:3000` 或管理端 `http://127.0.0.1:3001`。两个页面都通过 Axios XHR 请求同源的 `/api/v1/hello`，看到 `Hello, Project1!` 即可确认接口连通。用户端采用移动优先布局，适配桌面浏览器。在启动终端按 `Ctrl+C` 停止本次启动的服务。
 
 ```bash
-npm run lint                 # Oxlint
-npm run format:check         # Oxfmt 检查
-npm run format               # Oxfmt 格式化
-npm run typecheck            # 两个应用的 Vue / TypeScript 类型检查
-npm run build                # 构建两个应用
-npm run build -w user-web    # 仅构建用户端
-npm run build -w admin-web   # 仅构建管理端
+pnpm lint                      # Oxlint
+pnpm run format:check          # Oxfmt 检查
+pnpm format                    # Oxfmt 格式化
+pnpm typecheck                 # 两个应用的 Vue / TypeScript 类型检查
+pnpm build                     # 构建两个应用
+pnpm --filter user-web build   # 仅构建用户端
+pnpm --filter admin-web build  # 仅构建管理端
 ```
 
-更新 `frontend/shared/openapi.json` 中的接口契约后，在 `frontend/` 执行 `npm run generate:api` 来重新生成共享 TypeScript 类型。构建产物分别输出到两个应用的 `dist/`。部署时由 Nginx 提供各端的静态文件，并在同一站点代理 `/api/v1/`。
+更新 `frontend/shared/openapi.json` 中的接口契约后，在 `frontend/` 执行 `pnpm run generate:api` 来重新生成共享 TypeScript 类型。构建产物分别输出到两个应用的 `dist/`。部署时由 Nginx 提供各端的静态文件，并在同一站点代理 `/api/v1/`。
 
 ## 后端编译与启停
 

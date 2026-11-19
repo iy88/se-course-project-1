@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run typecheck && rsbuild build",
+    "build": "pnpm run typecheck && rsbuild build",
     "dev": "rsbuild",
     "preview": "rsbuild preview",
     "typecheck": "vue-tsc --noEmit"

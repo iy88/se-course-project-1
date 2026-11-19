@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
-const usage = "Usage: npm run dev -- [both|user|admin]";
+const usage = "Usage: pnpm dev [both|user|admin]";
 const [target = "both", ...extra] = process.argv.slice(2);
 const workspaces = {
   both: ["user-web", "admin-web"],

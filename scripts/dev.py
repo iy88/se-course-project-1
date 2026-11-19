@@ -44,7 +44,7 @@ def service_commands(env_file):
     if not jar.is_file():
         raise ValueError("build the backend first with mvn -f backend/pom.xml verify")
     if not (frontend / "node_modules/.bin/rsbuild").is_file():
-        raise ValueError("install frontend dependencies first with npm --prefix frontend ci")
+        raise ValueError("install frontend dependencies first with pnpm --dir frontend install --frozen-lockfile")
     for executable in ("java", "node"):
         if shutil.which(executable) is None:
             raise ValueError(f"{executable} was not found on PATH")
