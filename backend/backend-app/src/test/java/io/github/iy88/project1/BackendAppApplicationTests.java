@@ -43,4 +43,10 @@ class BackendAppApplicationTests {
         mvc.perform(get("/api/v1/hello").accept(MediaType.APPLICATION_XML))
                 .andExpect(status().isNotAcceptable());
     }
+
+    @Test
+    void fileProbeRouteIsAbsentByDefault() throws Exception {
+        mvc.perform(get("/__dev/file-probe/limits").header("X-File-Probe", "1"))
+                .andExpect(status().isNotFound());
+    }
 }

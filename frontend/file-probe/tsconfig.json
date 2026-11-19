@@ -1,0 +1,4 @@
+{
+  "extends": "../user-web/tsconfig.json",
+  "include": ["rsbuild.config.mts", "src/**/*.ts", "src/**/*.vue"]
+}

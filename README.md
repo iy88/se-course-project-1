@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.40
-Version-Datetime: 2026-11-19T13:37:35+08:00
+Version: 0.1.41
+Version-Datetime: 2026-11-19T15:50:15+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -156,6 +156,20 @@ v2 使用两个私有 Bucket。开发和联调共用开发桶，生产使用独�
 ```
 
 探针直接由后端调用 OSS。浏览器直传接入时，再像 legacy 一样登记实际用户端和管理端 Origin（包含协议和端口）。v2 的签名表单用 `POST`，浏览器直读确实需要时再添加 `GET` 或 `HEAD`。允许头按浏览器实际预检填写，可暴露 `ETag`、`x-oss-request-id`。v2 的禁止覆盖和 ACL 约束由签名表单字段承载。[阿里云 OSS RAM 目录级授权](https://www.alibabacloud.com/help/en/oss/user-guide/access-control-base-on-ram-policy)
+
+### File service test page
+
+S2 builds the product image API and UI on the shared Java services in `file-storage`. S4 uses the same services for case evidence. The probe frontend and controller are standalone test fixtures. Business design and implementation use their own API and UI and leave both probe components untouched. Once the production file APIs are integrated, remove the `dev/fileprobe` package, `frontend/file-probe/`, the probe route check in `BackendAppApplicationTests`, and this section.
+
+Build the backend first. Run the two commands from the repository root in separate terminals. Use `APP_ENV=dev` and `HTTP_BIND_HOST=127.0.0.1`. The page proxies to port 8080 by default. Set `API_PROXY_TARGET` for a different backend address.
+
+```bash
+java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
+  --env-file=backend/.env.dev --spring.profiles.active=file-probe
+pnpm --dir frontend exec rsbuild dev --root file-probe
+```
+
+Allow Origin `http://127.0.0.1:3002` and method `POST` in the dev OSS bucket's CORS rules. Open the [test page](http://127.0.0.1:3002), upload a file, complete verification, open the signed read URL, and release the test reference. The file list shows records created by the current backend process.
 
 ### Redis ACL
 
