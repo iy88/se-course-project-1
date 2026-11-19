@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Range;
+import org.springframework.data.redis.connection.RedisStreamCommands.XAddOptions;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.PendingMessage;
@@ -64,7 +65,7 @@ class TaskStreamTests {
         receive(List.of(completedEntry, pendingEntry, unrelatedEntry));
         when(worker.run(ready)).thenReturn(true);
 
-        tasks.tick();
+        tasks.consume();
 
         verify(worker).run(ready);
         verify(worker).run(busy);
@@ -87,7 +88,7 @@ class TaskStreamTests {
         when(stream.claim(eq(KEY), eq(GROUP), anyString(), eq(LEASE), eq(entry.getId()))).thenReturn(List.of(entry));
         when(worker.run(ready)).thenReturn(true);
 
-        tasks.tick();
+        tasks.consume();
 
         var order = inOrder(stream);
         order.verify(stream).claim(eq(KEY), eq(GROUP), anyString(), eq(LEASE), eq(entry.getId()));
@@ -103,17 +104,32 @@ class TaskStreamTests {
         when(stream.pending(KEY, GROUP, Range.unbounded(), BATCH_SIZE, LEASE))
                 .thenThrow(missing).thenReturn(new PendingMessages(GROUP, List.of()));
 
-        assertThatThrownBy(tasks::tick).isSameAs(missing);
-        tasks.tick();
+        assertThatThrownBy(tasks::consume).isSameAs(missing);
+        tasks.consume();
 
         verify(stream, times(2)).createGroup(KEY, ReadOffset.from("0-0"), GROUP);
+    }
+
+    @Test
+    void onlyTheSchedulerListsDueTasksAndEnqueuesThem() {
+        var due = new TaskSchedules.Ready(UUID.randomUUID(), KIND);
+        when(schedules.due(Set.of(KIND))).thenReturn(List.of(due));
+
+        tasks.consume();
+        verifyNoInteractions(schedules);
+
+        tasks.enqueueDue();
+        verify(schedules).due(Set.of(KIND));
+        verify(stream).add(eq(KEY), eq(Map.of("task_id", due.id().toString(), "task_kind", KIND)),
+                any(XAddOptions.class));
+        verify(worker, never()).run(due);
     }
 
     @Test
     void skipsStreamAccessWithoutRegisteredHandlers() {
         when(worker.kinds()).thenReturn(Set.of());
 
-        tasks.tick();
+        tasks.consume();
 
         verifyNoInteractions(stream, schedules);
     }

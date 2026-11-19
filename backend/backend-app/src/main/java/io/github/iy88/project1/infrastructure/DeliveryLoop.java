@@ -10,35 +10,23 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 
-import io.github.iy88.project1.messaging.EventDispatch;
 import io.github.iy88.project1.messaging.TaskStream;
-import io.github.iy88.project1.messaging.UserEvents;
 
 @Component
 @Profile("delivery-worker & infrastructure & !dependency-probe")
 public class DeliveryLoop {
-    private final EventDispatch events;
     private final TaskStream tasks;
-    private final UserEvents registry;
 
-    public DeliveryLoop(EventDispatch events, TaskStream tasks, UserEvents registry) {
-        this.events = events;
+    public DeliveryLoop(TaskStream tasks) {
         this.tasks = tasks;
-        this.registry = registry;
     }
 
     @Scheduled(fixedDelayString = "${WORK_SCAN_SECONDS:5}", timeUnit = TimeUnit.SECONDS, scheduler = "deliveryScheduler")
-    public void publish() { events.publishDue(); }
-
-    @Scheduled(fixedDelayString = "${WORK_SCAN_SECONDS:5}", timeUnit = TimeUnit.SECONDS, scheduler = "deliveryScheduler")
-    public void work() { tasks.tick(); }
-
-    @Scheduled(fixedDelayString = "${EVENT_CLEANUP_SCAN_SECONDS:300}", timeUnit = TimeUnit.SECONDS, scheduler = "deliveryScheduler")
-    public void prune() { registry.pruneExpired(); }
+    public void work() { tasks.consume(); }
 }
 
 @Configuration(proxyBeanMethods = false)
-@Profile("delivery-worker & infrastructure & !dependency-probe")
+@Profile("(delivery-worker | delivery-scheduler) & infrastructure & !dependency-probe")
 @EnableScheduling
 class DeliveryScheduling {
     @Bean
@@ -46,6 +34,8 @@ class DeliveryScheduling {
         var scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(4);
         scheduler.setThreadNamePrefix("delivery-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(20);
         return scheduler;
     }
 }

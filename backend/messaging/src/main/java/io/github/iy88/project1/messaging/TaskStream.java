@@ -39,8 +39,18 @@ public class TaskStream {
         group = namespace + ":workers";
     }
 
+    public void enqueueDue() {
+        var kinds = worker.kinds();
+        if (kinds.isEmpty()) return;
+        var stream = redis.<String, String>opsForStream();
+        for (var due : schedules.due(kinds)) {
+            stream.add(key, Map.of("task_id", due.id().toString(), "task_kind", due.kind()),
+                    XAddOptions.maxlen(settings.streamMaxLength()));
+        }
+    }
+
     @SuppressWarnings("unchecked")
-    public void tick() {
+    public void consume() {
         if (worker.kinds().isEmpty()) return;
         var stream = redis.<String, String>opsForStream();
         try {
@@ -52,26 +62,22 @@ public class TaskStream {
                 }
                 groupReady = true;
             }
-            for (var due : schedules.due(worker.kinds())) {
-                stream.add(key, Map.of("task_id", due.id().toString(), "task_kind", due.kind()),
-                        XAddOptions.maxlen(settings.streamMaxLength()));
-            }
             var idle = Duration.ofSeconds(settings.leaseSeconds());
             var pending = stream.pending(key, group, Range.unbounded(), settings.batchSize(), idle).stream()
                     .map(message -> message.getId()).toArray(RecordId[]::new);
             if (pending.length != 0) {
-                consume(stream.claim(key, group, consumer, idle, pending));
+                process(stream.claim(key, group, consumer, idle, pending));
             }
             var offset = StreamOffset.create(key, ReadOffset.lastConsumed());
             var options = StreamReadOptions.empty().count(settings.batchSize());
-            consume(stream.read(Consumer.from(group, consumer), options, offset));
+            process(stream.read(Consumer.from(group, consumer), options, offset));
         } catch (RuntimeException failure) {
             if (containsRedisCode(failure, "NOGROUP")) groupReady = false;
             throw failure;
         }
     }
 
-    private void consume(List<MapRecord<String, String, String>> entries) {
+    private void process(List<MapRecord<String, String, String>> entries) {
         if (entries == null) return;
         for (var entry : entries) {
             String kind = entry.getValue().get("task_kind");

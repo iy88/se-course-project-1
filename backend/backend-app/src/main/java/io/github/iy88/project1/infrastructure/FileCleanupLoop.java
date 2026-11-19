@@ -13,7 +13,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("delivery-worker & file-cleanup & infrastructure & !dependency-probe")
+@Profile("delivery-scheduler & file-cleanup & infrastructure & !dependency-probe")
 public class FileCleanupLoop {
     private static final Logger LOG = LoggerFactory.getLogger(FileCleanupLoop.class);
     private final FileCleanup cleanup;

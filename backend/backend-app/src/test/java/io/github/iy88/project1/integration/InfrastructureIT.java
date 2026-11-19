@@ -220,15 +220,18 @@ class InfrastructureIT {
         String key = namespace + ":work";
         String group = namespace + ":workers";
         var stream = redis.<String, String>opsForStream();
-        var message = stream.add(key, Map.of("task_id", task.id().toString(), "task_kind", TASK_KIND));
+        var tasks = app.getBean(TaskStream.class);
+        tasks.enqueueDue();
+        assertThat(stream.size(key)).isEqualTo(1);
         stream.createGroup(key, ReadOffset.from("0-0"), group);
         var delivered = stream.read(Consumer.from(group, "stopped-worker"), StreamReadOptions.empty().count(1),
                 StreamOffset.create(key, ReadOffset.lastConsumed()));
-        assertThat(delivered).singleElement().satisfies(entry -> assertThat(entry.getId()).isEqualTo(message));
+        assertThat(delivered).singleElement().satisfies(entry -> assertThat(entry.getValue())
+                .containsExactlyInAnyOrderEntriesOf(Map.of("task_id", task.id().toString(), "task_kind", TASK_KIND)));
         await().atMost(Duration.ofSeconds(10)).until(() ->
                 stream.pending(key, group, Range.unbounded(), 1, Duration.ofSeconds(3)).size() == 1);
 
-        app.getBean(TaskStream.class).tick();
+        tasks.consume();
 
         assertThat(stream.pending(key, group).getTotalPendingMessages()).isZero();
         assertThat(stream.size(key)).isZero();
