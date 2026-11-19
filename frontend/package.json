@@ -1,0 +1,25 @@
+{
+  "name": "project1-frontend",
+  "private": true,
+  "workspaces": [
+    "user-web",
+    "admin-web"
+  ],
+  "scripts": {
+    "dev": "node dev.mjs",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "oxlint --deny-warnings user-web admin-web shared dev.mjs",
+    "format": "oxfmt user-web admin-web shared dev.mjs package.json",
+    "format:check": "oxfmt --check user-web admin-web shared dev.mjs package.json",
+    "generate:api": "openapi-typescript shared/openapi.json -o shared/api-types.ts && oxfmt shared/api-types.ts"
+  },
+  "dependencies": {
+    "axios": "1.21.1"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0"
+  }
+}

@@ -1,9 +1,54 @@
 <!--
-Version: 0.1.36
-Version-Datetime: 2026-11-19T12:50:10+08:00
+Version: 0.1.37
+Version-Datetime: 2026-11-19T12:50:26+08:00
 -->
 
 # 校园二手交易与物品流转平台
+
+## 一键启动开发环境
+
+在 macOS 或 Linux 上，从仓库根目录执行。首次运行或后端代码更新后重新构建 JAR，前端锁文件更新后重新安装依赖。
+
+```bash
+mvn -f backend/pom.xml verify
+npm --prefix frontend ci
+python3 scripts/dev.py start
+python3 scripts/dev.py status
+python3 scripts/dev.py restart
+python3 scripts/dev.py stop
+```
+
+脚本默认读取 `backend/.env.dev`，在后台启动后端、用户端 `http://127.0.0.1:3000` 和管理端 `http://127.0.0.1:3001`。先按下文配置并初始化 PostgreSQL 和 Redis。使用其他配置文件时，给 `start` 或 `restart` 加上 `--env-file <路径>`。Rsbuild 默认代理到本地 8080，后端使用其他地址时，设置 `API_PROXY_TARGET` 覆盖。
+
+PID 记录在 `var/dev/dev.pid`，日志写入 `var/dev/dev.log`，可用 `tail -f var/dev/dev.log` 查看。`status` 显示托管进程状态，后端或任一前端进程退出时，脚本会停止本次启动的其他服务。
+
+## 前端安装、启停与构建
+
+前端使用 Node.js 26、npm 12、Vue 3、TypeScript 和 Rsbuild（Rspack）。仓库的 `frontend/` 使用 npm workspaces，共用一份锁文件。首次安装或锁文件更新后，在该目录运行 `npm ci`。
+
+先按下节启动后端。另开终端，在 `frontend/` 用以下任一命令启动。
+
+```bash
+npm run dev            # 同时启动两端
+npm run dev -- user    # 仅启动用户端
+npm run dev -- admin   # 仅启动管理端
+```
+
+两端共用 `frontend/shared/rsbuild.ts` 的开发代理，默认将 `/api/v1` 转发到 `http://127.0.0.1:8080`。后端使用其他地址时，可通过环境变量 `API_PROXY_TARGET` 覆盖 Rsbuild 的代理目标。
+
+在浏览器打开用户端 `http://127.0.0.1:3000` 或管理端 `http://127.0.0.1:3001`。两个页面都通过 Axios XHR 请求同源的 `/api/v1/hello`，看到 `Hello, Project1!` 即可确认接口连通。用户端采用移动优先布局，适配桌面浏览器。在启动终端按 `Ctrl+C` 停止本次启动的服务。
+
+```bash
+npm run lint                 # Oxlint
+npm run format:check         # Oxfmt 检查
+npm run format               # Oxfmt 格式化
+npm run typecheck            # 两个应用的 Vue / TypeScript 类型检查
+npm run build                # 构建两个应用
+npm run build -w user-web    # 仅构建用户端
+npm run build -w admin-web   # 仅构建管理端
+```
+
+更新 `frontend/shared/openapi.json` 中的接口契约后，在 `frontend/` 执行 `npm run generate:api` 来重新生成共享 TypeScript 类型。构建产物分别输出到两个应用的 `dist/`。部署时由 Nginx 提供各端的静态文件，并在同一站点代理 `/api/v1/`。
 
 ## 后端编译与启停
 
