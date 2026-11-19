@@ -1,17 +1,15 @@
-package io.github.iy88.project1.api;
+package io.github.iy88.project1.api.hello;
 
-import io.github.iy88.project1.core.HelloService;
+import io.github.iy88.project1.application.hello.HelloService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequiredArgsConstructor
 public class HelloController {
 
     private final HelloService helloService;
-
-    public HelloController(HelloService helloService) {
-        this.helloService = helloService;
-    }
 
     @GetMapping("/api/v1/hello")
     public HelloResponse hello() {

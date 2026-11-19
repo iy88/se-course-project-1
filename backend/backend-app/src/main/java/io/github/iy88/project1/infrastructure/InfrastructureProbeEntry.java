@@ -13,4 +13,8 @@ class InfrastructureProbeEntry {
 
     protected InfrastructureProbeEntry() {
     }
+
+    Integer getId() {
+        return id;
+    }
 }

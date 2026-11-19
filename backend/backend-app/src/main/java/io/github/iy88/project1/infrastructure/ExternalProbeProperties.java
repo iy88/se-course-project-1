@@ -8,10 +8,10 @@ import org.springframework.util.Assert;
 @ConfigurationProperties("project1.probe")
 record ExternalProbeProperties(Oss oss, Smtp smtp) {
 
-    record Oss(String endpoint, String region, String bucket, String prefix,
-               String accessKeyId, String accessKeySecret) {
+    public record Oss(String endpoint, String region, String bucket, String prefix,
+                      String accessKeyId, String accessKeySecret) {
 
-        void validate() {
+        public Oss {
             required(region, "OSS_REGION");
             Assert.isTrue(region.matches("[a-z0-9-]+"), "OSS_REGION must be an OSS region ID");
             String host = "https://oss-" + region;

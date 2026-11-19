@@ -1,4 +1,4 @@
-package io.github.iy88.project1;
+package io.github.iy88.project1.bootstrap;
 
 import java.net.URI;
 import java.util.ArrayList;

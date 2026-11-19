@@ -1,4 +1,4 @@
-package io.github.iy88.project1;
+package io.github.iy88.project1.bootstrap;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,9 +17,6 @@ final class ApplicationEnvFile {
 
     static void load(ConfigurableEnvironment environment, ApplicationArguments arguments) {
         var values = arguments.getOptionValues("env-file");
-        if (values == null && !environment.matchesProfiles("infrastructure", "dependency-probe")) {
-            return;
-        }
         if (values == null || values.size() != 1 || values.getFirst().isBlank()) {
             throw new IllegalArgumentException("Provide exactly one --env-file=<path> for the application configuration");
         }

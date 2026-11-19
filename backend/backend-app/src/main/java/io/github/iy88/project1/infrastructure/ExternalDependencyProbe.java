@@ -1,5 +1,6 @@
 package io.github.iy88.project1.infrastructure;
 
+import lombok.RequiredArgsConstructor;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -12,16 +13,11 @@ import org.springframework.stereotype.Component;
 @Profile("dependency-probe")
 @EnableConfigurationProperties(ExternalProbeProperties.class)
 @Order(1)
+@RequiredArgsConstructor
 class ExternalDependencyProbe implements ApplicationRunner {
 
     private final ExternalProbeProperties properties;
     private final SmtpProbeRecipient recipient;
-
-    ExternalDependencyProbe(ExternalProbeProperties properties, SmtpProbeRecipient recipient) {
-        properties.oss().validate();
-        this.properties = properties;
-        this.recipient = recipient;
-    }
 
     @Override
     public void run(ApplicationArguments args) {

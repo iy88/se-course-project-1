@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.34
-Version-Datetime: 2026-11-19T10:47:23+08:00
+Version: 0.1.36
+Version-Datetime: 2026-11-19T12:50:10+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -13,10 +13,10 @@ Version-Datetime: 2026-11-19T10:47:23+08:00
 cd backend
 mvn verify                         # 构建并测试所有模块，生成可执行 JAR
 mvn -pl backend-app -am test         # 只测试启动模块及其 Maven 依赖模块
-java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --server.address=127.0.0.1
+java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --env-file=.env.dev
 ```
 
-应用默认监听本机 8080，可加 `--server.port=8081` 调整。另开一个终端检查 `curl -fsS http://127.0.0.1:8080/api/v1/hello` 和 `curl -fsS http://127.0.0.1:8080/actuator/health`。服务在前台运行，在启动终端按 `Ctrl+C` 停止。默认模式只运行 Hello World 和健康端点。
+应用监听 `.env.dev` 中的 `HTTP_BIND_HOST` 和 `HTTP_BIND_PORT`。例如配置为本机 8080 时，可用 `curl -fsS http://127.0.0.1:8080/api/v1/hello` 和 `curl -fsS http://127.0.0.1:8080/actuator/health` 检查。服务在前台运行，在启动终端按 `Ctrl+C` 停止。
 
 ### 安装内部模块到本机 Maven 仓库
 
@@ -33,6 +33,21 @@ mvn -pl backend-app,maintenance -am install
 ```
 
 整仓或 CI 构建检查用 `mvn verify` 即可。同一次多模块构建会直接解析参与构建的内部模块。
+
+### 后端模块与包
+
+`BackendAppApplication` 放在 `io.github.iy88.project1` 根包。启动期的参数、环境加载和校验集中在 `backend-app` 的 `bootstrap` 包。将 Maven 模块加入应用依赖后，根包下的 Spring 组件以及 JPA 实体和 Repository 可由 Spring Boot 按类型扫描。业务服务和项目自有适配器用组件注解和构造器注入。SDK 客户端等需要显式装配的对象由对应模块的配置类注册。
+
+`backend-app` 使用 Lombok 的 `@RequiredArgsConstructor` 为 Spring 组件的 `final` 依赖字段生成构造器。Maven 显式配置注解处理器。配置值通过 `@ConfigurationProperties` 绑定和校验。
+
+| 位置 | 职责 |
+| --- | --- |
+| `backend-app` 的 `api.<业务>` | Controller、HTTP 请求和响应 DTO，负责参数校验和传输映射 |
+| 业务模块的 `application` | 用例服务及跨模块使用的命令、查询和具名输入输出 |
+| 业务模块的 `domain` | 业务规则、状态和领域对象 |
+| 业务模块的 `persistence` | JPA 实体、Spring Data Repository、必要的显式 SQL |
+
+按实际需要建立包。跨模块协作由应用层调用各模块公开服务，传递 ID 和具名输入输出。持久化实体与 Repository 由其所属模块管理。文件服务按同一规则组织，作为首个正式基础设施服务接入。
 
 ## S1 开发环境与依赖探针
 
@@ -95,11 +110,10 @@ ACL SETUSER project1_dev reset on >替换为随机密码 ~project1:dev:iy88:* -@
 
 ### 运行方式
 
-从 `backend/` 运行。常驻开发服务使用 `infrastructure` profile，通过必填参数 `--env-file` 指定配置文件，支持绝对路径和相对于当前目录的路径。首次启动前先执行下文的 `db init`，并在 `.env.dev` 中填写 `HTTP_BIND_HOST` 和 `HTTP_BIND_PORT`。核对相应地址上的 HTTP 接口，按 `Ctrl+C` 停止服务。
+从 `backend/` 运行。后端自动启用 `infrastructure` profile，通过必填参数 `--env-file` 指定配置文件，支持绝对路径和相对于当前目录的路径。首次启动前先执行下文的 `db init`，并在 `.env.dev` 中填写 `HTTP_BIND_HOST` 和 `HTTP_BIND_PORT`。核对相应地址上的 HTTP 接口，按 `Ctrl+C` 停止服务。
 
 ```bash
 java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
-  --spring.profiles.active=infrastructure \
   --env-file="$PWD/.env.dev"
 ```
 
