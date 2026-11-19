@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.2
-Version-Datetime: 2026-11-14T21:44:43+08:00
+Version: 0.1.3
+Version-Datetime: 2026-11-19T13:17:22+08:00
 -->
 
 # ADR-007 OSS 私有文件与授权直传
@@ -31,3 +31,7 @@ Version-Datetime: 2026-11-14T21:44:43+08:00
 ## 2026-11-14 覆盖控制决定
 
 袁尚峰（iy88）在 Q-002 逐轮决策中选择 A，并提出不开启 Bucket 版本控制。本批以从未开启版本控制为部署条件，上传授权固定唯一 key 和禁止覆盖字段；已开启或暂停过版本控制的 Bucket 通过 Q-002 重新评估。上传接口、稳定内容标识、回收及验证入口见[文件专题](../../detailed-design/key-designs/文件与邮件.md)。
+
+## v2 Bucket 分配
+
+袁尚峰（iy88）于 2026-11-19 确认 v2 使用两个私有 Bucket。开发与联调共用一个，生产使用另一个。legacy 保留独立 Bucket。各环境配置其专用 `OSS_BUCKET`，商品图片和事项证据通过 `OSS_PREFIX` 下的 `product_image/`、`case_evidence/` 前缀存放，读取权限由对应主体判断。开发与联调的整桶重置使用开发 Bucket。
