@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.41
-Version-Datetime: 2026-11-19T15:50:15+08:00
+Version: 0.1.42
+Version-Datetime: 2026-11-19T16:03:19+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -156,6 +156,14 @@ v2 使用两个私有 Bucket。开发和联调共用开发桶，生产使用独�
 ```
 
 探针直接由后端调用 OSS。浏览器直传接入时，再像 legacy 一样登记实际用户端和管理端 Origin（包含协议和端口）。v2 的签名表单用 `POST`，浏览器直读确实需要时再添加 `GET` 或 `HEAD`。允许头按浏览器实际预检填写，可暴露 `ETag`、`x-oss-request-id`。v2 的禁止覆盖和 ACL 约束由签名表单字段承载。[阿里云 OSS RAM 目录级授权](https://www.alibabacloud.com/help/en/oss/user-guide/access-control-base-on-ram-policy)
+
+### Shared write use cases
+
+Build business commands on `backend-core` and call `WriteExecutor.run` with a server-created `ExecutionContext`. Provide the validated request projection, read-only lock plan, qualification checks, replay authorization, and write callback. Reserve the PostgreSQL single-bigint advisory lock space for account IDs. Acquire session and other identity locks in the qualification callback, then use `WriteTransaction.lock` for declared business keys in ascending domain and key order.
+
+Use `WriteTransaction.audit` for approved audit facts. The command, audit facts, and idempotency response commit together. Keep credentials and verification codes in their dedicated account protocols.
+
+For browser writes under `/api/v1`, configure `ALLOWED_ORIGINS` and supply a `CsrfGuard.Verifier` bound to the current session or account entry. The API sets `X-Request-Id` for each request. Apply the database migration before running a write use case.
 
 ### File service test page
 
