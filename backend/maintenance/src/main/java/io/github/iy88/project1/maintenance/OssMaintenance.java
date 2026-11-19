@@ -1,10 +1,11 @@
 package io.github.iy88.project1.maintenance;
 
 import com.aliyun.sdk.service.oss2.OSSClient;
+import com.aliyun.sdk.service.oss2.models.Delete;
 import com.aliyun.sdk.service.oss2.models.DeleteMultipleObjectsRequest;
-import com.aliyun.sdk.service.oss2.models.DeleteObject;
 import com.aliyun.sdk.service.oss2.models.DeletedInfo;
 import com.aliyun.sdk.service.oss2.models.ListObjectsV2Request;
+import com.aliyun.sdk.service.oss2.models.ObjectIdentifier;
 import com.aliyun.sdk.service.oss2.models.ObjectSummary;
 import io.github.iy88.project1.storage.OssClients;
 import java.util.HashSet;
@@ -62,9 +63,11 @@ final class OssMaintenance {
                 throw new IllegalStateException("OSS listing did not advance after deletion");
             }
             previousFirstKey = keys.getFirst();
-            var deletions = keys.stream().map(key -> DeleteObject.newBuilder().key(key).build()).toList();
+            var deletions = keys.stream().map(key -> ObjectIdentifier.newBuilder().key(key).build()).toList();
             var result = client.deleteMultipleObjects(DeleteMultipleObjectsRequest.newBuilder()
-                    .bucket(bucket).deleteObjects(deletions).quiet(false).build());
+                    .bucket(bucket)
+                    .delete(Delete.newBuilder().objects(deletions).quiet(false).build())
+                    .build());
             var deleted = result.deletedObjects();
             if (deleted == null || !new HashSet<>(keys).equals(
                     new HashSet<>(deleted.stream().map(DeletedInfo::key).toList()))) {

@@ -5,7 +5,6 @@ import com.aliyun.sdk.service.oss2.models.AccessControlList;
 import com.aliyun.sdk.service.oss2.models.AccessControlPolicy;
 import com.aliyun.sdk.service.oss2.models.DeleteMultipleObjectsRequest;
 import com.aliyun.sdk.service.oss2.models.DeleteMultipleObjectsResult;
-import com.aliyun.sdk.service.oss2.models.DeleteObject;
 import com.aliyun.sdk.service.oss2.models.DeleteObjectRequest;
 import com.aliyun.sdk.service.oss2.models.DeletedInfo;
 import com.aliyun.sdk.service.oss2.models.GetBucketAclRequest;
@@ -14,6 +13,7 @@ import com.aliyun.sdk.service.oss2.models.GetBucketVersioningRequest;
 import com.aliyun.sdk.service.oss2.models.GetBucketVersioningResult;
 import com.aliyun.sdk.service.oss2.models.ListObjectsV2Request;
 import com.aliyun.sdk.service.oss2.models.ListObjectsV2Result;
+import com.aliyun.sdk.service.oss2.models.ObjectIdentifier;
 import com.aliyun.sdk.service.oss2.models.ObjectSummary;
 import com.aliyun.sdk.service.oss2.models.VersioningConfiguration;
 import java.util.Arrays;
@@ -45,7 +45,7 @@ class OssMaintenanceTests {
         when(client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(first, second, empty);
         when(client.deleteMultipleObjects(any(DeleteMultipleObjectsRequest.class))).thenAnswer(invocation -> {
             DeleteMultipleObjectsRequest request = invocation.getArgument(0);
-            return deleted(request.deleteObjects().stream().map(DeleteObject::key).toArray(String[]::new));
+            return deleted(request.delete().objects().stream().map(ObjectIdentifier::key).toArray(String[]::new));
         });
 
         assertThat(OssMaintenance.clear(client, BUCKET)).isEqualTo(1002);
@@ -53,11 +53,11 @@ class OssMaintenanceTests {
         verify(client, times(2)).deleteMultipleObjects(deletes.capture());
         assertThat(deletes.getAllValues()).allSatisfy(request -> {
             assertThat(request.bucket()).isEqualTo(BUCKET);
-            assertThat(request.quiet()).isFalse();
+            assertThat(request.delete().quiet()).isFalse();
         });
-        assertThat(deletes.getAllValues().get(0).deleteObjects()).extracting(DeleteObject::key)
+        assertThat(deletes.getAllValues().getFirst().delete().objects()).extracting(ObjectIdentifier::key)
                 .containsExactly(firstBatch);
-        assertThat(deletes.getAllValues().get(1).deleteObjects()).extracting(DeleteObject::key)
+        assertThat(deletes.getAllValues().get(1).delete().objects()).extracting(ObjectIdentifier::key)
                 .containsExactly("outside/one", "root-object");
         verify(client, never()).deleteObject(any(DeleteObjectRequest.class));
         var requests = ArgumentCaptor.forClass(ListObjectsV2Request.class);
