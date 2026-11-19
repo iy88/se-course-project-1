@@ -9,7 +9,9 @@ import org.springframework.context.annotation.Bean;
 public class BackendAppApplication {
 
     public static void main(String[] args) {
-        var context = SpringApplication.run(BackendAppApplication.class, args);
+        var application = new SpringApplication(BackendAppApplication.class);
+        application.addInitializers(context -> RequiredInfrastructureConfiguration.validate(context.getEnvironment()));
+        var context = application.run(args);
         if (context.getEnvironment().matchesProfiles("dependency-probe")) {
             context.close();
         }

@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 
 class OssMaintenanceTests {
 
-    private static final String BUCKET = "project1-dev";
+    private static final String BUCKET = "unit-test-bucket";
 
     @Test
     void clearsTheWholeBucketInBatchesOfAtMostOneThousandObjects() {

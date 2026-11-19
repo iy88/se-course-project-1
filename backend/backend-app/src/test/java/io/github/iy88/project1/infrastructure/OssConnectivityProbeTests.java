@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 
 class OssConnectivityProbeTests {
 
-    private static final String BUCKET = "project1-dev";
+    private static final String BUCKET = "unit-test-bucket";
     private static final String PREFIX = "project1/dev";
 
     @Test

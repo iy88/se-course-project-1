@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.31
-Version-Datetime: 2026-11-19T10:08:30+08:00
+Version: 0.1.32
+Version-Datetime: 2026-11-19T10:14:19+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -21,6 +21,8 @@ java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --server.address=127
 ## S1 开发环境与依赖探针
 
 从 `backend/` 复制配置样例，然后在本地编辑。Git 已忽略 `.env.dev`。文件使用 Java properties 语法，值直接写在等号后，避免加引号，反斜杠写成两个反斜杠。
+
+`.env.example` 中的值用于示范格式。复制后请在 `.env.dev` 中填入实际的依赖地址、资源名和凭据。`DATABASE_URL` 必须包含数据库名。应用和维护工具会在连接前报出缺少的配置项。
 
 ```bash
 cd backend
@@ -77,7 +79,7 @@ ACL SETUSER project1_dev reset on >替换为随机密码 ~project1:dev:iy88:* -@
 
 ### 运行方式
 
-从 `backend/` 运行，`APP_ENV_FILE` 支持绝对路径。常驻开发服务使用 `infrastructure` profile。首次启动前先执行下文的 `db init`。在 `.env.dev` 中设置 `HTTP_BIND_HOST` 和 `HTTP_BIND_PORT`，默认值为 `127.0.0.1` 和 `8080`。核对相应地址上的 HTTP 接口，按 `Ctrl+C` 停止服务。
+从 `backend/` 运行，`APP_ENV_FILE` 支持绝对路径。常驻开发服务使用 `infrastructure` profile。首次启动前先执行下文的 `db init`，并在 `.env.dev` 中填写 `HTTP_BIND_HOST` 和 `HTTP_BIND_PORT`。核对相应地址上的 HTTP 接口，按 `Ctrl+C` 停止服务。
 
 ```bash
 APP_ENV_FILE="$PWD/.env.dev" java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
