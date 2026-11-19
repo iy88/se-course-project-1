@@ -1,13 +1,13 @@
 <!--
-Version: 0.1.43
-Version-Datetime: 2026-11-19T17:12:17+08:00
+Version: 0.1.44
+Version-Datetime: 2026-11-19T18:31:12+08:00
 -->
 
 # 校园二手交易与物品流转平台
 
 ## GitHub Actions 检查
 
-向 `main` 提交 PR 或推送到 `main` 时，CI 在 Linux 上并行运行后端与前端检查。后端使用 OpenJDK 27 和 Maven Wrapper 执行 `verify`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，核对 OpenAPI 生成类型、lint 和格式，再对用户端和管理端分别做类型检查与构建。
+向 `main` 提交 PR 或推送到 `main` 时，CI 在 Linux 上并行运行后端、后端集成和前端检查。后端使用 OpenJDK 27 和 Maven Wrapper 执行 `verify`，并在日志中输出总体行覆盖率和分支覆盖率。后端集成 job 用独立的 PostgreSQL 和 Redis 容器，先执行 Flyway 迁移，再运行 `verify -Pintegration`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，核对 OpenAPI 生成类型、lint 和格式，再对用户端和管理端分别做类型检查与构建。
 
 ## 一键启动开发环境
 
@@ -82,6 +82,23 @@ mvn -pl backend-app,maintenance -am install
 ```
 
 整仓或 CI 构建检查用 `mvn verify` 即可。同一次多模块构建会直接解析参与构建的内部模块。
+
+### 后端测试覆盖率
+
+在 `backend/` 运行 `mvn clean verify`，然后用浏览器打开 `coverage-report/target/site/jacoco-aggregate/index.html`。汇总报告合并各模块测试产生的执行数据，可查看模块、类和源码行的覆盖情况。同目录的 `jacoco.xml` 可供工具读取。
+
+单独构建时，运行 `mvn -pl backend-app -am clean verify`，在带测试的各模块下查看 `target/site/jacoco/index.html`。模块报告仅计算该模块测试产生的执行数据，跨模块覆盖情况以汇总报告为准。
+
+### 后端集成测试
+
+启动 `backend/.env.dev` 指定的 PostgreSQL 和 Redis，先执行下文的 `db migrate` 更新迁移。使用 `APP_ENV=dev`，并为 Redis 用户配置事件流、工作队列和实时连接所需的权限。
+
+```bash
+cd backend
+mvn clean verify -Pintegration
+```
+
+使用其他开发配置文件时，加 `-Dit.envFile=/path/to/.env.dev`。集成测试通过 Failsafe 执行，报告在 `backend-app/target/failsafe-reports/`。测试覆盖 PostgreSQL 并发幂等与回滚、Redis 消费组重领与确认、WebSocket 断线重连与事件恢复。每次运行使用独立的 Redis 键前缀和测试记录，结束时清理。运行该 profile 后，JaCoCo 汇总报告包含单元和集成测试的执行数据。
 
 ### 后端模块与包
 
