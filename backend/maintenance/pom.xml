@@ -34,8 +34,9 @@
             <artifactId>lettuce-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.aliyun.oss</groupId>
-            <artifactId>aliyun-sdk-oss</artifactId>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>file-storage</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

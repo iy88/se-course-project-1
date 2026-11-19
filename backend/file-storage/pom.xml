@@ -11,4 +11,10 @@
     </parent>
 
     <artifactId>file-storage</artifactId>
+    <dependencies>
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>alibabacloud-oss-v2</artifactId>
+        </dependency>
+    </dependencies>
 </project>

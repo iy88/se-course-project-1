@@ -1,18 +1,17 @@
 package io.github.iy88.project1.maintenance;
 
-import com.aliyun.oss.ClientBuilderConfiguration;
-import com.aliyun.oss.OSS;
-import com.aliyun.oss.OSSClientBuilder;
-import com.aliyun.oss.common.auth.DefaultCredentialProvider;
-import com.aliyun.oss.common.comm.SignVersion;
-import com.aliyun.oss.model.BucketVersioningConfiguration;
-import com.aliyun.oss.model.CannedAccessControlList;
-import com.aliyun.oss.model.DeleteObjectsRequest;
-import com.aliyun.oss.model.ListObjectsV2Request;
-import com.aliyun.oss.model.OSSObjectSummary;
+import com.aliyun.sdk.service.oss2.OSSClient;
+import com.aliyun.sdk.service.oss2.models.DeleteMultipleObjectsRequest;
+import com.aliyun.sdk.service.oss2.models.DeleteObject;
+import com.aliyun.sdk.service.oss2.models.DeletedInfo;
+import com.aliyun.sdk.service.oss2.models.ListObjectsV2Request;
+import com.aliyun.sdk.service.oss2.models.ObjectSummary;
+import io.github.iy88.project1.storage.OssClients;
 import java.util.HashSet;
 
 final class OssMaintenance {
+
+    private static final long MAX_BATCH_SIZE = 1000;
 
     private final String bucket;
     private final String region;
@@ -37,57 +36,38 @@ final class OssMaintenance {
     }
 
     long reset() {
-        var options = new ClientBuilderConfiguration();
-        options.setSignatureVersion(SignVersion.V4);
-        options.setConnectionTimeout(5000);
-        options.setSocketTimeout(5000);
-        options.setMaxErrorRetry(0);
-        OSS client = OSSClientBuilder.create()
-                .endpoint(endpoint)
-                .region(region)
-                .credentialsProvider(new DefaultCredentialProvider(accessKey, secret))
-                .clientConfiguration(options)
-                .build();
-        try {
-            return clear(client, bucket);
-        } finally {
-            client.shutdown();
-        }
+        return OssClients.use(endpoint, region, accessKey, secret, client -> clear(client, bucket));
     }
 
-    static long clear(OSS client, String bucket) {
-        if (client.getBucketAcl(bucket).getCannedACL() != CannedAccessControlList.Private) {
-            throw new IllegalStateException("OSS reset requires a private bucket");
-        }
-        String status = client.getBucketVersioning(bucket).getStatus();
-        if (status != null && !status.isEmpty() && !BucketVersioningConfiguration.OFF.equals(status)) {
-            throw new IllegalStateException("OSS reset requires a bucket where versioning has never been enabled");
-        }
-        var request = new ListObjectsV2Request(bucket);
-        int batchSize = DeleteObjectsRequest.DELETE_OBJECTS_ONETIME_LIMIT;
-        request.setMaxKeys(batchSize);
+    static long clear(OSSClient client, String bucket) {
+        OssClients.requirePrivateUnversionedBucket(client, bucket);
+        var request = ListObjectsV2Request.newBuilder().bucket(bucket).maxKeys(MAX_BATCH_SIZE).build();
         long removed = 0;
         String previousFirstKey = null;
         while (true) {
             // List the first page again after deleting it, so a continuation token never points into removed objects.
             var page = client.listObjectsV2(request);
-            var keys = page.getObjectSummaries().stream().map(OSSObjectSummary::getKey).toList();
-            if (keys.isEmpty()) {
-                if (page.isTruncated()) {
+            var objects = page.contents();
+            if (objects == null || objects.isEmpty()) {
+                if (Boolean.TRUE.equals(page.isTruncated())) {
                     throw new IllegalStateException("OSS returned an empty truncated page");
                 }
                 return removed;
             }
-            if (keys.size() > batchSize) {
+            if (objects.size() > MAX_BATCH_SIZE) {
                 throw new IllegalStateException("OSS returned more keys than the batch delete limit");
             }
+            var keys = objects.stream().map(ObjectSummary::key).toList();
             if (keys.getFirst().equals(previousFirstKey)) {
                 throw new IllegalStateException("OSS listing did not advance after deletion");
             }
             previousFirstKey = keys.getFirst();
-            var result = client.deleteObjects(new DeleteObjectsRequest(bucket).withKeys(keys).withQuiet(false));
-            var deleted = result.getDeletedObjects();
-            if (deleted == null || !new HashSet<>(keys).equals(new HashSet<>(deleted))) {
+            var deletions = keys.stream().map(key -> DeleteObject.newBuilder().key(key).build()).toList();
+            var result = client.deleteMultipleObjects(DeleteMultipleObjectsRequest.newBuilder()
+                    .bucket(bucket).deleteObjects(deletions).quiet(false).build());
+            var deleted = result.deletedObjects();
+            if (deleted == null || !new HashSet<>(keys).equals(
+                    new HashSet<>(deleted.stream().map(DeletedInfo::key).toList()))) {
                 throw new IllegalStateException("OSS did not confirm every deletion in the batch");
             }
             removed += keys.size();

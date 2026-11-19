@@ -1,7 +1,5 @@
 package io.github.iy88.project1.maintenance;
 
-import com.aliyun.oss.ClientException;
-import com.aliyun.oss.OSSException;
 import io.lettuce.core.RedisException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -91,10 +89,6 @@ public final class MaintenanceCli {
             } else {
                 System.err.println("PostgreSQL step failed (SQLSTATE " + state + ")");
             }
-        } catch (OSSException failure) {
-            System.err.println("OSS step failed (" + failure.getErrorCode() + ", request " + failure.getRequestId() + ")");
-        } catch (ClientException failure) {
-            System.err.println("OSS connection failed (" + failure.getErrorCode() + ")");
         } catch (RedisException failure) {
             System.err.println("Redis step failed (" + failure.getClass().getSimpleName() + ")");
         } catch (FlywayException failure) {
