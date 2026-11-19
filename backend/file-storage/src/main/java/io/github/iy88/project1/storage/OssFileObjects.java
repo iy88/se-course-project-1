@@ -11,6 +11,7 @@ import com.aliyun.sdk.service.oss2.models.HeadObjectRequest;
 import io.github.iy88.project1.storage.content.FileContentVerifier.VerifiedContent;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Serial;
 import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
@@ -76,6 +77,9 @@ public final class OssFileObjects {
                 .bucket(location.bucket()).key(location.key()).ifMatch(expected.etag()).build()));
         T result;
         try (var body = response.body()) {
+            if (body == null) {
+                throw new Failure(Reason.UNAVAILABLE, response.requestId());
+            }
             var actual = new Metadata(response.eTag(), response.contentLength(), response.contentType());
             if (!expected.equals(actual)) {
                 throw new Failure(Reason.CONTENT_CHANGED, response.requestId());
@@ -175,6 +179,9 @@ public final class OssFileObjects {
     }
 
     public static final class Failure extends RuntimeException {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private final Reason reason;
         private final String requestId;
 

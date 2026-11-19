@@ -7,6 +7,7 @@ import com.aliyun.sdk.service.oss2.exceptions.ServiceException;
 import com.aliyun.sdk.service.oss2.models.GetBucketAclRequest;
 import com.aliyun.sdk.service.oss2.models.GetBucketVersioningRequest;
 import com.aliyun.sdk.service.oss2.retry.NopRetryer;
+import java.io.Serial;
 import java.time.Duration;
 import java.util.function.Function;
 
@@ -17,7 +18,7 @@ public final class OssClients {
 
     public static <T> T use(String endpoint, String region, String accessKey, String secret,
                             Function<OSSClient, T> action) {
-        try (OSSClient client = OSSClient.newBuilder()
+        try (var session = new ClientSession(OSSClient.newBuilder()
                 .endpoint(endpoint)
                 .region(region)
                 .credentialsProvider(new StaticCredentialsProvider(accessKey, secret))
@@ -25,8 +26,8 @@ public final class OssClients {
                 .connectTimeout(Duration.ofSeconds(5))
                 .readWriteTimeout(Duration.ofSeconds(5))
                 .retryer(new NopRetryer())
-                .build()) {
-            return action.apply(client);
+                .build())) {
+            return action.apply(session.client());
         } catch (OperationException failure) {
             if (failure.getCause() instanceof ServiceException serviceFailure) {
                 throw serviceError(serviceFailure);
@@ -34,10 +35,22 @@ public final class OssClients {
             throw new IllegalStateException("OSS request failed (" + failure.getClass().getSimpleName() + ")");
         } catch (ServiceException failure) {
             throw serviceError(failure);
-        } catch (RuntimeException failure) {
-            throw failure;
-        } catch (Exception failure) {
-            throw new IllegalStateException("Could not close the OSS client");
+        }
+    }
+
+    private record ClientSession(OSSClient client) implements AutoCloseable {
+        @Override
+        public void close() {
+            try {
+                client.close();
+            } catch (RuntimeException failure) {
+                throw failure;
+            } catch (InterruptedException failure) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while closing the OSS client");
+            } catch (Exception failure) {
+                throw new IllegalStateException("Could not close the OSS client");
+            }
         }
     }
 
@@ -56,6 +69,9 @@ public final class OssClients {
     }
 
     static final class InvalidBucketException extends IllegalStateException {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private InvalidBucketException(String message) {
             super(message);
         }

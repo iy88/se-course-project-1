@@ -35,10 +35,15 @@ public record UploadRegistration(
     public record Draft(long ownerAccountId, FilePurpose purpose, Target target, Location location,
                         long declaredSize, String declaredContentType, String signingCredentialRef,
                         Instant createdAt, Instant expiresAt, Instant cleanupAfter) {
-        UploadRegistration withRules(Rules rules) {
-            String contentType = "image/jpg".equals(declaredContentType) ? "image/jpeg" : declaredContentType;
+        public Draft {
+            if ("image/jpg".equals(declaredContentType)) {
+                declaredContentType = "image/jpeg";
+            }
+        }
+
+        public UploadRegistration withRules(Rules rules) {
             return new UploadRegistration(ownerAccountId, purpose, target, location, declaredSize,
-                    contentType, rules, signingCredentialRef, createdAt, expiresAt, cleanupAfter);
+                    declaredContentType, rules, signingCredentialRef, createdAt, expiresAt, cleanupAfter);
         }
     }
 

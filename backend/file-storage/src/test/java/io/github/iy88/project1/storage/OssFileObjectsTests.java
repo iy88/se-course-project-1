@@ -6,7 +6,7 @@ import com.aliyun.sdk.service.oss2.models.GetObjectResult;
 import com.aliyun.sdk.service.oss2.models.HeadObjectRequest;
 import com.aliyun.sdk.service.oss2.models.HeadObjectResult;
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
+import java.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -57,13 +57,13 @@ class OssFileObjectsTests {
         when(head.contentLength()).thenReturn(expected.sizeBytes());
         when(head.contentType()).thenReturn(expected.contentType());
 
-        byte[] actual = objects.readForVerification(location, expected, InputStream::readAllBytes);
+        byte[] actual = objects.readForVerification(location, expected, body -> Objects.requireNonNull(body).readAllBytes());
         assertThat(actual).containsExactly(42);
         var request = ArgumentCaptor.forClass(GetObjectRequest.class);
         verify(client).getObject(request.capture());
         assertThat(request.getValue().ifMatch()).isEqualTo(expected.etag());
 
-        assertThatThrownBy(() -> objects.readForVerification(location, expected, InputStream::readAllBytes))
+        assertThatThrownBy(() -> objects.readForVerification(location, expected, body -> Objects.requireNonNull(body).readAllBytes()))
                 .isInstanceOf(OssFileObjects.Failure.class)
                 .hasMessage("CONTENT_CHANGED");
     }

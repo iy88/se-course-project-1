@@ -2,6 +2,7 @@ package io.github.iy88.project1.storage.persistence;
 
 import io.github.iy88.project1.storage.content.FileContentVerifier.VerifiedContent;
 import jakarta.persistence.EntityManager;
+import java.io.Serial;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -46,9 +47,12 @@ public class FileRegistry {
     }
 
     public record Entry(long fileId, String state, UploadRegistration upload, Instant verifiedAt,
-                        String etag, VerifiedContent content) {}
+                        String etag, VerifiedContent content, String lastCleanupRequestId) {}
 
     public static final class Rejected extends RuntimeException {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         public Rejected(String code) {
             super(code);
         }

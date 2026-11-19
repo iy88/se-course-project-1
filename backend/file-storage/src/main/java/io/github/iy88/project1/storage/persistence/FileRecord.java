@@ -123,7 +123,7 @@ class FileRecord {
                 new Location(bucket, objectKey), declaredSize, declaredContentType, rules,
                 signingCredentialRef, createdAt, uploadExpiresAt, cleanupAfter);
         var content = verifiedSize == null ? null : new VerifiedContent(verifiedSize, verifiedContentType);
-        return new FileRegistry.Entry(id, state, upload, verifiedAt, contentEtag, content);
+        return new FileRegistry.Entry(id, state, upload, verifiedAt, contentEtag, content, lastCleanupRequestId);
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

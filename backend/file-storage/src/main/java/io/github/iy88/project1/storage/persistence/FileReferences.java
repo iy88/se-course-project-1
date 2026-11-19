@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,7 @@ public class FileReferences {
 
     /** Prelock the union when several file operations share one subject transaction. */
     public void lockFiles(Collection<Long> fileIds) {
-        orderedIds(fileIds).forEach(this::lockFile);
+        orderedIds(fileIds).forEach(id -> lockFile(Objects.requireNonNull(id)));
     }
 
     public List<Reference> attach(long accountId, Target target, FilePurpose purpose,
@@ -76,7 +77,7 @@ public class FileReferences {
         }
         var matches = references.findByTargetTypeAndTargetIdAndIdInOrderById(target.type(), target.id(), ids);
         requireAll(ids, matches);
-        return orderedIds(matches.stream().map(FileReference::fileId).toList());
+        return orderedIds(matches.stream().map(reference -> Objects.requireNonNull(reference).fileId()).toList());
     }
 
     public Released release(Target target, Collection<Long> referenceIds, RetentionBasis basis) {

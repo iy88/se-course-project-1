@@ -2,6 +2,7 @@ package io.github.iy88.project1.storage.content;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Serial;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -110,6 +111,9 @@ public final class FileContentVerifier {
     public record VerifiedContent(long sizeBytes, String contentType) {}
 
     public static final class InvalidContent extends RuntimeException {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private InvalidContent() {
             super("FILE_CONTENT_INVALID");
         }
