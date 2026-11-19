@@ -63,9 +63,10 @@ final class RedisMaintenance {
         long removed = 0;
         do {
             var page = redis.scan(cursor, scan);
-            validate(page.getKeys());
-            for (byte[] key : page.getKeys()) {
-                removed += redis.del(key);
+            var keys = page.getKeys();
+            validate(keys);
+            if (!keys.isEmpty()) {
+                removed += redis.del(keys.toArray(byte[][]::new));
             }
             cursor = page;
         } while (!cursor.isFinished());

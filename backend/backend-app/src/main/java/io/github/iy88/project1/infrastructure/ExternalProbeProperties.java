@@ -11,7 +11,7 @@ record ExternalProbeProperties(Oss oss, Smtp smtp) {
     record Oss(String endpoint, String region, String bucket, String prefix,
                String accessKeyId, String accessKeySecret) {
 
-        Oss {
+        void validate() {
             required(region, "OSS_REGION");
             Assert.isTrue(region.matches("[a-z0-9-]+"), "OSS_REGION must be an OSS region ID");
             String host = "https://oss-" + region;

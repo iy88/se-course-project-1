@@ -3,17 +3,12 @@ package io.github.iy88.project1.infrastructure;
 import java.time.Duration;
 import java.util.UUID;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
-@Component
-@Profile("infrastructure")
 @Order(0)
 class InfrastructureStartupProbe implements ApplicationRunner {
 
@@ -26,7 +21,7 @@ class InfrastructureStartupProbe implements ApplicationRunner {
     InfrastructureStartupProbe(
             InfrastructureProbeRepository repository,
             StringRedisTemplate redis,
-            @Value("${project1.redis.namespace}") String redisNamespace) {
+            String redisNamespace) {
         Assert.isTrue(redisNamespace.matches("[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*"),
                 "REDIS_NAMESPACE must contain non-empty colon-separated segments using letters, digits, underscores or hyphens");
         this.repository = repository;

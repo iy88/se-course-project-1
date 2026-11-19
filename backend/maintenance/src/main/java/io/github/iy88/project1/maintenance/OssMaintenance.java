@@ -3,11 +3,10 @@ package io.github.iy88.project1.maintenance;
 import com.aliyun.sdk.service.oss2.OSSClient;
 import com.aliyun.sdk.service.oss2.models.Delete;
 import com.aliyun.sdk.service.oss2.models.DeleteMultipleObjectsRequest;
-import com.aliyun.sdk.service.oss2.models.DeletedInfo;
 import com.aliyun.sdk.service.oss2.models.ListObjectsV2Request;
 import com.aliyun.sdk.service.oss2.models.ObjectIdentifier;
-import com.aliyun.sdk.service.oss2.models.ObjectSummary;
 import io.github.iy88.project1.storage.OssClients;
+import java.util.ArrayList;
 import java.util.HashSet;
 
 final class OssMaintenance {
@@ -58,7 +57,14 @@ final class OssMaintenance {
             if (objects.size() > MAX_BATCH_SIZE) {
                 throw new IllegalStateException("OSS returned more keys than the batch delete limit");
             }
-            var keys = objects.stream().map(ObjectSummary::key).toList();
+            var keys = new ArrayList<String>(objects.size());
+            for (var object : objects) {
+                String key = object == null ? null : object.key();
+                if (key == null || key.isEmpty()) {
+                    throw new IllegalStateException("OSS listing returned an object without a key");
+                }
+                keys.add(key);
+            }
             if (keys.getFirst().equals(previousFirstKey)) {
                 throw new IllegalStateException("OSS listing did not advance after deletion");
             }
@@ -69,8 +75,17 @@ final class OssMaintenance {
                     .delete(Delete.newBuilder().objects(deletions).quiet(false).build())
                     .build());
             var deleted = result.deletedObjects();
-            if (deleted == null || !new HashSet<>(keys).equals(
-                    new HashSet<>(deleted.stream().map(DeletedInfo::key).toList()))) {
+            var confirmedKeys = new HashSet<String>();
+            if (deleted != null) {
+                for (var object : deleted) {
+                    String key = object == null ? null : object.key();
+                    if (key == null || key.isEmpty()) {
+                        throw new IllegalStateException("OSS deletion response returned an object without a key");
+                    }
+                    confirmedKeys.add(key);
+                }
+            }
+            if (!new HashSet<>(keys).equals(confirmedKeys)) {
                 throw new IllegalStateException("OSS did not confirm every deletion in the batch");
             }
             removed += keys.size();

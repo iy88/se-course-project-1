@@ -18,6 +18,7 @@ class ExternalDependencyProbe implements ApplicationRunner {
     private final SmtpProbeRecipient recipient;
 
     ExternalDependencyProbe(ExternalProbeProperties properties, SmtpProbeRecipient recipient) {
+        properties.oss().validate();
         this.properties = properties;
         this.recipient = recipient;
     }

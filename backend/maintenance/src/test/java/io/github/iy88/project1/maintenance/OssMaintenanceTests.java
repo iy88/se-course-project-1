@@ -13,16 +13,17 @@ import com.aliyun.sdk.service.oss2.models.GetBucketVersioningRequest;
 import com.aliyun.sdk.service.oss2.models.GetBucketVersioningResult;
 import com.aliyun.sdk.service.oss2.models.ListObjectsV2Request;
 import com.aliyun.sdk.service.oss2.models.ListObjectsV2Result;
-import com.aliyun.sdk.service.oss2.models.ObjectIdentifier;
 import com.aliyun.sdk.service.oss2.models.ObjectSummary;
 import com.aliyun.sdk.service.oss2.models.VersioningConfiguration;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -45,20 +46,15 @@ class OssMaintenanceTests {
         when(client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(first, second, empty);
         when(client.deleteMultipleObjects(any(DeleteMultipleObjectsRequest.class))).thenAnswer(invocation -> {
             DeleteMultipleObjectsRequest request = invocation.getArgument(0);
-            return deleted(request.delete().objects().stream().map(ObjectIdentifier::key).toArray(String[]::new));
+            return deleted(keysIn(request).toArray(String[]::new));
         });
 
         assertThat(OssMaintenance.clear(client, BUCKET)).isEqualTo(1002);
         var deletes = ArgumentCaptor.forClass(DeleteMultipleObjectsRequest.class);
         verify(client, times(2)).deleteMultipleObjects(deletes.capture());
-        assertThat(deletes.getAllValues()).allSatisfy(request -> {
-            assertThat(request.bucket()).isEqualTo(BUCKET);
-            assertThat(request.delete().quiet()).isFalse();
-        });
-        assertThat(deletes.getAllValues().getFirst().delete().objects()).extracting(ObjectIdentifier::key)
-                .containsExactly(firstBatch);
-        assertThat(deletes.getAllValues().get(1).delete().objects()).extracting(ObjectIdentifier::key)
-                .containsExactly("outside/one", "root-object");
+        assertThat(deletes.getAllValues()).satisfiesExactly(
+                firstRequest -> assertBatch(firstRequest, firstBatch),
+                secondRequest -> assertBatch(secondRequest, "outside/one", "root-object"));
         verify(client, never()).deleteObject(any(DeleteObjectRequest.class));
         var requests = ArgumentCaptor.forClass(ListObjectsV2Request.class);
         verify(client, times(3)).listObjectsV2(requests.capture());
@@ -78,8 +74,8 @@ class OssMaintenanceTests {
         when(client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(listed);
         when(client.deleteMultipleObjects(any(DeleteMultipleObjectsRequest.class))).thenReturn(removed);
 
-        assertThatThrownBy(() -> OssMaintenance.clear(client, BUCKET))
-                .isInstanceOf(IllegalStateException.class).hasMessageContaining("did not confirm");
+        var failure = assertThrows(IllegalStateException.class, () -> OssMaintenance.clear(client, BUCKET));
+        assertThat(failure.getMessage()).contains("did not confirm");
         verify(client).listObjectsV2(any(ListObjectsV2Request.class));
     }
 
@@ -91,9 +87,20 @@ class OssMaintenanceTests {
                 .thenReturn(VersioningConfiguration.newBuilder().status("Suspended").build());
         when(client.getBucketVersioning(any(GetBucketVersioningRequest.class))).thenReturn(versioning);
 
-        assertThatThrownBy(() -> OssMaintenance.clear(client, BUCKET))
-                .isInstanceOf(IllegalStateException.class).hasMessageContaining("versioning");
+        var failure = assertThrows(IllegalStateException.class, () -> OssMaintenance.clear(client, BUCKET));
+        assertThat(failure.getMessage()).contains("versioning");
         verify(client, never()).listObjectsV2(any(ListObjectsV2Request.class));
+    }
+
+    private static void assertBatch(DeleteMultipleObjectsRequest request, String... expectedKeys) {
+        assertThat(request.bucket()).isEqualTo(BUCKET);
+        assertThat(request.delete().quiet()).isFalse();
+        assertThat(keysIn(request)).containsExactly(expectedKeys);
+    }
+
+    private static List<String> keysIn(DeleteMultipleObjectsRequest request) {
+        return request.delete().objects().stream()
+                .map(object -> Objects.requireNonNull(object).key()).toList();
     }
 
     private static OSSClient privateBucket() {
