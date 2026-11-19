@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.39
-Version-Datetime: 2026-11-19T13:03:27+08:00
+Version: 0.1.40
+Version-Datetime: 2026-11-19T13:37:35+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -127,6 +127,14 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 
 后端探针和维护工具共用阿里云 OSS Java SDK 2.0（`com.aliyun:alibabacloud-oss-v2`）。[官方 SDK 文档](https://help.aliyun.com/zh/oss/developer-reference/oss-sdk-for-java-2-0/)
 
+v2 使用两个私有 Bucket。开发和联调共用开发桶，生产使用独立生产桶。各环境的 `OSS_BUCKET` 只填本环境的桶名，legacy 保留独立资源。商品图片与事项证据分别使用 `<OSS_PREFIX>/product_image/` 和 `<OSS_PREFIX>/case_evidence/`，各主体按业务权限授权读取。
+
+商品图片支持 JPG／JPEG、PNG，事项证据另外支持 PDF。两种用途默认每文件 100 MiB。可在部署配置通过 `FILE_PRODUCT_IMAGE_*` 和 `FILE_CASE_EVIDENCE_*` 分别调整字节上限和 MIME 列表，并更新 `FILE_RULE_VERSION`。新授权保存当次规则，已有授权继续按保存的规则核验。
+
+`file-storage` 提供文件核验、引用与签名读取。商品、事项等调用方先校验账户和目标对象权限，再在业务事务内建立、保留或释放引用。签名 URL 默认有效 60 秒（`FILE_READ_URL_TTL_SECONDS`），PDF 以附件下载。
+
+回收批次只处理到期且无有效引用的文件，先认领，再删除 OSS 对象，最后保存删除结果。失败与迟到上传按 `FILE_CLEANUP_SCAN_SECONDS` 的间隔重新处理，默认 300 秒。当前通过内部 `FileCleanup.runBatch` 触发，定时调度尚未接入。
+
 在 OSS 控制台将 Bucket ACL 设为 **私有**，启用阻止公共访问，版本控制保持从未启用。以下策略用于独立开发 Bucket。把 `YOUR-DEV-BUCKET` 换为你的 Bucket 名。第一项授权查询 Bucket ACL、版本状态和列举对象。第二项授权读取、写入和删除该 Bucket 中的所有对象。ARN 中的账号字段可填写 Bucket 所有者的阿里云账号 ID。
 
 ```json
@@ -205,7 +213,7 @@ java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar oss reset
 ```
 
 - `db reset` 先检查 Redis 能否扫描指定命名空间，再删除并重建 PostgreSQL 目标库、运行 Flyway，最后清空 `REDIS_NAMESPACE:*`。PostgreSQL 有活动连接时拒绝删除。Redis 的维护凭据需具备 `SCAN` 及命名空间内的 `DEL` 权限，在当前 ACL 示例基础上加 `+scan`。
-- `oss reset` 清空 `OSS_BUCKET` 内的所有对象，每次批量删除最多 1,000 个。预览显示 `scope=ALL_OBJECTS`。工具从清单中取对象并分批删除，直至清单为空。探针仍使用 `OSS_PREFIX` 生成测试对象键。
+- `oss reset` 清空 `OSS_BUCKET` 内的所有对象，每次批量删除最多 1,000 个。预览显示 `scope=ALL_OBJECTS`。在开发和联调时，将维护工具配置指向开发桶。工具从清单中取对象并分批删除，直至清单为空。探针使用 `OSS_PREFIX` 生成测试对象键。
 - 两个命令分别报告执行结果。重置中途失败时，保持写入停止，修复报错后重新预览并执行对应的完整命令。数据库重置会按同一版本的 Flyway 迁移重建示例数据。
 
 ## docs 目录结构

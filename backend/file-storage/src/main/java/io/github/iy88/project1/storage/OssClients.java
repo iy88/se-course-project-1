@@ -45,13 +45,19 @@ public final class OssClients {
         var acl = client.getBucketAcl(GetBucketAclRequest.newBuilder().bucket(bucket).build())
                 .accessControlPolicy();
         if (acl == null || acl.accessControlList() == null || !"private".equals(acl.accessControlList().grant())) {
-            throw new IllegalStateException("OSS requires a private bucket");
+            throw new InvalidBucketException("OSS requires a private bucket");
         }
         var versioning = client.getBucketVersioning(GetBucketVersioningRequest.newBuilder().bucket(bucket).build())
                 .versioningConfiguration();
         String status = versioning == null ? null : versioning.status();
         if (status != null && !status.isEmpty() && !"Off".equals(status)) {
-            throw new IllegalStateException("OSS requires a bucket where versioning has never been enabled");
+            throw new InvalidBucketException("OSS requires a bucket where versioning has never been enabled");
+        }
+    }
+
+    static final class InvalidBucketException extends IllegalStateException {
+        private InvalidBucketException(String message) {
+            super(message);
         }
     }
 
