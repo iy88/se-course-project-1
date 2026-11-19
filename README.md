@@ -7,7 +7,7 @@ Version-Datetime: 2026-11-19T13:37:35+08:00
 
 ## GitHub Actions 检查
 
-向 `main` 提交 PR 或推送到 `main` 时，CI 在 Linux 上并行运行后端与前端检查。后端使用 OpenJDK 27 和 Maven Wrapper 执行 `verify`。前端使用 Node.js 26.13.1 和 pnpm 12.5.1，按锁文件安装依赖，核对 OpenAPI 生成类型、lint 和格式，再对用户端和管理端分别做类型检查与构建。
+向 `main` 提交 PR 或推送到 `main` 时，CI 在 Linux 上并行运行后端与前端检查。后端使用 OpenJDK 27 和 Maven Wrapper 执行 `verify`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，核对 OpenAPI 生成类型、lint 和格式，再对用户端和管理端分别做类型检查与构建。
 
 ## 一键启动开发环境
 
@@ -28,7 +28,7 @@ PID 记录在 `var/dev/dev.pid`，日志写入 `var/dev/dev.log`，可用 `tail 
 
 ## 前端安装、启停与构建
 
-前端使用 Node.js 26.13.1、pnpm 12.5.1、Vue 3、TypeScript 和 Rsbuild（Rspack）。Node.js 版本记录在 `frontend/.nvmrc`，pnpm 版本记录在 `frontend/package.json`。两个应用共用 `frontend/pnpm-lock.yaml`。首次安装或锁文件更新后，在 `frontend/` 运行 `pnpm install --frozen-lockfile`。
+前端使用 Node.js 26.13.1、pnpm 12.21.0、Vue 3、TypeScript 和 Rsbuild（Rspack）。Node.js 版本由仓库根目录的 [`.node-version`](.node-version) 统一指定，GitHub Actions 读取同一文件。使用 fnm 时，在仓库根目录运行 `fnm install` 安装此版本，再运行 `fnm use` 切换当前终端。pnpm 版本记录在 `frontend/package.json`。两个应用共用 `frontend/pnpm-lock.yaml`。首次安装或锁文件更新后，在 `frontend/` 运行 `pnpm install --frozen-lockfile`。
 
 先按下节启动后端。另开终端，在 `frontend/` 用以下任一命令启动。
 
