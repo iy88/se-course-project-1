@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.30
-Version-Datetime: 2026-11-19T09:34:53+08:00
+Version: 0.1.31
+Version-Datetime: 2026-11-19T10:08:30+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -39,9 +39,11 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 | PostgreSQL | 填写 `DATABASE_URL=jdbc:postgresql://主机:5432/project1_dev`、应用账号的 `DATABASE_USERNAME` 和 `DATABASE_PASSWORD`，以及迁移账号的 `DATABASE_OWNER_USERNAME` 和 `DATABASE_OWNER_PASSWORD`。维护工具按配置创建数据库和缺失角色。 |
 | Redis | 设置 `REDIS_URL` 和独立的 `REDIS_NAMESPACE`，例如 `project1:dev:iy88`。ACL 用户连接串示例为 `rediss://project1_dev:URL编码后的密码@主机:6380/0`，无 TLS 的本地实例用 `redis://`。ACL 将键限制到 `~project1:dev:iy88:*`。探针使用 `GET`、`SET`、`DEL`，Spring Boot 的健康检查还需要 `INFO`。下方有单机 Redis 的 ACL 示例。 |
 | OSS | 使用独立开发 Bucket，设置为私有，保持版本控制从未开启。开发 RAM 用户绑定下方的自定义策略。填写 `OSS_REGION`（如 `cn-hangzhou`）、对应 HTTPS `OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_PREFIX` 和该 RAM 用户的 AccessKey。 |
-| SMTP | 填写服务商提供的 `SMTP_HOST` 和 `SMTP_PORT`，`SMTP_TLS_MODE=starttls` 用于要求 STARTTLS 的端口（常见 587），`ssl` 用于隐式 TLS（常见 465）。`SMTP_USERNAME` 填发送账号，`SMTP_PASSWORD` 填服务商的 SMTP 授权码，`SMTP_FROM` 填该账号获授权的发件地址，`SMTP_PROBE_TO` 填你要检查的测试收件箱。 |
+| SMTP | 填写服务商提供的 `SMTP_HOST` 和 `SMTP_PORT`，`SMTP_TLS_MODE=starttls` 用于要求 STARTTLS 的端口（常见 587），`ssl` 用于隐式 TLS（常见 465）。`SMTP_USERNAME` 填发送账号，`SMTP_PASSWORD` 填服务商的 SMTP 授权码，`SMTP_FROM` 填获授权的发件地址，可带显示名，例如 `CampusMarket-V2 Dev <example@example.com>`。 |
 
 ### OSS Bucket ACL、RAM 和 CORS
+
+后端探针和维护工具共用阿里云 OSS Java SDK 2.0（`com.aliyun:alibabacloud-oss-v2`）。[官方 SDK 文档](https://help.aliyun.com/zh/oss/developer-reference/oss-sdk-for-java-2-0/)
 
 在 OSS 控制台将 Bucket ACL 设为 **私有**，启用阻止公共访问，版本控制保持从未启用。以下策略用于独立开发 Bucket。把 `YOUR-DEV-BUCKET` 换为你的 Bucket 名。第一项授权查询 Bucket ACL、版本状态和列举对象。第二项授权读取、写入和删除该 Bucket 中的所有对象。ARN 中的账号字段可填写 Bucket 所有者的阿里云账号 ID。
 
@@ -82,7 +84,7 @@ APP_ENV_FILE="$PWD/.env.dev" java -jar backend-app/target/backend-app-0.0.1-SNAP
   --spring.profiles.active=infrastructure
 ```
 
-一次性探针先检查 PostgreSQL 和 Redis，再核对 OSS Bucket 和探针对象的写入、读回、删除，最后向测试收件箱发送一封邮件。进程完成后退出，失败返回非零状态。SMTP 日志显示服务器接收结果和邮件 ID，在收件箱查找同 ID 的 `[Project1 S1] SMTP probe` 邮件以验证投递。
+运行一次性探针前，把 [SmtpConnectivityProbe.java](backend/backend-app/src/main/java/io/github/iy88/project1/infrastructure/SmtpConnectivityProbe.java) 中的 `PROBE_RECIPIENT` 改成测试收件地址，再运行 `mvn verify` 重新打包。探针先检查 PostgreSQL 和 Redis，再核对 OSS Bucket 和探针对象的写入、读回、删除，最后发送一封邮件。进程完成后退出，失败返回非零状态。SMTP 日志显示服务器接收结果和邮件 ID，在收件箱查找同 ID 的 `[Project1 S1] SMTP probe` 邮件以验证投递。
 
 ```bash
 APP_ENV_FILE="$PWD/.env.dev" java -jar backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
@@ -93,13 +95,17 @@ APP_ENV_FILE="$PWD/.env.dev" java -jar backend-app/target/backend-app-0.0.1-SNAP
 
 从 `backend/` 构建独立维护 JAR。维护工具执行 Flyway，应用启动时由 Hibernate 校验表结构。两者从由 `APP_ENV_FILE` 指定的项目 `.env` 读取各自需要的参数。
 
+`--admin-user` 填目标 PostgreSQL 实例上**已有的管理员登录名**。该账号需要能创建角色和数据库，并将新库的所有权授予 `DATABASE_OWNER_USERNAME`。执行重置时，还需要删除目标库的权限。工具使用该账号连接同一实例的 `postgres` 维护库。`postgres` 是这里的数据库名，管理员登录名由你的实例配置决定。
+
 ```bash
 mvn -pl maintenance -am verify
 export APP_ENV_FILE="$PWD/.env.dev"
-java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar db init --admin-user postgres
+printf '%s' '请输入 PostgreSQL 实例的管理员登录名：'
+IFS= read -r DB_ADMIN_USER
+java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar db init --admin-user "$DB_ADMIN_USER"
 ```
 
-`db init` 使用已有的管理员账号连接同一实例的 `postgres` 库，按 `.env.dev` 配置创建缺失的 `owner`、`app` 角色及数据库。管理员账号通过 `--admin-user` 指定，密码按终端提示输入，输入时无回显。三个角色名称各自独立。已有角色沿用现有密码。
+`db init` 按 `.env.dev` 配置创建缺失的 `owner`、`app` 角色及数据库。管理员、`owner` 和 `app` 使用不同的登录名。管理员密码按终端提示输入，输入时无回显。已有角色沿用现有密码。
 
 `owner` 持有数据库及迁移创建的对象，维护工具从 `DATABASE_OWNER_USERNAME` 和 `DATABASE_OWNER_PASSWORD` 读取凭据执行 Flyway。`app` 只有数据库连接、`public` schema 使用、业务表读写和序列权限，后端使用 `DATABASE_USERNAME` 和 `DATABASE_PASSWORD` 连接。部署新版本先执行 `db migrate`，再启动应用。Jenkins 可将 `APP_ENV_FILE` 指向包含上述数据库配置的维护凭据文件。
 
@@ -107,7 +113,7 @@ java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar db init --admin-user
 java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar db migrate
 ```
 
-执行重置前停止所有写入所选环境的应用进程和任务。以下命令只预览。核对打印的环境、服务器和范围后，将输出的 `--confirm TOKEN` 加到对应命令末尾执行。执行 `db reset` 时同时加 `--admin-user 维护账号`，按终端提示输入密码。早期由应用账号持有的测试库可通过确认后的 `db reset` 重建为两角色结构。
+执行重置前停止所有写入所选环境的应用进程和任务。以下命令只预览。核对打印的环境、服务器和范围后，将输出的 `--confirm TOKEN` 加到对应命令末尾执行。执行 `db reset` 时同时加 `--admin-user "$DB_ADMIN_USER"`，使用上面输入的管理员登录名，并按终端提示输入密码。早期由应用账号持有的测试库可通过确认后的 `db reset` 重建为两角色结构。
 
 ```bash
 java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar db reset
