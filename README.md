@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.44
-Version-Datetime: 2026-11-19T18:31:12+08:00
+Version: 0.1.45
+Version-Datetime: 2026-11-19T18:56:04+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -8,6 +8,18 @@ Version-Datetime: 2026-11-19T18:31:12+08:00
 ## GitHub Actions 检查
 
 向 `main` 提交 PR 或推送到 `main` 时，CI 在 Linux 上并行运行后端、后端集成和前端检查。后端使用 OpenJDK 27 和 Maven Wrapper 执行 `verify`，并在日志中输出总体行覆盖率和分支覆盖率。后端集成 job 用独立的 PostgreSQL 和 Redis 容器，先执行 Flyway 迁移，再运行 `verify -Pintegration`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，核对 OpenAPI 生成类型、lint 和格式，再对用户端和管理端分别做类型检查与构建。
+
+## Jenkins 发布包
+
+Jenkins 从 SCM 检出的提交构建发布包。构建节点使用 OpenJDK 27、`.node-version` 中的 Node.js 版本、`frontend/package.json` 中的 pnpm 版本和 Python 3。Maven 构建使用 Wrapper 并跳过测试，前端构建执行 TypeScript 类型检查。单元测试、集成测试、lint 和格式检查由 GitHub Actions 执行。
+
+从仓库根目录可用同一入口打包，第二个参数为构建编号。
+
+```bash
+bash scripts/deploy/build-release.sh var/releases 1
+```
+
+产物目录为 `var/releases/<提交号>-<构建编号>/`，包含压缩包与 `SHA256SUMS`。包内有两个前端的静态文件、部署资产、`release.txt`、`backend/backend-app.jar` 和 `backend/maintenance.jar`。两个 JAR 随同一版本发布到生产服务器。systemd 启动 `backend-app.jar`。数据库迁移和维护操作在服务器上运行 `maintenance.jar`，由 `APP_ENV_FILE` 指向服务器上的维护配置。首发、域名、系统配置与回退见 [v2 首发与发布配置](bits/v2首发与发布配置.md)。维护 JAR 的命令见[初始化与全量重置](#初始化与全量重置)。
 
 ## 一键启动开发环境
 
