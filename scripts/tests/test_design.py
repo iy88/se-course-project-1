@@ -15,16 +15,21 @@ class DesignDocumentsTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.base = self.root / "docs/design"
         (self.base / "architecture").mkdir(parents=True)
-        (self.base / "基线索引.md").write_text("# 入口\n")
-        (self.base / "asset.txt").write_text("evidence\n")
+        (self.base / "基线索引.md").write_text("# 入口\n", encoding="utf-8")
+        (self.base / "asset.txt").write_text("evidence\n", encoding="utf-8")
         self.source = self.base / "architecture/01.md"
-        self.source.write_text("# 架构\n\n[附件](../asset.txt)\n\n## 场景\n\n待讨论。\n")
+        self.source.write_text(
+            "# 架构\n\n[附件](../asset.txt)\n\n## 场景\n\n待讨论。\n",
+            encoding="utf-8",
+        )
         self.manifest = {"documents": [{"id": "architecture", "title": "讨论稿",
             "output": "软件架构设计方案_讨论稿.md", "sources": ["architecture/01.md"]}]}
         self.output = self.root / "docs/软件架构设计方案_讨论稿.md"
 
     def run_documents(self, check=False):
-        (self.base / "拼合清单.json").write_text(json.dumps(self.manifest))
+        (self.base / "拼合清单.json").write_text(
+            json.dumps(self.manifest), encoding="utf-8"
+        )
         with redirect_stdout(StringIO()):
             documents(self.root, check)
 
@@ -36,7 +41,10 @@ class DesignDocumentsTests(unittest.TestCase):
         self.run_documents()
         self.assertEqual(original, self.output.read_bytes())
         self.run_documents(check=True)
-        self.source.write_text(self.source.read_text() + "\n补充。\n")
+        self.source.write_text(
+            self.source.read_text(encoding="utf-8") + "\n补充。\n",
+            encoding="utf-8",
+        )
         with self.assertRaisesRegex(ValueError, "Regenerate"):
             self.run_documents(check=True)
         self.assertEqual(original, self.output.read_bytes())

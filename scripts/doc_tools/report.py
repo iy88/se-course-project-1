@@ -27,7 +27,9 @@ def specification(root: Path, check: bool = False) -> None:
             continue
         target = (baseline.parent / unquote(match[2].split("#", 1)[0])).resolve()
         if target.is_file():
-            version = re.search(r"^Version: ([\d.]+)$", target.read_text(), re.MULTILINE)
+            version = re.search(
+                r"^Version: ([\d.]+)$", target.read_text(encoding="utf-8"), re.MULTILINE
+            )
             if version:
                 rows[index] = match[1] + version[1] + match[4] + "\n"
     expanded[baseline] = "".join(rows)
@@ -56,7 +58,11 @@ def specification(root: Path, check: bool = False) -> None:
         errors.extend(validate_links(path, text, overrides))
     if errors:
         raise ValueError("\n".join(errors))
-    stale = [p for p, text in overrides.items() if not p.exists() or p.read_text() != text]
+    stale = [
+        p
+        for p, text in overrides.items()
+        if not p.exists() or p.read_text(encoding="utf-8") != text
+    ]
     if check and stale:
         raise ValueError("Regenerate specification: " + ", ".join(p.name for p in stale))
     if not check:

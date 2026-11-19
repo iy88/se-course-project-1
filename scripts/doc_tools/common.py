@@ -30,7 +30,7 @@ def atomic_write(path: Path, data: bytes) -> None:
 
 def generated_markdown(path: Path, body: str) -> str:
     """Preserve the registered version; identical builds preserve metadata too."""
-    existing = path.read_text() if path.exists() else ""
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
     if META.sub("", existing).strip() == body.strip():
         return existing
     version = re.search(r"^Version: (.+)$", existing, re.MULTILINE)

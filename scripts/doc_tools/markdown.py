@@ -70,7 +70,7 @@ def expand_chapter(path: Path) -> str:
             raise ValueError(f"Invalid include in {path.name}: {relative}")
         if source.name in {"index.md", "draft-index.md"}:
             raise ValueError(f"Index files must be linked, not included: {source}")
-        body = META.sub("", source.read_text()).strip()
+        body = META.sub("", source.read_text(encoding="utf-8")).strip()
         if "spec-include:" in body:
             raise ValueError(f"Nested includes are not supported: {source}")
         # Child-document navigation and repeated draft labels are not report content.
@@ -102,7 +102,7 @@ def expand_chapter(path: Path) -> str:
             + body + f"\n\n[完整材料]({relative})。\n"
             + "<!-- /spec-include -->"
         )
-    return INCLUDE.sub(replace, path.read_text())
+    return INCLUDE.sub(replace, path.read_text(encoding="utf-8"))
 
 def heading_ids(text: str) -> set[str]:
     clean = map_prose(text, lambda part: part)
@@ -136,7 +136,7 @@ def validate_links(path: Path, text: str, overrides: dict[Path, str]) -> list[st
             elif parts.fragment and target.suffix == ".md":
                 content = overrides.get(target)
                 if content is None:
-                    content = target.read_text()
+                    content = target.read_text(encoding="utf-8")
                 if unquote(parts.fragment) not in heading_ids(content):
                     errors.append(f"{path.name}: missing anchor {url}")
         return part
