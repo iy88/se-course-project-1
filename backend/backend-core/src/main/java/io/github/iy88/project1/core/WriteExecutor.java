@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -32,11 +33,14 @@ public class WriteExecutor {
     private final JdbcClient jdbc;
     private final WriteRecords records;
     private final WriteSettings settings;
+    private final ObjectProvider<EventIntent.Writer> eventWriter;
 
-    public WriteExecutor(PlatformTransactionManager manager, JdbcClient jdbc, JsonMapper json, WriteSettings settings) {
+    public WriteExecutor(PlatformTransactionManager manager, JdbcClient jdbc, JsonMapper json, WriteSettings settings,
+                         ObjectProvider<EventIntent.Writer> eventWriter) {
         this.jdbc = jdbc;
         this.records = new WriteRecords(jdbc, json);
         this.settings = settings;
+        this.eventWriter = eventWriter;
         read = template(manager, settings.transactionTimeoutSeconds(), true);
         write = template(manager, settings.transactionTimeoutSeconds(), false);
     }
@@ -106,6 +110,10 @@ public class WriteExecutor {
         var transaction = new WriteTransaction(context, claim.operationId(), plan, records);
         try {
             var response = useCase.write(transaction, request, qualifications, plan);
+            var events = transaction.events();
+            if (!events.isEmpty()) {
+                eventWriter.getObject().persist(context, events);
+            }
             var body = records.complete(claim.operationId(), response);
             return new WriteResult<>(claim.operationId(), response.status(), body, response.resource(), false);
         } catch (BusinessError rejected) {
