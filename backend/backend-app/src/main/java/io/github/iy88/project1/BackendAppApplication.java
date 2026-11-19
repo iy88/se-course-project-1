@@ -12,10 +12,12 @@ public class BackendAppApplication {
 
     public static void main(String[] args) {
         var application = new SpringApplication(BackendAppApplication.class);
+        var arguments = new DefaultApplicationArguments(args);
         application.addInitializers(context -> {
             var environment = context.getEnvironment();
+            ApplicationEnvFile.load(environment, arguments);
             if (environment.matchesProfiles("dependency-probe")) {
-                var recipient = SmtpProbeRecipient.from(new DefaultApplicationArguments(args));
+                var recipient = SmtpProbeRecipient.from(arguments);
                 context.getBeanFactory().registerSingleton("smtpProbeRecipient", recipient);
             }
             RequiredInfrastructureConfiguration.validate(environment);
