@@ -66,6 +66,7 @@ class InfrastructureIT {
     private static final UUID RUN_ID = UUID.randomUUID();
     private static final UUID SESSION_ID = UUID.randomUUID();
     private static final long ACCOUNT = ThreadLocalRandom.current().nextLong(1L << 42, 1L << 52);
+    private static final long WRITE_EVENT_RECIPIENT = ACCOUNT + 1;
     private static final String ORIGIN = "http://127.0.0.1:3000";
     private static final String TASK_KIND = "integration-" + RUN_ID;
     private static final AtomicInteger TASK_EXECUTIONS = new AtomicInteger();
@@ -113,8 +114,10 @@ class InfrastructureIT {
     static void cleanUp() {
         if (app == null) return;
         try (var context = app) {
-            db.sql("DELETE FROM user_event WHERE recipient_account_id = ?").param(ACCOUNT).update();
-            db.sql("DELETE FROM account_event_head WHERE account_id = ?").param(ACCOUNT).update();
+            db.sql("DELETE FROM user_event WHERE recipient_account_id IN (?, ?)")
+                    .param(ACCOUNT).param(WRITE_EVENT_RECIPIENT).update();
+            db.sql("DELETE FROM account_event_head WHERE account_id IN (?, ?)")
+                    .param(ACCOUNT).param(WRITE_EVENT_RECIPIENT).update();
             db.sql("DELETE FROM task_schedule WHERE task_kind = ?").param(TASK_KIND).update();
             db.sql("DELETE FROM audit_record WHERE actor_kind = 'account' AND actor_id = ?")
                     .param(Long.toString(ACCOUNT)).update();
@@ -210,8 +213,46 @@ class InfrastructureIT {
     }
 
     @Test
+    void eventPersistenceFailureRollsBackAuditCursorAndIdempotencyReservation() {
+        var writes = app.getBean(WriteExecutor.class);
+        var events = app.getBean(UserEvents.class);
+        String key = RUN_ID + "-event";
+        var command = new WriteFixture() {
+            @Override
+            public WriteResult.Response<?> write(WriteTransaction transaction, String request, Boolean qualification,
+                                                 LockPlan plan) {
+                var response = super.write(transaction, request, qualification, plan);
+                transaction.addEventIntent(Set.of(WRITE_EVENT_RECIPIENT), "integration_changed", 1, FIXTURE,
+                        key, null, null);
+                if ("duplicate".equals(request)) {
+                    transaction.addEventIntent(Set.of(WRITE_EVENT_RECIPIENT), "integration_changed", 1, FIXTURE,
+                            key, null, null);
+                }
+                return response;
+            }
+        };
+
+        assertThatThrownBy(() -> writes.run(accountContext(), "integration.event", key, "duplicate", command))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("EVENT_INTENT_CONFLICT");
+                    assertThat(auditCount(error.operationId())).isZero();
+                });
+        assertThat(events.head(WRITE_EVENT_RECIPIENT).headSequence()).isZero();
+
+        var recovered = writes.run(accountContext(), "integration.event", key, "recovered", command);
+        var head = events.head(WRITE_EVENT_RECIPIENT);
+        var page = events.scan(WRITE_EVENT_RECIPIENT, head.epoch(), 0, 10);
+        assertThat(recovered.replayed()).isFalse();
+        assertThat(auditCount(recovered.operationId())).isEqualTo(1);
+        assertThat(page.events()).singleElement().satisfies(event -> {
+            assertThat(event.sequence()).isEqualTo(1);
+            assertThat(event.type()).isEqualTo("integration_changed");
+        });
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
-    void workerReclaimsAnIdlePendingMessageAndAcknowledgesItAfterCompletingTheTask() {
+    void workerReclaimsThePendingMessageAndExpiredDatabaseLeaseAfterAnInterruptedAttempt() {
         var schedule = app.getBean(TaskSchedules.class);
         var tx = app.getBean(TransactionTemplate.class);
         var task = tx.execute(status -> schedule.schedule(new TaskSchedules.Spec(TASK_KIND, FIXTURE,
@@ -228,8 +269,13 @@ class InfrastructureIT {
                 StreamOffset.create(key, ReadOffset.lastConsumed()));
         assertThat(delivered).singleElement().satisfies(entry -> assertThat(entry.getValue())
                 .containsExactlyInAnyOrderEntriesOf(Map.of("task_id", task.id().toString(), "task_kind", TASK_KIND)));
+        var interrupted = schedule.claim(new TaskSchedules.Ready(task.id(), TASK_KIND)).orElseThrow();
+        assertThat(interrupted.attempt()).isEqualTo(1);
+        assertThat(schedule.claim(new TaskSchedules.Ready(task.id(), TASK_KIND))).isEmpty();
         await().atMost(Duration.ofSeconds(10)).until(() ->
-                stream.pending(key, group, Range.unbounded(), 1, Duration.ofSeconds(3)).size() == 1);
+                stream.pending(key, group, Range.unbounded(), 1, Duration.ofSeconds(3)).size() == 1
+                        && db.sql("SELECT lease_until <= clock_timestamp() FROM task_schedule WHERE task_id = ?")
+                                .param(task.id()).query(Boolean.class).single());
 
         tasks.consume();
 
@@ -238,6 +284,9 @@ class InfrastructureIT {
         assertThat(TASK_EXECUTIONS.get()).isEqualTo(1);
         assertThat(db.sql("SELECT completed_at IS NOT NULL FROM task_schedule WHERE task_id = ?")
                 .param(task.id()).query(Boolean.class).single()).isTrue();
+        assertThat(db.sql("SELECT attempts FROM task_schedule WHERE task_id = ?")
+                .param(task.id()).query(Integer.class).single()).isEqualTo(2);
+        assertThat(schedule.retry(interrupted, "LATE_WORKER")).isFalse();
     }
 
     @Test
