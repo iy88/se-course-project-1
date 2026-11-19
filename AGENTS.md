@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.10
-Version-Datetime: 2026-11-19T13:24:52+08:00
+Version: 0.2.11
+Version-Datetime: 2026-11-19T15:50:15+08:00
 -->
 
 # Project1 实现协作规范
@@ -11,6 +11,9 @@ Version-Datetime: 2026-11-19T13:24:52+08:00
 - 按任务 Issue 约定的范围和分支实施。涉及需求、共享契约、模块归属、迁移或依赖的变更时，先核对受影响的调用方，需要业务或架构决策时向用户确认。
 - 业务模块维护各自拥有的状态。跨模块用例按公共约定处理资格、事务、锁、幂等、审计和事件。由所属模块集中实现可推导规则，数据库约束承载必要不变量。
 - 配置变更同步样例。凭据留在对应环境，日志、提交和交接记录使用脱敏信息。
+- Reuse existing frameworks and mature third-party libraries in frontend and backend code. Keep project code focused on business rules and integration.
+- Limit UI and API copy to actions, results, and errors. Use layout, controls, and essential labels to guide users.
+- Write code comments in English when a contract, constraint, or implementation choice needs explanation. Keep comments and documentation concise and factual.
 
 ## GitHub 协作
 
