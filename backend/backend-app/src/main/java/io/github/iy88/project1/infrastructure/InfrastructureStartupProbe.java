@@ -49,6 +49,6 @@ class InfrastructureStartupProbe implements ApplicationRunner {
             redis.delete(key);
         }
         LoggerFactory.getLogger(InfrastructureStartupProbe.class)
-                .info("PostgreSQL migration and JPA query passed. Redis probe read, write and cleanup passed.");
+                .info("PostgreSQL schema validation and JPA query passed. Redis probe read, write and cleanup passed.");
     }
 }

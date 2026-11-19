@@ -22,6 +22,8 @@
     </properties>
 
     <modules>
+        <module>database-migrations</module>
+        <module>maintenance</module>
         <module>backend-app</module>
         <module>backend-core</module>
         <module>account</module>
@@ -34,4 +36,14 @@
         <module>file-storage</module>
         <module>messaging</module>
     </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.aliyun.oss</groupId>
+                <artifactId>aliyun-sdk-oss</artifactId>
+                <version>3.18.4</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>
