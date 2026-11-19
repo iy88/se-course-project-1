@@ -16,11 +16,9 @@ final class RedisMaintenance {
 
     private final RedisURI uri;
     private final String prefix;
-    private final byte[] prefixBytes;
 
     RedisMaintenance(MaintenanceConfig config) {
         prefix = config.matching("REDIS_NAMESPACE", "[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*") + ":";
-        prefixBytes = prefix.getBytes(StandardCharsets.UTF_8);
         String url = config.required("REDIS_URL");
         try {
             URI address = URI.create(url);
@@ -44,27 +42,31 @@ final class RedisMaintenance {
     void resetAfter(SqlStep resetPostgres) throws SQLException {
         RedisClient client = RedisClient.create(uri);
         try (var connection = client.connect(ByteArrayCodec.INSTANCE)) {
-            var redis = connection.sync();
-            ScanArgs scan = ScanArgs.Builder.matches(prefix + "*").limit(200);
-            // Check connectivity and SCAN permission before PostgreSQL changes.
-            var firstPage = redis.scan(ScanCursor.INITIAL, scan);
-            validate(firstPage.getKeys());
-            resetPostgres.run();
-            System.out.println("PostgreSQL reset and migration: complete");
-            long removed = clear(redis, scan);
-            System.out.println("Redis reset: complete (" + removed + " keys removed)");
+            resetAfter(connection.sync(), prefix, resetPostgres);
         } finally {
             client.shutdown();
         }
     }
 
-    private long clear(RedisCommands<byte[], byte[]> redis, ScanArgs scan) {
+    static void resetAfter(RedisCommands<byte[], byte[]> redis, String prefix, SqlStep resetPostgres)
+            throws SQLException {
+        var prefixBytes = prefix.getBytes(StandardCharsets.UTF_8);
+        ScanArgs scan = ScanArgs.Builder.matches(prefix + "*").limit(200);
+        // Check connectivity and SCAN permission before PostgreSQL changes.
+        validate(redis.scan(ScanCursor.INITIAL, scan).getKeys(), prefixBytes);
+        resetPostgres.run();
+        System.out.println("PostgreSQL reset and migration: complete");
+        long removed = clear(redis, scan, prefixBytes);
+        System.out.println("Redis reset: complete (" + removed + " keys removed)");
+    }
+
+    private static long clear(RedisCommands<byte[], byte[]> redis, ScanArgs scan, byte[] prefixBytes) {
         ScanCursor cursor = ScanCursor.INITIAL;
         long removed = 0;
         do {
             var page = redis.scan(cursor, scan);
             var keys = page.getKeys();
-            validate(keys);
+            validate(keys, prefixBytes);
             if (!keys.isEmpty()) {
                 removed += redis.del(keys.toArray(byte[][]::new));
             }
@@ -73,7 +75,7 @@ final class RedisMaintenance {
         return removed;
     }
 
-    private void validate(Iterable<byte[]> keys) {
+    private static void validate(Iterable<byte[]> keys, byte[] prefixBytes) {
         for (byte[] key : keys) {
             if (key.length < prefixBytes.length
                     || !Arrays.equals(key, 0, prefixBytes.length, prefixBytes, 0, prefixBytes.length)) {

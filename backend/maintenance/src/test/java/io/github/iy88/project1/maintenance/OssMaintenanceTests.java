@@ -1,6 +1,7 @@
 package io.github.iy88.project1.maintenance;
 
 import com.aliyun.sdk.service.oss2.OSSClient;
+import com.aliyun.sdk.service.oss2.exceptions.OperationException;
 import com.aliyun.sdk.service.oss2.models.AccessControlList;
 import com.aliyun.sdk.service.oss2.models.AccessControlPolicy;
 import com.aliyun.sdk.service.oss2.models.DeleteMultipleObjectsRequest;
@@ -77,6 +78,31 @@ class OssMaintenanceTests {
         var failure = assertThrows(IllegalStateException.class, () -> OssMaintenance.clear(client, BUCKET));
         assertThat(failure.getMessage()).contains("did not confirm");
         verify(client).listObjectsV2(any(ListObjectsV2Request.class));
+    }
+
+    @Test
+    void retryListsFromTheStartAndDeletesOnlyRemainingObjectsAfterAPartialFailure() {
+        OSSClient client = privateBucket();
+        var completedBatch = page("already-removed");
+        var pendingBatch = page("still-present");
+        var empty = page();
+        var firstDeletion = deleted("already-removed");
+        var remainingDeletion = deleted("still-present");
+        var outage = new OperationException("DeleteMultipleObjects");
+        when(client.listObjectsV2(any(ListObjectsV2Request.class)))
+                .thenReturn(completedBatch, pendingBatch, pendingBatch, empty);
+        when(client.deleteMultipleObjects(any(DeleteMultipleObjectsRequest.class)))
+                .thenReturn(firstDeletion).thenThrow(outage).thenReturn(remainingDeletion);
+
+        assertThat(assertThrows(OperationException.class, () -> OssMaintenance.clear(client, BUCKET))).isSameAs(outage);
+        assertThat(OssMaintenance.clear(client, BUCKET)).isEqualTo(1);
+
+        var deletes = ArgumentCaptor.forClass(DeleteMultipleObjectsRequest.class);
+        verify(client, times(3)).deleteMultipleObjects(deletes.capture());
+        assertThat(deletes.getAllValues()).satisfiesExactly(
+                request -> assertBatch(request, "already-removed"),
+                request -> assertBatch(request, "still-present"),
+                request -> assertBatch(request, "still-present"));
     }
 
     @Test
