@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.45
-Version-Datetime: 2026-11-19T18:56:04+08:00
+Version: 0.1.46
+Version-Datetime: 2026-11-19T19:12:28+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -34,9 +34,9 @@ python3 scripts/dev.py restart
 python3 scripts/dev.py stop
 ```
 
-脚本默认读取 `backend/.env.dev`，在后台启动后端、用户端 `http://127.0.0.1:3000` 和管理端 `http://127.0.0.1:3001`。先按下文配置并初始化 PostgreSQL 和 Redis。使用其他配置文件时，给 `start` 或 `restart` 加上 `--env-file <路径>`。Rsbuild 默认代理到本地 8080，后端使用其他地址时，设置 `API_PROXY_TARGET` 覆盖。
+脚本默认用 `backend/.env.dev` 启动 API、一个调度器、两个 worker JVM，以及用户端 `http://127.0.0.1:3000` 和管理端 `http://127.0.0.1:3001`。先初始化 PostgreSQL 并配置 Redis。通过 `start` 或 `restart` 的 `--workers N` 调整 worker 数量，用 `--env-file <路径>` 选择配置。两个前端通过 Rsbuild 同源代理访问 API，默认目标为本地 8080，可用 `API_PROXY_TARGET` 覆盖。
 
-PID 记录在 `var/dev/dev.pid`，日志写入 `var/dev/dev.log`，可用 `tail -f var/dev/dev.log` 查看。`status` 显示托管进程状态，后端或任一前端进程退出时，脚本会停止本次启动的其他服务。
+PID 记录在 `var/dev/dev.pid`，日志写入 `var/dev/dev.log`，可用 `tail -f var/dev/dev.log` 查看。`status` 显示每个托管进程的 PID。任一进程退出时，脚本会停止本次启动的其他服务。
 
 ## 前端安装、启停与构建
 
@@ -162,7 +162,7 @@ v2 使用两个私有 Bucket。开发和联调共用开发桶，生产使用独�
 
 `file-storage` 提供文件核验、引用与签名读取。商品、事项等调用方先校验账户和目标对象权限，再在业务事务内建立、保留或释放引用。签名 URL 默认有效 60 秒（`FILE_READ_URL_TTL_SECONDS`），PDF 以附件下载。
 
-回收批次只处理到期且无有效引用的文件，先认领，再删除 OSS 对象，最后保存删除结果。失败与迟到上传按 `FILE_CLEANUP_SCAN_SECONDS` 的间隔重新处理，默认 300 秒。启用 `delivery-worker,file-cleanup` 后按配置调度，每批仅扫描当前 Bucket 和用途前缀。
+回收批次只处理到期且无有效引用的文件，先认领，再删除 OSS 对象，最后保存删除结果。失败与迟到上传按 `FILE_CLEANUP_SCAN_SECONDS` 的间隔重新处理，默认 300 秒。启用 `delivery-scheduler,file-cleanup` 后按配置调度，每批仅扫描当前 Bucket 和用途前缀。
 
 在 OSS 控制台将 Bucket ACL 设为 **私有**，启用阻止公共访问，版本控制保持从未启用。以下策略用于独立开发 Bucket。把 `YOUR-DEV-BUCKET` 换为你的 Bucket 名。第一项授权查询 Bucket ACL、版本状态和列举对象。第二项授权读取、写入和删除该 Bucket 中的所有对象。ARN 中的账号字段可填写 Bucket 所有者的阿里云账号 ID。
 
@@ -196,11 +196,11 @@ For browser writes under `/api/v1`, configure `ALLOWED_ORIGINS` and supply a `Cs
 
 ### Event delivery and scheduled work
 
-Apply Flyway V5 before starting the worker. Add the Spring profile `delivery-worker` to enable event dispatch, the task consumer group, and event retention. Add `file-cleanup` to run the file cleanup batch, and `mail-delivery` to provide the configured SMTP sender.
+Apply Flyway V5 before starting the backend processes. Use one JVM with `--spring.profiles.active=delivery-scheduler` to enqueue due tasks, dispatch events, and prune expired events. Run one or more JVMs with `--spring.profiles.active=delivery-worker` to claim, execute, and acknowledge tasks from the same Redis consumer group. These two profiles use the same role wiring in the development launcher and the production unit templates. Both run without an HTTP listener. Add `file-cleanup` to the scheduler when OSS cleanup is enabled, and `mail-delivery` to roles that load the SMTP sender.
 
 - Use `WriteTransaction.addEventIntent` to append events in the same transaction as the business write. `UserEvents.head` and `UserEvents.scan` read the PostgreSQL cursor. `EventSignals` reads Redis hints with an independent cursor per instance. Use `EventReplay` to project events under the authenticated account and current source permissions.
-- Use `TaskSchedules.schedule` in the business transaction. Register the matching `TaskHandler` on the worker. Deploy the same handler set across instances in the consumer group. A handler uses the shared write transaction for business changes and the task outcome.
-- The worker uses `<REDIS_NAMESPACE>:events` and `<REDIS_NAMESPACE>:work`. Its Redis credential needs XADD and XREAD for events, and XADD, XGROUP CREATE, XREADGROUP, XPENDING, XCLAIM, XACK and XDEL for work. Event readers also use XREVRANGE to start at the current tail.
+- Use `TaskSchedules.schedule` in the business transaction. Register the same `TaskHandler` set in the scheduler and every worker. The scheduler uses the registered kinds to select due tasks. A worker uses the shared write transaction for business changes and the task outcome.
+- The scheduler uses XADD on `<REDIS_NAMESPACE>:events` and `<REDIS_NAMESPACE>:work`. Workers use XGROUP CREATE, XREADGROUP, XPENDING, XCLAIM, XACK and XDEL on the work stream. Event readers use XREAD and XREVRANGE.
 - Bind the SMTP sender to the account-owned mail record and call it after committing the mail lease. Keep file, event, and email retry state on the owning record.
 
 ### Realtime HTTP and WebSocket
