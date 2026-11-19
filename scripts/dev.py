@@ -45,7 +45,7 @@ def service_commands(env_file, workers):
     frontend = ROOT / "frontend"
     jar = backend / "backend-app/target/backend-app-0.0.1-SNAPSHOT.jar"
     if not jar.is_file():
-        raise ValueError("build the backend first with mvn -f backend/pom.xml verify")
+        raise ValueError("build the backend first with mvn -f backend/pom.xml install")
     if not (frontend / "node_modules/.bin/rsbuild").is_file():
         raise ValueError("install frontend dependencies first with pnpm --dir frontend install --frozen-lockfile")
     for executable in ("java", "node"):

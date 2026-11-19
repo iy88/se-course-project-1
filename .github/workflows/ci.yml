@@ -103,8 +103,8 @@ jobs:
           REDIS_NAMESPACE=project1:integration
           EOF
           ./mvnw --batch-mode --no-transfer-progress -pl maintenance -am package -DskipTests
-          APP_ENV_FILE="$RUNNER_TEMP/project1-integration.env" \
-            java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar db migrate
+          java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+            db migrate --env-file="$RUNNER_TEMP/project1-integration.env"
       - name: Verify backend with PostgreSQL and Redis
         run: |
           ./mvnw --batch-mode --no-transfer-progress verify -Pintegration \

@@ -1,11 +1,26 @@
 <!--
-Version: 0.2.3
-Version-Datetime: 2026-11-13T01:47:49+08:00
+Version: 0.2.6
+Version-Datetime: 2026-11-19T22:44:22+08:00
 -->
 
-# 文档构建
+# Project1 脚本使用说明
 
-依赖 Python 3.10+、PlantUML 及其 Java／Graphviz 环境。脚本按自身位置定位项目，可从任意工作目录运行。
+脚本按自身位置定位项目，可从任意工作目录运行。
+
+## 开发启动器
+
+macOS 或 Linux 使用 `dev.py`，Windows 使用 PowerShell 5.1 或更高版本启动 `dev.ps1`。两者启动相同的 API、调度器、工作进程和双前端，默认读取 `backend/.env.dev`。Windows 需允许当前用户执行本地 `.ps1` 脚本：
+
+```text
+python3 scripts/dev.py start --env-file=backend/.env.dev
+.\scripts\dev.ps1 start -EnvFile backend/.env.dev
+```
+
+分别使用 `status`、`restart` 和 `stop` 查看状态、重启和停止。Windows 的监督日志为 `var/dev/dev.log`，各服务输出位于 `var/dev/logs/`。
+
+## 文档构建
+
+文档构建额外依赖 Python 3.10+、PlantUML 及其 Java／Graphviz 环境。
 
 在 project1 根目录执行：
 
@@ -19,7 +34,9 @@ python3 scripts/cli.py build
 
 ```text
 scripts/
-  cli.py                 # 唯一命令行入口
+  cli.py                 # 文档构建入口
+  dev.py                 # macOS/Linux 开发启动器
+  dev.ps1                # Windows PowerShell 5.1+ 开发启动器
   doc_tools/
     common.py            # 原子写入、版本元数据与公共常量
     markdown.py          # Markdown展开、链接重定位与锚点

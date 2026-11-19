@@ -52,6 +52,7 @@ final class PostgresMaintenance {
             }
             createRoleIfMissing(connection, owner, ownerPassword);
             createRoleIfMissing(connection, appUser, appPassword);
+            ensureOwnerCanCreateDatabase(connection, owner);
             validateAppRole(connection);
 
             if (currentOwner != null && reset) {
@@ -70,6 +71,34 @@ final class PostgresMaintenance {
                 execute(connection, "CREATE DATABASE " + identifier(target.database())
                         + " OWNER " + identifier(owner));
             }
+            migrate();
+        }
+    }
+
+    void resetAsOwner() throws SQLException {
+        try (Connection connection = connect(target.adminUrl(), "postgres", owner, ownerPassword)) {
+            if (!"locked".equals(lookup(connection,
+                    "SELECT CASE WHEN pg_try_advisory_lock(hashtext(?)::bigint) THEN 'locked' END", target.database()))) {
+                throw new IllegalStateException("Another PostgreSQL maintenance operation holds the database lock");
+            }
+            String currentOwner = databaseOwner(connection);
+            if (currentOwner == null) {
+                throw new IllegalStateException("The target database does not exist. Run db init with an administrator");
+            }
+            if (!owner.equals(currentOwner)) {
+                throw new IllegalStateException("The configured owner does not own the existing database. "
+                        + "Use db reset with --admin-user for a legacy database");
+            }
+            validateOwnerCanReset(connection);
+            verifyAppCredentials();
+            try (var checked = connect(target.jdbcUrl(), target.database(), owner, ownerPassword)) {
+                if (!checked.isValid(5)) {
+                    throw new IllegalStateException("PostgreSQL owner connection validation failed");
+                }
+            }
+            execute(connection, "DROP DATABASE " + identifier(target.database()));
+            execute(connection, "CREATE DATABASE " + identifier(target.database())
+                    + " OWNER " + identifier(owner));
             migrate();
         }
     }
@@ -104,6 +133,17 @@ final class PostgresMaintenance {
         }
     }
 
+    private void validateOwnerCanReset(Connection connection) throws SQLException {
+        String role = lookup(connection, """
+                SELECT rolname FROM pg_roles
+                WHERE rolname = ? AND rolcanlogin AND rolcreatedb
+                """, owner);
+        if (role == null) {
+            throw new IllegalStateException("DATABASE_OWNER_USERNAME must have CREATEDB. "
+                    + "Run db init once with an administrator to update the role");
+        }
+    }
+
     private String databaseOwner(Connection connection) throws SQLException {
         return lookup(connection, "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = ?", target.database());
     }
@@ -119,6 +159,10 @@ final class PostgresMaintenance {
                 Arrays.fill(password, '\0');
             }
         }
+    }
+
+    private static void ensureOwnerCanCreateDatabase(Connection connection, String owner) throws SQLException {
+        execute(connection, "ALTER ROLE " + identifier(owner) + " CREATEDB");
     }
 
     private void restrictConnectionAndSchema(Connection connection) throws SQLException {

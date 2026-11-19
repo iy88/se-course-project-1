@@ -1,21 +1,20 @@
 <!--
-Version: 0.2.13
-Version-Datetime: 2026-11-19T18:31:12+08:00
+Version: 0.2.14
+Version-Datetime: 2026-11-19T22:18:35+08:00
 -->
 
 # Project1 实现协作规范
 
 ## 任务与变更边界
 
-- Before starting implementation, list the planned deliverables and verification steps in the conversation. Check the list against the request and the phase requirements for omissions.
-
+- 开始实现前，在对话中列出计划交付物和验证步骤。对照请求和阶段要求检查是否有遗漏。
 - 开工前核对工作区、分支和任务 Issue。以最新 `main` 中的已确认需求、接口和业务规则为实现依据，从 [README](README.md) 查阅项目入口和操作命令。
 - 按任务 Issue 约定的范围和分支实施。涉及需求、共享契约、模块归属、迁移或依赖的变更时，先核对受影响的调用方，需要业务或架构决策时向用户确认。
 - 业务模块维护各自拥有的状态。跨模块用例按公共约定处理资格、事务、锁、幂等、审计和事件。由所属模块集中实现可推导规则，数据库约束承载必要不变量。
 - 配置变更同步样例。凭据留在对应环境，日志、提交和交接记录使用脱敏信息。
-- Reuse existing frameworks and mature third-party libraries in frontend and backend code. Keep project code focused on business rules and integration.
-- Limit UI and API copy to actions, results, and errors. Use layout, controls, and essential labels to guide users.
-- Write code comments in English when a contract, constraint, or implementation choice needs explanation. Keep comments and documentation concise and factual.
+- 前后端代码复用现有框架和成熟第三方库，项目代码聚焦业务规则和集成。
+- 界面和接口文案只表达操作、结果和错误，通过布局、控件和必要标签引导用户。
+- 需要解释契约、约束或实现选择时，用英文编写代码注释。注释和文档保持简洁、基于事实。
 
 ## GitHub 协作
 
