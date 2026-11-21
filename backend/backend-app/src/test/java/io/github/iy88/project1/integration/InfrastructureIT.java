@@ -2,6 +2,7 @@ package io.github.iy88.project1.integration;
 
 import io.github.iy88.project1.BackendAppApplication;
 import io.github.iy88.project1.api.realtime.RealtimeAccess;
+import io.github.iy88.project1.api.realtime.RealtimeSessions;
 import io.github.iy88.project1.api.realtime.RealtimeSocket;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.EventIntent;
@@ -11,6 +12,7 @@ import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.core.WriteTransaction;
+import io.github.iy88.project1.messaging.RealtimeEventSources;
 import io.github.iy88.project1.messaging.TaskHandler;
 import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.messaging.TaskStream;
@@ -46,6 +48,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -103,7 +106,7 @@ class InfrastructureIT {
         var application = new SpringApplication(BackendAppApplication.class, Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("integration", properties)));
-        app = application.run("--spring.profiles.active=infrastructure,realtime-api",
+        app = application.run("--spring.profiles.active=infrastructure",
                 "--server.port=0", "--server.address=127.0.0.1", "--spring.main.banner-mode=off");
         db = app.getBean(JdbcClient.class);
         redis = app.getBean(StringRedisTemplate.class);
@@ -369,7 +372,8 @@ class InfrastructureIT {
     @TestConfiguration(proxyBeanMethods = false)
     public static class Fixtures {
         @Bean
-        public RealtimeAccess realtimeAccess() {
+        @Primary
+        public RealtimeAccess infrastructureRealtimeAccess() {
             return new RealtimeAccess() {
                 @Override
                 public Session authenticate(HttpServletRequest request) {
@@ -394,6 +398,44 @@ class InfrastructureIT {
                     return Optional.of(Map.of("source_id", event.source().id()));
                 }
             };
+        }
+
+        @Bean
+        public RealtimeSessions realtimeSessions() {
+            return new RealtimeSessions() {
+                @Override
+                public Optional<RealtimeAccess.Session> resolve(HttpServletRequest request) {
+                    var cookies = request.getCookies();
+                    if (cookies == null || Arrays.stream(cookies).noneMatch(cookie ->
+                            "it_session".equals(cookie.getName()) && SESSION_ID.toString().equals(cookie.getValue()))) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(new RealtimeAccess.Session(ACCOUNT, SESSION_ID, 1, "integration"));
+                }
+
+                @Override
+                public void requireCurrent(RealtimeAccess.Session session) {}
+
+                @Override
+                public void requireCsrf(RealtimeAccess.Session session, String token) {
+                    if (!RUN_ID.toString().equals(token)) throw new BusinessError("CSRF_INVALID", 403, "fixture");
+                }
+
+                @Override
+                public PublicAccountLimits publicLimits() {
+                    return new PublicAccountLimits(12, 256, 64);
+                }
+            };
+        }
+
+        @Bean
+        public RealtimeEventSources.Notifications notificationSource() {
+            return (context, notificationId) -> Optional.empty();
+        }
+
+        @Bean
+        public RealtimeEventSources.Conversations conversationSource() {
+            return org.mockito.Mockito.mock(RealtimeEventSources.Conversations.class);
         }
 
         @Bean
