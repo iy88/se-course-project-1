@@ -57,4 +57,21 @@ class EventRecoveryTests {
                 .andExpect(jsonPath("$.items[0].data").doesNotExist())
                 .andExpect(jsonPath("$.next_cursor.after_seq").value(2));
     }
+
+    @Test
+    void returnsTheScannedNextCursorAndPageBoundary() throws Exception {
+        UUID epoch = UUID.randomUUID();
+        when(access.authenticate(any())).thenReturn(new RealtimeAccess.Session(14, UUID.randomUUID(), 1L, "test"));
+        when(events.replay(any(), eq(epoch), eq(3L), eq(2), eq(access)))
+                .thenReturn(new EventReplay.Page(List.of(new EventReplay.CursorAdvance(epoch, 4, 6)), 6, 8, true));
+
+        mvc.perform(get("/api/v1/account/events").param("epoch", epoch.toString())
+                        .param("after_seq", "3").param("limit", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].from_seq").value(4))
+                .andExpect(jsonPath("$.items[0].through_seq").value(6))
+                .andExpect(jsonPath("$.next_cursor.after_seq").value(6))
+                .andExpect(jsonPath("$.head_seq").value(8))
+                .andExpect(jsonPath("$.has_more").value(true));
+    }
 }

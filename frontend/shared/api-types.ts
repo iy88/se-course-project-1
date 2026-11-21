@@ -241,6 +241,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/capabilities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getCapabilities"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/account/events/head": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getEventHead"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/account/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["replayEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -440,6 +488,116 @@ export interface components {
     DisputeEnvelope: {
       dispute: components["schemas"]["Dispute"];
       trade: components["schemas"]["TradeView"];
+    };
+    Capabilities: {
+      config_version: string;
+      limits: {
+        password_min_length: number;
+        password_max_length: number;
+        display_name_max_length: number;
+      };
+    };
+    EventHead: {
+      /** Format: uuid */
+      epoch: string;
+      /** Format: int64 */
+      head_seq: number;
+      /** Format: int64 */
+      replay_floor: number;
+    };
+    RealtimeEvent: {
+      /** @constant */
+      type: "event";
+      /** Format: uuid */
+      epoch: string;
+      /** Format: uuid */
+      event_id: string;
+      /** Format: int64 */
+      account_seq: number;
+      /** @constant */
+      schema_version: 1;
+      /** Format: date-time */
+      occurred_at: string;
+    } & (
+      | {
+          /** @constant */
+          event_type: "message_created";
+          data: {
+            /** @enum {string} */
+            conversation_kind: "chat" | "trade" | "case";
+            conversation_id: string;
+            message_id: string;
+            message_seq: number;
+            /** Format: uuid */
+            business_event_id?: string;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "message_read";
+          data: {
+            /** @enum {string} */
+            conversation_kind: "chat" | "trade" | "case";
+            conversation_id: string;
+            last_read_seq: number;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "conversation_archived";
+          data: {
+            /** @enum {string} */
+            conversation_kind: "chat" | "trade" | "case";
+            conversation_id: string;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "notification_created";
+          data: {
+            notification_id: string;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "notification_read";
+          data: {
+            notification_id: string;
+            /** Format: date-time */
+            read_at: string;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "source_changed";
+          data: {
+            source_type: string;
+            source_id: string;
+          };
+        }
+    );
+    CursorAdvance: {
+      /** @constant */
+      type: "cursor_advance";
+      /** Format: uuid */
+      epoch: string;
+      /** Format: int64 */
+      from_seq: number;
+      /** Format: int64 */
+      through_seq: number;
+    };
+    RealtimeFrame: components["schemas"]["RealtimeEvent"] | components["schemas"]["CursorAdvance"];
+    EventPage: {
+      items: components["schemas"]["RealtimeFrame"][];
+      next_cursor: {
+        /** Format: uuid */
+        epoch: string;
+        /** Format: int64 */
+        after_seq: number;
+      };
+      /** Format: int64 */
+      head_seq: number;
+      has_more: boolean;
     };
   };
   responses: never;
@@ -1307,6 +1465,70 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getCapabilities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current public configuration version and limits */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Capabilities"];
+        };
+      };
+    };
+  };
+  getEventHead: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current account event recovery boundary */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EventHead"];
+        };
+      };
+    };
+  };
+  replayEvents: {
+    parameters: {
+      query: {
+        epoch: string;
+        after_seq: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One page of projected account events */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EventPage"];
         };
       };
     };

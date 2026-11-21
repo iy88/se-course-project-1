@@ -1311,6 +1311,89 @@
           }
         }
       }
+    },
+    "/api/v1/capabilities": {
+      "get": {
+        "operationId": "getCapabilities",
+        "responses": {
+          "200": {
+            "description": "Current public configuration version and limits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Capabilities"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/events/head": {
+      "get": {
+        "operationId": "getEventHead",
+        "responses": {
+          "200": {
+            "description": "Current account event recovery boundary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventHead"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/events": {
+      "get": {
+        "operationId": "replayEvents",
+        "parameters": [
+          {
+            "name": "epoch",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after_seq",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of projected account events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1911,6 +1994,327 @@
           },
           "trade": {
             "$ref": "#/components/schemas/TradeView"
+          }
+        }
+      },
+      "Capabilities": {
+        "type": "object",
+        "required": ["config_version", "limits"],
+        "properties": {
+          "config_version": {
+            "type": "string"
+          },
+          "limits": {
+            "type": "object",
+            "required": ["password_min_length", "password_max_length", "display_name_max_length"],
+            "additionalProperties": false,
+            "properties": {
+              "password_min_length": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "password_max_length": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "display_name_max_length": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      },
+      "EventHead": {
+        "type": "object",
+        "required": ["epoch", "head_seq", "replay_floor"],
+        "properties": {
+          "epoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "head_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "replay_floor": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "RealtimeEvent": {
+        "type": "object",
+        "required": ["type", "epoch", "event_id", "account_seq", "schema_version", "occurred_at"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "event"
+          },
+          "epoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "account_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["event_type", "data"],
+            "properties": {
+              "event_type": {
+                "type": "string",
+                "const": "message_created"
+              },
+              "data": {
+                "type": "object",
+                "required": ["conversation_kind", "conversation_id", "message_id", "message_seq"],
+                "additionalProperties": false,
+                "properties": {
+                  "conversation_kind": {
+                    "type": "string",
+                    "enum": ["chat", "trade", "case"]
+                  },
+                  "conversation_id": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  },
+                  "message_id": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  },
+                  "message_seq": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "business_event_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["event_type", "data"],
+            "properties": {
+              "event_type": {
+                "type": "string",
+                "const": "message_read"
+              },
+              "data": {
+                "type": "object",
+                "required": ["conversation_kind", "conversation_id", "last_read_seq"],
+                "additionalProperties": false,
+                "properties": {
+                  "conversation_kind": {
+                    "type": "string",
+                    "enum": ["chat", "trade", "case"]
+                  },
+                  "conversation_id": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  },
+                  "last_read_seq": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["event_type", "data"],
+            "properties": {
+              "event_type": {
+                "type": "string",
+                "const": "conversation_archived"
+              },
+              "data": {
+                "type": "object",
+                "required": ["conversation_kind", "conversation_id"],
+                "additionalProperties": false,
+                "properties": {
+                  "conversation_kind": {
+                    "type": "string",
+                    "enum": ["chat", "trade", "case"]
+                  },
+                  "conversation_id": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["event_type", "data"],
+            "properties": {
+              "event_type": {
+                "type": "string",
+                "const": "notification_created"
+              },
+              "data": {
+                "type": "object",
+                "required": ["notification_id"],
+                "additionalProperties": false,
+                "properties": {
+                  "notification_id": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["event_type", "data"],
+            "properties": {
+              "event_type": {
+                "type": "string",
+                "const": "notification_read"
+              },
+              "data": {
+                "type": "object",
+                "required": ["notification_id", "read_at"],
+                "additionalProperties": false,
+                "properties": {
+                  "notification_id": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  },
+                  "read_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["event_type", "data"],
+            "properties": {
+              "event_type": {
+                "type": "string",
+                "const": "source_changed"
+              },
+              "data": {
+                "type": "object",
+                "required": ["source_type", "source_id"],
+                "additionalProperties": false,
+                "properties": {
+                  "source_type": {
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]*$"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "CursorAdvance": {
+        "type": "object",
+        "required": ["type", "epoch", "from_seq", "through_seq"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "cursor_advance"
+          },
+          "epoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "through_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "additionalProperties": false
+      },
+      "RealtimeFrame": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RealtimeEvent"
+          },
+          {
+            "$ref": "#/components/schemas/CursorAdvance"
+          }
+        ]
+      },
+      "EventPage": {
+        "type": "object",
+        "required": ["items", "next_cursor", "head_seq", "has_more"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RealtimeFrame"
+            }
+          },
+          "next_cursor": {
+            "type": "object",
+            "required": ["epoch", "after_seq"],
+            "properties": {
+              "epoch": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "after_seq": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "head_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "has_more": {
+            "type": "boolean"
           }
         }
       }
