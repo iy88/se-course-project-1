@@ -97,7 +97,8 @@ class TradeLifecycleIT {
         properties.setProperty("REDIS_NAMESPACE", properties.getProperty("REDIS_NAMESPACE") + ":trade:" + RUN);
         properties.setProperty("DB_TRANSACTION_TIMEOUT_SECONDS", "20");
         properties.setProperty("DB_LOCK_TIMEOUT_SECONDS", "10");
-        var application = new SpringApplication(BackendAppApplication.class, Fixtures.class);
+        var application = new SpringApplication(BackendAppApplication.class, Fixtures.class,
+                BusinessRealtimeIT.Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("trade-integration", properties)));
         app = application.run("--spring.profiles.active=infrastructure", "--server.port=0",
