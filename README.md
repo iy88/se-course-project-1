@@ -1,11 +1,305 @@
 <!--
-Version: 0.1.28
-Version-Datetime: 2026-11-13T01:50:29+08:00
+Version: 0.1.56
+Version-Datetime: 2026-11-19T23:03:15+08:00
 -->
 
 # 校园二手交易与物品流转平台
 
-## docs 目录结构
+项目包含 Spring Boot 后端、用户端界面和管理端界面。日常开发使用 `scripts/dev.py` 或 `scripts/dev.ps1` 启停服务，通过 `maintenance.jar` 初始化或迁移数据库。
+
+## 快速开始
+
+以下命令从仓库根目录执行。
+
+### 1. 准备依赖与配置
+
+启动 PostgreSQL 和 Redis，并准备 OpenJDK 27、Maven 3.10.1、Node.js 26.13.1、pnpm 12.21.0、Python 3.10+。Node.js 版本以根目录 [`.node-version`](.node-version) 为准。
+
+macOS 或 Linux：
+
+```bash
+umask 077
+cp -n backend/.env.example backend/.env.dev
+```
+
+Windows PowerShell 5.1 或更高版本：
+
+```powershell
+Copy-Item backend/.env.example backend/.env.dev -ErrorAction SilentlyContinue
+```
+
+按[开发配置](#开发配置)填写数据库、Redis 和所需的外部服务凭据。
+
+### 2. 构建并初始化
+
+```bash
+mvn -f backend/pom.xml install
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar db init --env-file=backend/.env.dev --admin-user "<已有 PostgreSQL 管理员登录名>"
+```
+
+`db init` 创建缺失的数据库和角色并执行 Flyway 迁移。数据库已初始化时跳过此命令；拉取新迁移后执行下文的 `db migrate`。
+
+### 3. 安装前端依赖并启动
+
+```bash
+pnpm --dir frontend install --frozen-lockfile
+```
+
+macOS 或 Linux：
+
+```bash
+python3 scripts/dev.py start --env-file=backend/.env.dev
+```
+
+Windows PowerShell 5.1 或更高版本：
+
+```powershell
+.\scripts\dev.ps1 start -EnvFile backend/.env.dev
+```
+
+两个启动器均启动 API、一个调度器、两个工作进程 JVM 和两个前端。访问：
+
+- 用户端：`http://127.0.0.1:3000`
+- 管理端：`http://127.0.0.1:3001`
+- API：`http://127.0.0.1:8080`
+
+常用启停命令：
+
+| 操作 | macOS／Linux | Windows PowerShell 5.1+ |
+|---|---|---|
+| 查看状态 | `python3 scripts/dev.py status` | `.\scripts\dev.ps1 status` |
+| 查看日志 | `tail -f var/dev/dev.log` | `Get-Content -Wait var/dev/dev.log` |
+| 调整工作进程数并重启 | `python3 scripts/dev.py restart --env-file=backend/.env.dev --workers 3` | `.\scripts\dev.ps1 restart -EnvFile backend/.env.dev -Workers 3` |
+| 使用其他配置 | `python3 scripts/dev.py start --env-file /path/to/.env` | `.\scripts\dev.ps1 start -EnvFile path\to\.env` |
+| 停止 | `python3 scripts/dev.py stop` | `.\scripts\dev.ps1 stop` |
+
+任一受管进程退出时，启动器会停止本次启动的其他服务。Windows 启动器要求 PowerShell 5.1 或更高版本，并允许执行本地 `.ps1` 脚本；PID 与锁文件沿用 `var/dev/`，服务输出分别写入 `var/dev/logs/`。
+
+## 开发配置
+
+`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.example`](backend/.env.example) 后替换示例值，不要把实际凭据提交到仓库。
+
+| 资源 | 必需配置 |
+|---|---|
+| PostgreSQL | `DATABASE_URL`、`DATABASE_USERNAME`、`DATABASE_PASSWORD`、`DATABASE_OWNER_USERNAME`、`DATABASE_OWNER_PASSWORD`。URL 必须包含数据库名，应用账号与迁移账号使用不同凭据。 |
+| Redis | `REDIS_URL` 和独立的 `REDIS_NAMESPACE`，例如 `project1:dev:iy88`。不同开发环境使用不同命名空间。 |
+| OSS | `OSS_REGION`、`OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_PREFIX` 和开发 RAM 用户的 AccessKey。开发 Bucket 保持私有并关闭版本控制。 |
+| SMTP | `SMTP_HOST`、`SMTP_PORT`、`SMTP_TLS_MODE`、`SMTP_USERNAME`、`SMTP_PASSWORD` 和 `SMTP_FROM`。常用配置为 587 端口配 `starttls`，或 465 端口配 `ssl`。 |
+
+可用以下命令生成 PostgreSQL 应用账号和迁移账号的 URL 安全密码：
+
+```bash
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+```
+
+`owner` 持有数据库及迁移创建的对象，具有 `CREATEDB`，维护工具使用 `DATABASE_OWNER_USERNAME` 和 `DATABASE_OWNER_PASSWORD` 执行 Flyway 和常规重置。`app` 只有连接、`public` schema 使用、业务表读写和序列权限，后端使用 `DATABASE_USERNAME` 和 `DATABASE_PASSWORD` 连接。
+
+## 初始化与全量重置
+
+维护工具通过必需的 `--env-file` 参数指定配置。以下命令在仓库根目录运行。
+
+`db init` 的 `--admin-user` 必须是目标 PostgreSQL 实例上已有的管理员登录名。该账号需要能创建角色和数据库，并将新库的所有权授予 `DATABASE_OWNER_USERNAME`。初始化会把 owner 更新为具有 `CREATEDB`，密码在终端中无回显输入。
+
+首次创建数据库、角色并执行迁移：
+
+```bash
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  db init --env-file="$PWD/backend/.env.dev" --admin-user "<已有 PostgreSQL 管理员登录名>"
+```
+
+仅执行增量迁移：
+
+```bash
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  db migrate --env-file="$PWD/backend/.env.dev"
+```
+
+部署新版本时先执行 `db migrate`，再启动应用。`db init` 会创建缺失的 `owner`、`app` 角色和数据库；已有角色沿用现有密码，并确保 owner 具有 `CREATEDB`。
+
+重置会删除数据。执行前停止所选环境的所有应用进程和任务。先预览目标：
+
+```bash
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  db reset --env-file="$PWD/backend/.env.dev"
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  oss reset --env-file="$PWD/backend/.env.dev"
+```
+
+核对输出的环境、服务器和范围后，使用对应预览令牌执行：
+
+```bash
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  db reset --env-file="$PWD/backend/.env.dev" --confirm "<预览令牌>"
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  oss reset --env-file="$PWD/backend/.env.dev" --confirm "<预览令牌>"
+```
+
+- `db reset` 使用 owner 凭据检查 Redis 可扫描指定命名空间，删除并重建 PostgreSQL 目标库、执行 Flyway，最后清空 `REDIS_NAMESPACE:*`。PostgreSQL 存在活动连接时拒绝删除。
+- 仅当旧数据库仍由 app 角色持有时，confirmed `db reset` 才需要额外传入 `--admin-user` 完成角色迁移。
+- `oss reset` 清空 `OSS_BUCKET` 内的全部对象，每批最多删除 1,000 个。开发和联调时，维护配置应指向开发桶。
+- 重置中途失败时保持写入停止，修复后重新预览并执行完整命令。数据库重置会按当前 Flyway 迁移重建结构。
+
+## 后端开发
+
+后端使用 OpenJDK 27、Spring Boot 4.1.2 和 Maven 3.10.1。以下命令均从仓库根目录执行：
+
+| 用途 | 命令 |
+|---|---|
+| 安装内部模块到本机 Maven 仓库 | `mvn -f backend/pom.xml install` |
+| 构建、测试和验证 | `mvn -f backend/pom.xml verify` |
+| 测试启动模块及依赖 | `mvn -f backend/pom.xml -pl backend-app -am test` |
+| 完整构建并生成覆盖率 | `mvn -f backend/pom.xml clean verify` |
+| 运行集成测试 | `mvn -f backend/pom.xml clean verify -Pintegration` |
+
+首次开发或内部模块依赖发生变化时，先执行 `mvn -f backend/pom.xml install`，将模块 JAR 和 POM 安装到本机 Maven 仓库。`verify` 用于检查，不能替代开发环境要求的 `install`。
+
+汇总覆盖率报告位于 `backend/coverage-report/target/site/jacoco-aggregate/index.html`。集成测试需要已启动的 PostgreSQL 和 Redis，并先执行最新的 `db migrate`；测试报告位于 `backend/backend-app/target/failsafe-reports/`，每次运行使用独立的 Redis 前缀并在结束时清理。使用其他配置文件时，加 `-Dit.envFile="$PWD/backend/.env.dev"`。
+
+需要单独调试时，分别在终端启动 API、调度器和工作进程：
+
+```bash
+java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --env-file=backend/.env.dev
+java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --env-file=backend/.env.dev --spring.profiles.active=delivery-scheduler
+java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --env-file=backend/.env.dev --spring.profiles.active=delivery-worker
+```
+
+应用监听 `.env.dev` 中的 `HTTP_BIND_HOST` 和 `HTTP_BIND_PORT`。默认地址下可用以下命令检查：
+
+```bash
+curl -fsS http://127.0.0.1:8080/api/v1/hello
+curl -fsS http://127.0.0.1:8080/actuator/health
+```
+
+后端模块入口为 `io.github.iy88.project1.BackendAppApplication`。启动参数、环境加载和校验集中在 `backend-app` 的 `bootstrap` 包。Maven 模块加入应用依赖后，根包下的 Spring 组件、JPA 实体和 Repository 可按类型扫描；SDK 客户端等外部对象由对应模块的配置类显式装配。
+
+| 位置 | 职责 |
+|---|---|
+| `backend-app` 的 `api.<业务>` | Controller、HTTP 请求和响应 DTO、参数校验及传输映射 |
+| 业务模块的 `application` | 用例服务及跨模块使用的命令、查询和具名输入输出 |
+| 业务模块的 `domain` | 业务规则、状态和领域对象 |
+| 业务模块的 `persistence` | JPA 实体、Spring Data Repository 和必要的显式 SQL |
+
+跨模块协作由应用层调用各模块公开服务，只传递 ID 和具名输入输出。持久化实体与 Repository 由其所属模块管理。
+
+## 前端开发
+
+前端使用 Node.js 26.13.1、pnpm 12.21.0、Vue 3、TypeScript 和 Rsbuild。使用 fnm 时，在仓库根目录执行 `fnm install` 和 `fnm use`。两个应用共用 `frontend/pnpm-lock.yaml`：
+
+```bash
+pnpm --dir frontend install --frozen-lockfile
+```
+
+| 用途 | 命令 |
+|---|---|
+| 同时启动两端 | `pnpm --dir frontend dev` |
+| 仅启动用户端 | `pnpm --dir frontend dev user` |
+| 仅启动管理端 | `pnpm --dir frontend dev admin` |
+| 格式化 | `pnpm --dir frontend format` |
+| 检查 | `pnpm --dir frontend lint` |
+| 检查格式 | `pnpm --dir frontend format:check` |
+| 类型检查 | `pnpm --dir frontend typecheck` |
+| 构建两端 | `pnpm --dir frontend build` |
+| 重新生成 API 类型 | `pnpm --dir frontend generate:api` |
+
+两端共用 `frontend/shared/rsbuild.ts` 的开发代理，默认将 `/api/v1` 转发到 `http://127.0.0.1:8080`。后端地址不同时，设置 `API_PROXY_TARGET`。页面请求同源的 `/api/v1/hello`，看到 `Hello, Project1!` 即表示接口连通。构建产物输出到两个应用的 `dist/`。
+
+更新 `frontend/shared/openapi.json` 后执行 `generate:api`。部署时由 Nginx 提供两个应用的静态文件，并代理 `/api/v1/`。
+
+## S1 开发环境与依赖探针
+
+S2–S4 的开发入口和公共能力验证见 [S1 工程交接与验证](bits/S1工程交接与验证.md)。
+
+### 依赖探针
+
+配置好 PostgreSQL、Redis、OSS 和 SMTP 后，可运行一次性探针验证连接、OSS 对象写入／读回／删除及邮件投递：
+
+```bash
+java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --spring.profiles.active=dependency-probe --env-file=backend/.env.dev --smtp-probe-to=you@example.com
+```
+
+将示例收件地址替换为测试地址。探针完成后退出，失败时返回非零状态；SMTP 日志中的邮件 ID 可用于在收件箱中定位 `[Project1 S1] SMTP probe`。
+
+### OSS 配置
+
+后端探针和维护工具共用阿里云 OSS Java SDK 2.0（`com.aliyun:alibabacloud-oss-v2`）。v2 使用两个私有 Bucket：开发和联调共用开发桶，生产使用独立桶。各环境的 `OSS_BUCKET` 只填本环境桶名。商品图片与事项证据分别使用 `<OSS_PREFIX>/product_image/` 和 `<OSS_PREFIX>/case_evidence/`。
+
+商品图片支持 JPG／JPEG、PNG，事项证据另外支持 PDF，默认每文件上限 100 MiB。可通过 `FILE_PRODUCT_IMAGE_*` 和 `FILE_CASE_EVIDENCE_*` 调整大小与 MIME 列表；变更规则时同步更新 `FILE_RULE_VERSION`。
+
+在 OSS 控制台将 Bucket 设为私有、启用阻止公共访问，并保持版本控制从未启用。以下策略用于独立开发 Bucket，将 `YOUR-DEV-BUCKET` 替换为实际桶名：
+
+```json
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["oss:GetBucketAcl", "oss:GetBucketVersioning", "oss:ListObjects"],
+      "Resource": ["acs:oss:*:*:YOUR-DEV-BUCKET"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["oss:PutObject", "oss:GetObject", "oss:DeleteObject"],
+      "Resource": ["acs:oss:*:*:YOUR-DEV-BUCKET/*"]
+    }
+  ]
+}
+```
+
+`file-storage` 提供文件核验、引用和签名读取。商品、事项等调用方先校验账户及目标对象权限，再在业务事务内建立、保留或释放引用。签名 URL 默认有效 60 秒，可通过 `FILE_READ_URL_TTL_SECONDS` 调整；PDF 以附件下载。回收任务先认领到期且无有效引用的文件，再删除 OSS 对象并保存结果。
+
+浏览器直传接入时，在 Bucket CORS 中登记实际用户端和管理端 Origin。签名表单使用 `POST`，浏览器确实需要直读时再添加 `GET` 或 `HEAD`；按预检需求配置允许头，可暴露 `ETag` 和 `x-oss-request-id`。
+
+### 共享写入用例
+
+在 `backend-core` 上构建业务命令，并使用服务端创建的 `ExecutionContext` 调用 `WriteExecutor.run`。提供经过校验的请求投影、只读锁计划、资格检查、重放授权和写入回调。为账户 ID 预留 PostgreSQL 单 bigint 咨询锁空间。在资格检查回调中获取会话和其他身份锁，然后使用 `WriteTransaction.lock`，按领域和键的升序锁定已声明的业务键。
+
+使用 `WriteTransaction.audit` 记录已批准的审计事实。命令、审计事实和幂等响应在同一事务中提交。凭据和验证码分别保留在其所属的账户协议中。
+
+对于 `/api/v1` 下的浏览器写入，配置 `ALLOWED_ORIGINS`，并提供绑定到当前会话或账户条目的 `CsrfGuard.Verifier`。API 会为每个请求设置 `X-Request-Id`。运行写入用例前先应用数据库迁移。
+
+### 事件投递与定时任务
+
+启动后端进程前应用最新的 Flyway 迁移。使用一个 JVM 并设置 `--spring.profiles.active=delivery-scheduler`，以入队到期任务、分发事件并清理过期事件。运行一个或多个 JVM 并设置 `--spring.profiles.active=delivery-worker`，以认领、执行和确认任务。这两个 profile 均不启动 HTTP 监听器。启用 OSS 清理时，为调度器添加 `file-cleanup`；为加载 SMTP 发送器的角色添加 `mail-delivery`。
+
+- 使用 `WriteTransaction.addEventIntent` 将事件追加到与业务写入相同的事务中。`UserEvents.head` 和 `UserEvents.scan` 读取 PostgreSQL 游标。`EventSignals` 使用每个实例独立的游标读取 Redis 提示。使用 `EventReplay`，按已认证账户和当前来源权限投影事件。
+- 在业务事务中使用 `TaskSchedules.schedule`。在调度器和每个工作进程中注册相同的 `TaskHandler` 集合。调度器使用已注册的任务类型选择到期任务。工作进程使用共享写入事务处理业务变更并记录任务结果。
+- 将 SMTP 发送器绑定到账户所属的邮件记录，并在提交邮件租约后调用。文件、事件和邮件的重试状态保留在所属记录上。
+
+### 实时 HTTP 与 WebSocket
+
+通过 `ALLOWED_ORIGINS` 和 `RealtimeAccess` bean 启用 `realtime-api`。适配器认证 Session Cookie，重新检查其当前状态，验证 hello CSRF 令牌，并投影可见的事件来源。
+
+- `GET /api/v1/account/events/head` 返回账户纪元、头部序列和重放下限。`GET /api/v1/account/events?epoch=<uuid>&after_seq=<seq>` 在限定范围内扫描一页数据。
+- `/api/v1/realtime` 接受版本 1 的 `hello` 帧。有效游标会恢复投递。触发 `sync_reset` 后，加载当前快照并使用新游标发送 `resume`。通过 `ack` 确认最后连续处理的序列。
+- 在将来源连接记录到执行上下文之前，通过 `OriginConnectionLookup` 解析 `X-Origin-Connection-Id`。Redis 将连接租约限定到已认证的账户和 Session。
+
+### 文件服务测试页
+
+S2 在 `file-storage` 的共享 Java 服务之上构建商品图片 API 和界面。S4 使用相同服务处理事项证据。探针前端和控制器是独立的测试组件。生产文件 API 集成后，删除 `dev/fileprobe` 包、`frontend/file-probe/`、`BackendAppApplicationTests` 中的探针路由检查以及本节。
+
+构建后端后，从仓库根目录在两个终端分别启动探针 API 和页面：
+
+```bash
+java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar \
+  --env-file=backend/.env.dev --spring.profiles.active=file-probe
+pnpm --dir frontend exec rsbuild dev --root file-probe
+```
+
+在开发 OSS Bucket 的 CORS 中允许 Origin `http://127.0.0.1:3002` 和 `POST`。打开[测试页](http://127.0.0.1:3002)，上传并核验文件、打开签名读取 URL，再释放测试引用。
+
+## CI 与发布
+
+GitHub Actions 在 Linux 上并行执行后端、后端集成和前端检查。后端使用 OpenJDK 27 和 Maven 执行 `verify` 并输出覆盖率；集成 job 使用独立的 PostgreSQL 和 Redis 容器，先执行 Flyway 迁移，再运行 `verify -Pintegration`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，检查 OpenAPI 生成类型、lint 和格式，再分别检查并构建两个应用。
+
+Jenkins 使用 OpenJDK 27、`.node-version`、`frontend/package.json` 中的 pnpm 版本和 Python 3。发布包构建跳过测试，前端仍需通过 TypeScript 类型检查；单元测试、集成测试、lint 和格式检查由 GitHub Actions 执行。从仓库根目录构建：
+
+```bash
+bash scripts/deploy/build-release.sh var/releases 1
+```
+
+产物目录为 `var/releases/<提交号>-<构建编号>/`，包含压缩包、`SHA256SUMS`、两个前端的静态文件、部署资产、`release.txt`、`backend/backend-app.jar` 和 `backend/maintenance.jar`。systemd 启动 `backend-app.jar`；数据库迁移和维护操作通过 `maintenance.jar` 的 `--env-file` 参数指定维护配置。发布、回退及生产配置见 [v2 首发与发布配置](bits/v2首发与发布配置.md)。
+
+## 文档目录结构
 
 ```text
 docs/
@@ -46,34 +340,23 @@ docs/
 
 入口：[设计基线索引](docs/design/基线索引.md)、[四人任务](docs/design/tasks/索引.md)、[需求基线](docs/requirements/08-需求基线.md)。
 
-## scripts 命令
+## 脚本命令
 
 在仓库根目录运行，完整参数及依赖见 [scripts 使用说明](scripts/README.md)。
 
 | 命令 | 功能 |
 |---|---|
-| `python3 scripts/cli.py report --documents design` | 按清单生成四份设计整合文档，检查本地引用 |
-| `python3 scripts/cli.py check --documents design` | 只读核对设计生成一致性与本地引用 |
+| `python3 scripts/cli.py report --documents design` | 生成设计整合文档并检查本地引用 |
+| `python3 scripts/cli.py check --documents design` | 核对设计生成一致性与本地引用 |
 | `python3 scripts/cli.py report --documents requirements` | 同步需求摘录及需求规格说明书 |
 | `python3 scripts/cli.py check --documents requirements` | 核对需求生成内容、模型摘要及本地引用 |
-| `python3 scripts/cli.py report` | 生成需求与设计文档，默认 `--documents all` |
-| `python3 scripts/cli.py render` | 增量渲染模型 PNG，默认 200 DPI |
-| `python3 scripts/cli.py render --force --dpi 200` | 重新渲染全部模型并更新摘要 |
 | `python3 scripts/cli.py build` | 渲染模型并生成需求与设计文档 |
 | `python3 scripts/cli.py check` | 只读核对模型、全部生成文档及本地引用 |
+| `python3 scripts/cli.py pdf` | 增量导出 `docs/` 到 `docs-pdf/` |
 
-PDF 输出到 `docs-pdf/`，保持文档目录结构：
-
-```bash
-python3 scripts/cli.py pdf
-python3 scripts/cli.py pdf --only docs/design
-python3 scripts/cli.py pdf --check --pdf-link-check on
-```
-
-文档工具检查与帮助：
+文档工具检查：
 
 ```bash
 PYTHONPATH=scripts python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 python3 scripts/cli.py --help
-python3 scripts/cli.py pdf --help
 ```

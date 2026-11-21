@@ -11,7 +11,7 @@ from .markdown import relocate, shift_headings, validate_links
 
 def documents(root: Path, check: bool = False) -> None:
     directory = (root / "docs/design").resolve()
-    manifest = json.loads((directory / "拼合清单.json").read_text())
+    manifest = json.loads((directory / "拼合清单.json").read_text(encoding="utf-8"))
     planned: dict[Path, str] = {}
     source_paths: set[Path] = set()
     identifiers: set[str] = set()
@@ -42,7 +42,7 @@ def documents(root: Path, check: bool = False) -> None:
         anchors = {path: f"{identifier}-{index:02}" for index, path in enumerate(paths, 1)}
         chapters = []
         for path in paths:
-            content = META.sub("", path.read_text()).strip()
+            content = META.sub("", path.read_text(encoding="utf-8")).strip()
             title = re.search(r"^# (.+)$", content, re.MULTILINE)
             if title is None:
                 raise ValueError(f"Missing design chapter title: {path}")
@@ -59,14 +59,14 @@ def documents(root: Path, check: bool = False) -> None:
         planned[output] = generated_markdown(output, body)
     errors = []
     for path in source_paths | planned.keys():
-        content = planned[path] if path in planned else path.read_text()
+        content = planned[path] if path in planned else path.read_text(encoding="utf-8")
         if re.search(r"^#{7,} ", content, re.MULTILINE):
             errors.append(f"{path.name}: heading deeper than H6")
         errors.extend(validate_links(path, content, planned))
     if errors:
         raise ValueError("\n".join(errors))
     stale = [path for path, content in planned.items()
-             if not path.exists() or path.read_text() != content]
+             if not path.exists() or path.read_text(encoding="utf-8") != content]
     if check and stale:
         raise ValueError("Regenerate design documents: " + ", ".join(p.name for p in stale))
     if not check:

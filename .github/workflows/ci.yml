@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend / Maven
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: oracle-openjdk
+          java-version: "27"
+          cache: maven
+          cache-dependency-path: backend/**/pom.xml
+      - name: Verify backend
+        run: ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Log backend coverage
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          report = ET.parse("coverage-report/target/site/jacoco-aggregate/jacoco.xml").getroot()
+          counters = {counter.attrib["type"]: counter.attrib for counter in report.findall("counter")}
+          for kind in ("LINE", "BRANCH"):
+              counter = counters.get(kind, {"covered": 0, "missed": 0})
+              covered = int(counter["covered"])
+              total = covered + int(counter["missed"])
+              value = f"{covered / total:.1%} ({covered}/{total})" if total else "N/A"
+              print(f"Overall {kind.lower()} coverage: {value}")
+          PY
+
+  backend-integration:
+    name: Backend Integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: project1_integration
+          POSTGRES_USER: project1_it_owner
+          POSTGRES_PASSWORD: integration-owner
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U project1_it_owner -d project1_integration"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:8
+        ports:
+          - 6379/tcp
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: oracle-openjdk
+          java-version: "27"
+          cache: maven
+          cache-dependency-path: backend/**/pom.xml
+      - name: Initialize integration database
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+          REDIS_PORT: ${{ job.services.redis.ports[6379] }}
+        run: |
+          docker exec "$POSTGRES_CONTAINER" psql -v ON_ERROR_STOP=1 -U project1_it_owner -d project1_integration \
+            -c "CREATE ROLE project1_it_app LOGIN PASSWORD 'integration-app'"
+          cat > "$RUNNER_TEMP/project1-integration.env" <<EOF
+          APP_ENV=dev
+          DATABASE_URL=jdbc:postgresql://127.0.0.1:${POSTGRES_PORT}/project1_integration
+          DATABASE_USERNAME=project1_it_app
+          DATABASE_PASSWORD=integration-app
+          DATABASE_OWNER_USERNAME=project1_it_owner
+          DATABASE_OWNER_PASSWORD=integration-owner
+          REDIS_URL=redis://127.0.0.1:${REDIS_PORT}/0
+          REDIS_NAMESPACE=project1:integration
+          EOF
+          ./mvnw --batch-mode --no-transfer-progress -pl maintenance -am package -DskipTests
+          java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+            db migrate --env-file="$RUNNER_TEMP/project1-integration.env"
+      - name: Verify backend with PostgreSQL and Redis
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress verify -Pintegration \
+            -Dit.envFile="$RUNNER_TEMP/project1-integration.env"
+
+  frontend:
+    name: Frontend / Vue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check generated API types
+        run: |
+          pnpm run generate:api
+          git diff --exit-code -- shared/api-types.ts
+      - name: Check lint and formatting
+        run: |
+          pnpm run lint
+          pnpm run format:check
+      - name: Type-check and build both apps
+        run: pnpm run build

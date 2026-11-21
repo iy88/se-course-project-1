@@ -10,7 +10,7 @@ def check_repository(root: Path) -> None:
     excluded = {".git", "node_modules"}
     paths = [p for p in root.rglob("*.md") if excluded.isdisjoint(p.parts)]
     for path in paths:
-        errors.extend(validate_links(path.resolve(), path.read_text(), {}))
+        errors.extend(validate_links(path.resolve(), path.read_text(encoding="utf-8"), {}))
     if errors:
         raise ValueError("\n".join(errors))
     print(f"Local Markdown links and anchors: {len(paths)} documents, current")
