@@ -3,6 +3,7 @@ package io.github.iy88.project1.integration;
 import io.github.iy88.project1.BackendAppApplication;
 import io.github.iy88.project1.api.realtime.RealtimeAccess;
 import io.github.iy88.project1.api.realtime.RealtimeSocket;
+import io.github.iy88.project1.api.trade.TradeActorResolver;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.EventIntent;
 import io.github.iy88.project1.core.ExecutionContext;
@@ -15,6 +16,7 @@ import io.github.iy88.project1.messaging.TaskHandler;
 import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.messaging.TaskStream;
 import io.github.iy88.project1.messaging.UserEvents;
+import io.github.iy88.project1.trade.application.TradePorts;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -61,6 +63,7 @@ import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.Mockito.mock;
 
 class InfrastructureIT {
     private static final UUID RUN_ID = UUID.randomUUID();
@@ -393,6 +396,40 @@ class InfrastructureIT {
                 public Optional<Map<String, ?>> project(ExecutionContext context, UserEvents.Event event) {
                     return Optional.of(Map.of("source_id", event.source().id()));
                 }
+            };
+        }
+
+        // S1 infrastructure verification does not exercise trade use cases. The normal trade assembly still
+        // requires the ports and session adapter owned by other tasks, so this base test supplies inert stand-ins.
+        @Bean
+        public TradePorts.Product tradeProduct() {
+            return mock(TradePorts.Product.class);
+        }
+
+        @Bean
+        public TradePorts.Accounts tradeAccounts() {
+            return mock(TradePorts.Accounts.class);
+        }
+
+        @Bean
+        public TradePorts.Conversation tradeConversation() {
+            return mock(TradePorts.Conversation.class);
+        }
+
+        @Bean
+        public TradePorts.Cases tradeCases() {
+            return mock(TradePorts.Cases.class);
+        }
+
+        @Bean
+        public TradePorts.Notifications tradeNotifications() {
+            return mock(TradePorts.Notifications.class);
+        }
+
+        @Bean
+        public TradeActorResolver tradeActorResolver() {
+            return request -> {
+                throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "fixture");
             };
         }
 
