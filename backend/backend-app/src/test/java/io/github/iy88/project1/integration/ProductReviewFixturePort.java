@@ -8,7 +8,6 @@ import io.github.iy88.project1.casemanagement.application.ProductReviewPort;
 import io.github.iy88.project1.casemanagement.application.ReviewCaseSchema;
 import io.github.iy88.project1.casemanagement.application.ReviewDecision;
 import io.github.iy88.project1.casemanagement.application.ReviewManagerAccess;
-import io.github.iy88.project1.casemanagement.application.ReviewNotifications;
 import io.github.iy88.project1.casemanagement.application.ReviewPlan;
 import io.github.iy88.project1.casemanagement.application.SubjectPlan;
 import io.github.iy88.project1.casemanagement.application.TodoItem;
@@ -27,28 +26,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Test-only product, category, account and notification adapter. The case module, its Flyway
- * migration and the shared write executor are real; these fixture tables stand in for the
- * product/account/notification modules until their production adapters are merged.
+ * Test-only product, category and account adapter. The case module, its Flyway migration, the
+ * shared write executor and the notification adapter are real; these fixture tables stand in for
+ * the product and account modules until their production adapters are merged.
  */
-class ProductReviewFixturePort implements ProductReviewPort, ReviewNotifications, ReviewManagerAccess,
-        ReviewActorAccess {
+class ProductReviewFixturePort implements ProductReviewPort, ReviewManagerAccess, ReviewActorAccess {
     private final JdbcClient db;
-    private final JsonMapper json;
     private final LockTrace trace;
-    private final Set<Long> notificationFailures = ConcurrentHashMap.newKeySet();
 
-    ProductReviewFixturePort(JdbcClient db, JsonMapper json, LockTrace trace) {
+    ProductReviewFixturePort(JdbcClient db, LockTrace trace) {
         this.db = db;
-        this.json = json;
         this.trace = trace;
     }
 
@@ -159,30 +151,6 @@ class ProductReviewFixturePort implements ProductReviewPort, ReviewNotifications
     }
 
     @Override
-    public void reviewDecided(WriteTransaction transaction, long sellerAccountId, long auditId, long productId,
-                              String status, String rejectionReason, Instant occurredAt) {
-        var params = json.createObjectNode();
-        params.put("audit_id", Long.toString(auditId));
-        params.put("product_id", Long.toString(productId));
-        params.put("status", status);
-        if (rejectionReason == null) {
-            params.putNull("reason");
-        } else {
-            params.put("reason", rejectionReason);
-        }
-        db.sql("""
-                INSERT INTO review_notification_fixture
-                    (recipient_account_id, event_type, source_type, source_id, intent_key, display_params, occurred_at)
-                VALUES (?, ?, 'product_audit', ?, ?, CAST(? AS jsonb), ?)
-                """).param(sellerAccountId).param("product_review_" + status).param(auditId)
-                .param("product_review_result:" + auditId).param(json.writeValueAsString(params))
-                .param(java.sql.Timestamp.from(occurredAt)).update();
-        if (notificationFailures.remove(auditId)) {
-            throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "通知暂不可用");
-        }
-    }
-
-    @Override
     public void requireManager(ExecutionContext context, String forbiddenCode, int forbiddenStatus) {
         if (!manager(Long.parseLong(context.actorId()))) {
             throw new BusinessError(forbiddenCode, forbiddenStatus, "无管理权限");
@@ -224,14 +192,6 @@ class ProductReviewFixturePort implements ProductReviewPort, ReviewNotifications
             }
         }
         throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "身份已失效");
-    }
-
-    void failNotification(long auditId) {
-        notificationFailures.add(auditId);
-    }
-
-    void reset() {
-        notificationFailures.clear();
     }
 
     LockTrace trace() {

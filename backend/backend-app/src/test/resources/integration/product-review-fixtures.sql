@@ -1,5 +1,5 @@
--- Test-only product, category, session and notification facts. The review case tables are the
--- real moderation_case tables created by Flyway; these tables never ship with the application.
+-- Test-only product, category, account and session fixtures. The review case and notification
+-- tables are the real tables created by Flyway; these fixtures never ship with the application.
 CREATE TABLE review_seller_fixture (
     account_id BIGINT PRIMARY KEY,
     display_name TEXT NOT NULL
@@ -71,17 +71,6 @@ CREATE TABLE review_banned_item_fixture (
     group_name TEXT NOT NULL,
     content TEXT NOT NULL,
     active BOOLEAN NOT NULL
-);
-
-CREATE TABLE review_notification_fixture (
-    notification_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    recipient_account_id BIGINT NOT NULL,
-    event_type TEXT NOT NULL,
-    source_type TEXT NOT NULL,
-    source_id BIGINT NOT NULL,
-    intent_key TEXT NOT NULL UNIQUE,
-    display_params JSONB NOT NULL,
-    occurred_at TIMESTAMPTZ NOT NULL
 );
 
 -- Test projection of the product owner's public visibility rule.

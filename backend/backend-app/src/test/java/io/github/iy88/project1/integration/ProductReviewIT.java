@@ -61,9 +61,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Real PostgreSQL/Spring transaction integration for product-review claim and decision. The case
- * table, Flyway schema, case persistence and shared write executor are production code. Product,
- * category, account and notification schemas are test-only adapters and do not claim production
- * coverage for #74/#75/#76.
+ * and notification tables use the production schema and adapters. Product, category and account
+ * data use fixtures.
  */
 class ProductReviewIT {
     private static final UUID RUN_ID = UUID.randomUUID();
@@ -155,13 +154,12 @@ class ProductReviewIT {
     void resetFixtures() {
         cleanupCases();
         db.sql("""
-                TRUNCATE review_notification_fixture, review_category_application_fixture, review_audit_fixture,
+                TRUNCATE review_category_application_fixture, review_audit_fixture,
                     review_product_category_fixture, review_product_image_fixture, review_product_fixture,
                     review_category_fixture, review_banned_item_fixture, review_manager_fixture,
                     review_session_fixture, review_seller_fixture CASCADE
                 """).update();
         cleanupInfrastructure();
-        port.reset();
         port.trace().clear();
         CASE_BY_AUDIT.clear();
 
@@ -191,7 +189,6 @@ class ProductReviewIT {
     void cleanUp() {
         cleanupCases();
         cleanupInfrastructure();
-        port.reset();
     }
 
     @Test
@@ -209,9 +206,15 @@ class ProductReviewIT {
         assertThat(auditStatus(firstAudit)).isEqualTo("rejected");
         assertThat(productState()).isEqualTo("review_rejected");
         assertThat(publicVisible()).isZero();
-        assertThat(notificationCount()).isEqualTo(1);
-        assertThat(notificationEventType()).isEqualTo("product_review_rejected");
-        assertThat(notificationReason()).isEqualTo("prohibited");
+        assertThat(sellerNotificationCount()).isEqualTo(1);
+        var rejection = notification(firstAudit);
+        assertThat(rejection.recipientAccountId()).isEqualTo(SELLER);
+        assertThat(rejection.eventType()).isEqualTo("product_audit.rejected");
+        assertThat(rejection.sourceType()).isEqualTo("product_audit");
+        assertThat(rejection.sourceId()).isEqualTo(firstAudit);
+        assertThat(rejection.intentKey()).isEqualTo(notificationIntentKey(firstAudit));
+        assertThat(rejection.decision()).isEqualTo("rejected");
+        assertThat(rejection.reason()).isEqualTo("prohibited");
 
         long secondAudit = AUDITS.getAndIncrement();
         long secondCase = submit(secondAudit, NOW.plusSeconds(60), "v2", 2);
@@ -227,7 +230,15 @@ class ProductReviewIT {
         assertThat(auditStatus(secondAudit)).isEqualTo("passed");
         assertThat(productState()).isEqualTo("public");
         assertThat(publicVisible()).isEqualTo(1);
-        assertThat(notificationCount()).isEqualTo(2);
+        assertThat(sellerNotificationCount()).isEqualTo(2);
+        var approval = notification(secondAudit);
+        assertThat(approval.recipientAccountId()).isEqualTo(SELLER);
+        assertThat(approval.eventType()).isEqualTo("product_audit.passed");
+        assertThat(approval.sourceType()).isEqualTo("product_audit");
+        assertThat(approval.sourceId()).isEqualTo(secondAudit);
+        assertThat(approval.intentKey()).isEqualTo(notificationIntentKey(secondAudit));
+        assertThat(approval.decision()).isEqualTo("passed");
+        assertThat(approval.reason()).isNull();
         assertThat(caseActionCount(secondCase, "decide")).isEqualTo(1);
     }
 
@@ -258,7 +269,13 @@ class ProductReviewIT {
                 null, "decide-new-key"))
                 .isInstanceOfSatisfying(BusinessError.class,
                         error -> assertThat(error.code()).isEqualTo("REVIEW_NOT_PENDING"));
-        assertThat(notificationCount()).isEqualTo(1);
+        assertThat(sellerNotificationCount()).isEqualTo(1);
+        var replayNotification = notification(auditId);
+        assertThat(replayNotification.eventType()).isEqualTo("product_audit.passed");
+        assertThat(replayNotification.sourceType()).isEqualTo("product_audit");
+        assertThat(replayNotification.sourceId()).isEqualTo(auditId);
+        assertThat(replayNotification.intentKey()).isEqualTo(notificationIntentKey(auditId));
+        assertThat(replayNotification.reason()).isNull();
         assertThat(caseActionCount(caseId, "decide")).isEqualTo(1);
         assertThat(caseAuditCount(caseId)).isEqualTo(2);
     }
@@ -305,7 +322,7 @@ class ProductReviewIT {
     }
 
     @Test
-    void notificationFailureRollsBackTheProductCategoryCaseActionAndIdempotency() {
+    void notificationConflictRollsBackTheProductCategoryCaseActionAndIdempotency() {
         long auditId = AUDITS.getAndIncrement();
         long caseId = submit(auditId, NOW, "v1", 1);
         db.sql("""
@@ -314,14 +331,19 @@ class ProductReviewIT {
                 VALUES (?, ?, 'New category', 'pending')
                 """).param(APPLICATION).param(auditId).update();
         claim(MANAGER_1, MANAGER_1_SESSION, caseId, "claim-rollback");
-        port.failNotification(auditId);
+
+        // Same seller and intent key as the decision, but different event content forces a conflict.
+        long conflictingNotificationId = insertConflictingNotification(auditId);
+        String conflictingBefore = notificationRowAsJson(conflictingNotificationId);
+
         String key = "decide-rollback";
         var failure = org.assertj.core.api.Assertions.catchThrowableOfType(
                 () -> decide(MANAGER_1, MANAGER_1_SESSION, auditId, ReviewAction.APPROVE, null,
                         ReviewAction.APPROVE, "new category accepted", key),
                 BusinessError.class);
         assertThat(failure).isNotNull();
-        assertThat(failure.status()).isEqualTo(503);
+        assertThat(failure.code()).isEqualTo("NOTIFICATION_INTENT_CONFLICT");
+        assertThat(failure.status()).isEqualTo(409);
         assertThat(failure.operationId()).isNotNull();
 
         assertThat(auditStatus(auditId)).isEqualTo("pending");
@@ -334,7 +356,13 @@ class ProductReviewIT {
         assertThat(caseActionCount(caseId, "decide")).isZero();
         assertThat(operationCount(key)).isZero();
         assertThat(auditCount(failure.operationId())).isZero();
-        assertThat(notificationCount()).isZero();
+        assertThat(sellerNotificationCount()).isEqualTo(1);
+        assertThat(notificationRowAsJson(conflictingNotificationId)).isEqualTo(conflictingBefore);
+
+        // Remove only the conflict seed; the retry must then commit through the real adapter.
+        db.sql("DELETE FROM notification WHERE notification_id = ?")
+                .param(conflictingNotificationId).update();
+        assertThat(sellerNotificationCount()).isZero();
 
         var recovered = decide(MANAGER_1, MANAGER_1_SESSION, auditId, ReviewAction.APPROVE, null,
                 ReviewAction.APPROVE, "new category accepted", key);
@@ -345,7 +373,13 @@ class ProductReviewIT {
         assertThat(productState()).isEqualTo("public");
         assertThat(categoryApplicationStatus(auditId)).isEqualTo("approved");
         assertThat(caseActionCount(caseId, "decide")).isEqualTo(1);
-        assertThat(notificationCount()).isEqualTo(1);
+        assertThat(sellerNotificationCount()).isEqualTo(1);
+        var recoveredNotification = notification(auditId);
+        assertThat(recoveredNotification.eventType()).isEqualTo("product_audit.passed");
+        assertThat(recoveredNotification.sourceType()).isEqualTo("product_audit");
+        assertThat(recoveredNotification.sourceId()).isEqualTo(auditId);
+        assertThat(recoveredNotification.intentKey()).isEqualTo(notificationIntentKey(auditId));
+        assertThat(recoveredNotification.reason()).isNull();
     }
 
     @Test
@@ -531,6 +565,10 @@ class ProductReviewIT {
     }
 
     private static void cleanupInfrastructure() {
+        // Real notification and realtime event facts are scoped to the fixture seller.
+        db.sql("DELETE FROM notification WHERE recipient_account_id = ?").param(SELLER).update();
+        db.sql("DELETE FROM user_event WHERE recipient_account_id = ?").param(SELLER).update();
+        db.sql("DELETE FROM account_event_head WHERE account_id = ?").param(SELLER).update();
         db.sql("DELETE FROM operation_record WHERE actor_id IN (?, ?, ?, ?)")
                 .param(Long.toString(MANAGER_1)).param(Long.toString(MANAGER_2))
                 .param(Long.toString(NON_MANAGER)).param(Long.toString(SELLER)).update();
@@ -564,17 +602,51 @@ class ProductReviewIT {
                 .param(auditId).query(String.class).single();
     }
 
-    private static long notificationCount() {
-        return db.sql("SELECT count(*) FROM review_notification_fixture").query(Long.class).single();
+    private static long sellerNotificationCount() {
+        return db.sql("SELECT count(*) FROM notification WHERE recipient_account_id = ?")
+                .param(SELLER).query(Long.class).single();
     }
 
-    private static String notificationEventType() {
-        return db.sql("SELECT event_type FROM review_notification_fixture").query(String.class).single();
+    private static NotificationRow notification(long auditId) {
+        return db.sql("""
+                SELECT notification_id, recipient_account_id, event_type, source_type, source_id, intent_key,
+                       display_params -> 'values' ->> 'decision' AS decision,
+                       display_params -> 'values' ->> 'reason' AS reason
+                FROM notification
+                WHERE recipient_account_id = ? AND source_type = 'product_audit' AND source_id = ?
+                """).param(SELLER).param(auditId)
+                .query((row, index) -> new NotificationRow(row.getLong("notification_id"),
+                        row.getLong("recipient_account_id"), row.getString("event_type"),
+                        row.getString("source_type"), row.getLong("source_id"), row.getString("intent_key"),
+                        row.getString("decision"), row.getString("reason")))
+                .single();
     }
 
-    private static String notificationReason() {
-        return db.sql("SELECT display_params ->> 'reason' FROM review_notification_fixture")
-                .query(String.class).single();
+    private static String notificationRowAsJson(long notificationId) {
+        return db.sql("SELECT to_jsonb(n)::text FROM notification n WHERE notification_id = ?")
+                .param(notificationId).query(String.class).single();
+    }
+
+    private static long insertConflictingNotification(long auditId) {
+        var displayParams = json.createObjectNode();
+        var values = displayParams.putObject("values");
+        values.put("product_id", Long.toString(PRODUCT));
+        values.put("decision", "rejected");
+        values.put("reason", "previous conflict");
+        return db.sql("""
+                INSERT INTO notification
+                    (recipient_account_id, intent_key, event_type, source_type, source_id, template_key,
+                     template_version, display_params, occurred_at, created_at)
+                VALUES (?, ?, 'product_audit.rejected', 'product_audit', ?, 'product_audit.decision', '1',
+                        CAST(? AS jsonb), statement_timestamp() - interval '1 minute', statement_timestamp())
+                RETURNING notification_id
+                """).param(SELLER).param(notificationIntentKey(auditId)).param(auditId)
+                .param(json.writeValueAsString(displayParams))
+                .query(Long.class).single();
+    }
+
+    private static String notificationIntentKey(long auditId) {
+        return "product_audit.decision:" + auditId;
     }
 
     private static long caseActionCount(long caseId, String actionKind) {
@@ -600,6 +672,10 @@ class ProductReviewIT {
     private static long auditCount(java.util.UUID operationId) {
         return db.sql("SELECT count(*) FROM audit_record WHERE operation_id = ?")
                 .param(operationId).query(Long.class).single();
+    }
+
+    record NotificationRow(long notificationId, long recipientAccountId, String eventType, String sourceType,
+                           long sourceId, String intentKey, String decision, String reason) {
     }
 
     record SubmitRequest(long auditId, Instant submittedAt, String title, int contentVersion) {
@@ -701,9 +777,8 @@ class ProductReviewIT {
         }
 
         @Bean
-        ProductReviewFixturePort fixturePort(JdbcClient db, JsonMapper json,
-                                             ProductReviewFixturePort.LockTrace trace) {
-            return new ProductReviewFixturePort(db, json, trace);
+        ProductReviewFixturePort fixturePort(JdbcClient db, ProductReviewFixturePort.LockTrace trace) {
+            return new ProductReviewFixturePort(db, trace);
         }
 
         @Bean
