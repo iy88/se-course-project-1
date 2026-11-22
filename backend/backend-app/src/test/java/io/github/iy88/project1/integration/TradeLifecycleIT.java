@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.iy88.project1.BackendAppApplication;
 import io.github.iy88.project1.api.CsrfGuard;
 import io.github.iy88.project1.api.trade.TradeActorResolver;
+import io.github.iy88.project1.conversation.application.TradeParticipation;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.LockPlan;
@@ -79,6 +80,7 @@ class TradeLifecycleIT {
     private static ConfigurableApplicationContext app;
     private static JdbcClient db;
     private static TradeApplication trades;
+    private static TradeParticipation participation;
     private static MutableClock clock;
     private static FixturePorts ports;
     private static JsonMapper json;
@@ -104,6 +106,7 @@ class TradeLifecycleIT {
                 "--server.address=127.0.0.1", "--spring.main.banner-mode=off");
         db = app.getBean(JdbcClient.class);
         trades = app.getBean(TradeApplication.class);
+        participation = app.getBean(TradeParticipation.class);
         clock = app.getBean(MutableClock.class);
         ports = app.getBean(FixturePorts.class);
         json = app.getBean(JsonMapper.class);
@@ -320,6 +323,14 @@ class TradeLifecycleIT {
         assertThat(trades.reviewEligibility(tradeId, MANAGER).eligible()).isFalse();
         assertThat(trades.conversationAccess(tradeId).buyerId()).isEqualTo(BUYER_ONE);
         assertThat(trades.conversationAccess(tradeId).contains(SELLER)).isTrue();
+        var participants = participation.participants(tradeId).orElseThrow();
+        assertThat(participants.buyerId()).isEqualTo(BUYER_ONE);
+        assertThat(participants.sellerId()).isEqualTo(SELLER);
+        assertThat(participants.involves(MANAGER)).isFalse();
+        assertThat(participation.participants(Long.MAX_VALUE)).isEmpty();
+        assertThatThrownBy(() -> trades.conversationAccess(Long.MAX_VALUE))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
     }
 
     @Test
@@ -604,16 +615,18 @@ class TradeLifecycleIT {
         assertThat(trades.getTrade(account(BUYER_ONE), pending, List.of()).at("/request/close_reason").stringValue())
                 .isEqualTo("account_banned");
         assertThat(trades.getTrade(account(SELLER), active, List.of()).at("/freeze/items").size()).isEqualTo(2);
-        assertThat(trades.pairFrozen(SELLER, BUYER_ONE)).isTrue();
-        assertThat(trades.pairFrozen(SELLER, BUYER_TWO)).isFalse();
+        assertThat(participation.pairFrozen(SELLER, BUYER_ONE)).isTrue();
+        assertThat(participation.pairFrozen(BUYER_ONE, SELLER)).isTrue();
+        assertThat(participation.pairFrozen(SELLER, BUYER_TWO)).isFalse();
 
         applyRestriction("lift-first-ban", active, (transaction, plan) ->
                 trades.removeAccountBan(transaction, plan, BUYER_ONE, 71, "restriction:71"));
         assertThat(trades.getTrade(account(SELLER), active, List.of()).at("/freeze/items").size()).isEqualTo(1);
+        assertThat(participation.pairFrozen(SELLER, BUYER_ONE)).isTrue();
         applyRestriction("lift-last-ban", active, (transaction, plan) ->
                 trades.removeAccountBan(transaction, plan, BUYER_ONE, 72, "restriction:72"));
         assertThat(trades.getTrade(account(SELLER), active, List.of()).at("/freeze/active").asBoolean()).isFalse();
-        assertThat(trades.pairFrozen(SELLER, BUYER_ONE)).isFalse();
+        assertThat(participation.pairFrozen(SELLER, BUYER_ONE)).isFalse();
     }
 
     private static void applyRestriction(String key, long tradeId, BiConsumer<WriteTransaction, LockPlan> change) {

@@ -1257,9 +1257,14 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     @Override
+    public Optional<TradeModels.ConversationAccess> findConversationAccess(long tradeId) {
+        return repository.find(tradeId)
+                .map(trade -> new TradeModels.ConversationAccess(trade.buyerId(), trade.sellerId(), trade.status()));
+    }
+
+    @Override
     public TradeModels.ConversationAccess conversationAccess(long tradeId) {
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        return new TradeModels.ConversationAccess(trade.buyerId(), trade.sellerId(), trade.status());
+        return findConversationAccess(tradeId).orElseThrow(Trade::notVisible);
     }
 
     @Override

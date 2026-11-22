@@ -106,6 +106,9 @@ public final class TradePorts {
 
     /** Read projection used by the conversation module. */
     public interface Participation {
+        /** Returns the trade participants and status, or empty when the trade does not exist. */
+        Optional<TradeModels.ConversationAccess> findConversationAccess(long tradeId);
+
         TradeModels.ConversationAccess conversationAccess(long tradeId);
 
         boolean pairFrozen(long firstAccountId, long secondAccountId);

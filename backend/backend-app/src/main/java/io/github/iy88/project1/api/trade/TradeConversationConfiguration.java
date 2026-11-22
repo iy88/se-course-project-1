@@ -1,9 +1,11 @@
 package io.github.iy88.project1.api.trade;
 
+import io.github.iy88.project1.conversation.application.TradeParticipation;
 import io.github.iy88.project1.conversation.persistence.ConversationStore;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.trade.application.TradePorts;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
 import org.springframework.context.annotation.Bean;
@@ -16,6 +18,25 @@ class TradeConversationConfiguration {
     @Bean
     TradePorts.Conversation tradeConversation(ConversationStore conversations) {
         return new StoreConversation(conversations);
+    }
+
+    @Bean
+    TradeParticipation tradeParticipation(TradePorts.Participation trades) {
+        return new TradeParticipationAdapter(trades);
+    }
+
+    /** Projects trade reads required by the conversation module. */
+    private record TradeParticipationAdapter(TradePorts.Participation trades) implements TradeParticipation {
+        @Override
+        public Optional<TradeParticipation.Participants> participants(long tradeId) {
+            return trades.findConversationAccess(tradeId)
+                    .map(access -> new TradeParticipation.Participants(access.buyerId(), access.sellerId()));
+        }
+
+        @Override
+        public boolean pairFrozen(long firstAccountId, long secondAccountId) {
+            return trades.pairFrozen(firstAccountId, secondAccountId);
+        }
     }
 
     /** Adapts the shared conversation store to the trade transaction and lock plan. */
