@@ -53,7 +53,7 @@ pipeline {
 
         stage('Build and package') {
             steps {
-                sh 'PROJECT1_RELEASE_MAVEN=mvn bash scripts/deploy/build-release.sh release-artifacts "$BUILD_NUMBER"'
+                sh 'bash scripts/deploy/build-release.sh release-artifacts "$BUILD_NUMBER"'
                 archiveArtifacts(
                     artifacts: 'release-artifacts/*/*.tar.gz,release-artifacts/*/SHA256SUMS',
                     fingerprint: true,
