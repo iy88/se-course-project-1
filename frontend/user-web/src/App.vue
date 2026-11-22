@@ -9,12 +9,11 @@ import { computed, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { session } from "./app/session";
 import { badges, refreshBadges } from "./app/badges";
-import { getDataSource } from "./api/http";
+
 import ToastHost from "./components/ToastHost.vue";
 import AvatarBadge from "./components/AvatarBadge.vue";
 
 const route = useRoute();
-const dataSource = computed(() => getDataSource());
 
 const primaryNav = [
   { name: "home", label: "逛逛", badge: () => 0 },
@@ -53,7 +52,7 @@ watch(
           <span v-if="item.badge() > 0" class="shell__badge">{{ item.badge() }}</span>
         </RouterLink>
       </nav>
-      <RouterLink v-if="session.isAuthenticated.value" to="/me/profile" class="shell__account">
+      <RouterLink v-if="session.isAuthenticated.value" to="/me/settings" class="shell__account">
         <AvatarBadge
           :display-name="session.displayName.value"
           :url="session.avatarUrl.value"
@@ -78,12 +77,6 @@ watch(
         <span v-if="item.badge() > 0" class="shell__badge">{{ item.badge() }}</span>
       </RouterLink>
     </nav>
-
-    <footer v-if="!isAuthScreen" class="shell__footer">
-      <span class="muted">
-        数据源：{{ dataSource === "mock" ? "本地模拟" : "真实接口" }} · 可在「我的 → 账户设置」切换
-      </span>
-    </footer>
   </div>
   <ToastHost />
 </template>
@@ -239,12 +232,6 @@ watch(
   text-decoration: none;
 }
 
-.shell__footer {
-  display: none;
-  padding-inline: var(--space-4);
-  padding-block-end: var(--space-4);
-}
-
 @media (width >= 48rem) {
   .shell {
     padding-block-end: 0;
@@ -264,10 +251,6 @@ watch(
 
   .shell__main {
     padding: var(--space-6) var(--space-5);
-  }
-
-  .shell__footer {
-    display: block;
   }
 }
 </style>
