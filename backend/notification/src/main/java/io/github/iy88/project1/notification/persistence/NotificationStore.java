@@ -54,11 +54,18 @@ public interface NotificationStore {
             return new NotificationItem(notificationId, recipientAccountId, intentKey, createdAt, readAt);
         }
 
-        /** True when this row was produced by the same business intent. */
+        /**
+         * True when this row was produced by the same business intent.
+         *
+         * Template parameters are part of the comparison: the same intent key with
+         * only a different reason would otherwise silently return the old entry
+         * instead of reporting the conflict the contract requires.
+         */
         public boolean describes(NotificationIntent intent) {
             return eventType.equals(intent.eventType()) && source.equals(intent.source())
                     && templateKey.equals(intent.templateKey())
-                    && templateVersion.equals(intent.templateVersion());
+                    && templateVersion.equals(intent.templateVersion())
+                    && displayParams.equals(intent.orderedDisplayParams());
         }
     }
 }
