@@ -10,16 +10,21 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getCase, postCaseMessage, supplementReport } from "../../api/cases";
+import { listMyTodos } from "../../api/aggregation";
 import { listMessages } from "../../api/conversations";
 import type { CaseDetail, CaseMessage, CaseMessageKind } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
 import { formatDateTime, formatRemaining } from "../../app/format";
 import { newIdempotencyKey } from "../../app/keys";
 import {
+  caseActionKindText,
+  caseActorKindText,
   caseDecisionLabels,
   caseMessageKindLabels,
   caseStatusLabels,
   caseStatusTones,
+  enforcementActionText,
+  enforcementStateText,
 } from "../../app/labels";
 import { problemMessage } from "../../app/problems";
 import { session } from "../../app/session";
@@ -39,10 +44,19 @@ const threadMessages = ref<CaseMessage[]>([]);
 const threadStatus = ref<"idle" | "loading" | "ready" | "failed">("idle");
 const threadError = ref<unknown>(null);
 
+/* One open reply form at a time, keyed by the inquiry action it answers. */
+const replyingTo = ref<string | null>(null);
 const replyBody = ref("");
-const replyKind = ref<CaseMessageKind>("statement");
 const replyPending = ref(false);
 const replyError = ref<string | null>(null);
+
+/* Appeals are a separate entry point and carry no inquiry reference. */
+const appealBody = ref("");
+const appealPending = ref(false);
+const appealError = ref<string | null>(null);
+
+/* Pending inquiries come from the todo aggregation, not from the message list. */
+const pendingInquiryIds = ref<string[]>([]);
 
 const supplementNote = ref("");
 const supplementFiles = ref<string[]>([]);
@@ -61,23 +75,9 @@ const appealRemaining = computed(() => {
   return Math.max(0, Math.round((new Date(appealDeadline.value).getTime() - Date.now()) / 1000));
 });
 
-const canReply = computed(
-  () => !archived.value && Boolean(detail.data.value?.thread) && threadStatus.value === "ready",
-);
 const canSupplement = computed(
   () => !archived.value && isReporterView.value && detail.data.value?.case_type === "report",
 );
-
-const kindOptions = computed<{ value: CaseMessageKind; label: string }[]>(() => {
-  const options: { value: CaseMessageKind; label: string }[] = [];
-  if (appealDeadline.value) {
-    options.push({ value: "statement", label: caseMessageKindLabels.statement });
-    if (appealOpen.value) options.push({ value: "appeal", label: caseMessageKindLabels.appeal });
-    return options;
-  }
-  options.push({ value: "statement", label: caseMessageKindLabels.statement });
-  return options;
-});
 
 async function loadThread(): Promise<void> {
   const thread = detail.data.value?.thread;
@@ -107,9 +107,33 @@ async function loadThread(): Promise<void> {
   }
 }
 
+async function loadPendingInquiries(): Promise<void> {
+  const current = detail.data.value;
+  pendingInquiryIds.value = [];
+  if (!current) return;
+  try {
+    const todos = await listMyTodos({ page: 1, page_size: 50 });
+    const ids = new Set<string>();
+    for (const todo of todos.items) {
+      if (todo.kind !== "inquiry_response") continue;
+      const source = todo.source as { case_id?: unknown; inquiry_action_ids?: unknown };
+      if (String(source.case_id ?? "") !== current.case_id) continue;
+      if (!Array.isArray(source.inquiry_action_ids)) continue;
+      for (const id of source.inquiry_action_ids) {
+        if (id !== null && id !== undefined && String(id) !== "") ids.add(String(id));
+      }
+    }
+    pendingInquiryIds.value = [...ids];
+  } catch {
+    // The todo projection is an auxiliary entry point; a failure must not hide the case.
+    pendingInquiryIds.value = [];
+  }
+}
+
 async function load(): Promise<void> {
   await detail.run();
   await loadThread();
+  await loadPendingInquiries();
 }
 
 onMounted(() => {
@@ -120,12 +144,19 @@ watch(caseId, () => {
   void load();
 });
 
-async function submitReply(): Promise<void> {
+function openInquiryReply(actionId: string): void {
+  replyingTo.value = replyingTo.value === actionId ? null : actionId;
+  replyBody.value = "";
+  replyError.value = null;
+}
+
+async function submitInquiryReply(): Promise<void> {
   const current = detail.data.value;
   const thread = current?.thread;
-  if (!current || !thread || replyPending.value) return;
+  const actionId = replyingTo.value;
+  if (!current || !thread || !actionId || replyPending.value) return;
   if (!replyBody.value.trim()) {
-    replyError.value = "请填写回复内容。";
+    replyError.value = "请填写说明内容。";
     return;
   }
   replyError.value = null;
@@ -135,19 +166,48 @@ async function submitReply(): Promise<void> {
       current.case_id,
       {
         thread,
-        message_kind: replyKind.value,
+        message_kind: "statement",
         body: replyBody.value.trim(),
+        inquiry_action_id: actionId,
       },
       newIdempotencyKey(),
     );
     replyBody.value = "";
-    notify.success(replyKind.value === "appeal" ? "申辩已提交。" : "回复已提交。");
+    replyingTo.value = null;
+    notify.success("说明已提交。");
     await load();
     void refreshBadges();
   } catch (caught) {
     replyError.value = problemMessage(caught);
   } finally {
     replyPending.value = false;
+  }
+}
+
+async function submitAppeal(): Promise<void> {
+  const current = detail.data.value;
+  const thread = current?.thread;
+  if (!current || !thread || appealPending.value) return;
+  if (!appealBody.value.trim()) {
+    appealError.value = "请填写申辩内容。";
+    return;
+  }
+  appealError.value = null;
+  appealPending.value = true;
+  try {
+    await postCaseMessage(
+      current.case_id,
+      { thread, message_kind: "appeal", body: appealBody.value.trim() },
+      newIdempotencyKey(),
+    );
+    appealBody.value = "";
+    notify.success("申辩已提交。");
+    await load();
+    void refreshBadges();
+  } catch (caught) {
+    appealError.value = problemMessage(caught);
+  } finally {
+    appealPending.value = false;
   }
 }
 
@@ -236,8 +296,8 @@ async function submitSupplement(): Promise<void> {
           <span class="field__label">处置结果</span>
           <ul class="plain-list">
             <li v-for="(item, index) in detail.data.value.enforcements" :key="index">
-              <span class="state state--danger">{{ item.action }}</span>
-              <span class="muted">当前状态：{{ item.current_state }}</span>
+              <span class="state state--danger">{{ enforcementActionText(item.action) }}</span>
+              <span class="muted">当前状态：{{ enforcementStateText(item.current_state) }}</span>
             </li>
           </ul>
         </div>
@@ -253,9 +313,10 @@ async function submitSupplement(): Promise<void> {
           <li v-for="(action, index) in detail.data.value.actions" :key="index">
             <span class="timeline__dot" aria-hidden="true" />
             <span class="timeline__body">
-              <span>{{ action.action_kind }}</span>
+              <span>{{ caseActionKindText(action.action_kind) }}</span>
               <span class="muted">
-                {{ formatDateTime(action.occurred_at) }} · {{ action.actor_kind }}
+                {{ formatDateTime(action.occurred_at) }} ·
+                {{ caseActorKindText(action.actor_kind) }}
               </span>
             </span>
           </li>
@@ -291,29 +352,81 @@ async function submitSupplement(): Promise<void> {
           </li>
         </ul>
 
-        <form v-if="canReply" class="thread__compose" @submit.prevent="submitReply">
-          <div class="field">
-            <label class="field__label" for="reply-kind">回复类型</label>
-            <select id="reply-kind" v-model="replyKind" class="select">
-              <option v-for="option in kindOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="field__label" for="reply-body">内容</label>
-            <textarea id="reply-body" v-model="replyBody" class="textarea" maxlength="2000" />
-          </div>
-          <p v-if="replyError" class="field__error" role="alert">{{ replyError }}</p>
-          <div class="inline">
-            <button type="submit" class="btn btn--primary" :disabled="replyPending">
-              {{ replyPending ? "提交中…" : replyKind === "appeal" ? "提交申辩" : "提交回复" }}
-            </button>
-          </div>
-        </form>
-        <p v-else-if="archived" class="banner banner--info">
+        <p v-if="archived" class="banner banner--info">
           事项已结案，不能再发言；历史记录仍可查看。
         </p>
+        <template v-else>
+          <div v-if="pendingInquiryIds.length" class="stack stack--tight">
+            <span class="field__label">待回复的问询</span>
+            <div v-for="(actionId, index) in pendingInquiryIds" :key="actionId" class="reply-entry">
+              <div class="inline">
+                <button
+                  type="button"
+                  class="btn btn--small"
+                  :disabled="replyPending"
+                  @click="openInquiryReply(actionId)"
+                >
+                  {{ replyingTo === actionId ? "收起" : "回复问询" }}
+                  <template v-if="pendingInquiryIds.length > 1">
+                    （{{ index + 1 }}/{{ pendingInquiryIds.length }}）
+                  </template>
+                </button>
+                <span class="muted">针对该条问询提交说明</span>
+              </div>
+              <form
+                v-if="replyingTo === actionId"
+                class="thread__compose"
+                @submit.prevent="submitInquiryReply"
+              >
+                <div class="field">
+                  <label class="field__label" :for="`reply-body-${actionId}`">说明内容</label>
+                  <textarea
+                    :id="`reply-body-${actionId}`"
+                    v-model="replyBody"
+                    class="textarea"
+                    maxlength="2000"
+                  />
+                </div>
+                <p v-if="replyError" class="field__error" role="alert">{{ replyError }}</p>
+                <div class="inline">
+                  <button type="submit" class="btn btn--primary" :disabled="replyPending">
+                    {{ replyPending ? "提交中…" : "提交说明" }}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <template v-if="appealDeadline && appealOpen">
+            <div class="reply-entry">
+              <div class="inline">
+                <span class="field__label">处置申辩</span>
+                <span class="muted">截止 {{ formatDateTime(appealDeadline) }}</span>
+              </div>
+              <form class="thread__compose" @submit.prevent="submitAppeal">
+                <div class="field">
+                  <label class="field__label" for="appeal-body">申辩内容</label>
+                  <textarea
+                    id="appeal-body"
+                    v-model="appealBody"
+                    class="textarea"
+                    maxlength="2000"
+                  />
+                </div>
+                <p v-if="appealError" class="field__error" role="alert">{{ appealError }}</p>
+                <div class="inline">
+                  <button type="submit" class="btn btn--primary" :disabled="appealPending">
+                    {{ appealPending ? "提交中…" : "提交申辩" }}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </template>
+
+          <p v-if="!pendingInquiryIds.length && !(appealDeadline && appealOpen)" class="muted">
+            当前没有需要回复的问询或可提交的申辩。
+          </p>
+        </template>
       </section>
 
       <section v-if="canSupplement" class="card">
@@ -430,6 +543,17 @@ async function submitSupplement(): Promise<void> {
 
 .thread__body {
   font-size: 0.875rem;
+}
+
+.reply-entry {
+  padding: var(--space-3);
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.reply-entry + .reply-entry {
+  margin-block-start: var(--space-2);
 }
 
 .thread__compose {

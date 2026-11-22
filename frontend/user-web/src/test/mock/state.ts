@@ -181,6 +181,13 @@ export interface MockMessage {
   body: string;
   created_at: string;
   case_message_kind?: CaseMessageKind;
+  /** Inquiry this statement answers; the API requires it for `statement`. */
+  inquiry_action_id?: string;
+}
+
+/** Stable inquiry identifier derived from the inquiry message. */
+export function inquiryActionIdOf(message: MockMessage): string {
+  return message.inquiry_action_id ?? `inquiry-${message.message_id}`;
 }
 
 export interface MockReadProgress {
@@ -1193,9 +1200,11 @@ export function tradeActions(trade: MockTrade, viewerId: string): TradeAction[] 
         actions.push("decide_cancellation");
       }
       if (current && !trade.dispute) actions.push("open_dispute");
+
       break;
     case "disputed":
       if (trade.dispute?.status === "resolved") actions.push("confirm_dispute_resolution");
+
       break;
     case "completed":
       break;

@@ -622,6 +622,18 @@ describe("cases", () => {
   });
 
   it("accepts an inquiry reply on the case thread", async () => {
+    // The pending inquiry id comes from the todo projection, which is the entry
+    // point the screen uses; the message list itself carries no inquiry ids.
+    const todos = await call<{ items: { kind: string; source: Record<string, unknown> }[] }>(
+      "GET",
+      "/account/todos",
+    );
+    const pending = todos.items.find(
+      (item) => item.kind === "inquiry_response" && String(item.source.case_id) === "6",
+    );
+    const pendingIds = (pending?.source.inquiry_action_ids ?? []) as string[];
+    assert.ok(pendingIds.length > 0, "expected a pending inquiry id for case 6");
+
     const posted = await call<{ case_message_id: string; seq: number }>(
       "POST",
       "/cases/6/messages",
@@ -630,6 +642,7 @@ describe("cases", () => {
           thread: { conversation_kind: "case", conversation_id: "1" },
           message_kind: "statement",
           body: "该台灯为本人自用，三档亮度。",
+          inquiry_action_id: pendingIds[0],
         },
         idempotencyKey: "case-reply-1",
       },
@@ -637,6 +650,32 @@ describe("cases", () => {
     assert.ok(posted.seq > 0);
     const detail = await call<{ actions: { action_kind: string }[] }>("GET", "/cases/6");
     assert.ok(detail.actions.some((action) => action.action_kind === "statement"));
+
+    // Answering the only inquiry removes its todo entry.
+    const after = await call<{ items: { kind: string; source: Record<string, unknown> }[] }>(
+      "GET",
+      "/account/todos",
+    );
+    const remaining = after.items.find(
+      (item) => item.kind === "inquiry_response" && String(item.source.case_id) === "6",
+    );
+    assert.equal(remaining, undefined);
+  });
+
+  it("rejects an inquiry reply without the inquiry reference", async () => {
+    await expectFailure(
+      "POST",
+      "/cases/6/messages",
+      {
+        body: {
+          thread: { conversation_kind: "case", conversation_id: "1" },
+          message_kind: "statement",
+          body: "缺少问询标识的说明。",
+        },
+        idempotencyKey: "case-reply-missing",
+      },
+      "INQUIRY_NOT_PENDING",
+    );
   });
 });
 
