@@ -3,6 +3,7 @@ pipeline {
 
     tools {
         jdk 'jdk-27'
+        maven 'maven-3.10.1'
         nodejs 'node-latest'
     }
 
