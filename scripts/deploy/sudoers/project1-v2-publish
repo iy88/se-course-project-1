@@ -1,7 +1,0 @@
-Cmnd_Alias PROJECT1_V2_UNITS = /usr/bin/systemctl start project1-v2-api@18081.service, \
-    /usr/bin/systemctl stop project1-v2-api@18081.service, \
-    /usr/bin/systemctl restart project1-v2-api@18081.service, \
-    /usr/bin/systemctl start project1-v2-api@18082.service, \
-    /usr/bin/systemctl stop project1-v2-api@18082.service, \
-    /usr/bin/systemctl restart project1-v2-api@18082.service
-project1-v2-deploy ALL=(root) NOPASSWD: PROJECT1_V2_UNITS
