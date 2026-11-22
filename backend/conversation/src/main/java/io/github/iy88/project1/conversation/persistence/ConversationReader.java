@@ -15,13 +15,16 @@ public class ConversationReader {
     private final TradeConversationRepository trades;
     private final ChatMessageRepository chatMessages;
     private final TradeMessageRepository tradeMessages;
+    private final CaseMessageRepository caseMessages;
 
     public ConversationReader(ChatConversationRepository chats, TradeConversationRepository trades,
-                              ChatMessageRepository chatMessages, TradeMessageRepository tradeMessages) {
+                              ChatMessageRepository chatMessages, TradeMessageRepository tradeMessages,
+                              CaseMessageRepository caseMessages) {
         this.chats = chats;
         this.trades = trades;
         this.chatMessages = chatMessages;
         this.tradeMessages = tradeMessages;
+        this.caseMessages = caseMessages;
     }
 
     public List<ChatConversation> chatConversations(long accountId) {
@@ -66,6 +69,18 @@ public class ConversationReader {
                     beforeSeq, page));
         }
         return reversed(tradeMessages.findByTradeConversationIdOrderBySeqDesc(conversationId, page));
+    }
+
+    public List<CaseMessage> caseMessages(long conversationId, Long beforeSeq, Long afterSeq, int limit) {
+        var page = PageRequest.of(0, limit);
+        if (afterSeq != null) {
+            return caseMessages.findByCaseConversationIdAndSeqGreaterThanOrderBySeqAsc(conversationId, afterSeq, page);
+        }
+        if (beforeSeq != null) {
+            return reversed(caseMessages.findByCaseConversationIdAndSeqLessThanOrderBySeqDesc(conversationId,
+                    beforeSeq, page));
+        }
+        return reversed(caseMessages.findByCaseConversationIdOrderBySeqDesc(conversationId, page));
     }
 
     private static <T> List<T> reversed(List<T> descending) {
