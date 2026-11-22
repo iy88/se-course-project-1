@@ -88,6 +88,8 @@ watch(
       URL.revokeObjectURL(url);
     }
   },
+  // The component is created only when a file is already picked, so load it at once.
+  { immediate: true },
 );
 
 onBeforeUnmount(() => {
@@ -111,6 +113,12 @@ function onPointerDown(event: PointerEvent): void {
   (event.target as Element).setPointerCapture?.(event.pointerId);
 }
 
+function pointerScale(): number {
+  const stage = canvas.value?.parentElement;
+  if (!stage || stage.clientWidth === 0) return 1;
+  return OUTPUT / stage.clientWidth;
+}
+
 function pinchDistance(): number {
   const points = [...pointers.values()];
   if (points.length < 2) return 0;
@@ -128,8 +136,10 @@ function onPointerMove(event: PointerEvent): void {
       applyZoom(pinch.zoom * (distance / pinch.distance) ** PINCH_SENSITIVITY);
     }
   } else {
-    offsetX += event.clientX - previous.x;
-    offsetY += event.clientY - previous.y;
+    // Pointer deltas are CSS pixels; the canvas works in output pixels.
+    const factor = pointerScale();
+    offsetX += (event.clientX - previous.x) * factor;
+    offsetY += (event.clientY - previous.y) * factor;
     draw();
   }
   pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
