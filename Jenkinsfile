@@ -8,25 +8,18 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '20'))
     }
 
-    parameters {
-        string(name: 'EXPECTED_REVISION', defaultValue: '', description: 'Full main commit SHA. Required for server staging.')
-        booleanParam(name: 'STAGE_ON_SOURCE', defaultValue: false, description: 'Upload and prepare the release without activating it.')
-    }
-
     stages {
         stage('Checkout') {
             steps {
                 deleteDir()
                 script {
-                    def source = checkout scm
-                    env.RELEASE_REVISION = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                    def expected = params.EXPECTED_REVISION.trim()
-                    if (expected && expected != env.RELEASE_REVISION) {
-                        error('The checked-out commit differs from EXPECTED_REVISION.')
-                    }
-                    if (params.STAGE_ON_SOURCE && (!expected || source.GIT_BRANCH != 'origin/main')) {
-                        error('Server staging requires an explicit SHA and a checkout of origin/main.')
-                    }
+                    checkout scm
+                    env.RELEASE_REVISION = sh(script: '''
+                        set -eu
+                        revision=$(git rev-parse HEAD)
+                        test "$revision" = "$(git rev-parse refs/remotes/origin/main)"
+                        echo "$revision"
+                    ''', returnStdout: true).trim()
                 }
             }
         }
@@ -58,10 +51,7 @@ pipeline {
             }
         }
 
-        stage('Stage on source server') {
-            when {
-                expression { params.STAGE_ON_SOURCE }
-            }
+        stage('Deploy on source server') {
             steps {
                 sshagent(credentials: ['project1-v2-deploy']) {
                     sh 'bash scripts/deploy/upload-release.sh "release-artifacts/${RELEASE_REVISION}-${BUILD_NUMBER}"'

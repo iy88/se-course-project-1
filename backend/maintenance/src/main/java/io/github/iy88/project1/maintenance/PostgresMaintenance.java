@@ -1,11 +1,15 @@
 package io.github.iy88.project1.maintenance;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Set;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.postgresql.util.PasswordUtil;
 
 final class PostgresMaintenance {
@@ -110,15 +114,51 @@ final class PostgresMaintenance {
             }
             validateAppRole(connection);
             restrictConnectionAndSchema(connection);
-            Flyway.configure()
-                    .dataSource(target.jdbcUrl(), owner, ownerPassword)
-                    .defaultSchema("public")
-                    .locations("classpath:db/migration")
-                    .load()
-                    .migrate();
+            flyway().load().migrate();
             grantApplicationAccess(connection);
         }
         verifyAppCredentials();
+    }
+
+    void validate() {
+        // Old releases may only resume when their migration set matches the database.
+        flyway().ignoreMigrationPatterns(new String[0]).load().validate();
+    }
+
+    private FluentConfiguration flyway() {
+        return Flyway.configure()
+                .dataSource(target.jdbcUrl(), owner, ownerPassword)
+                .defaultSchema("public")
+                .locations("classpath:db/migration");
+    }
+
+    void backup(Path output) throws IOException, InterruptedException {
+        if (target.jdbcUrl().contains("?")) {
+            throw new IllegalArgumentException("Database backup requires a JDBC URL without query options");
+        }
+        Path destination = output.toAbsolutePath();
+        Path temporary = Files.createTempFile(destination.getParent(), ".backup-", ".dump");
+        try {
+            var dump = new ProcessBuilder("pg_dump", "--format=custom", "--no-password",
+                    "--host", target.host(), "--port", String.valueOf(target.port()),
+                    "--username", owner, "--dbname", target.database(), "--file", temporary.toString());
+            dump.environment().put("PGPASSWORD", ownerPassword);
+            dump.environment().put("PGCONNECT_TIMEOUT", "5");
+            runBackupCommand(dump);
+            runBackupCommand(new ProcessBuilder("pg_restore", "--list", temporary.toString()));
+            Files.move(temporary, destination);
+            System.out.println("PostgreSQL backup verified: " + destination);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static void runBackupCommand(ProcessBuilder command) throws IOException, InterruptedException {
+        var process = command.redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.INHERIT)
+                .start();
+        if (process.waitFor() != 0) {
+            throw new IllegalStateException(command.command().getFirst() + " failed");
+        }
     }
 
     private void validateAppRole(Connection connection) throws SQLException {

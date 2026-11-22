@@ -18,6 +18,8 @@ public final class MaintenanceCli {
     private static final String USAGE = """
             Usage: java -jar maintenance.jar db init --env-file PATH --admin-user USER
                    java -jar maintenance.jar db migrate --env-file PATH
+                   java -jar maintenance.jar db backup --env-file PATH --backup-file PATH
+                   java -jar maintenance.jar db validate --env-file PATH
                    java -jar maintenance.jar db reset --env-file PATH
                    java -jar maintenance.jar db reset --env-file PATH --confirm TOKEN [--admin-user USER]
                    java -jar maintenance.jar oss reset --env-file PATH [--confirm TOKEN]
@@ -67,6 +69,8 @@ public final class MaintenanceCli {
                     postgres.migrate();
                     System.out.println("PostgreSQL migration and application grants: complete");
                 }
+                case "db backup" -> new PostgresMaintenance(config).backup(options.backupFile());
+                case "db validate" -> new PostgresMaintenance(config).validate();
                 case "db reset" -> {
                     var postgres = new PostgresMaintenance(config);
                     var redis = new RedisMaintenance(config);
@@ -102,7 +106,10 @@ public final class MaintenanceCli {
         } catch (IllegalArgumentException | IllegalStateException failure) {
             System.err.println(failure.getMessage());
         } catch (IOException failure) {
-            System.err.println("Unable to read the configured .env file");
+            System.err.println("Unable to read configuration or prepare the database backup");
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            System.err.println("PostgreSQL backup interrupted");
         }
         return 1;
     }
@@ -154,7 +161,7 @@ public final class MaintenanceCli {
         void run(char[] password) throws SQLException;
     }
 
-    record Options(Path envFile, String command, String confirmation, String adminUser) {
+    record Options(Path envFile, String command, String confirmation, String adminUser, Path backupFile) {
         static Options parse(String[] args) {
             if (args.length < 3 || args.length > 8) {
                 return null;
@@ -163,6 +170,7 @@ public final class MaintenanceCli {
             Path envFile = null;
             String confirmation = null;
             String admin = null;
+            Path backupFile = null;
             for (int index = 2; index < args.length;) {
                 String argument = args[index];
                 String option;
@@ -206,6 +214,16 @@ public final class MaintenanceCli {
                         }
                         admin = value;
                     }
+                    case "--backup-file" -> {
+                        if (backupFile != null) {
+                            return null;
+                        }
+                        try {
+                            backupFile = Path.of(value);
+                        } catch (InvalidPathException invalidPath) {
+                            return null;
+                        }
+                    }
                     default -> {
                         return null;
                     }
@@ -213,12 +231,14 @@ public final class MaintenanceCli {
             }
             boolean valid = switch (command) {
                 case "db init" -> envFile != null && admin != null && confirmation == null;
-                case "db migrate" -> envFile != null && admin == null && confirmation == null;
+                case "db migrate", "db validate" -> envFile != null && admin == null && confirmation == null;
+                case "db backup" -> envFile != null && admin == null && confirmation == null && backupFile != null;
                 case "db reset" -> envFile != null && (admin == null || confirmation != null);
                 case "oss reset" -> envFile != null && admin == null;
                 default -> false;
             };
-            return valid ? new Options(envFile, command, confirmation, admin) : null;
+            return valid && (backupFile == null || command.equals("db backup"))
+                    ? new Options(envFile, command, confirmation, admin, backupFile) : null;
         }
     }
 

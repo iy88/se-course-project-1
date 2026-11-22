@@ -31,3 +31,4 @@ ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10)
 ssh "${ssh_options[@]}" "$server" "umask 077; mkdir -- '$incoming'"
 scp "${ssh_options[@]}" "$artifact_dir/project1-$release_id.tar.gz" "$artifact_dir/SHA256SUMS" "$server:$incoming/"
 ssh "${ssh_options[@]}" "$server" "bash -s -- '$incoming' '$root/releases'" < "$(dirname "$0")/prepare-release.sh"
+ssh "${ssh_options[@]}" "$server" "python3 '$root/releases/$release_id/deploy/activate-release.py' '$release_id'"

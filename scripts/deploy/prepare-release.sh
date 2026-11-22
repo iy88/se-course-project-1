@@ -29,6 +29,7 @@ archive="project1-$release_id.tar.gz"
 )
 
 destination="$releases/$release_id"
+umask 022
 mkdir -- "$destination"
 prepared=false
 cleanup() {
@@ -38,7 +39,7 @@ cleanup() {
 }
 trap cleanup EXIT
 tar -xzf "$incoming/$archive" -C "$destination"
-for required in backend/backend-app.jar backend/maintenance.jar user-web/index.html admin-web/index.html release.txt; do
+for required in backend/backend-app.jar backend/maintenance.jar user-web/index.html admin-web/index.html release.txt deploy/activate-release.py; do
     test -s "$destination/$required"
 done
 grep -qxF "revision=${release_id%-*}" "$destination/release.txt"
