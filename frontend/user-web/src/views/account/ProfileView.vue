@@ -6,7 +6,7 @@
  * aggregation page and the trade counterparty projection all show the same value.
  */
 import { computed, ref } from "vue";
-import { putAvatar, removeAvatar, updateProfile } from "../../api/account";
+import { removeAvatar, setAvatar, updateProfile } from "../../api/account";
 import { uploadVerifiedFile } from "../../api/files";
 import { newIdempotencyKey } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
@@ -58,7 +58,8 @@ async function onAvatarSelected(event: Event): Promise<void> {
     const fileId = await uploadVerifiedFile("account_avatar", file, null, () =>
       newIdempotencyKey(),
     );
-    await putAvatar(fileId, newIdempotencyKey());
+    // Design 0.2.6: the avatar is set through the profile endpoint, not its own route.
+    await setAvatar(fileId, newIdempotencyKey());
     await refreshSession();
     notify.success("头像已更新。");
   } catch (caught) {

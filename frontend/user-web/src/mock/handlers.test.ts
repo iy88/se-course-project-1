@@ -690,7 +690,7 @@ describe("file uploads", () => {
     resetMockState();
   });
 
-  it("authorises, verifies and references an avatar", async () => {
+  it("authorises, verifies and references an avatar through the profile endpoint", async () => {
     const created = await call<{ file_id: string; state: string }>("POST", "/files/uploads", {
       body: {
         purpose: "account_avatar",
@@ -706,21 +706,50 @@ describe("file uploads", () => {
       idempotencyKey: "complete-1",
     });
     assert.equal(verified.state, "verified");
-    const avatar = await call<{ file_id: string; url: string }>("PUT", "/account/avatar", {
-      body: { file_id: created.file_id },
-      idempotencyKey: "avatar-1",
-    });
-    assert.equal(avatar.file_id, created.file_id);
+    const profile = await call<{ display_name: string; avatar_url: string | null }>(
+      "PATCH",
+      "/account/profile",
+      { body: { avatar_file_id: created.file_id }, idempotencyKey: "avatar-1" },
+    );
+    assert.ok(profile.avatar_url);
+    assert.equal(profile.display_name, "林同学", "an omitted name keeps its value");
     const identity = await call<Identity>("GET", "/account/session");
-    assert.ok(identity.account.avatar_url);
+    assert.equal(identity.account.avatar_url, profile.avatar_url);
+
+    // Removing the avatar reports the default state and keeps the name.
+    const removed = await call<{ display_name: string; avatar_url: string | null }>(
+      "PATCH",
+      "/account/profile",
+      { body: { avatar_file_id: null }, idempotencyKey: "avatar-2" },
+    );
+    assert.equal(removed.avatar_url, null);
+    assert.equal(removed.display_name, "林同学");
   });
 
   it("refuses a file whose purpose is not the avatar purpose", async () => {
     await expectFailure(
-      "PUT",
-      "/account/avatar",
-      { body: { file_id: "11" }, idempotencyKey: "avatar-2" },
+      "PATCH",
+      "/account/profile",
+      { body: { avatar_file_id: "11" }, idempotencyKey: "avatar-3" },
       "FILE_PURPOSE_MISMATCH",
+    );
+  });
+
+  it("refuses an avatar file owned by another account", async () => {
+    await expectFailure(
+      "PATCH",
+      "/account/profile",
+      { body: { avatar_file_id: "14" }, idempotencyKey: "avatar-4" },
+      "RESOURCE_NOT_VISIBLE",
+    );
+  });
+
+  it("refuses a profile update that changes nothing", async () => {
+    await expectFailure(
+      "PATCH",
+      "/account/profile",
+      { body: {}, idempotencyKey: "avatar-5" },
+      "INPUT_INVALID",
     );
   });
 });

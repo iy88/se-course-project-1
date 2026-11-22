@@ -4,7 +4,6 @@
  */
 import { request } from "./http";
 import type {
-  AvatarResult,
   ChangeEmailRequest,
   ChangePasswordRequest,
   CurrentIdentity,
@@ -93,13 +92,11 @@ export function changeEmail(
 }
 
 /** Set or replace the avatar with a verified `account_avatar` file. */
-export function putAvatar(fileId: string, idempotencyKey: string): Promise<AvatarResult> {
-  return request<AvatarResult>("PUT", "/account/avatar", {
-    body: { file_id: fileId },
-    idempotencyKey,
-  });
+export function setAvatar(fileId: string, idempotencyKey: string): Promise<UpdateProfileResult> {
+  return updateProfile({ avatar_file_id: fileId }, idempotencyKey);
 }
 
-export function removeAvatar(idempotencyKey: string): Promise<void> {
-  return request<void>("DELETE", "/account/avatar", { idempotencyKey });
+/** Remove the current avatar; the interface then shows the default. */
+export function removeAvatar(idempotencyKey: string): Promise<UpdateProfileResult> {
+  return updateProfile({ avatar_file_id: null }, idempotencyKey);
 }

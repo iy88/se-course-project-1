@@ -468,8 +468,41 @@ const routes: Route[] = [
     pattern: ["account", "profile"],
     handler: ({ accountId, body }) => {
       const account = accountById(accountId);
-      account.display_name = requireString(body, "display_name");
-      return { account_id: account.account_id, display_name: account.display_name };
+      const hasName = body.display_name !== undefined;
+      const hasAvatar = Object.prototype.hasOwnProperty.call(body, "avatar_file_id");
+      if (!hasName && !hasAvatar) {
+        fail(422, "INPUT_INVALID", "请至少提交显示名称或头像。");
+      }
+      if (hasName) {
+        account.display_name = requireString(body, "display_name");
+      }
+      if (hasAvatar) {
+        const fileId = body.avatar_file_id;
+        if (fileId === null) {
+          account.avatar_file_id = null;
+        } else {
+          const id = typeof fileId === "string" ? fileId : "";
+          const file = state.files.find((item) => item.file_id === id);
+          if (!file || file.owner_account_id !== accountId) {
+            fail(404, "RESOURCE_NOT_VISIBLE", "文件不存在。");
+          }
+          if (file.purpose !== "account_avatar") {
+            fail(422, "FILE_PURPOSE_MISMATCH", "该文件用途不是头像。");
+          }
+          if (file.state !== "verified") {
+            fail(409, "FILE_NOT_REFERENCEABLE", "文件尚未完成核验。");
+          }
+          account.avatar_file_id = id;
+        }
+      }
+      const avatarFile = account.avatar_file_id
+        ? state.files.find((item) => item.file_id === account.avatar_file_id)
+        : undefined;
+      return {
+        account_id: account.account_id,
+        display_name: account.display_name,
+        avatar_url: avatarFile?.url ?? null,
+      };
     },
   },
   {
@@ -508,35 +541,6 @@ const routes: Route[] = [
       return { account_id: account.account_id, email: account.email };
     },
   },
-  {
-    method: "PUT",
-    pattern: ["account", "avatar"],
-    handler: ({ accountId, body }) => {
-      const account = accountById(accountId);
-      const fileId = requireString(body, "file_id");
-      const file = state.files.find((item) => item.file_id === fileId);
-      if (!file || file.owner_account_id !== accountId) {
-        fail(404, "RESOURCE_NOT_VISIBLE", "文件不存在。");
-      }
-      if (file.purpose !== "account_avatar") {
-        fail(422, "FILE_PURPOSE_MISMATCH", "该文件用途不是头像。");
-      }
-      if (file.state !== "verified") {
-        fail(409, "FILE_NOT_REFERENCEABLE", "文件尚未完成核验。");
-      }
-      account.avatar_file_id = fileId;
-      return { file_id: fileId, url: file.url, expires_at: file.expires_at };
-    },
-  },
-  {
-    method: "DELETE",
-    pattern: ["account", "avatar"],
-    handler: ({ accountId }) => {
-      accountById(accountId).avatar_file_id = null;
-      return undefined;
-    },
-  },
-
   /* -- files -- */
   {
     method: "POST",

@@ -134,24 +134,22 @@ export interface ChangeEmailRequest {
   new_code: string;
 }
 
+/**
+ * API-COM-AUTH-009 `PATCH /account/profile` (design 0.2.6, renamed to
+ * 修改个人资料). At least one field must be sent; an omitted field keeps its
+ * current value and `avatar_file_id: null` removes the avatar. A provided file id
+ * must be the caller's already verified `account_avatar`.
+ */
 export interface UpdateProfileRequest {
-  display_name: string;
+  display_name?: string;
+  avatar_file_id?: string | null;
 }
 
 export interface UpdateProfileResult {
   account_id: string;
   display_name: string;
-}
-
-/**
- * Avatar mutation. Proposed shape for the account avatar feature requested by
- * issue #75 (`本人已核验的 account_avatar 文件`); the file purpose is
- * `account_avatar` and the uploaded file must already be `verified`.
- */
-export interface AvatarResult {
-  file_id: string;
-  url: string;
-  expires_at: string;
+  /** Short-lived signed URL for the current avatar; null shows the default. */
+  avatar_url: string | null;
 }
 
 /* -------------------------------------------------------------------- files */
