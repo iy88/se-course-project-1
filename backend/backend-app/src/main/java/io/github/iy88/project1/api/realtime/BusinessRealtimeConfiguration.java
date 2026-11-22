@@ -1,6 +1,7 @@
 package io.github.iy88.project1.api.realtime;
 
 import io.github.iy88.project1.messaging.RealtimeEventSources;
+import io.github.iy88.project1.notification.application.NotificationQueries;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
@@ -15,6 +16,12 @@ import org.springframework.context.annotation.Profile;
 @Profile("infrastructure & !dependency-probe & !file-probe")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class BusinessRealtimeConfiguration {
+    @Bean
+    RealtimeEventSources.Notifications realtimeNotifications(NotificationQueries notifications) {
+        return (context, notificationId) -> notifications.findRecipientItem(context, notificationId)
+                .map(item -> new RealtimeEventSources.NotificationHint(item.readAt()));
+    }
+
     @Bean
     public RealtimeAccess realtimeAccess(RealtimeSessions sessions,
                                          RealtimeEventSources.Notifications notifications,

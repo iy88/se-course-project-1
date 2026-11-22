@@ -5,15 +5,16 @@ import io.github.iy88.project1.api.realtime.OriginConnectionLookup;
 import io.github.iy88.project1.api.realtime.RealtimeAccess;
 import io.github.iy88.project1.api.realtime.RealtimeSessions;
 import io.github.iy88.project1.api.realtime.RealtimeSocket;
-import io.github.iy88.project1.messaging.RealtimeEventSources;
-import io.github.iy88.project1.messaging.RealtimeEventSources.ConversationKind;
-import io.github.iy88.project1.messaging.RealtimeEventSources.ConversationRef;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.EventIntent;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.messaging.EventDispatch;
+import io.github.iy88.project1.messaging.RealtimeEventSources;
+import io.github.iy88.project1.messaging.RealtimeEventSources.ConversationKind;
+import io.github.iy88.project1.messaging.RealtimeEventSources.ConversationRef;
 import io.github.iy88.project1.messaging.UserEvents;
+import io.github.iy88.project1.notification.application.NotificationQueries;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -23,8 +24,10 @@ import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +115,8 @@ class BusinessRealtimeIT {
             var db = first == null ? null : first.getBean(JdbcClient.class);
             var redis = first == null ? null : first.getBean(StringRedisTemplate.class);
             if (db != null) {
+                db.sql("DELETE FROM notification WHERE recipient_account_id IN (?, ?) AND intent_key LIKE ?")
+                        .param(ACCOUNT_A).param(ACCOUNT_B).param("realtime:" + RUN_ID + ":%").update();
                 db.sql("DELETE FROM user_event WHERE recipient_account_id IN (?, ?)")
                         .param(ACCOUNT_A).param(ACCOUNT_B).update();
                 db.sql("DELETE FROM account_event_head WHERE account_id IN (?, ?)")
@@ -135,8 +140,8 @@ class BusinessRealtimeIT {
             helloAtHead(a1, first, ACCOUNT_A);
             helloAtHead(a2, second, ACCOUNT_A);
             helloAtHead(b, first, ACCOUNT_B);
-            long firstNotification = SOURCES.notification(ACCOUNT_A);
-            long secondNotification = SOURCES.notification(ACCOUNT_B);
+            long firstNotification = createNotification(first, ACCOUNT_A);
+            long secondNotification = createNotification(first, ACCOUNT_B);
 
             persist(first, context(ACCOUNT_A, SESSION_A1), List.of(
                     notificationCreated(ACCOUNT_A, firstNotification, "same:a:" + RUN_ID),
@@ -156,6 +161,23 @@ class BusinessRealtimeIT {
             assertThat(other.path("data").path("notification_id").stringValue())
                     .isEqualTo(Long.toString(secondNotification));
             assertThat(a1.noFrame(Duration.ofSeconds(1))).isTrue();
+
+            var queries = first.getBean(NotificationQueries.class);
+            var view = queries.get(context(ACCOUNT_A, SESSION_A1), firstNotification);
+            assertThat(view.notificationId()).isEqualTo(firstNotification);
+            assertThat(view.source()).isNull();
+
+            long isolatedSequence = other.path("account_seq").asLong();
+            persist(first, context(ACCOUNT_B, SESSION_B), List.of(
+                    notificationCreated(ACCOUNT_B, firstNotification, "isolated:b:" + RUN_ID)));
+            dispatch(first);
+            var advance = b.receiveEvent();
+            assertThat(advance.path("type").stringValue()).isEqualTo("cursor_advance");
+            assertThat(advance.path("from_seq").asLong()).isEqualTo(isolatedSequence + 1);
+            assertThat(advance.path("through_seq").asLong()).isEqualTo(isolatedSequence + 1);
+            assertThat(advance.path("event_type").isMissingNode()).isTrue();
+            assertThat(advance.path("data").isMissingNode()).isTrue();
+            assertThat(advance.path("notification_id").isMissingNode()).isTrue();
         }
     }
 
@@ -166,8 +188,8 @@ class BusinessRealtimeIT {
             helloAtHead(a2, second, ACCOUNT_A);
             var events = first.getBean(UserEvents.class);
             long before = events.head(ACCOUNT_A).headSequence();
-            var ids = List.of(SOURCES.notification(ACCOUNT_A), SOURCES.notification(ACCOUNT_A),
-                    SOURCES.notification(ACCOUNT_A));
+            var ids = List.of(createNotification(first, ACCOUNT_A), createNotification(first, ACCOUNT_A),
+                    createNotification(first, ACCOUNT_A));
             persist(first, context(ACCOUNT_A, SESSION_A1), List.of(
                     notificationCreated(ACCOUNT_A, ids.get(0), "order:1:" + RUN_ID),
                     notificationCreated(ACCOUNT_A, ids.get(1), "order:2:" + RUN_ID),
@@ -208,7 +230,7 @@ class BusinessRealtimeIT {
         var conversation = SOURCES.conversation(ConversationKind.CHAT, ACCOUNT_A);
         long firstMessage = conversation.message(7, null);
         long secondMessage = conversation.message(8, null);
-        long notification = SOURCES.notification(ACCOUNT_A);
+        long notification = createNotification(first, ACCOUNT_A);
 
         try (var origin = open(first, SESSION_A1); var other = open(second, SESSION_A2)) {
             var originHello = helloAtHead(origin, first, ACCOUNT_A);
@@ -241,8 +263,8 @@ class BusinessRealtimeIT {
             long hiddenSequence = hidden.path("through_seq").asLong();
 
             conversation.readable(true);
-            Instant readAt = Instant.now().minusSeconds(5);
-            SOURCES.read(notification, readAt);
+            Instant readAt = Instant.now().minusSeconds(5).truncatedTo(ChronoUnit.MICROS);
+            setNotificationReadAt(first, notification, readAt);
             var suppliedConnection = originHello.path("connection_id").stringValue();
             var lookup = second.getBean(OriginConnectionLookup.class);
             var ownerSession = new RealtimeAccess.Session(ACCOUNT_A, SESSION_A1, 1L, "business-it");
@@ -267,7 +289,7 @@ class BusinessRealtimeIT {
             var nonce = UUID.randomUUID().toString();
             other.send(Map.of("type", "ping", "nonce", nonce));
             assertThat(other.receiveType("pong").path("nonce").stringValue()).isEqualTo(nonce);
-            assertThat(SOURCES.notificationState(notification).readAt).isEqualTo(readAt);
+            assertThat(storedNotificationReadAt(first, notification)).isEqualTo(readAt);
 
             conversation.readable(false);
             var replay = request(first, "/api/v1/account/events?epoch="
@@ -303,7 +325,7 @@ class BusinessRealtimeIT {
             var head = request(first, "/api/v1/account/events/head", SESSION_A1);
             long headSequence = head.path("head_seq").asLong();
             String epoch = head.path("epoch").stringValue();
-            long notification = SOURCES.notification(ACCOUNT_A);
+            long notification = createNotification(first, ACCOUNT_A);
             persist(first, context(ACCOUNT_A, SESSION_A1), List.of(
                     notificationCreated(ACCOUNT_A, notification, "cold:" + RUN_ID)));
 
@@ -326,7 +348,7 @@ class BusinessRealtimeIT {
     void normalEntryProjectsNotificationAndConversationEventsTogether() throws Exception {
         var conversation = SOURCES.conversation(ConversationKind.TRADE, ACCOUNT_A);
         long message = conversation.message(3, null);
-        long notification = SOURCES.notification(ACCOUNT_A);
+        long notification = createNotification(first, ACCOUNT_A);
 
         try (var connection = open(first, SESSION_A1)) {
             helloAtHead(connection, first, ACCOUNT_A);
@@ -389,6 +411,41 @@ class BusinessRealtimeIT {
                 app.getBean(UserEvents.class).persist(context, intents));
     }
 
+    private static long createNotification(ConfigurableApplicationContext app, long account) {
+        return app.getBean(JdbcClient.class).sql("""
+                        INSERT INTO public.notification (recipient_account_id, intent_key, event_type,
+                                source_type, source_id, template_key, template_version, display_params,
+                                occurred_at, created_at)
+                        VALUES (?, ?, 'product_audit.passed', 'product_audit', ?, 'product_audit.decision', '1',
+                                '{"values":{}}'::jsonb, statement_timestamp() - interval '1 minute',
+                                statement_timestamp() - interval '1 minute')
+                        RETURNING notification_id
+                        """)
+                .param(account)
+                .param("realtime:" + RUN_ID + ":" + UUID.randomUUID())
+                .param(ThreadLocalRandom.current().nextLong(1L << 40, 1L << 50))
+                .query(Long.class)
+                .single();
+    }
+
+    private static void setNotificationReadAt(ConfigurableApplicationContext app, long notification, Instant readAt) {
+        int updated = app.getBean(JdbcClient.class)
+                .sql("UPDATE public.notification SET read_at = ? WHERE notification_id = ?")
+                .param(Timestamp.from(readAt))
+                .param(notification)
+                .update();
+        assertThat(updated).isEqualTo(1);
+    }
+
+    private static Instant storedNotificationReadAt(ConfigurableApplicationContext app, long notification) {
+        return app.getBean(JdbcClient.class)
+                .sql("SELECT read_at FROM public.notification WHERE notification_id = ?")
+                .param(notification)
+                .query(Timestamp.class)
+                .single()
+                .toInstant();
+    }
+
     private static void dispatch(ConfigurableApplicationContext app) {
         assertThat(app.getBean(EventDispatch.class).publishDue()).isPositive();
     }
@@ -442,25 +499,10 @@ class BusinessRealtimeIT {
 
     static final class Controlled {
         private final Map<UUID, SessionState> sessions = new ConcurrentHashMap<>();
-        private final Map<Long, NotificationState> notifications = new ConcurrentHashMap<>();
         private final Map<ConversationKey, ConversationState> conversations = new ConcurrentHashMap<>();
 
         void addSession(UUID session, long account) {
             sessions.put(session, new SessionState(account, session));
-        }
-
-        long notification(long account) {
-            long id = ThreadLocalRandom.current().nextLong(1L << 40, 1L << 50);
-            notifications.put(id, new NotificationState(account));
-            return id;
-        }
-
-        NotificationState notificationState(long id) {
-            return notifications.get(id);
-        }
-
-        void read(long id, Instant readAt) {
-            notifications.get(id).readAt = readAt;
         }
 
         void revoke(UUID session) {
@@ -476,7 +518,6 @@ class BusinessRealtimeIT {
 
         void clear() {
             sessions.clear();
-            notifications.clear();
             conversations.clear();
         }
 
@@ -516,16 +557,6 @@ class BusinessRealtimeIT {
             private SessionState(long account, UUID id) {
                 this.account = account;
                 this.id = id;
-            }
-        }
-
-        static final class NotificationState {
-            private final long owner;
-            private volatile boolean readable = true;
-            private volatile Instant readAt;
-
-            private NotificationState(long owner) {
-                this.owner = owner;
             }
         }
 
@@ -579,16 +610,6 @@ class BusinessRealtimeIT {
                 public PublicAccountLimits publicLimits() {
                     return new PublicAccountLimits(12, 256, 64);
                 }
-            };
-        }
-
-        @Bean
-        public RealtimeEventSources.Notifications notifications() {
-            return (context, notificationId) -> {
-                var state = SOURCES.notifications.get(notificationId);
-                if (state == null || !state.readable
-                        || state.owner != Controlled.account(context)) return Optional.empty();
-                return Optional.of(new RealtimeEventSources.NotificationHint(state.readAt));
             };
         }
 
