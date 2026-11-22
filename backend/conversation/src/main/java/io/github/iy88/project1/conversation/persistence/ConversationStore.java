@@ -83,7 +83,8 @@ public class ConversationStore {
         return chats.findByAccountLowIdAndAccountHighId(pair.lowAccountId(), pair.highAccountId());
     }
 
-    public ChatConversation lockChat(WriteTransaction transaction, long conversationId) {        var holder = new AtomicReference<ChatConversation>();
+    public ChatConversation lockChat(WriteTransaction transaction, long conversationId) {
+        var holder = new AtomicReference<ChatConversation>();
         transaction.lock(key(LockPlan.Domain.CHAT_CONVERSATION, conversationId),
                 () -> holder.set(chats.lockById(conversationId).orElseThrow(ConversationStore::participantRequired)));
         return holder.get();
@@ -91,6 +92,10 @@ public class ConversationStore {
 
     public ChatConversation chat(long conversationId) {
         return chats.findById(conversationId).orElseThrow(ConversationStore::participantRequired);
+    }
+
+    public TradeConversation trade(long conversationId) {
+        return trades.findById(conversationId).orElseThrow(ConversationStore::participantRequired);
     }
 
     public ChatMessage appendChatText(WriteTransaction transaction, ChatConversation conversation,

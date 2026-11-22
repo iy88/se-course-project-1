@@ -55,6 +55,30 @@ public class ConversationQueries {
         return new ConversationViews.MessagePage(items, lastSeq(items), firstSeq(items), "active");
     }
 
+    public ConversationViews.MessagePage pageTrade(ExecutionContext context, long conversationId, Long beforeSeq,
+                                                   Long afterSeq, int limit) {
+        long actor = accountId(context);
+        var conversation = store.trade(conversationId);
+        var participants = trades.participants(conversation.tradeId()).orElse(null);
+        if (participants == null || !participants.involves(actor)) {
+            throw participantRequired();
+        }
+        if (beforeSeq != null && afterSeq != null) {
+            throw new BusinessError("INPUT_INVALID", 422, "before_seq 与 after_seq 只能二选一");
+        }
+        var messages = reader.tradeMessages(conversationId, beforeSeq, afterSeq, pageSize(limit));
+        var senderIds = new HashSet<Long>();
+        for (TradeMessage message : messages) {
+            if (message.senderAccountId() != null) {
+                senderIds.add(message.senderAccountId());
+            }
+        }
+        var profiles = accounts.profiles(senderIds);
+        var items = messages.stream().map(message -> tradeMessage(message, profiles)).toList();
+        return new ConversationViews.MessagePage(items, lastSeq(items), firstSeq(items),
+                conversation.archived() ? "archived" : "active");
+    }
+
     public ConversationViews.Page<ConversationViews.Summary> list(ExecutionContext context, int page, int pageSize) {
         long actor = accountId(context);
         int currentPage = Math.max(1, page);
@@ -113,6 +137,16 @@ public class ConversationQueries {
                 new ConversationViews.Sender(message.senderAccountId(),
                         displayName(message.senderAccountId(), profiles), "account"),
                 "text", message.body(), message.createdAt(), null, null);
+    }
+
+    private ConversationViews.Message tradeMessage(TradeMessage message, Map<Long, AccountDirectory.Profile> profiles) {
+        var sender = "system".equals(message.senderKind())
+                ? new ConversationViews.Sender(null, "系统", "system")
+                : new ConversationViews.Sender(message.senderAccountId(),
+                        displayName(message.senderAccountId(), profiles), "account");
+        String sourceRef = message.sourceType() == null ? null : message.sourceType() + ":" + message.sourceId();
+        return new ConversationViews.Message(message.id(), message.seq(), sender, message.messageType(),
+                message.body(), message.createdAt(), message.eventType(), sourceRef);
     }
 
     private static List<ConversationViews.Branch> sortedBranches(List<ConversationViews.Branch> branches) {
