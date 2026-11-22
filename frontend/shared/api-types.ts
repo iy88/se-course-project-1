@@ -20,10 +20,225 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/admin/cases/{case_id}/claim": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Claim a product-review case */
+    post: operations["claimCase"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/product-reviews/{audit_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read a claimed product review */
+    get: operations["getProductReview"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/product-reviews/{audit_id}/decision": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Submit a product-review decision */
+    post: operations["decideProductReview"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/management/todos": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the management product-review queue */
+    get: operations["listManagementTodos"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: never;
+  schemas: {
+    Error: {
+      error: {
+        code: string;
+        message: string;
+        details?: {
+          [key: string]: unknown;
+        } | null;
+      };
+      /** Format: uuid */
+      request_id: string;
+      /** Format: uuid */
+      operation_id?: string | null;
+    };
+    CategoryApplication: {
+      application_id: string;
+      proposed_name: string;
+      /** @enum {string} */
+      status: "pending" | "approved" | "rejected" | "withdrawn";
+    };
+    ClaimResponse: {
+      case_id: string;
+      /** @enum {string} */
+      case_status: "claimed";
+      claimed_manager_id: string;
+      /** Format: date-time */
+      claimed_at: string;
+      already_claimed: boolean;
+    };
+    ReviewDetail: {
+      audit_id: string;
+      product_id: string;
+      case_id: string;
+      /** @enum {string} */
+      status: "pending" | "passed" | "rejected" | "withdrawn";
+      /** Format: date-time */
+      submitted_at: string;
+      seller: {
+        id: string;
+        display_name: string;
+      };
+      claim: {
+        manager_id: string;
+        /** Format: date-time */
+        claimed_at: string;
+      };
+      current_content: {
+        title: string;
+        description: string;
+        /** Format: int64 */
+        price_cents: number;
+        content_version: number;
+        images: {
+          file_id: string;
+          /** Format: uri */
+          url: string;
+          /** Format: date-time */
+          expires_at: string;
+        }[];
+        categories: {
+          id: string;
+          name: string;
+        }[];
+      };
+      category_application?: null | {
+        application_id: string;
+        proposed_name: string;
+        /** @enum {string} */
+        status: "pending" | "approved" | "rejected" | "withdrawn";
+      };
+      banned_scope: {
+        id: string;
+        group: string;
+        content: string;
+      }[];
+      review_result?: null | {
+        /** @enum {string} */
+        decision: "approved" | "rejected";
+        reason: string | null;
+        reviewed_content_version: number;
+        /** Format: date-time */
+        decided_at: string;
+        decided_by: string;
+      };
+    };
+    DecisionRequest: {
+      /** @enum {string} */
+      decision: "approved" | "rejected";
+      reason?: string;
+      /** @enum {string} */
+      category_application_decision?: "approved" | "rejected";
+      category_application_reason?: string;
+      banned_item_ids?: string[];
+    };
+    DecisionResponse: {
+      audit_id: string;
+      /** @enum {string} */
+      status: "passed" | "rejected";
+      case_id: string;
+      /** @enum {string} */
+      case_status: "decided";
+      product: {
+        id: string;
+        lifecycle_state: string;
+        content_version: number;
+      };
+      category_application: null | {
+        application_id: string;
+        proposed_name: string;
+        /** @enum {string} */
+        status: "pending" | "approved" | "rejected" | "withdrawn";
+      };
+      reviewed_content_version: number;
+      /** Format: date-time */
+      decided_at: string;
+    };
+    ManagementTodoPage: {
+      items: {
+        case_id: string;
+        /** @enum {string} */
+        kind: "product_review" | "report" | "dispute" | "exception";
+        /** Format: date-time */
+        created_at: string;
+        /** Format: date-time */
+        updated_at: string;
+        summary: {
+          audit_id: string;
+          product_id: string;
+        };
+      }[];
+      page: number;
+      page_size: number;
+      /** Format: int64 */
+      total: number;
+      counts_by_kind: {
+        /** Format: int64 */
+        product_review: number;
+        /** Format: int64 */
+        report: number;
+        /** Format: int64 */
+        dispute: number;
+        /** Format: int64 */
+        exception: number;
+      };
+      /** Format: date-time */
+      as_of: string;
+    };
+  };
   responses: never;
   parameters: never;
   requestBodies: never;
@@ -50,6 +265,289 @@ export interface operations {
           "application/json": {
             message: string;
           };
+        };
+      };
+    };
+  };
+  claimCase: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        "X-CSRF-Token": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Case claimed or already claimed by the same manager */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ClaimResponse"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Request failed the CSRF checks or lacks required management access */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Case not visible */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Case already claimed by another manager */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Invalid identifier or idempotency key */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Review dependency unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  getProductReview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        audit_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Review detail */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-store";
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReviewDetail"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Review not visible to this manager */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Invalid audit identifier */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Review dependency unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  decideProductReview: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        "X-CSRF-Token": string;
+      };
+      path: {
+        audit_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DecisionRequest"];
+      };
+    };
+    responses: {
+      /** @description Review decided */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DecisionResponse"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Request failed the CSRF checks or lacks required management access */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Review not visible to this manager */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Review is no longer pending */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Invalid decision input */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Review dependency unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  listManagementTodos: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+        ownership?: "unclaimed" | "mine";
+        kind?: "product_review" | "report" | "dispute" | "exception";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Management queue page */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-store";
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ManagementTodoPage"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Management qualification required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Invalid filter or pagination */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Review dependency unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
         };
       };
     };
