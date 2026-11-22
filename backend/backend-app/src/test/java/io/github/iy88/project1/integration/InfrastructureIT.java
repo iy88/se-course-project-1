@@ -416,11 +416,6 @@ class InfrastructureIT {
         }
 
         @Bean
-        public TradePorts.Conversation tradeConversation() {
-            return mock(TradePorts.Conversation.class);
-        }
-
-        @Bean
         public TradePorts.Cases tradeCases() {
             return mock(TradePorts.Cases.class);
         }

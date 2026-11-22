@@ -72,11 +72,18 @@ public final class TradePorts {
         Map<Long, AccountProfile> profiles(Set<Long> accountIds);
     }
 
+    /**
+     * Trade conversation boundary. The implementation records conversation row locks in the caller's
+     * {@link WriteTransaction}; callers plan the conversation keys and must not wrap the lock call in
+     * another {@code transaction.lock}. Append and archive use the row already locked in this
+     * transaction or the row created by {@link #ensure} and never take a second lock.
+     */
     public interface Conversation {
         long ensure(WriteTransaction transaction, long tradeId, long productId, long buyerId, long sellerId);
 
         OptionalLong find(long tradeId);
 
+        /** Locks the conversation row and records that lock in the current write transaction. */
         void lockConversation(WriteTransaction transaction, long conversationId);
 
         void append(WriteTransaction transaction, long conversationId, UUID businessEventId, String eventType,

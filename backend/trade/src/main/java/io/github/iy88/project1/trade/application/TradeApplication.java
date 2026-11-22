@@ -1113,7 +1113,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
             branches.put(trade.id(), requireConversationId(trade.id()));
         }
         for (long branch : new TreeSet<>(branches.values())) {
-            transaction.lock(conversationKey(branch), () -> conversations.lockConversation(transaction, branch));
+            conversations.lockConversation(transaction, branch);
         }
         return branches;
     }
@@ -1424,8 +1424,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
 
     private long requireConversation(WriteTransaction transaction, long tradeId) {
         long conversationId = requireConversationId(tradeId);
-        transaction.lock(conversationKey(conversationId),
-                () -> conversations.lockConversation(transaction, conversationId));
+        conversations.lockConversation(transaction, conversationId);
         return conversationId;
     }
 

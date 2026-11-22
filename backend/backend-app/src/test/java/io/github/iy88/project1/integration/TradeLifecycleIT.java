@@ -39,12 +39,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
@@ -61,6 +59,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
@@ -157,7 +156,7 @@ class TradeLifecycleIT {
                 .findFirst().orElseThrow().id();
         long loser = rows.stream().filter(row -> "closed".equals(row.status())).findFirst().orElseThrow().id();
         assertThat(ports.occupancy(product)).isEqualTo(winner);
-        assertThat(ports.archived(loser)).isTrue();
+        assertThat(archived(loser)).isTrue();
         assertThat(db.sql("SELECT close_reason FROM trade WHERE status = 'closed' AND product_id = ?")
                 .param(product).query(String.class).single()).isEqualTo("other_user_locked");
         assertThat(db.sql("SELECT count(*) FROM trade_state_history WHERE trade_id = ?")
@@ -187,8 +186,16 @@ class TradeLifecycleIT {
                 .param(tradeId).query(Long.class).single()).isEqualTo(1);
         assertThat(db.sql("SELECT count(*) FROM user_event WHERE source_type = 'trade' AND source_id = ?")
                 .param(tradeId).query(Long.class).single()).isEqualTo(1);
-        assertThat(ports.messages.stream().filter(message -> "request_created".equals(message.type())).count())
-                .isEqualTo(1);
+        assertThat(conversationCount(tradeId)).isEqualTo(1);
+        assertThat(progressAccounts(tradeId)).containsExactlyInAnyOrder(BUYER_ONE, SELLER);
+        assertThat(messageCount(tradeId, "request_created")).isEqualTo(1);
+        assertThat(messageCount(tradeId)).isEqualTo(1);
+        assertThat(db.sql("""
+                SELECT source_type IS NULL AND source_id IS NULL
+                FROM trade_message m
+                JOIN trade_conversation c ON c.trade_conversation_id = m.trade_conversation_id
+                WHERE c.trade_id = ? AND m.event_type = 'request_created'
+                """).param(tradeId).query(Boolean.class).single()).isTrue();
         assertThatThrownBy(() -> trades.accept(account(SELLER), "stale-" + RUN,
                 new TradeCommands.Versioned(tradeId, 99)))
                 .isInstanceOfSatisfying(BusinessError.class,
@@ -244,6 +251,12 @@ class TradeLifecycleIT {
                 agreement(tradeId, null, version, 9000));
         long agreementId = Long.parseLong(proposed.data().path("agreement").path("id").stringValue());
         version = proposed.data().path("trade").path("version").asInt();
+        assertThat(db.sql("""
+                SELECT count(*) FROM trade_message m
+                JOIN trade_conversation c ON c.trade_conversation_id = m.trade_conversation_id
+                WHERE c.trade_id = ? AND m.event_type = 'agreement_proposed'
+                    AND m.source_type = 'agreement_proposal' AND m.source_id = ?
+                """).param(tradeId).param(agreementId).query(Long.class).single()).isEqualTo(1);
         var decided = trades.decideAgreement(account(SELLER), "agree-" + RUN,
                 new TradeCommands.DecideAgreement(tradeId, agreementId, "accept", version));
         version = decided.data().path("trade").path("version").asInt();
@@ -259,11 +272,16 @@ class TradeLifecycleIT {
         version = change.data().path("trade").path("version").asInt();
         String decideChangeKey = "change-agree-" + RUN;
         var decideChange = new TradeCommands.DecideAgreement(tradeId, changeId, "accept", version);
-        ports.failAppend = true;
+        long messagesBeforeFailure = messageCount(tradeId);
+        long seqBeforeFailure = seqHead(tradeId);
+        ports.failNotification = true;
         assertThatThrownBy(() -> trades.decideAgreement(account(SELLER), decideChangeKey, decideChange))
                 .isInstanceOfSatisfying(BusinessError.class,
-                        error -> assertThat(error.code()).isEqualTo("TEST_CONVERSATION_FAILURE"));
-        ports.failAppend = false;
+                        error -> assertThat(error.code()).isEqualTo("TEST_NOTIFICATION_FAILURE"));
+        ports.failNotification = false;
+        assertThat(messageCount(tradeId)).isEqualTo(messagesBeforeFailure);
+        assertThat(seqHead(tradeId)).isEqualTo(seqBeforeFailure);
+        assertThat(archived(tradeId)).isFalse();
         assertThat(db.sql("SELECT count(*) FROM agreement_decision WHERE agreement_id = ?")
                 .param(changeId).query(Long.class).single()).isZero();
         assertThat(db.sql("SELECT status FROM agreement_version WHERE id = ?").param(agreementId)
@@ -287,7 +305,14 @@ class TradeLifecycleIT {
         assertThat(completed.data().path("trade").path("status").stringValue()).isEqualTo("completed");
         assertThat(completed.data().path("trade").path("terminal_reason").stringValue()).isEqualTo("completed");
         assertThat(ports.occupancy(product)).isNull();
-        assertThat(ports.archived(tradeId)).isTrue();
+        assertThat(archived(tradeId)).isTrue();
+        assertThat(messageCount(tradeId, "trade_completed")).isEqualTo(1);
+        assertThat(db.sql("""
+                SELECT count(*) FROM trade_message m
+                JOIN trade_conversation c ON c.trade_conversation_id = m.trade_conversation_id
+                WHERE c.trade_id = ? AND m.event_type = 'trade_completed'
+                    AND c.archived_at IS NOT NULL AND m.created_at <= c.archived_at
+                """).param(tradeId).query(Long.class).single()).isEqualTo(1);
         assertThat(completed.data().path("trade").path("product").path("price_cents").asLong()).isEqualTo(10000);
         var eligibility = trades.reviewEligibility(tradeId, BUYER_ONE);
         assertThat(eligibility.eligible()).isTrue();
@@ -391,7 +416,7 @@ class TradeLifecycleIT {
         assertThat(db.sql("SELECT end_reason FROM confirmation_wait WHERE trade_id = ?")
                 .param(tradeId).query(String.class).single()).isEqualTo("timeout");
         assertThat(ports.occupancy(product)).isEqualTo(tradeId);
-        assertThat(ports.archived(tradeId)).isFalse();
+        assertThat(archived(tradeId)).isFalse();
 
         long restoreCase = 60_000 + tradeId;
         trades.restore(account(MANAGER), "restore-" + RUN,
@@ -410,7 +435,7 @@ class TradeLifecycleIT {
         assertThat(db.sql("SELECT count(*) FROM trade_confirmation WHERE trade_id = ? AND invalidated_at IS NULL")
                 .param(tradeId).query(Long.class).single()).isZero();
         assertThat(ports.occupancy(product)).isEqualTo(tradeId);
-        assertThat(ports.archived(tradeId)).isFalse();
+        assertThat(archived(tradeId)).isFalse();
 
         int versionNow = db.sql("SELECT version FROM trade WHERE id = ?").param(tradeId)
                 .query(Integer.class).single();
@@ -479,7 +504,14 @@ class TradeLifecycleIT {
         assertThat(terminated.data().path("trade").path("status").stringValue()).isEqualTo("terminated");
         assertThat(terminated.data().path("trade").path("terminal_reason").stringValue()).isEqualTo("cancelled");
         assertThat(ports.occupancy(product)).isNull();
-        assertThat(ports.archived(tradeId)).isTrue();
+        assertThat(archived(tradeId)).isTrue();
+        assertThat(messageCount(tradeId, "trade_terminated")).isEqualTo(1);
+        assertThat(db.sql("""
+                SELECT count(*) FROM trade_message m
+                JOIN trade_conversation c ON c.trade_conversation_id = m.trade_conversation_id
+                WHERE c.trade_id = ? AND m.event_type = 'trade_terminated'
+                    AND c.archived_at IS NOT NULL AND m.created_at <= c.archived_at
+                """).param(tradeId).query(Long.class).single()).isEqualTo(1);
         assertThat(db.sql("SELECT status FROM trade_dispute WHERE id = ?").param(secondDisputeId)
                 .query(String.class).single()).isEqualTo("terminated");
         assertThat(db.sql("SELECT status FROM trade_dispute WHERE id = ?").param(disputeId)
@@ -487,18 +519,30 @@ class TradeLifecycleIT {
     }
 
     @Test
-    void failedConversationAppendRollsBackTradeHistoryAndIdempotency() {
+    void failedNotificationAfterCreationRollsBackConversationHistoryAndIdempotency() {
         long product = product(SELLER);
-        ports.failAppend = true;
+        long conversationsBefore = db.sql("SELECT count(*) FROM trade_conversation")
+                .query(Long.class).single();
+        long messagesBefore = db.sql("SELECT count(*) FROM trade_message").query(Long.class).single();
+        long progressBefore = db.sql("SELECT count(*) FROM trade_read_progress")
+                .query(Long.class).single();
         String key = "rollback-" + RUN;
+        ports.failNotification = true;
         assertThatThrownBy(() -> trades.createPurchaseRequest(account(BUYER_TWO), key,
                 new TradeCommands.CreatePurchaseRequest(product, null, 7)))
-                .isInstanceOf(BusinessError.class);
-        ports.failAppend = false;
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TEST_NOTIFICATION_FAILURE"));
+        ports.failNotification = false;
         assertThat(db.sql("SELECT count(*) FROM trade WHERE buyer_id = ? AND product_id = ?")
                 .param(BUYER_TWO).param(product).query(Long.class).single()).isZero();
         assertThat(db.sql("SELECT count(*) FROM operation_record WHERE actor_id = ? AND idempotency_key = ?")
                 .param(Long.toString(BUYER_TWO)).param(key).query(Long.class).single()).isZero();
+        assertThat(db.sql("SELECT count(*) FROM trade_conversation").query(Long.class).single())
+                .isEqualTo(conversationsBefore);
+        assertThat(db.sql("SELECT count(*) FROM trade_message").query(Long.class).single())
+                .isEqualTo(messagesBefore);
+        assertThat(db.sql("SELECT count(*) FROM trade_read_progress").query(Long.class).single())
+                .isEqualTo(progressBefore);
     }
 
     @Test
@@ -509,11 +553,13 @@ class TradeLifecycleIT {
                 .param(tradeId).query(Long.class).single();
         String key = "rollback-accept-" + RUN;
         var command = new TradeCommands.Versioned(tradeId, 1);
-        ports.failAppend = true;
+        long messagesBefore = messageCount(tradeId);
+        long seqBefore = seqHead(tradeId);
+        ports.failNotification = true;
         assertThatThrownBy(() -> trades.accept(account(SELLER), key, command))
                 .isInstanceOfSatisfying(BusinessError.class,
-                        error -> assertThat(error.code()).isEqualTo("TEST_CONVERSATION_FAILURE"));
-        ports.failAppend = false;
+                        error -> assertThat(error.code()).isEqualTo("TEST_NOTIFICATION_FAILURE"));
+        ports.failNotification = false;
         assertThat(ports.occupancy(product)).isNull();
         assertThat(db.sql("SELECT status FROM trade WHERE id = ?").param(tradeId).query(String.class).single())
                 .isEqualTo("pending_acceptance");
@@ -523,8 +569,21 @@ class TradeLifecycleIT {
                 .param(tradeId).query(Long.class).single()).isEqualTo(1);
         assertThat(db.sql("SELECT count(*) FROM audit_record WHERE target_type = 'trade' AND target_id = ?")
                 .param(tradeId).query(Long.class).single()).isEqualTo(before);
+        assertThat(db.sql("SELECT count(*) FROM operation_record WHERE actor_id = ? AND idempotency_key = ?")
+                .param(Long.toString(SELLER)).param(key).query(Long.class).single()).isZero();
+        assertThat(conversationCount(tradeId)).isEqualTo(1);
+        assertThat(messageCount(tradeId, "request_accepted")).isZero();
+        assertThat(messageCount(tradeId)).isEqualTo(messagesBefore);
+        assertThat(seqHead(tradeId)).isEqualTo(seqBefore);
+        assertThat(archived(tradeId)).isFalse();
         assertThat(trades.accept(account(SELLER), key, command).replayed()).isFalse();
         assertThat(ports.occupancy(product)).isEqualTo(tradeId);
+        assertThat(conversationCount(tradeId)).isEqualTo(1);
+        assertThat(progressAccounts(tradeId)).containsExactlyInAnyOrder(BUYER_ONE, SELLER);
+        assertThat(messageCount(tradeId, "request_accepted")).isEqualTo(1);
+        assertThat(messageCount(tradeId)).isEqualTo(messagesBefore + 1);
+        assertThat(seqHead(tradeId)).isEqualTo(seqBefore + 1);
+        assertThat(archived(tradeId)).isFalse();
     }
 
     @Test
@@ -540,7 +599,7 @@ class TradeLifecycleIT {
         applyRestriction("second-ban", active, (transaction, plan) ->
                 trades.applyAccountBan(transaction, plan, BUYER_ONE, 72, "限制交易", "restriction:72"));
 
-        assertThat(ports.archived(pending)).isTrue();
+        assertThat(archived(pending)).isTrue();
         assertThat(ports.occupancy(activeProduct)).isEqualTo(active);
         assertThat(trades.getTrade(account(BUYER_ONE), pending, List.of()).at("/request/close_reason").stringValue())
                 .isEqualTo("account_banned");
@@ -643,6 +702,45 @@ class TradeLifecycleIT {
     private record TradeRow(long id, String status) {
     }
 
+    private static long conversationCount(long tradeId) {
+        return db.sql("SELECT count(*) FROM trade_conversation WHERE trade_id = ?")
+                .param(tradeId).query(Long.class).single();
+    }
+
+    private static List<Long> progressAccounts(long tradeId) {
+        return db.sql("""
+                SELECT p.account_id FROM trade_read_progress p
+                JOIN trade_conversation c ON c.trade_conversation_id = p.trade_conversation_id
+                WHERE c.trade_id = ? ORDER BY p.account_id
+                """).param(tradeId).query(Long.class).list();
+    }
+
+    private static long messageCount(long tradeId) {
+        return db.sql("""
+                SELECT count(*) FROM trade_message m
+                JOIN trade_conversation c ON c.trade_conversation_id = m.trade_conversation_id
+                WHERE c.trade_id = ?
+                """).param(tradeId).query(Long.class).single();
+    }
+
+    private static long messageCount(long tradeId, String eventType) {
+        return db.sql("""
+                SELECT count(*) FROM trade_message m
+                JOIN trade_conversation c ON c.trade_conversation_id = m.trade_conversation_id
+                WHERE c.trade_id = ? AND m.event_type = ?
+                """).param(tradeId).param(eventType).query(Long.class).single();
+    }
+
+    private static long seqHead(long tradeId) {
+        return db.sql("SELECT seq_head FROM trade_conversation WHERE trade_id = ?")
+                .param(tradeId).query(Long.class).single();
+    }
+
+    private static boolean archived(long tradeId) {
+        return db.sql("SELECT archived_at IS NOT NULL FROM trade_conversation WHERE trade_id = ?")
+                .param(tradeId).query(Boolean.class).single();
+    }
+
     private static long product(long seller) {
         long product = 700_000 + PRODUCT_SEQUENCE.incrementAndGet()
                 + Math.floorMod(RUN.getLeastSignificantBits(), 100_000);
@@ -676,6 +774,11 @@ class TradeLifecycleIT {
             return;
         }
         String in = String.join(",", tradeIds.stream().map(String::valueOf).toList());
+        db.sql("DELETE FROM trade_message WHERE trade_conversation_id IN "
+                + "(SELECT trade_conversation_id FROM trade_conversation WHERE trade_id IN (" + in + "))").update();
+        db.sql("DELETE FROM trade_read_progress WHERE trade_conversation_id IN "
+                + "(SELECT trade_conversation_id FROM trade_conversation WHERE trade_id IN (" + in + "))").update();
+        db.sql("DELETE FROM trade_conversation WHERE trade_id IN (" + in + ")").update();
         db.sql("DELETE FROM user_event WHERE recipient_account_id IN (?, ?, ?)")
                 .param(BUYER_ONE).param(BUYER_TWO).param(SELLER).update();
         db.sql("DELETE FROM account_event_head WHERE account_id IN (?, ?, ?)")
@@ -729,31 +832,17 @@ class TradeLifecycleIT {
         }
     }
 
-    static class FixturePorts implements TradePorts.Product, TradePorts.Accounts, TradePorts.Conversation,
-            TradePorts.Cases, TradePorts.Notifications {
+    static class FixturePorts implements TradePorts.Product, TradePorts.Accounts, TradePorts.Cases,
+            TradePorts.Notifications {
         final Map<Long, TradePorts.ProductState> products = new ConcurrentHashMap<>();
         final Map<Long, Boolean> restricted = new ConcurrentHashMap<>();
-        final Map<Long, Long> tradeConversations = new ConcurrentHashMap<>();
-        final Map<Long, Long> conversationTrades = new ConcurrentHashMap<>();
-        final List<Message> messages = new CopyOnWriteArrayList<>();
-        final Set<Long> archived = ConcurrentHashMap.newKeySet();
-        final AtomicLong conversationIds = new AtomicLong(800_000);
         final AtomicInteger timeoutCases = new AtomicInteger(900_000);
-        volatile boolean failAppend;
+        volatile boolean failNotification;
 
         void reset() {
             products.clear();
             restricted.clear();
-            tradeConversations.clear();
-            conversationTrades.clear();
-            messages.clear();
-            archived.clear();
-            failAppend = false;
-        }
-
-        boolean archived(long tradeId) {
-            Long conversation = tradeConversations.get(tradeId);
-            return conversation != null && archived.contains(conversation);
+            failNotification = false;
         }
 
         @Override
@@ -854,45 +943,6 @@ class TradeLifecycleIT {
         }
 
         @Override
-        public long ensure(WriteTransaction transaction, long tradeId, long productId, long buyerId, long sellerId) {
-            return tradeConversations.computeIfAbsent(tradeId, id -> {
-                long conversation = conversationIds.incrementAndGet();
-                conversationTrades.put(conversation, id);
-                return conversation;
-            });
-        }
-
-        @Override
-        public OptionalLong find(long tradeId) {
-            Long conversation = tradeConversations.get(tradeId);
-            return conversation == null ? OptionalLong.empty() : OptionalLong.of(conversation);
-        }
-
-        @Override
-        public void lockConversation(WriteTransaction transaction, long conversationId) {
-            db.sql("SELECT true FROM pg_advisory_xact_lock(?)").param(0x5000_0000_0000_0000L + conversationId)
-                    .query(Boolean.class).single();
-        }
-
-        @Override
-        public void append(WriteTransaction transaction, long conversationId, UUID businessEventId,
-                           String eventType, String body, ResourceRef sourceRef) {
-            transaction.audit("fixture.conversation.append",
-                    new ResourceRef("trade", conversationTrades.get(conversationId)), null,
-                    json.createObjectNode().put("event_id", businessEventId.toString()));
-            if (failAppend) {
-                throw new BusinessError("TEST_CONVERSATION_FAILURE", 500, "fixture");
-            }
-            messages.add(new Message(conversationId, businessEventId, eventType, body,
-                    sourceRef == null ? null : sourceRef.type()));
-        }
-
-        @Override
-        public void archive(WriteTransaction transaction, long conversationId, long tradeId, String reason) {
-            archived.add(conversationId);
-        }
-
-        @Override
         public void lockAndValidate(WriteTransaction transaction, long caseId, long managerId,
                                     long tradeId, String basisRef) {
             db.sql("SELECT true FROM pg_advisory_xact_lock(?)").param(0x6000_0000_0000_0000L + caseId)
@@ -911,17 +961,18 @@ class TradeLifecycleIT {
         @Override
         public void register(WriteTransaction transaction, UUID businessEventId, String eventType,
                              long tradeId, Set<Long> recipients) {
+            if (failNotification) {
+                throw new BusinessError("TEST_NOTIFICATION_FAILURE", 500, "fixture");
+            }
             transaction.addEventIntent(recipients, eventType.replace('.', '_'), 1,
                     new ResourceRef("trade", tradeId), eventType + ":" + businessEventId, null, null);
-        }
-
-        record Message(long conversationId, UUID businessEventId, String type, String body, String sourceType) {
         }
     }
 
     @TestConfiguration(proxyBeanMethods = false)
     public static class Fixtures {
         @Bean
+        @Primary
         public MutableClock mutableClock() {
             return new MutableClock();
         }

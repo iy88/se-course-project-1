@@ -614,7 +614,7 @@ class BusinessRealtimeIT {
         }
 
         @Bean
-        public RealtimeEventSources.Conversations conversations() {
+        public RealtimeEventSources.Conversations fixtureConversationProjection() {
             return new RealtimeEventSources.Conversations() {
                 @Override
                 public boolean canRead(ExecutionContext context, ConversationRef conversation) {

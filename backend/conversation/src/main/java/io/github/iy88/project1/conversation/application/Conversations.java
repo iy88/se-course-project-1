@@ -6,12 +6,14 @@ import io.github.iy88.project1.conversation.persistence.ConversationStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.WriteTransaction;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 /**
  * Private-chat use cases. Callers own the write transaction and idempotency; these methods apply
  * participant, qualification and freeze rules before touching the conversation store.
  */
+@Lazy
 @Service
 public class Conversations {
     private final ConversationStore store;
