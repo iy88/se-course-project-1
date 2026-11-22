@@ -466,11 +466,6 @@ class InfrastructureIT {
         }
 
         @Bean
-        public RealtimeEventSources.Notifications notificationSource() {
-            return (context, notificationId) -> Optional.empty();
-        }
-
-        @Bean
         public RealtimeEventSources.Conversations conversationSource() {
             return org.mockito.Mockito.mock(RealtimeEventSources.Conversations.class);
         }
