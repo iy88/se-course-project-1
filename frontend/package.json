@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "node dev.mjs",
     "build": "pnpm --recursive run build",
+    "test": "pnpm --recursive --if-present run test",
     "typecheck": "pnpm --recursive run typecheck",
     "lint": "oxlint --deny-warnings user-web admin-web shared dev.mjs",
     "format": "oxfmt user-web admin-web shared dev.mjs package.json",
