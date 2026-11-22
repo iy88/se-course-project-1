@@ -5,15 +5,15 @@ import java.time.Duration;
 import java.time.Instant;
 import org.springframework.http.ResponseCookie;
 
-final class AccountCookies {
-    static final String SESSION = "__Host-se_session";
-    static final String CSRF = "__Host-se_csrf";
-    static final String ENTRY = "__Host-se_entry";
+public final class AccountCookies {
+    public static final String SESSION = "__Host-se_session";
+    public static final String CSRF = "__Host-se_csrf";
+    public static final String ENTRY = "__Host-se_entry";
 
     private AccountCookies() {
     }
 
-    static String read(HttpServletRequest request, String name) {
+    public static String read(HttpServletRequest request, String name) {
         if (request.getCookies() == null) {
             return null;
         }
