@@ -82,10 +82,6 @@ async function submit(): Promise<void> {
       <RouterLink to="/register">还没有账户？注册</RouterLink>
       <RouterLink to="/reset-password">忘记密码</RouterLink>
     </div>
-
-    <p class="muted auth__note">
-      演示环境可用 林同学（lin@campus.example.edu）或以 审核管理员 身份登录，密码为 Campus#2026。
-    </p>
   </section>
 </template>
 
@@ -120,11 +116,5 @@ async function submit(): Promise<void> {
   gap: var(--space-3);
   margin-block-start: var(--space-4);
   font-size: 0.8125rem;
-}
-
-.auth__note {
-  margin-block-start: var(--space-4);
-  padding-block-start: var(--space-3);
-  border-block-start: 1px solid var(--line);
 }
 </style>

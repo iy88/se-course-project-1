@@ -458,13 +458,11 @@ export type TradeAction =
   | "withdraw"
   | "propose_agreement"
   | "decide_agreement"
-  | "submit_completion"
+  | "submit_confirmation"
   | "propose_cancellation"
   | "decide_cancellation"
   | "open_dispute"
-  | "confirm_dispute_resolution"
-  | "submit_review"
-  | "open_trade_conversation";
+  | "confirm_dispute_resolution";
 
 export interface TradeView {
   id: string;

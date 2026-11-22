@@ -1,33 +1,70 @@
 <script setup lang="ts">
 /*
- * Conversation entry list (US-04 / US-11).
+ * Conversation branch list.
  *
- * One row per counterparty, each branch shown separately so a private chat and the
- * per-transaction branches stay distinguishable. Case threads are intentionally
- * absent: they are reached through the case screen.
+ * One row per counterparty with each branch listed separately, so a private chat
+ * and the per-transaction branches stay distinguishable. Case threads are reached
+ * through the case screen and are not listed here. The pane works both as the
+ * narrow-screen page body and as the left column of the wide layout.
  */
-import { onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { onBeforeUnmount, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { listConversations } from "../../api/conversations";
 import type { ConversationBranch, ConversationEntry, ConversationKind } from "../../api/contracts";
 import { usePagedList } from "../../app/async";
+import { conversationKey, rememberPeer } from "../../app/conversation-directory";
 import { formatRelative, truncate } from "../../app/format";
+import { registerSnapshotReloader, subscribeRealtime } from "../../app/realtime";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
-import PageHeader from "../../components/PageHeader.vue";
 import PaginationBar from "../../components/PaginationBar.vue";
 
+const route = useRoute();
 const router = useRouter();
 
 const list = usePagedList<ConversationEntry>((page, pageSize, signal) =>
   listConversations(page, pageSize, signal),
 );
 
+const activeKey = () => {
+  const kind = String(route.params.kind ?? "");
+  const id = String(route.params.conversationId ?? "");
+  return kind && id ? conversationKey(kind, id) : "";
+};
+
+function reload(): void {
+  void list.load(list.paging.page || 1);
+}
+
+let unsubscribe: (() => void) | null = null;
+let unregisterReloader: (() => void) | null = null;
+
 onMounted(() => {
-  void list.load(1);
+  reload();
+  unregisterReloader = registerSnapshotReloader(() => reload());
+  unsubscribe = subscribeRealtime((frame) => {
+    if (
+      frame.event_type === "message_created" ||
+      frame.event_type === "conversation_archived" ||
+      frame.event_type === "notification_created"
+    ) {
+      reload();
+    }
+  });
 });
+
+onBeforeUnmount(() => {
+  unsubscribe?.();
+  unregisterReloader?.();
+});
+
+// Reload when the user opens another branch so unread badges stay truthful.
+watch(
+  () => route.fullPath,
+  () => reload(),
+);
 
 function branchLabel(branch: ConversationBranch): string {
   if (branch.conversation_kind === "chat") return "私聊";
@@ -44,20 +81,14 @@ function open(branch: ConversationBranch): void {
     },
   });
 }
+
+function remember(entry: ConversationEntry, branch: ConversationBranch): void {
+  rememberPeer(branch.conversation_kind, branch.conversation_id, entry.peer.display_name);
+}
 </script>
 
 <template>
-  <div class="stack stack--loose">
-    <PageHeader
-      eyebrow="消息"
-      title="消息"
-      description="私聊与每笔交易各自保留独立会话，已读进度按会话分别记录。"
-    >
-      <template #actions>
-        <RouterLink to="/me/notifications" class="btn btn--ghost">查看通知</RouterLink>
-      </template>
-    </PageHeader>
-
+  <section class="pane" aria-label="会话列表">
     <LoadingBlock v-if="list.isLoading.value" label="正在加载会话…" />
     <ErrorNotice
       v-else-if="list.problem.value"
@@ -83,7 +114,16 @@ function open(branch: ConversationBranch): void {
               v-for="branch in entry.branches"
               :key="`${branch.conversation_kind}-${branch.conversation_id}`"
             >
-              <button type="button" class="branch" @click="open(branch)">
+              <button
+                type="button"
+                class="branch"
+                :class="{
+                  'branch--active':
+                    activeKey() ===
+                    conversationKey(branch.conversation_kind, branch.conversation_id),
+                }"
+                @click="(remember(entry, branch), open(branch))"
+              >
                 <span class="branch__main">
                   <span class="inline">
                     <span class="chip">{{ branchLabel(branch) }}</span>
@@ -115,10 +155,17 @@ function open(branch: ConversationBranch): void {
         @change="list.load"
       />
     </template>
-  </div>
+  </section>
 </template>
 
 <style scoped>
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
 .rows {
   display: flex;
   flex-direction: column;
@@ -165,6 +212,11 @@ function open(branch: ConversationBranch): void {
 }
 
 .branch:hover {
+  border-color: var(--brand);
+}
+
+.branch--active {
+  background: var(--brand-soft);
   border-color: var(--brand);
 }
 

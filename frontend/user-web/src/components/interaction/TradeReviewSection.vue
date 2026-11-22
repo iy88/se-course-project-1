@@ -4,8 +4,11 @@
  *
  * Contract for the real component:
  *   props: { tradeId: string; canReview: boolean; revieweeName: string }
- *   reads: API-TRD-012 submit review (the eligibility check is server side and
- *          arrives as the `submit_review` allowed action on the trade view)
+ *   reads: API-TRD-012 submit review
+ *
+ * Review eligibility and its entry point belong to the conversation work package
+ * (#80); the trade view exposes no `submit_review` allowed action, so `canReview`
+ * currently only reflects that the trade is completed.
  *
  * Issue #79 delivers the entry point only; the record and its management UI
  * belong to the S2-04 / S3-04 work packages.

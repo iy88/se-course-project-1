@@ -1,28 +1,42 @@
 /*
- * Realtime transport for the user client.
+ * Realtime transport for the user client (API-COM-RT-001／002).
  *
- * One connection per browser tab. The client keeps the account event cursor,
- * acknowledges the last contiguous sequence it has processed, and when the server
- * answers `sync_reset` it reloads the snapshot through the existing HTTP queries
- * before resuming from the new head — the resync order described in #79's
- * coordination comment.
+ * Frames follow `实时与任务.md`: the first client frame is
+ * `hello {protocol_version, csrf_token, cursor?}`, the server answers
+ * `hello_ok {connection_id, epoch, replay_floor, head_seq, heartbeat_seconds,
+ * max_frame_bytes}` and then pushes `event`／`cursor_advance` frames. The client
+ * acknowledges with `ack {epoch, through_seq}` only after the event is queued for
+ * refresh, keeps a heartbeat via `ping`／`pong`, and on `sync_reset` reloads the
+ * snapshot, then resumes from the head the server just reported.
  *
- * The client-to-server frames (`hello`, `ack`, `resume`) are not part of the
- * published OpenAPI; they follow the delivery description in
- * README「实时 HTTP 与 WebSocket」and need confirmation from the S3-01 work
- * package before the connection is used against a real server.
+ * One connection per tab. Business screens subscribe to frames and re-read their
+ * own data through the regular HTTP queries; the frame never carries message or
+ * notification bodies.
  */
 import { readonly, ref } from "vue";
-import { getDataSource } from "../api/http";
 import type { EventHead, RealtimeEventFrame, RealtimeFrame } from "../api/contracts";
 import { refreshBadges } from "./badges";
+import { readCsrfToken } from "./csrf";
 
 type Handler = (frame: RealtimeEventFrame) => void;
 
-type ConnectionState = "idle" | "connecting" | "ready" | "reconnecting" | "disabled";
+export type RealtimeState =
+  | "idle"
+  | "connecting"
+  | "ready"
+  | "reconnecting"
+  | "unauthenticated"
+  | "protocol_error";
 
-const state = ref<ConnectionState>("idle");
-const lastSequenced = ref(0);
+const PROTOCOL_VERSION = 1;
+const MAX_BACKOFF_MS = 30_000;
+/** Close codes defined by the realtime contract. */
+const CLOSE_UNAUTHORIZED = 4401;
+const CLOSE_FORBIDDEN = 4403;
+const CLOSE_PROTOCOL = 4400;
+const CLOSE_QUOTA = 4409;
+
+const state = ref<RealtimeState>("idle");
 
 const handlers = new Set<Handler>();
 const snapshotReloaders = new Set<() => Promise<void> | void>();
@@ -32,8 +46,8 @@ let cursor = 0;
 let attempt = 0;
 let closedByCaller = false;
 let retryTimer: number | null = null;
-
-const MAX_BACKOFF_MS = 30_000;
+let heartbeatTimer: number | null = null;
+let lastHeartbeatAt = 0;
 
 function realtimeUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -49,8 +63,10 @@ async function fetchHead(): Promise<EventHead> {
   return (await response.json()) as EventHead;
 }
 
-function send(payload: unknown): void {
-  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+function send(payload: Record<string, unknown>): boolean {
+  if (socket?.readyState !== WebSocket.OPEN) return false;
+  socket.send(JSON.stringify(payload));
+  return true;
 }
 
 /** Reload every subscribed snapshot; the caller resumes only after all succeed. */
@@ -59,21 +75,50 @@ export async function reloadRealtimeSnapshot(): Promise<void> {
   await Promise.all([...snapshotReloaders].map((reload) => reload()));
 }
 
+function clearHeartbeat(): void {
+  if (heartbeatTimer !== null) {
+    window.clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
+
+function scheduleHeartbeat(seconds: number): void {
+  clearHeartbeat();
+  const interval = Math.max(1, seconds) * 1000;
+  heartbeatTimer = window.setInterval(() => {
+    lastHeartbeatAt = Date.now();
+    send({ type: "ping", nonce: String(lastHeartbeatAt) });
+  }, interval);
+}
+
+function acknowledge(): void {
+  if (epoch === null || cursor <= 0) return;
+  send({ type: "ack", epoch, through_seq: cursor });
+}
+
 function dispatch(frame: RealtimeFrame): void {
   if (frame.type === "cursor_advance") {
-    // Carries no business payload: those sequences were already handled by the
-    // connection that produced the write.
+    // Those sequences were already handled by the connection that produced the
+    // write; advance the local cursor without touching business state.
     cursor = Math.max(cursor, frame.through_seq);
-    lastSequenced.value = cursor;
+    acknowledge();
     return;
   }
   cursor = Math.max(cursor, frame.account_seq);
-  lastSequenced.value = cursor;
-  send({ type: "ack", epoch: frame.epoch, account_seq: cursor });
   for (const handler of handlers) handler(frame);
+  // Acknowledge only after the frame reached the local refresh queue; loading the
+  // referenced bodies is a separate, retryable step.
+  acknowledge();
 }
 
 async function open(): Promise<void> {
+  const csrfToken = readCsrfToken();
+  if (csrfToken === null) {
+    // Without the session CSRF credential the server will reject the handshake,
+    // so report the state instead of opening a connection that cannot succeed.
+    state.value = "unauthenticated";
+    return;
+  }
   state.value = attempt === 0 ? "connecting" : "reconnecting";
   if (!epoch) {
     const head = await fetchHead();
@@ -84,9 +129,13 @@ async function open(): Promise<void> {
   socket = connection;
 
   connection.addEventListener("open", () => {
-    send({ type: "hello", version: 1, epoch, after_seq: cursor });
-    state.value = "ready";
-    attempt = 0;
+    const hello: Record<string, unknown> = {
+      type: "hello",
+      protocol_version: PROTOCOL_VERSION,
+      csrf_token: csrfToken,
+    };
+    if (epoch !== null) hello.cursor = { epoch, after_seq: cursor };
+    send(hello);
   });
 
   connection.addEventListener("message", (event) => {
@@ -96,22 +145,56 @@ async function open(): Promise<void> {
     } catch {
       return;
     }
-    const record = payload as { type?: string };
-    if (record.type === "sync_reset") {
-      void handleSyncReset();
-      return;
+    const frame = payload as { type?: string };
+    switch (frame.type) {
+      case "hello_ok": {
+        const accepted = payload as {
+          epoch?: string;
+          head_seq?: number;
+          heartbeat_seconds?: number;
+        };
+        if (typeof accepted.epoch === "string") epoch = accepted.epoch;
+        if (typeof accepted.head_seq === "number") cursor = Math.max(accepted.head_seq, cursor);
+        state.value = "ready";
+        attempt = 0;
+        scheduleHeartbeat(accepted.heartbeat_seconds ?? 20);
+        return;
+      }
+      case "ping":
+        // Answer the server heartbeat with the same nonce.
+        send({ type: "pong", nonce: (payload as { nonce?: string }).nonce ?? "" });
+        return;
+      case "pong":
+        return;
+      case "sync_reset":
+        void handleSyncReset();
+        return;
+      case "auth_required":
+        state.value = "unauthenticated";
+        stopRealtime();
+        return;
+      default:
+        dispatch(payload as RealtimeFrame);
     }
-    if (record.type === "ready" || record.type === "resume_ok") return;
-    dispatch(payload as RealtimeFrame);
   });
 
-  connection.addEventListener("close", () => {
+  connection.addEventListener("close", (closeEvent) => {
     if (socket === connection) socket = null;
+    clearHeartbeat();
     if (closedByCaller) {
       state.value = "idle";
       return;
     }
-    scheduleReconnect();
+    if (closeEvent.code === CLOSE_UNAUTHORIZED || closeEvent.code === CLOSE_FORBIDDEN) {
+      state.value = "unauthenticated";
+      return;
+    }
+    if (closeEvent.code === CLOSE_PROTOCOL) {
+      // A protocol mismatch is not fixed by retrying the same frames.
+      state.value = "protocol_error";
+      return;
+    }
+    scheduleReconnect(closeEvent.code === CLOSE_QUOTA ? 4 : 1);
   });
 
   connection.addEventListener("error", () => {
@@ -121,37 +204,33 @@ async function open(): Promise<void> {
 
 async function handleSyncReset(): Promise<void> {
   try {
+    // Load the snapshot first, then resume from the head the server reports so no
+    // event between the old cursor and the new head is skipped.
     await reloadRealtimeSnapshot();
     const head = await fetchHead();
     epoch = head.epoch;
     cursor = Math.max(head.replay_floor, head.head_seq);
     send({ type: "resume", epoch, after_seq: cursor });
   } catch {
-    scheduleReconnect();
+    scheduleReconnect(1);
   }
 }
 
-function scheduleReconnect(): void {
+function scheduleReconnect(multiplier: number): void {
   state.value = "reconnecting";
   attempt += 1;
-  const delay = Math.min(MAX_BACKOFF_MS, 1_000 * 2 ** Math.min(attempt, 5));
+  const delay = Math.min(MAX_BACKOFF_MS, multiplier * 1_000 * 2 ** Math.min(attempt, 5));
   if (retryTimer !== null) window.clearTimeout(retryTimer);
   retryTimer = window.setTimeout(() => {
-    void open().catch(() => scheduleReconnect());
+    void open().catch(() => scheduleReconnect(1));
   }, delay);
 }
 
 export function startRealtime(): void {
-  if (getDataSource() === "mock") {
-    // The simulated data source answers over HTTP only; screens refetch after each
-    // write instead of receiving pushed frames.
-    state.value = "disabled";
-    return;
-  }
   if (socket) return;
   closedByCaller = false;
   attempt = 0;
-  void open().catch(() => scheduleReconnect());
+  void open().catch(() => scheduleReconnect(1));
 }
 
 export function stopRealtime(): void {
@@ -160,6 +239,7 @@ export function stopRealtime(): void {
     window.clearTimeout(retryTimer);
     retryTimer = null;
   }
+  clearHeartbeat();
   socket?.close();
   socket = null;
   state.value = "idle";
@@ -187,10 +267,7 @@ export function registerSnapshotReloader(reload: () => Promise<void> | void): ()
 export function resetRealtimeCursor(): void {
   epoch = null;
   cursor = 0;
-  lastSequenced.value = 0;
 }
 
-export const realtime = {
-  state: readonly(state),
-  lastSequenced: readonly(lastSequenced),
-};
+/** Connection state for a subtle "reconnecting" hint in the business screens. */
+export const realtimeState = readonly(state);

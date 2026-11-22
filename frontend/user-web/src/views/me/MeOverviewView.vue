@@ -17,6 +17,7 @@ import { todoKindLabels } from "../../app/labels";
 import { notify } from "../../app/toast";
 import { clearSession, session } from "../../app/session";
 import { resetBadges, refreshBadges } from "../../app/badges";
+import { resetRealtimeCursor } from "../../app/realtime";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
@@ -45,6 +46,7 @@ async function signOut(): Promise<void> {
     // naturally idempotent, so the user can retry from the login screen.
   }
   clearSession();
+  resetRealtimeCursor();
   resetBadges();
   notify.info("已退出登录。");
   await router.replace({ name: "login" });
@@ -80,8 +82,8 @@ function refresh(): void {
         <p class="muted">{{ session.account.value?.email ?? "" }}</p>
       </div>
       <div class="me-head__actions">
-        <RouterLink to="/me/profile" class="btn btn--small">编辑资料</RouterLink>
-        <RouterLink to="/me/security" class="btn btn--small">账户安全</RouterLink>
+        <RouterLink to="/me/settings" class="btn btn--small">账户设置</RouterLink>
+        <button type="button" class="btn btn--small btn--ghost" @click="signOut">退出登录</button>
       </div>
     </header>
 
@@ -158,9 +160,6 @@ function refresh(): void {
           <span>禁发范围</span>
           <span class="muted">发布前确认</span>
         </RouterLink>
-      </div>
-      <div class="inline signout">
-        <button type="button" class="btn btn--ghost" @click="signOut">退出登录</button>
       </div>
     </section>
   </div>
