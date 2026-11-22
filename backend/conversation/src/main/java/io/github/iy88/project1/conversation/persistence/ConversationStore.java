@@ -98,6 +98,19 @@ public class ConversationStore {
         return trades.findById(conversationId).orElseThrow(ConversationStore::participantRequired);
     }
 
+    public CaseConversation caseConversation(long conversationId) {
+        return cases.findById(conversationId).orElseThrow(ConversationStore::participantRequired);
+    }
+
+    public Optional<CaseConversation> findCase(long caseId, long relatedAccountId) {
+        return cases.findByCaseIdAndRelatedAccountId(caseId, relatedAccountId);
+    }
+
+    public CaseConversation lockCaseByCase(WriteTransaction transaction, long caseId, long relatedAccountId) {
+        var conversation = findCase(caseId, relatedAccountId).orElseThrow(ConversationStore::participantRequired);
+        return lockCase(transaction, conversation.id());
+    }
+
     public ChatMessage appendChatText(WriteTransaction transaction, ChatConversation conversation,
                                       long senderAccountId, String body) {
         if (!conversation.involves(senderAccountId)) {
