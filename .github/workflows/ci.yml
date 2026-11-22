@@ -2,7 +2,13 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - 's1/**'
+      - 's2/**'
+      - 's3/**'
+      - 's4/**'
+      - 'integration/**'
   push:
     branches: [main]
 
