@@ -1,6 +1,17 @@
 pipeline {
     agent any
 
+    tools {
+        jdk 'jdk-27'
+        maven 'maven-3.10.1'
+        nodejs 'node-latest'
+    }
+
+    environment {
+        PROJECT1_V2_DEPLOY_HOST = '192.168.3.221'
+        PROJECT1_V2_DEPLOY_USER = 'deploy'
+    }
+
     options {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
@@ -12,7 +23,31 @@ pipeline {
         stage('Checkout') {
             steps {
                 deleteDir()
-                checkout scm
+                script {
+                    checkout scm
+                    env.RELEASE_REVISION = sh(script: '''
+                        set -eu
+                        revision=$(git rev-parse HEAD)
+                        test "$revision" = "$(git rev-parse refs/remotes/origin/main)"
+                        echo "$revision"
+                    ''', returnStdout: true).trim()
+                }
+            }
+        }
+
+        stage('Validate deployment assets') {
+            steps {
+                sh '''
+                    set -eu
+                    config=scripts/deploy/config/.env.deploy.example
+                    for output in upstream units; do
+                        python3 scripts/deploy/render-runtime.py "$config" "$output" > /dev/null
+                    done
+                    python3 scripts/deploy/render-runtime.py "$config" sudoers --deploy-user deploy > /dev/null
+                    for script in scripts/deploy/*.sh; do
+                        bash -n "$script"
+                    done
+                '''
             }
         }
 
@@ -24,6 +59,14 @@ pipeline {
                     fingerprint: true,
                     allowEmptyArchive: false
                 )
+            }
+        }
+
+        stage('Deploy on source server') {
+            steps {
+                sshagent(credentials: ['project1-v2-deploy']) {
+                    sh 'bash scripts/deploy/upload-release.sh "release-artifacts/${RELEASE_REVISION}-${BUILD_NUMBER}"'
+                }
             }
         }
     }

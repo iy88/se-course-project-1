@@ -293,7 +293,7 @@ pnpm --dir frontend exec rsbuild dev --root file-probe
 
 GitHub Actions 在 Linux 上并行执行后端、后端集成和前端检查。后端使用 OpenJDK 27 和 Maven 执行 `verify` 并输出覆盖率；集成 job 使用独立的 PostgreSQL 和 Redis 容器，先执行 Flyway 迁移，再运行 `verify -Pintegration`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，检查 OpenAPI 生成类型、lint 和格式，再分别检查并构建两个应用。
 
-Jenkins 使用 OpenJDK 27、`.node-version`、`frontend/package.json` 中的 pnpm 版本和 Python 3。发布包构建跳过测试，前端仍需通过 TypeScript 类型检查；单元测试、集成测试、lint 和格式检查由 GitHub Actions 执行。从仓库根目录构建：
+Jenkins 使用 OpenJDK 27、Maven 3.10.1、`.node-version`、`frontend/package.json` 中的 pnpm 版本和 Python 3。发布包构建跳过测试，前端仍需通过 TypeScript 类型检查；单元测试、集成测试、lint 和格式检查由 GitHub Actions 执行。本地运行发布脚本前，把已安装 Maven 的 `mvn` 加入 PATH。从仓库根目录构建：
 
 ```bash
 bash scripts/deploy/build-release.sh var/releases 1

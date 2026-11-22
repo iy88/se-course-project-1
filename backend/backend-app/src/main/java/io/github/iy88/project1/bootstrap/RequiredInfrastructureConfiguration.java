@@ -23,7 +23,7 @@ final class RequiredInfrastructureConfiguration {
         var required = new ArrayList<>(SERVICE_KEYS);
         if (environment.matchesProfiles("dependency-probe")) {
             required.addAll(PROBE_KEYS);
-        } else {
+        } else if (environment.matchesProfiles("!delivery-worker & !delivery-scheduler")) {
             required.addAll(List.of("HTTP_BIND_HOST", "HTTP_BIND_PORT"));
         }
         var missing = required.stream().filter(key -> isMissing(environment, key)).toList();
