@@ -11,4 +11,21 @@
     </parent>
 
     <artifactId>conversation</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.iy88.project1</groupId>
+            <artifactId>backend-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>
