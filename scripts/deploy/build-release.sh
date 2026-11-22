@@ -29,7 +29,7 @@ git -C "$repo" archive "$revision" -- .node-version backend frontend scripts/dep
 
 (
     cd "$source_dir/backend"
-    ./mvnw --batch-mode --no-transfer-progress -Dmaven.test.skip=true -pl backend-app,maintenance -am package
+    "${PROJECT1_RELEASE_MAVEN:-./mvnw}" --batch-mode --no-transfer-progress -Dmaven.test.skip=true -pl backend-app,maintenance -am package
 )
 
 (

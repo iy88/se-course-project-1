@@ -3,6 +3,7 @@ pipeline {
 
     tools {
         jdk 'jdk-27'
+        maven 'maven-3.10.1'
         nodejs 'node-latest'
     }
 
@@ -52,7 +53,7 @@ pipeline {
 
         stage('Build and package') {
             steps {
-                sh 'bash scripts/deploy/build-release.sh release-artifacts "$BUILD_NUMBER"'
+                sh 'PROJECT1_RELEASE_MAVEN=mvn bash scripts/deploy/build-release.sh release-artifacts "$BUILD_NUMBER"'
                 archiveArtifacts(
                     artifacts: 'release-artifacts/*/*.tar.gz,release-artifacts/*/SHA256SUMS',
                     fingerprint: true,
