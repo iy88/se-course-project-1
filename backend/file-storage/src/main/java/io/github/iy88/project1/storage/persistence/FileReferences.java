@@ -70,6 +70,13 @@ public class FileReferences {
     }
 
     @Transactional(readOnly = true)
+    public List<Reference> current(Target target, String slot) {
+        requireText(slot);
+        return references.findByTargetTypeAndTargetIdAndSlotOrderById(target.type(), target.id(), slot)
+                .stream().map(FileReference::snapshot).toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<Long> prepareRelease(Target target, Collection<Long> referenceIds) {
         var ids = orderedIds(referenceIds);
         if (ids.isEmpty()) {
