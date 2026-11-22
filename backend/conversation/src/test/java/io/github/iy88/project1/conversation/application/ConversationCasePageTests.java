@@ -1,0 +1,93 @@
+package io.github.iy88.project1.conversation.application;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import io.github.iy88.project1.conversation.ConversationSettings;
+import io.github.iy88.project1.conversation.persistence.CaseConversation;
+import io.github.iy88.project1.conversation.persistence.CaseMessage;
+import io.github.iy88.project1.conversation.persistence.ConversationReader;
+import io.github.iy88.project1.conversation.persistence.ConversationStore;
+import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+
+class ConversationCasePageTests {
+    private static final Instant NOW = Instant.parse("2026-11-22T10:00:00Z");
+
+    private final ConversationStore store = mock(ConversationStore.class);
+    private final ConversationReader reader = mock(ConversationReader.class);
+    private final AccountDirectory accounts = mock(AccountDirectory.class);
+    private final CaseParticipation cases = mock(CaseParticipation.class);
+    private final CaseConversationQueries queries = new CaseConversationQueries(store, reader, accounts, cases,
+            new ConversationSettings());
+
+    @Test
+    void pagesCaseThreadWithRoleProjection() {
+        var conversation = mock(CaseConversation.class);
+        when(conversation.id()).thenReturn(3L);
+        when(conversation.caseId()).thenReturn(9L);
+        when(conversation.archived()).thenReturn(false);
+        when(store.caseConversation(3L)).thenReturn(conversation);
+        when(cases.canAccess(9L, 7L)).thenReturn(true);
+
+        var inquiry = caseMessage(30L, 1L, "manager", 99L, "inquiry", "请说明情况", null);
+        var statement = caseMessage(31L, 2L, "account", 7L, "statement", "这是我的说明", null);
+        var notice = caseMessage(32L, 3L, "system", null, "system_notice", "事项已结案", "case_closed");
+        when(reader.caseMessages(3L, null, null, 20)).thenReturn(List.of(inquiry, statement, notice));
+        when(accounts.profiles(java.util.Set.of(7L, 99L))).thenReturn(Map.of(
+                7L, new AccountDirectory.Profile(7L, "张新悦"),
+                99L, new AccountDirectory.Profile(99L, "管理员甲")));
+
+        var page = queries.pageCase(actor(7L), 3L, null, null, 20);
+
+        assertThat(page.items()).hasSize(3);
+        assertThat(page.items().getFirst().sender().senderKind()).isEqualTo("manager");
+        assertThat(page.items().getFirst().sender().displayName()).isEqualTo("管理员");
+        assertThat(page.items().getFirst().messageType()).isEqualTo("inquiry");
+        assertThat(page.items().get(1).sender().displayName()).isEqualTo("张新悦");
+        assertThat(page.items().getLast().sender().displayName()).isEqualTo("系统");
+        assertThat(page.items().getLast().eventType()).isEqualTo("case_closed");
+        assertThat(page.branchStatus()).isEqualTo("active");
+        assertThat(page.nextBeforeSeq()).isEqualTo(1L);
+        assertThat(page.nextAfterSeq()).isEqualTo(3L);
+    }
+
+    @Test
+    void rejectsAccountsWithoutCaseAccess() {
+        var conversation = mock(CaseConversation.class);
+        when(conversation.id()).thenReturn(3L);
+        when(conversation.caseId()).thenReturn(9L);
+        when(store.caseConversation(3L)).thenReturn(conversation);
+        when(cases.canAccess(9L, 8L)).thenReturn(false);
+
+        assertThatThrownBy(() -> queries.pageCase(actor(8L), 3L, null, null, 20))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("PARTICIPANT_REQUIRED"));
+    }
+
+    private static CaseMessage caseMessage(long id, long seq, String senderKind, Long senderAccountId,
+                                           String messageKind, String body, String eventType) {
+        var message = mock(CaseMessage.class);
+        when(message.id()).thenReturn(id);
+        when(message.seq()).thenReturn(seq);
+        when(message.senderKind()).thenReturn(senderKind);
+        when(message.senderAccountId()).thenReturn(senderAccountId);
+        when(message.messageKind()).thenReturn(messageKind);
+        when(message.body()).thenReturn(body);
+        when(message.eventType()).thenReturn(eventType);
+        when(message.createdAt()).thenReturn(NOW);
+        return message;
+    }
+
+    private static ExecutionContext actor(long accountId) {
+        return new ExecutionContext(UUID.randomUUID(), ExecutionContext.ActorKind.ACCOUNT, Long.toString(accountId),
+                UUID.randomUUID(), null, 1L, "s1-v1");
+    }
+}

@@ -1,6 +1,7 @@
 package io.github.iy88.project1.conversation.persistence;
 
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,10 @@ interface ChatConversationRepository extends Repository<ChatConversation, Long> 
             order by c.createdAt desc, c.id desc
             """)
     List<ChatConversation> listForAccount(long accountId, Pageable page);
+
+    List<ChatConversation> findByAccountLowIdOrAccountHighId(long accountLowId, long accountHighId);
+
+    long countByAccountLowIdOrAccountHighId(long accountLowId, long accountHighId);
 }
 
 interface TradeConversationRepository extends Repository<TradeConversation, Long> {
@@ -33,6 +38,8 @@ interface TradeConversationRepository extends Repository<TradeConversation, Long
     Optional<TradeConversation> findById(long id);
 
     Optional<TradeConversation> findByTradeId(long tradeId);
+
+    List<TradeConversation> findByTradeIdIn(Collection<Long> tradeIds);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from TradeConversation c where c.id = :id")

@@ -629,6 +629,32 @@ class TradeLifecycleIT {
         assertThat(participation.pairFrozen(SELLER, BUYER_ONE)).isFalse();
     }
 
+    @Test
+    void tradeIdsOfCoversBuyerAndSellerOnceAndKeepsTerminalTrades() {
+        long sold = create(product(SELLER), BUYER_ONE);
+        long bought = create(product(BUYER_ONE), SELLER);
+        long rejected = create(product(SELLER), BUYER_ONE);
+        trades.reject(account(SELLER), "reject-trade-ids-" + RUN,
+                new TradeCommands.Reject(rejected, "不卖了", 1));
+        assertThat(db.sql("SELECT status FROM trade WHERE id = ?").param(rejected)
+                .query(String.class).single()).isEqualTo("rejected");
+        assertThat(archived(rejected)).isTrue();
+
+        assertThat(participation.tradeIdsOf(BUYER_ONE)).containsExactly(sold, bought, rejected);
+        assertThat(participation.tradeIdsOf(SELLER)).containsExactly(sold, bought, rejected);
+        assertThat(participation.tradeIdsOf(BUYER_TWO)).isEmpty();
+
+        var soldParticipants = participation.participants(sold).orElseThrow();
+        assertThat(soldParticipants.buyerId()).isEqualTo(BUYER_ONE);
+        assertThat(soldParticipants.sellerId()).isEqualTo(SELLER);
+        var boughtParticipants = participation.participants(bought).orElseThrow();
+        assertThat(boughtParticipants.buyerId()).isEqualTo(SELLER);
+        assertThat(boughtParticipants.sellerId()).isEqualTo(BUYER_ONE);
+        var rejectedParticipants = participation.participants(rejected).orElseThrow();
+        assertThat(rejectedParticipants.buyerId()).isEqualTo(BUYER_ONE);
+        assertThat(rejectedParticipants.sellerId()).isEqualTo(SELLER);
+    }
+
     private static void applyRestriction(String key, long tradeId, BiConsumer<WriteTransaction, LockPlan> change) {
         var context = new ExecutionContext(UUID.randomUUID(), ExecutionContext.ActorKind.SYSTEM,
                 "restriction-fixture", null, null, null, "trade-integration");

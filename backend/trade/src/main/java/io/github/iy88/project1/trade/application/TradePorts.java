@@ -112,6 +112,9 @@ public final class TradePorts {
         TradeModels.ConversationAccess conversationAccess(long tradeId);
 
         boolean pairFrozen(long firstAccountId, long secondAccountId);
+
+        /** Ids of all trades where the account is buyer or seller, including terminal trades. */
+        List<Long> tradeIdsOf(long accountId);
     }
 
     /** Read projection used by the evaluation module (API-TRD-012/015 owner). */

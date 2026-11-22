@@ -1272,6 +1272,11 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return repository.pairFrozen(firstAccountId, secondAccountId);
     }
 
+    @Override
+    public List<Long> tradeIdsOf(long accountId) {
+        return repository.tradeIdsForAccount(accountId);
+    }
+
     public TradeModels.ReviewEligibility reviewEligibility(long tradeId, long reviewerId) {
         var found = repository.find(tradeId);
         if (found.isEmpty()) {

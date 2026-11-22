@@ -5,6 +5,7 @@ import io.github.iy88.project1.conversation.persistence.ConversationStore;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.trade.application.TradePorts;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -36,6 +37,11 @@ class TradeConversationConfiguration {
         @Override
         public boolean pairFrozen(long firstAccountId, long secondAccountId) {
             return trades.pairFrozen(firstAccountId, secondAccountId);
+        }
+
+        @Override
+        public List<Long> tradeIdsOf(long accountId) {
+            return trades.tradeIdsOf(accountId);
         }
     }
 
