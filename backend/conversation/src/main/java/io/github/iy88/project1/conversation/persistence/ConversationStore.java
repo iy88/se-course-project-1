@@ -78,8 +78,12 @@ public class ConversationStore {
         return conversation;
     }
 
-    public ChatConversation lockChat(WriteTransaction transaction, long conversationId) {
-        var holder = new AtomicReference<ChatConversation>();
+    public Optional<ChatConversation> findChat(long firstAccountId, long secondAccountId) {
+        var pair = ConversationRules.pair(firstAccountId, secondAccountId);
+        return chats.findByAccountLowIdAndAccountHighId(pair.lowAccountId(), pair.highAccountId());
+    }
+
+    public ChatConversation lockChat(WriteTransaction transaction, long conversationId) {        var holder = new AtomicReference<ChatConversation>();
         transaction.lock(key(LockPlan.Domain.CHAT_CONVERSATION, conversationId),
                 () -> holder.set(chats.lockById(conversationId).orElseThrow(ConversationStore::participantRequired)));
         return holder.get();
