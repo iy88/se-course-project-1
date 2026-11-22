@@ -1,14 +1,443 @@
 <script setup lang="ts">
 /*
- * Route placeholder for the case work package (S4-03, issue #83).
- * Replaced by the case detail screen in its own commit.
+ * Case detail with the constrained conversation (US-08, US-14).
+ *
+ * A reporter only reads the progress and can add supplements; a related account
+ * answers an inquiry or submits an appeal before its deadline. The screen derives
+ * those capabilities from the case payload (`thread`, `appeal_deadline_at`,
+ * archived state) instead of from the case status alone.
  */
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
+import { getCase, postCaseMessage, supplementReport } from "../../api/cases";
+import { listMessages } from "../../api/conversations";
+import type { CaseDetail, CaseMessage, CaseMessageKind } from "../../api/contracts";
+import { useAsyncData } from "../../app/async";
+import { formatDateTime, formatRemaining } from "../../app/format";
+import { newIdempotencyKey } from "../../app/keys";
+import {
+  caseDecisionLabels,
+  caseMessageKindLabels,
+  caseStatusLabels,
+  caseStatusTones,
+} from "../../app/labels";
+import { problemMessage } from "../../app/problems";
+import { session } from "../../app/session";
+import { notify } from "../../app/toast";
+import { refreshBadges } from "../../app/badges";
+import ErrorNotice from "../../components/ErrorNotice.vue";
+import ImageUploader from "../../components/ImageUploader.vue";
+import LoadingBlock from "../../components/LoadingBlock.vue";
+import PageHeader from "../../components/PageHeader.vue";
+import StateBadge from "../../components/StateBadge.vue";
+
+const route = useRoute();
+const caseId = computed(() => String(route.params.caseId ?? ""));
+const detail = useAsyncData<CaseDetail>((signal) => getCase(caseId.value, signal));
+
+const threadMessages = ref<CaseMessage[]>([]);
+const threadStatus = ref<"idle" | "loading" | "ready" | "failed">("idle");
+const threadError = ref<unknown>(null);
+
+const replyBody = ref("");
+const replyKind = ref<CaseMessageKind>("statement");
+const replyPending = ref(false);
+const replyError = ref<string | null>(null);
+
+const supplementNote = ref("");
+const supplementFiles = ref<string[]>([]);
+const supplementPending = ref(false);
+const supplementError = ref<string | null>(null);
+
+const isReporterView = computed(() => detail.data.value?.appeal_deadline_at === null);
+const archived = computed(() => Boolean(detail.data.value?.archived_at));
+const appealDeadline = computed(() => detail.data.value?.appeal_deadline_at ?? null);
+const appealOpen = computed(() => {
+  if (!appealDeadline.value) return false;
+  return new Date(appealDeadline.value).getTime() > Date.now();
+});
+const appealRemaining = computed(() => {
+  if (!appealDeadline.value) return 0;
+  return Math.max(0, Math.round((new Date(appealDeadline.value).getTime() - Date.now()) / 1000));
+});
+
+const canReply = computed(
+  () => !archived.value && Boolean(detail.data.value?.thread) && threadStatus.value === "ready",
+);
+const canSupplement = computed(
+  () => !archived.value && isReporterView.value && detail.data.value?.case_type === "report",
+);
+
+const kindOptions = computed<{ value: CaseMessageKind; label: string }[]>(() => {
+  const options: { value: CaseMessageKind; label: string }[] = [];
+  if (appealDeadline.value) {
+    options.push({ value: "statement", label: caseMessageKindLabels.statement });
+    if (appealOpen.value) options.push({ value: "appeal", label: caseMessageKindLabels.appeal });
+    return options;
+  }
+  options.push({ value: "statement", label: caseMessageKindLabels.statement });
+  return options;
+});
+
+async function loadThread(): Promise<void> {
+  const thread = detail.data.value?.thread;
+  if (!thread) {
+    threadStatus.value = "ready";
+    threadMessages.value = [];
+    return;
+  }
+  threadStatus.value = "loading";
+  threadError.value = null;
+  try {
+    const page = await listMessages(thread.conversation_kind, thread.conversation_id, {
+      limit: 100,
+    });
+    threadMessages.value = page.items.map((message) => ({
+      case_message_id: message.message_id,
+      seq: message.seq,
+      message_kind: (message.message_type as CaseMessageKind) ?? "statement",
+      body: message.body,
+      sender: message.sender,
+      created_at: message.created_at,
+    }));
+    threadStatus.value = "ready";
+  } catch (caught) {
+    threadError.value = caught;
+    threadStatus.value = "failed";
+  }
+}
+
+async function load(): Promise<void> {
+  await detail.run();
+  await loadThread();
+}
+
+onMounted(() => {
+  void load();
+});
+
+watch(caseId, () => {
+  void load();
+});
+
+async function submitReply(): Promise<void> {
+  const current = detail.data.value;
+  const thread = current?.thread;
+  if (!current || !thread || replyPending.value) return;
+  if (!replyBody.value.trim()) {
+    replyError.value = "请填写回复内容。";
+    return;
+  }
+  replyError.value = null;
+  replyPending.value = true;
+  try {
+    await postCaseMessage(
+      current.case_id,
+      {
+        thread,
+        message_kind: replyKind.value,
+        body: replyBody.value.trim(),
+      },
+      newIdempotencyKey(),
+    );
+    replyBody.value = "";
+    notify.success(replyKind.value === "appeal" ? "申辩已提交。" : "回复已提交。");
+    await load();
+    void refreshBadges();
+  } catch (caught) {
+    replyError.value = problemMessage(caught);
+  } finally {
+    replyPending.value = false;
+  }
+}
+
+async function submitSupplement(): Promise<void> {
+  const current = detail.data.value;
+  if (!current || supplementPending.value) return;
+  if (!supplementNote.value.trim() && !supplementFiles.value.length) {
+    supplementError.value = "请填写补充说明或上传证据。";
+    return;
+  }
+  supplementError.value = null;
+  supplementPending.value = true;
+  try {
+    const result = await supplementReport(
+      current.case_id,
+      {
+        note: supplementNote.value.trim() || undefined,
+        attachments: supplementFiles.value.map((fileId) => ({ file_id: fileId })),
+      },
+      newIdempotencyKey(),
+    );
+    supplementNote.value = "";
+    supplementFiles.value = [];
+    notify.success(`已补充材料（第 ${result.supplement_count} 次）。`);
+    await load();
+  } catch (caught) {
+    supplementError.value = problemMessage(caught);
+  } finally {
+    supplementPending.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="stack stack--loose">
-    <h1>事项详情</h1>
-    <p class="banner banner--info">事项详情、问询回复与申辩由 S4-03（#83）提供。</p>
-    <RouterLink to="/me/cases" class="btn">返回事项列表</RouterLink>
+    <LoadingBlock v-if="detail.isLoading.value && !detail.data.value" label="正在加载事项…" />
+    <ErrorNotice v-else-if="detail.problem.value" :error="detail.error.value" @retry="load" />
+    <template v-else-if="detail.data.value">
+      <PageHeader
+        eyebrow="事项"
+        :title="`事项 #${detail.data.value.case_id}`"
+        :description="`当前进度：${caseStatusLabels[detail.data.value.case_status]}`"
+      >
+        <template #actions>
+          <RouterLink to="/me/cases" class="btn btn--ghost">返回事项列表</RouterLink>
+        </template>
+      </PageHeader>
+
+      <section class="card stack">
+        <div class="inline">
+          <StateBadge
+            :label="
+              detail.data.value.archived_at
+                ? '已结案'
+                : caseStatusLabels[detail.data.value.case_status]
+            "
+            :tone="
+              detail.data.value.archived_at
+                ? 'neutral'
+                : caseStatusTones[detail.data.value.case_status]
+            "
+          />
+          <span class="chip">{{
+            detail.data.value.case_type === "report"
+              ? "举报"
+              : detail.data.value.case_type === "product_review"
+                ? "商品审核"
+                : "异常交易"
+          }}</span>
+          <span v-if="detail.data.value.decision_kind" class="chip chip--active">
+            {{ caseDecisionLabels[detail.data.value.decision_kind] }}
+          </span>
+        </div>
+
+        <p v-if="detail.data.value.reason_text" class="reason pre-line break-anywhere">
+          {{ detail.data.value.reason_text }}
+        </p>
+
+        <p v-if="appealDeadline" class="banner banner--warn">
+          申辩截止：{{ formatDateTime(appealDeadline) }}
+          <template v-if="appealOpen"> · 剩余 {{ formatRemaining(appealRemaining) }}</template>
+          <template v-else>· 申辩期已结束</template>
+        </p>
+
+        <div v-if="detail.data.value.enforcements.length" class="stack stack--tight">
+          <span class="field__label">处置结果</span>
+          <ul class="plain-list">
+            <li v-for="(item, index) in detail.data.value.enforcements" :key="index">
+              <span class="state state--danger">{{ item.action }}</span>
+              <span class="muted">当前状态：{{ item.current_state }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="detail.data.value.public_result_at" class="banner banner--info">
+          该事项的匿名结果已于 {{ formatDateTime(detail.data.value.public_result_at) }} 公开。
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__head"><h2>进度</h2></div>
+        <ol class="timeline">
+          <li v-for="(action, index) in detail.data.value.actions" :key="index">
+            <span class="timeline__dot" aria-hidden="true" />
+            <span class="timeline__body">
+              <span>{{ action.action_kind }}</span>
+              <span class="muted">
+                {{ formatDateTime(action.occurred_at) }} · {{ action.actor_kind }}
+              </span>
+            </span>
+          </li>
+          <li v-if="!detail.data.value.actions.length" class="muted">暂无进度记录。</li>
+        </ol>
+      </section>
+
+      <section class="card">
+        <div class="card__head">
+          <h2>沟通记录</h2>
+          <span class="chip">{{ threadMessages.length }} 条</span>
+        </div>
+        <LoadingBlock v-if="threadStatus === 'loading'" label="正在加载沟通记录…" />
+        <ErrorNotice v-else-if="threadError" :error="threadError" @retry="loadThread" />
+        <p v-else-if="!threadMessages.length" class="muted">
+          暂无沟通记录。管理员发起问询后会显示在这里。
+        </p>
+        <ul v-else class="thread">
+          <li
+            v-for="message in threadMessages"
+            :key="message.case_message_id"
+            class="thread__item"
+            :class="{ 'thread__item--mine': message.sender.account_id === session.accountId.value }"
+          >
+            <div class="thread__meta">
+              <span class="chip">{{
+                caseMessageKindLabels[message.message_kind] ?? message.message_kind
+              }}</span>
+              <span class="muted">{{ message.sender.display_name }}</span>
+              <span class="muted">{{ formatDateTime(message.created_at) }}</span>
+            </div>
+            <p class="thread__body pre-line break-anywhere">{{ message.body }}</p>
+          </li>
+        </ul>
+
+        <form v-if="canReply" class="thread__compose" @submit.prevent="submitReply">
+          <div class="field">
+            <label class="field__label" for="reply-kind">回复类型</label>
+            <select id="reply-kind" v-model="replyKind" class="select">
+              <option v-for="option in kindOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="reply-body">内容</label>
+            <textarea id="reply-body" v-model="replyBody" class="textarea" maxlength="2000" />
+          </div>
+          <p v-if="replyError" class="field__error" role="alert">{{ replyError }}</p>
+          <div class="inline">
+            <button type="submit" class="btn btn--primary" :disabled="replyPending">
+              {{ replyPending ? "提交中…" : replyKind === "appeal" ? "提交申辩" : "提交回复" }}
+            </button>
+          </div>
+        </form>
+        <p v-else-if="archived" class="banner banner--info">
+          事项已结案，不能再发言；历史记录仍可查看。
+        </p>
+      </section>
+
+      <section v-if="canSupplement" class="card">
+        <div class="card__head"><h2>补充材料</h2></div>
+        <p class="muted">可补充说明与证据；补充不会改变事项状态与已作出的决定。</p>
+        <div class="field">
+          <label class="field__label" for="supplement-note">补充说明</label>
+          <textarea
+            id="supplement-note"
+            v-model="supplementNote"
+            class="textarea"
+            maxlength="1000"
+          />
+        </div>
+        <ImageUploader
+          v-model="supplementFiles"
+          purpose="case_evidence"
+          label="证据文件"
+          hint="支持 JPG、PNG、PDF"
+          :max-count="5"
+          :target="{ resource_type: 'case', resource_id: detail.data.value.case_id }"
+        />
+        <p v-if="supplementError" class="field__error" role="alert">{{ supplementError }}</p>
+        <div class="inline">
+          <button
+            type="button"
+            class="btn btn--primary"
+            :disabled="supplementPending"
+            @click="submitSupplement"
+          >
+            {{ supplementPending ? "提交中…" : "提交补充" }}
+          </button>
+        </div>
+      </section>
+    </template>
   </div>
 </template>
+
+<style scoped>
+.reason {
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.plain-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 0.875rem;
+}
+
+.plain-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.timeline li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.timeline__dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  margin-block-start: 0.5rem;
+  border-radius: 50%;
+  background: var(--brand);
+  flex: 0 0 auto;
+}
+
+.timeline__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  font-size: 0.875rem;
+}
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.thread__item {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fbfcfb;
+  max-inline-size: 90%;
+}
+
+.thread__item--mine {
+  margin-inline-start: auto;
+  background: var(--brand-soft);
+  border-color: #cbe3d4;
+}
+
+.thread__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-block-end: 0.125rem;
+}
+
+.thread__body {
+  font-size: 0.875rem;
+}
+
+.thread__compose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-block-start: 1px solid var(--line);
+  margin-block-start: var(--space-4);
+  padding-block-start: var(--space-3);
+}
+</style>
