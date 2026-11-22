@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    tools {
+        jdk 'jdk-27'
+        nodejs 'node-latest'
+    }
+
     options {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
