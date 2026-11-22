@@ -1,5 +1,6 @@
 package io.github.iy88.project1.notification.application;
 
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.notification.persistence.NotificationStore;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -40,7 +41,7 @@ public final class InMemoryNotificationStore implements NotificationStore {
     }
 
     @Override
-    public Optional<Stored> lock(long notificationId, long recipientAccountId) {
+    public Optional<Stored> lock(WriteTransaction transaction, long notificationId, long recipientAccountId) {
         return findForRecipient(notificationId, recipientAccountId);
     }
 

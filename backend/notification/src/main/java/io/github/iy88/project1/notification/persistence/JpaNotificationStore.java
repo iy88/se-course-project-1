@@ -1,14 +1,24 @@
 package io.github.iy88.project1.notification.persistence;
 
+import io.github.iy88.project1.core.LockPlan;
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.notification.application.NotificationQuery;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
-/** JPA implementation of the notification store. */
+/**
+ * JPA implementation of the notification store.
+ *
+ * Lazy so a context that has no data source (the probe-only application context)
+ * can start without trying to build this repository.
+ */
+@Lazy
 @Repository
 class JpaNotificationStore implements NotificationStore {
     private final NotificationRepository repository;
@@ -32,9 +42,11 @@ class JpaNotificationStore implements NotificationStore {
     }
 
     @Override
-    public Optional<Stored> lock(long notificationId, long recipientAccountId) {
-        return repository.lockByIdAndRecipient(notificationId, recipientAccountId)
-                .map(NotificationRecord::snapshot);
+    public Optional<Stored> lock(WriteTransaction transaction, long notificationId, long recipientAccountId) {
+        var locked = new AtomicReference<Optional<NotificationRecord>>(Optional.empty());
+        transaction.lock(new LockPlan.Key(LockPlan.Domain.NOTIFICATION, List.of(notificationId)),
+                () -> locked.set(repository.lockByIdAndRecipient(notificationId, recipientAccountId)));
+        return locked.get().map(NotificationRecord::snapshot);
     }
 
     @Override

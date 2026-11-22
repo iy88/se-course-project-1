@@ -1,6 +1,7 @@
 package io.github.iy88.project1.notification.persistence;
 
 import io.github.iy88.project1.core.ResourceRef;
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.notification.application.NotificationItem;
 import io.github.iy88.project1.notification.application.NotificationQuery;
@@ -21,7 +22,14 @@ public interface NotificationStore {
 
     Stored insert(long recipientAccountId, NotificationIntent intent, Instant now);
 
-    Optional<Stored> lock(long notificationId, long recipientAccountId);
+    /**
+     * Acquire the notification row under the caller's transaction and lock plan.
+     *
+     * The row is locked through {@link WriteTransaction#lock} so it follows the
+     * shared lock order: the notification row comes after the account and
+     * source-object locks the caller already declared.
+     */
+    Optional<Stored> lock(WriteTransaction transaction, long notificationId, long recipientAccountId);
 
     Optional<Stored> findForRecipient(long notificationId, long recipientAccountId);
 

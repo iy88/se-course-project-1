@@ -76,7 +76,7 @@ public class NotificationApplication {
      * device, returns the stored value and registers no second event.
      */
     public NotificationItem markRead(WriteTransaction transaction, long accountId, long notificationId) {
-        var locked = store.lock(notificationId, accountId)
+        var locked = store.lock(transaction, notificationId, accountId)
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "通知不存在"));
         if (locked.readAt() != null) {
             return locked.item();
