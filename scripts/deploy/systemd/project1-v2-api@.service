@@ -5,10 +5,10 @@ After=network-online.target
 
 [Service]
 Type=exec
-User=project1-v2
-Group=project1-v2
+User=se-project1-v2
+Group=se-project1-v2
 WorkingDirectory=/srv/se-course-project1-v2/instances/%i/backend
-ExecStart=/opt/project1-v2/java/bin/java -jar backend-app.jar --env-file=.env.prod --server.address=127.0.0.1 --server.port=%i --server.shutdown=graceful --spring.lifecycle.timeout-per-shutdown-phase=20s
+ExecStart=/opt/project1-v2/java/bin/java -jar backend-app.jar --env-file=.env.prod --HTTP_BIND_HOST=127.0.0.1 --HTTP_BIND_PORT=%i --server.shutdown=graceful --spring.lifecycle.timeout-per-shutdown-phase=20s
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s

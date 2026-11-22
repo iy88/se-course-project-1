@@ -5,8 +5,8 @@ After=network-online.target
 
 [Service]
 Type=exec
-User=project1-v2
-Group=project1-v2
+User=se-project1-v2
+Group=se-project1-v2
 WorkingDirectory=/srv/se-course-project1-v2/instances/scheduler/backend
 ExecStart=/opt/project1-v2/java/bin/java -jar backend-app.jar --env-file=.env.prod --spring.profiles.active=delivery-scheduler
 Restart=on-failure
