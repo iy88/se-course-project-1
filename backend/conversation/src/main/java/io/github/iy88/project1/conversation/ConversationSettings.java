@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ConversationSettings {
     private int maxBodyLength = 2000;
     private int maxPageSize = 100;
+    private int previewLength = 50;
 
     public int getMaxBodyLength() {
         return maxBodyLength;
@@ -28,5 +29,16 @@ public class ConversationSettings {
             throw new IllegalArgumentException("maxPageSize must be positive");
         }
         this.maxPageSize = maxPageSize;
+    }
+
+    public int getPreviewLength() {
+        return previewLength;
+    }
+
+    public void setPreviewLength(int previewLength) {
+        if (previewLength <= 0) {
+            throw new IllegalArgumentException("previewLength must be positive");
+        }
+        this.previewLength = previewLength;
     }
 }
