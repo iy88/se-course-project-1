@@ -148,9 +148,10 @@ public class ConversationQueries {
                 ? new ConversationViews.Sender(null, "系统", "system")
                 : new ConversationViews.Sender(message.senderAccountId(),
                         displayName(message.senderAccountId(), profiles), "account");
-        String sourceRef = message.sourceType() == null ? null : message.sourceType() + ":" + message.sourceId();
+        // API-CONV-003 allows a source reference only after ownership and visibility checks. No typed
+        // adapter covers the stored heterogeneous references yet, so keep the persisted facts off the wire.
         return new ConversationViews.Message(message.id(), message.seq(), sender, message.messageType(),
-                message.body(), message.createdAt(), message.eventType(), sourceRef);
+                message.body(), message.createdAt(), message.eventType(), null);
     }
 
     private static List<ConversationViews.Branch> sortedBranches(List<ConversationViews.Branch> branches) {

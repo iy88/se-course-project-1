@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
-/** Read-only case-thread query; access is delegated to the case module's qualification rules. */
+/** Read-only case-thread query; access is delegated to the case module's thread qualification rules. */
 @Lazy
 @Service
 @Profile("infrastructure")
@@ -36,7 +36,7 @@ public class CaseConversationQueries {
                                                   Long afterSeq, int limit) {
         long actor = accountId(context);
         var conversation = store.caseConversation(conversationId);
-        if (!cases.canAccess(conversation.caseId(), actor)) {
+        if (!cases.canAccess(conversation.caseId(), conversation.relatedAccountId(), actor)) {
             throw participantRequired();
         }
         if (beforeSeq != null && afterSeq != null) {

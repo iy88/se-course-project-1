@@ -50,7 +50,8 @@ class ConversationTradePageTests {
         assertThat(page.items().getFirst().sender().senderKind()).isEqualTo("system");
         assertThat(page.items().getFirst().sender().displayName()).isEqualTo("系统");
         assertThat(page.items().getFirst().eventType()).isEqualTo("trade_completed");
-        assertThat(page.items().getFirst().sourceRef()).isEqualTo("trade_transition:55");
+        assertThat(page.items().getFirst().body()).isEqualTo("交易已完成");
+        assertThat(page.items()).extracting(ConversationViews.Message::sourceRef).containsOnlyNulls();
         assertThat(page.items().getLast().sender().displayName()).isEqualTo("张新悦");
         assertThat(page.branchStatus()).isEqualTo("active");
         assertThat(page.nextBeforeSeq()).isEqualTo(1L);
