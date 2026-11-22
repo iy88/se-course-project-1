@@ -20,21 +20,30 @@ import org.springframework.web.bind.annotation.RestController;
 class EmailVerificationController {
     private final EmailVerificationService verifications;
     private final EntryTokenService entries;
+    private final CurrentAccount current;
 
-    EmailVerificationController(EmailVerificationService verifications, EntryTokenService entries) {
+    EmailVerificationController(EmailVerificationService verifications, EntryTokenService entries,
+                               CurrentAccount current) {
         this.verifications = verifications;
         this.entries = entries;
+        this.current = current;
     }
 
     @PostMapping
     ResponseEntity<VerificationResponse> request(@RequestBody VerificationRequest body,
                                                  HttpServletRequest request) {
-        String cookie = AccountCookies.read(request, AccountCookies.ENTRY);
-        if (cookie == null) {
-            throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "账户入口已失效");
+        EntryTokenService.Claims entry = null;
+        io.github.iy88.project1.account.persistence.Account account = null;
+        if ("email_change".equals(body.purpose())) {
+            account = current.require(request).account();
+        } else {
+            String cookie = AccountCookies.read(request, AccountCookies.ENTRY);
+            if (cookie == null) {
+                throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "账户入口已失效");
+            }
+            entry = entries.parse(cookie);
         }
-        var entry = entries.parse(cookie);
-        var result = verifications.request(body.purpose(), body.email(), entry);
+        var result = verifications.request(body.purpose(), body.email(), entry, account);
         var items = result.requests().stream()
                 .map(item -> new Item(Long.toString(item.verificationId()), item.purpose(),
                         DateTimeFormatter.ISO_INSTANT.format(item.expiresAt())))

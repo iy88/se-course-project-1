@@ -62,4 +62,9 @@ public class Account {
         this.passwordHash = passwordHash;
         this.credentialVersion++;
     }
+
+    public void changeEmail(String email) {
+        this.email = email;
+        this.credentialVersion++;
+    }
 }

@@ -154,6 +154,73 @@ public class AccountService {
         }
     }
 
+    public Account changeEmail(Account account, ChangeEmailCommand command) {
+        String newEmail = EmailAddress.normalize(command.newEmail());
+        if (EmailAddress.same(account.email(), newEmail)) {
+            throw new BusinessError("EMAIL_UNCHANGED", 409, "新邮箱与当前邮箱相同");
+        }
+        try {
+            Object result = transaction.execute(status -> {
+                Instant now = Instant.now();
+                Account locked = accounts.lockById(account.id())
+                        .orElseThrow(() -> new BusinessError("AUTHENTICATION_REQUIRED", 401, "登录状态已失效"));
+                long firstId = Math.min(command.oldVerificationId(), command.newVerificationId());
+                long secondId = Math.max(command.oldVerificationId(), command.newVerificationId());
+                EmailVerification first = verifications.lockById(firstId)
+                        .orElseThrow(() -> new BusinessError("VERIFICATION_CODE_INVALID", 422, "验证码无效"));
+                EmailVerification second = verifications.lockById(secondId)
+                        .orElseThrow(() -> new BusinessError("VERIFICATION_CODE_INVALID", 422, "验证码无效"));
+                EmailVerification oldRow = command.oldVerificationId() == firstId ? first : second;
+                EmailVerification newRow = command.oldVerificationId() == firstId ? second : first;
+                if (!validEmailChange(oldRow, newRow, locked, newEmail)) {
+                    return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
+                }
+                if (!oldRow.usable(now) || !newRow.usable(now)) {
+                    return new Failure("VERIFICATION_NOT_USABLE", 422, "验证码已失效");
+                }
+                boolean oldMatches = oldRow.matches(command.oldCode());
+                boolean newMatches = newRow.matches(command.newCode());
+                if (!oldMatches || !newMatches) {
+                    if (!oldMatches) {
+                        oldRow.recordFailure(now);
+                    }
+                    if (!newMatches) {
+                        newRow.recordFailure(now);
+                    }
+                    verifications.save(oldRow);
+                    verifications.save(newRow);
+                    return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
+                }
+                oldRow.consume(now);
+                newRow.consume(now);
+                verifications.save(oldRow);
+                verifications.save(newRow);
+                locked.changeEmail(newEmail);
+                return accounts.save(locked);
+            });
+            if (result instanceof Failure failure) {
+                throw new BusinessError(failure.code, failure.status, failure.message);
+            }
+            return (Account) result;
+        } catch (DataIntegrityViolationException duplicate) {
+            throw new BusinessError("EMAIL_IN_USE", 409, "该邮箱已被使用");
+        }
+    }
+
+    private static boolean validEmailChange(EmailVerification oldRow, EmailVerification newRow, Account account,
+                                            String newEmail) {
+        return "email_change_old".equals(oldRow.purpose())
+                && "email_change_new".equals(newRow.purpose())
+                && oldRow.groupId() != null && oldRow.groupId().equals(newRow.groupId())
+                && oldRow.accountId() != null && oldRow.accountId() == account.id()
+                && newRow.accountId() != null && newRow.accountId() == account.id()
+                && oldRow.credentialVersion() != null && newRow.credentialVersion() != null
+                && oldRow.credentialVersion() == account.credentialVersion()
+                && newRow.credentialVersion() == account.credentialVersion()
+                && EmailAddress.same(oldRow.email(), account.email())
+                && EmailAddress.same(newRow.email(), newEmail);
+    }
+
     public Account updateProfile(Account account, String displayName, String avatarFileId) {
         if (displayName == null && avatarFileId == null) {
             throw new BusinessError("INPUT_INVALID", 422, "没有可更新的资料");
@@ -200,6 +267,10 @@ public class AccountService {
         if (length < settings.passwordMinLength() || length > settings.passwordMaxLength()) {
             throw new BusinessError("INPUT_INVALID", 422, "密码长度不符合要求");
         }
+    }
+
+    public record ChangeEmailCommand(String newEmail, long oldVerificationId, String oldCode,
+                                     long newVerificationId, String newCode) {
     }
 
     private record Failure(String code, int status, String message) {

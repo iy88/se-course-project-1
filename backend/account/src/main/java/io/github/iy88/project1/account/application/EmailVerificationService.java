@@ -38,10 +38,14 @@ public class EmailVerificationService {
         this.transaction = new TransactionTemplate(manager);
     }
 
-    public Requested request(String purpose, String rawEmail, EntryTokenService.Claims entry) {
+    public Requested request(String purpose, String rawEmail, EntryTokenService.Claims entry, Account account) {
         String email = EmailAddress.normalize(rawEmail);
-        if (purpose == null || !(purpose.equals("registration") || purpose.equals("password_reset"))) {
+        if (purpose == null || !(purpose.equals("registration") || purpose.equals("password_reset")
+                || purpose.equals("email_change"))) {
             throw new BusinessError("INPUT_INVALID", 422, "不支持的验证用途");
+        }
+        if (purpose.equals("email_change")) {
+            return requestEmailChange(email, account);
         }
         if (entry == null) {
             throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "账户入口已失效");
@@ -61,20 +65,67 @@ public class EmailVerificationService {
                 existing.map(Account::id).orElse(null), entry.nonceDigest(), UUID.randomUUID(),
                 existing.map(Account::credentialVersion).orElse(null), now, expiresAt, code,
                 settings.emailCodeLength(), settings.emailCodeMaxFailedAttempts(), "s2-v1",
-                Map.of("max_attempts", 3, "retry_seconds", settings.emailResendIntervalSeconds()),
-                now.plusSeconds(settings.emailResendIntervalSeconds()));
+                rules(), now.plusSeconds(settings.emailResendIntervalSeconds()));
         transaction.executeWithoutResult(status -> verifications.save(record));
+        send(email, code);
+        markSent(record.id());
+        return new Requested(List.of(new Item(record.id(), purpose, expiresAt)),
+                settings.emailResendIntervalSeconds());
+    }
+
+    private Requested requestEmailChange(String newEmail, Account account) {
+        if (account == null) {
+            throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "登录状态已失效");
+        }
+        if (EmailAddress.same(account.email(), newEmail)) {
+            throw new BusinessError("EMAIL_UNCHANGED", 409, "新邮箱与当前邮箱相同");
+        }
+        if (accounts.existsByEmail(newEmail)) {
+            throw new BusinessError("EMAIL_IN_USE", 409, "该邮箱已被使用");
+        }
+        Instant now = Instant.now();
+        Instant expiresAt = now.plusSeconds(settings.emailCodeTtlSeconds());
+        UUID group = UUID.randomUUID();
+        String oldCode = code(settings.emailCodeLength());
+        String newCode = code(settings.emailCodeLength());
+        EmailVerification oldRow = new EmailVerification("email_change_old", account.email(), account.id(), null,
+                group, account.credentialVersion(), now, expiresAt, oldCode, settings.emailCodeLength(),
+                settings.emailCodeMaxFailedAttempts(), "s2-v1", rules(),
+                now.plusSeconds(settings.emailResendIntervalSeconds()));
+        EmailVerification newRow = new EmailVerification("email_change_new", newEmail, account.id(), null,
+                group, account.credentialVersion(), now, expiresAt, newCode, settings.emailCodeLength(),
+                settings.emailCodeMaxFailedAttempts(), "s2-v1", rules(),
+                now.plusSeconds(settings.emailResendIntervalSeconds()));
+        transaction.executeWithoutResult(status -> {
+            verifications.invalidateEmailChange(account.id(), now);
+            verifications.save(oldRow);
+            verifications.save(newRow);
+        });
+        send(account.email(), oldCode);
+        send(newEmail, newCode);
+        markSent(oldRow.id());
+        markSent(newRow.id());
+        return new Requested(List.of(new Item(oldRow.id(), "email_change_old", expiresAt),
+                new Item(newRow.id(), "email_change_new", expiresAt)), settings.emailResendIntervalSeconds());
+    }
+
+    private Map<String, Object> rules() {
+        return Map.of("max_attempts", 3, "retry_seconds", settings.emailResendIntervalSeconds());
+    }
+
+    private void send(String recipient, String code) {
         try {
-            mailer.sendCode(email, code, settings.emailCodeTtlSeconds());
+            mailer.sendCode(recipient, code, settings.emailCodeTtlSeconds());
         } catch (RuntimeException failure) {
             throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "验证码发送失败，请稍后重试");
         }
-        transaction.executeWithoutResult(status -> verifications.findById(record.id()).ifPresent(saved -> {
+    }
+
+    private void markSent(long verificationId) {
+        transaction.executeWithoutResult(status -> verifications.findById(verificationId).ifPresent(saved -> {
             saved.markSent(Instant.now());
             verifications.save(saved);
         }));
-        return new Requested(List.of(new Item(record.id(), purpose, expiresAt)),
-                settings.emailResendIntervalSeconds());
     }
 
     private static String code(int length) {
