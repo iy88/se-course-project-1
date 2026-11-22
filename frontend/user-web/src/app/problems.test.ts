@@ -96,7 +96,7 @@ describe("enum labels", () => {
   });
 
   it("labels every cancellable trade action and case decision", () => {
-    assert.ok(tradeActionLabels.submit_completion.length > 0);
+    assert.ok(tradeActionLabels.submit_confirmation.length > 0);
     assert.equal(caseDecisionLabels.violation, "违规成立");
     assert.equal(agreementStatusLabels.effective, "已生效");
   });

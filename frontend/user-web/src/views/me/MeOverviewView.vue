@@ -17,6 +17,7 @@ import { todoKindLabels } from "../../app/labels";
 import { notify } from "../../app/toast";
 import { clearSession, session } from "../../app/session";
 import { resetBadges, refreshBadges } from "../../app/badges";
+import { resetRealtimeCursor } from "../../app/realtime";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
@@ -45,6 +46,7 @@ async function signOut(): Promise<void> {
     // naturally idempotent, so the user can retry from the login screen.
   }
   clearSession();
+  resetRealtimeCursor();
   resetBadges();
   notify.info("已退出登录。");
   await router.replace({ name: "login" });

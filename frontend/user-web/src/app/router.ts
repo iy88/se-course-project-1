@@ -117,15 +117,20 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     path: "/conversations",
-    name: "conversations",
-    component: () => import("../views/conversations/ConversationListView.vue"),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: "/conversations/:kind/:conversationId",
-    name: "conversation",
-    component: () => import("../views/conversations/ConversationView.vue"),
-    meta: { requiresAuth: true },
+    component: () => import("../views/conversations/ConversationLayout.vue"),
+    meta: { requiresAuth: true, navLabel: "消息" },
+    children: [
+      {
+        path: "",
+        name: "conversations",
+        component: () => import("../views/conversations/ConversationIndex.vue"),
+      },
+      {
+        path: ":kind/:conversationId",
+        name: "conversation",
+        component: () => import("../views/conversations/ConversationThread.vue"),
+      },
+    ],
   },
   {
     path: "/cases/:caseId",

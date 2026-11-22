@@ -1183,7 +1183,7 @@ export function tradeActions(trade: MockTrade, viewerId: string): TradeAction[] 
       if (pending && pending.proposed_by !== viewerId) actions.push("decide_agreement");
       if (pending && pending.proposed_by === viewerId) actions.push("decide_agreement");
       if (trade.phase === "awaiting_completion" && !viewerConfirmed) {
-        actions.push("submit_completion");
+        actions.push("submit_confirmation");
       }
       if (!trade.cancellation) actions.push("propose_cancellation");
       if (trade.cancellation && trade.cancellation.proposed_by !== viewerId) {
@@ -1193,23 +1193,14 @@ export function tradeActions(trade: MockTrade, viewerId: string): TradeAction[] 
         actions.push("decide_cancellation");
       }
       if (current && !trade.dispute) actions.push("open_dispute");
-      actions.push("open_trade_conversation");
       break;
     case "disputed":
       if (trade.dispute?.status === "resolved") actions.push("confirm_dispute_resolution");
-      actions.push("open_trade_conversation");
       break;
     case "completed":
-      if (!trade.reviews.some((review) => review.reviewer_id === viewerId)) {
-        actions.push("submit_review");
-      }
       break;
     default:
       break;
-  }
-
-  if (trade.trade_conversation_id && trade.status !== "completed") {
-    if (!actions.includes("open_trade_conversation")) actions.push("open_trade_conversation");
   }
 
   return actions;

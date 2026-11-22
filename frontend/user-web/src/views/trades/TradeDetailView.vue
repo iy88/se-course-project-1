@@ -289,7 +289,7 @@ function openConversation(): void {
         <template #actions>
           <RouterLink to="/me/trades" class="btn btn--ghost">返回交易列表</RouterLink>
           <button
-            v-if="allowed.has('open_trade_conversation')"
+            v-if="trade.data.value.trade_conversation_id"
             type="button"
             class="btn"
             @click="openConversation"
@@ -576,7 +576,7 @@ function openConversation(): void {
           </li>
           <li v-if="!confirmations.length" class="muted">还没有完成确认。</li>
         </ul>
-        <div v-if="allowed.has('submit_completion')" class="stack">
+        <div v-if="allowed.has('submit_confirmation')" class="stack">
           <div class="field">
             <label class="field__label" for="completion-note">备注（可选）</label>
             <textarea
@@ -713,7 +713,7 @@ function openConversation(): void {
       <TradeReviewSection
         v-if="trade.data.value.status === 'completed'"
         :trade-id="trade.data.value.id"
-        :can-review="allowed.has('submit_review')"
+        :can-review="trade.data.value.status === 'completed'"
         :reviewee-name="counterparty?.display_name ?? '对方'"
       />
 
