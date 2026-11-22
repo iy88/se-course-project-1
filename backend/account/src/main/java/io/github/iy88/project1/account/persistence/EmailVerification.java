@@ -118,6 +118,7 @@ public class EmailVerification {
     public String purpose() { return purpose; }
     public String email() { return email; }
     public Long accountId() { return accountId; }
+    public Integer credentialVersion() { return credentialVersion; }
     public byte[] entryDigest() { return entryDigest; }
     public String code() { return code; }
     public Instant expiresAt() { return expiresAt; }

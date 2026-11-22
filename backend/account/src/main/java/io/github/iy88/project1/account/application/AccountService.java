@@ -99,6 +99,61 @@ public class AccountService {
         return sessions.issue(current);
     }
 
+    public void changePassword(Account account, String currentPassword, String newPassword) {
+        password(newPassword);
+        if (!hasher.matches(currentPassword, account.passwordHash())) {
+            throw new BusinessError("CURRENT_PASSWORD_INVALID", 422, "当前密码不正确");
+        }
+        String hash = hasher.hash(newPassword);
+        transaction.executeWithoutResult(status -> {
+            Account locked = accounts.lockById(account.id())
+                    .orElseThrow(() -> new BusinessError("AUTHENTICATION_REQUIRED", 401, "登录状态已失效"));
+            if (!hasher.matches(currentPassword, locked.passwordHash())) {
+                throw new BusinessError("CURRENT_PASSWORD_INVALID", 422, "当前密码不正确");
+            }
+            locked.replacePassword(hash);
+            accounts.save(locked);
+        });
+    }
+
+    public void resetPassword(EntryTokenService.Claims entry, long verificationId, String code, String newPassword) {
+        password(newPassword);
+        String hash = hasher.hash(newPassword);
+        Object result = transaction.execute(status -> {
+            Instant now = Instant.now();
+            EmailVerification verification = verifications.lockById(verificationId)
+                    .orElseThrow(() -> new BusinessError("VERIFICATION_CODE_INVALID", 422, "验证码无效"));
+            if (!"password_reset".equals(verification.purpose())
+                    || verification.entryDigest() == null
+                    || !MessageDigest.isEqual(verification.entryDigest(), entry.nonceDigest())
+                    || verification.accountId() == null) {
+                return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
+            }
+            if (!verification.usable(now)) {
+                return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
+            }
+            Account account = accounts.lockById(verification.accountId())
+                    .orElseThrow(() -> new BusinessError("VERIFICATION_CODE_INVALID", 422, "验证码无效"));
+            if (verification.credentialVersion() == null
+                    || account.credentialVersion() != verification.credentialVersion()) {
+                return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
+            }
+            if (!verification.matches(code)) {
+                verification.recordFailure(now);
+                verifications.save(verification);
+                return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
+            }
+            verification.consume(now);
+            verifications.save(verification);
+            account.replacePassword(hash);
+            accounts.save(account);
+            return Boolean.TRUE;
+        });
+        if (result instanceof Failure failure) {
+            throw new BusinessError(failure.code, failure.status, failure.message);
+        }
+    }
+
     public Account updateProfile(Account account, String displayName, String avatarFileId) {
         if (displayName == null && avatarFileId == null) {
             throw new BusinessError("INPUT_INVALID", 422, "没有可更新的资料");
