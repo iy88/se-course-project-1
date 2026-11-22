@@ -6,6 +6,11 @@ pipeline {
         nodejs 'node-latest'
     }
 
+    environment {
+        PROJECT1_V2_DEPLOY_HOST = '192.168.3.221'
+        PROJECT1_V2_DEPLOY_USER = 'deploy'
+    }
+
     options {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
