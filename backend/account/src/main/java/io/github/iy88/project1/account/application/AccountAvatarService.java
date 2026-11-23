@@ -42,23 +42,27 @@ public class AccountAvatarService {
         return read.url().toString();
     }
 
-    /** Must run inside the account write transaction. A null id keeps the current avatar. */
-    public void replace(long accountId, Long fileId) {
-        if (fileId == null) {
-            return;
-        }
+    /** Must run inside the account write transaction. */
+    public void replace(long accountId, long fileId) {
         var target = new UploadRegistration.Target("account", accountId);
+        releaseCurrent(target);
+        try {
+            references.attach(accountId, target, FilePurpose.ACCOUNT_AVATAR, List.of(fileId), "avatar");
+        } catch (FileRegistry.Rejected rejected) {
+            throw fileError(rejected.getMessage());
+        }
+    }
+
+    /** Must run inside the account write transaction. */
+    public void remove(long accountId) {
+        releaseCurrent(new UploadRegistration.Target("account", accountId));
+    }
+
+    private void releaseCurrent(UploadRegistration.Target target) {
         var current = references.current(target, "avatar");
         if (!current.isEmpty()) {
             references.release(target, current.stream().map(FileReferences.Reference::referenceId).toList(),
                     new FileReferences.RetentionBasis("avatar_replaced", Set.of("s2-v1"), null, Set.of()));
-        }
-        if (fileId > 0) {
-            try {
-                references.attach(accountId, target, FilePurpose.ACCOUNT_AVATAR, List.of(fileId), "avatar");
-            } catch (FileRegistry.Rejected rejected) {
-                throw fileError(rejected.getMessage());
-            }
         }
     }
 

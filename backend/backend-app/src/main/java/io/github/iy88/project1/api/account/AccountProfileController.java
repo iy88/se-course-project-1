@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
 
 @RestController
 @RequestMapping("/api/v1/account/profile")
@@ -28,16 +29,53 @@ class AccountProfileController {
     }
 
     @PatchMapping
-    ResponseEntity<ProfileResponse> update(@RequestBody ProfileRequest body, HttpServletRequest request) {
+    ResponseEntity<ProfileResponse> update(@RequestBody JsonNode body, HttpServletRequest request) {
         var identity = current.require(request);
-        var account = accounts.updateProfile(identity.account(), body.displayName(), body.avatarFileId());
+        boolean hasName = body.has("display_name");
+        boolean hasAvatar = body.has("avatar_file_id");
+        if (!hasName && !hasAvatar) {
+            throw new BusinessError("INPUT_INVALID", 422, "没有可更新的资料");
+        }
+        String displayName = null;
+        if (hasName) {
+            JsonNode value = body.get("display_name");
+            if (value == null || value.isNull() || !value.isString()) {
+                throw new BusinessError("INPUT_INVALID", 422, "显示名称无效");
+            }
+            displayName = value.asString();
+        }
+        AccountService.AvatarChange avatar = AccountService.AvatarChange.keep();
+        if (hasAvatar) {
+            JsonNode value = body.get("avatar_file_id");
+            if (value == null || value.isNull()) {
+                avatar = AccountService.AvatarChange.remove();
+            } else if (!value.isString()) {
+                throw new BusinessError("INPUT_INVALID", 422, "头像标识无效");
+            } else {
+                avatar = AccountService.AvatarChange.replace(avatarId(value.asString()));
+            }
+        }
+        var account = accounts.updateProfile(identity.account(), displayName, avatar);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(new ProfileResponse(Long.toString(account.id()), account.displayName(),
                         avatars.currentUrl(account.id())));
     }
 
-    record ProfileRequest(String displayName, String avatarFileId) {
+    private static long avatarId(String value) {
+        String text = value.trim();
+        if (text.isEmpty() || "0".equals(text)) {
+            throw new BusinessError("INPUT_INVALID", 422, "头像标识无效");
+        }
+        try {
+            long id = Long.parseLong(text);
+            if (id > 0) {
+                return id;
+            }
+        } catch (NumberFormatException ignored) {
+            // Fall through to the shared invalid identifier error.
+        }
+        throw new BusinessError("INPUT_INVALID", 422, "头像标识无效");
     }
 
     record ProfileResponse(String accountId, String displayName, String avatarUrl) {

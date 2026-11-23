@@ -221,37 +221,26 @@ public class AccountService {
                 && EmailAddress.same(newRow.email(), newEmail);
     }
 
-    public Account updateProfile(Account account, String displayName, String avatarFileId) {
-        if (displayName == null && avatarFileId == null) {
+    public Account updateProfile(Account account, String displayName, AvatarChange avatar) {
+        if (displayName == null && !avatar.changed()) {
             throw new BusinessError("INPUT_INVALID", 422, "没有可更新的资料");
         }
         String name = displayName == null ? null : name(displayName);
-        Long avatar = avatarFileId == null ? null : avatarId(avatarFileId);
         return transaction.execute(status -> {
             Account locked = accounts.lockById(account.id())
                     .orElseThrow(() -> new BusinessError("AUTHENTICATION_REQUIRED", 401, "登录状态已失效"));
             if (name != null) {
                 locked.rename(name);
             }
-            avatars.replace(locked.id(), avatar);
+            if (avatar.changed()) {
+                if (avatar.fileId() == null) {
+                    avatars.remove(locked.id());
+                } else {
+                    avatars.replace(locked.id(), avatar.fileId());
+                }
+            }
             return accounts.save(locked);
         });
-    }
-
-    private static Long avatarId(String value) {
-        String text = value.trim();
-        if (text.isEmpty() || "0".equals(text)) {
-            return 0L;
-        }
-        try {
-            long id = Long.parseLong(text);
-            if (id > 0) {
-                return id;
-            }
-        } catch (NumberFormatException ignored) {
-            // Fall through to the shared invalid identifier error.
-        }
-        throw new BusinessError("INPUT_INVALID", 422, "头像标识无效");
     }
 
     private String name(String value) {
@@ -271,6 +260,23 @@ public class AccountService {
 
     public record ChangeEmailCommand(String newEmail, long oldVerificationId, String oldCode,
                                      long newVerificationId, String newCode) {
+    }
+
+    public record AvatarChange(boolean changed, Long fileId) {
+        public static AvatarChange keep() {
+            return new AvatarChange(false, null);
+        }
+
+        public static AvatarChange remove() {
+            return new AvatarChange(true, null);
+        }
+
+        public static AvatarChange replace(long fileId) {
+            if (fileId <= 0) {
+                throw new IllegalArgumentException("Avatar file id must be positive");
+            }
+            return new AvatarChange(true, fileId);
+        }
     }
 
     private record Failure(String code, int status, String message) {
