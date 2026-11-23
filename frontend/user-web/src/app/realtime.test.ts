@@ -37,7 +37,10 @@ class FakeSocket implements RealtimeSocket {
     this.sent.push(JSON.parse(data) as Frame);
   }
 
+  closed = false;
+
   close(): void {
+    this.closed = true;
     this.readyState = 3;
     this.emit("close", { code: 1000 });
   }
@@ -192,20 +195,16 @@ describe("realtime client", () => {
     assert.equal(Number.isNaN(ack.through_seq as number), false);
   });
 
-  it("records the head before reloading snapshots and resumes from that head", async () => {
+  it("resumes from the reset frame without an extra head read", async () => {
     const order: string[] = [];
     const socket = new FakeSocket();
-    const before: EventHead = { epoch: "epoch-1", head_seq: 4, replay_floor: 0 };
-    const recorded: EventHead = { epoch: "epoch-2", head_seq: 20, replay_floor: 0 };
     let headReads = 0;
     const restore = useRealtimeDeps({
       createSocket: () => socket,
       fetchHead: async () => {
-        // The first read opens the connection, the later one serves the resync and
-        // reports a newer head than the snapshot covers.
         order.push("head");
         headReads += 1;
-        return headReads === 1 ? before : recorded;
+        return { epoch: "epoch-1", head_seq: 4, replay_floor: 0 };
       },
       csrfToken: () => "csrf-token",
     });
@@ -222,12 +221,121 @@ describe("realtime client", () => {
     socket.push({ type: "hello_ok", epoch: "epoch-1", head_seq: 4, heartbeat_seconds: 60 });
     await tick();
     order.length = 0;
+    headReads = 0;
 
-    socket.push({ type: "sync_reset" });
+    // The frame carries the authoritative head and epoch; no HTTP read is allowed.
+    socket.push({ type: "sync_reset", epoch: "epoch-2", head_seq: 20, replay_floor: 5 });
     await tick(6);
 
-    assert.deepEqual(order, ["head", "snapshot"]);
+    assert.deepEqual(order, ["snapshot"]);
+    assert.equal(headReads, 0);
     assert.deepEqual(socket.last(), { type: "resume", epoch: "epoch-2", after_seq: 20 });
+  });
+
+  it("acknowledges only sequences it actually received", async () => {
+    const harness = await connect();
+    disposers.push(harness.restore);
+    // A backlog replay from 10 against head 100: adopting the head would ACK 100.
+    harness.socket.push({
+      type: "hello_ok",
+      epoch: "epoch-1",
+      head_seq: 100,
+      heartbeat_seconds: 60,
+    });
+    await tick();
+    assert.equal(
+      harness.socket.sent.filter((frame) => frame.type === "ack").length,
+      0,
+      "hello_ok must not acknowledge anything",
+    );
+
+    harness.socket.push({
+      type: "event",
+      account_seq: 11,
+      event_type: "notification_created",
+      data: { notification_id: "1" },
+    });
+    await tick();
+
+    const acks = harness.socket.sent.filter((frame) => frame.type === "ack");
+    const ack = acks[acks.length - 1];
+    assert.equal(ack?.through_seq, 11);
+  });
+
+  it("does not resume on a connection that was replaced during the snapshot", async () => {
+    const first = new FakeSocket();
+    const second = new FakeSocket();
+    const sockets = [first, second];
+    let index = 0;
+    const restore = useRealtimeDeps({
+      createSocket: () => sockets[Math.min(index++, sockets.length - 1)],
+      fetchHead: async () => ({ epoch: "epoch-1", head_seq: 0, replay_floor: 0 }),
+      csrfToken: () => "csrf-token",
+    });
+    disposers.push(restore);
+    let releaseSnapshot: (() => void) | null = null;
+    const unregister = registerSnapshotReloader(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseSnapshot = resolve;
+        }),
+    );
+    disposers.push(unregister);
+
+    startRealtime();
+    await tick();
+    first.emit("open", {});
+    await tick();
+    first.push({ type: "hello_ok", epoch: "epoch-1", head_seq: 0, heartbeat_seconds: 60 });
+    await tick();
+
+    first.push({ type: "sync_reset", epoch: "epoch-2", head_seq: 30, replay_floor: 0 });
+    await tick();
+    // A second socket replaces the first while the snapshot is still running.
+    first.emit("close", { code: 1006 });
+    await tick();
+    second.emit("open", {});
+    await tick();
+    if (releaseSnapshot !== null) (releaseSnapshot as () => void)();
+    await tick(6);
+
+    assert.equal(
+      first.sent.filter((frame) => frame.type === "resume").length,
+      0,
+      "the stale connection must not resume",
+    );
+    assert.equal(
+      second.sent.filter((frame) => frame.type === "resume").length,
+      0,
+      "the newer connection resumes from its own handshake",
+    );
+  });
+
+  it("closes the original connection when the snapshot fails", async () => {
+    const socket = new FakeSocket();
+    const restore = useRealtimeDeps({
+      createSocket: () => socket,
+      fetchHead: async () => ({ epoch: "epoch-1", head_seq: 0, replay_floor: 0 }),
+      csrfToken: () => "csrf-token",
+    });
+    disposers.push(restore);
+    const unregister = registerSnapshotReloader(() => {
+      throw new Error("snapshot failed");
+    });
+    disposers.push(unregister);
+
+    startRealtime();
+    await tick();
+    socket.emit("open", {});
+    await tick();
+    socket.push({ type: "hello_ok", epoch: "epoch-1", head_seq: 0, heartbeat_seconds: 60 });
+    await tick();
+
+    socket.push({ type: "sync_reset", epoch: "epoch-1", head_seq: 3, replay_floor: 0 });
+    await tick(6);
+
+    assert.equal(socket.closed, true, "the close path owns reconnection");
+    assert.equal(socket.sent.filter((frame) => frame.type === "resume").length, 0);
   });
 
   it("stops on an unauthorized close instead of retrying", async () => {
