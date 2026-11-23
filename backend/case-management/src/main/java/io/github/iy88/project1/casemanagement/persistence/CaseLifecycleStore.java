@@ -424,6 +424,16 @@ public class CaseLifecycleStore {
                 .param(caseId).param(enforcementId).query(this::enforcement).optional();
     }
 
+    /** Records that the original enforcement was reversed by an appeal resolution or a lift. */
+    public void markEnforcementLifted(long caseId, String enforcementId, long managerId, String reason, Instant at) {
+        jdbc.sql("""
+                        update case_enforcement
+                           set lifted_at = ?, lifted_by = ?, lift_reason = ?
+                         where case_id = ? and enforcement_id = ? and lifted_at is null
+                        """)
+                .param(stamp(at)).param(managerId).param(reason).param(caseId).param(enforcementId).update();
+    }
+
     /** Distinct related accounts that hold a thread or an appeal for this case. */
     public List<Long> relatedAccountIds(long caseId) {
         return jdbc.sql("""

@@ -587,12 +587,12 @@ public class CaseApplication {
             if (appeal.relatedAccountId() == null) {
                 throw new BusinessError("STATE_CONFLICT", 409, "申辩记录不完整");
             }
-            if (!CaseVocabulary.RESOLUTION_UPHOLD.equals(message.resolution())) {
-                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "撤销或调整须由处置执行提供");
-            }
             long appellant = appeal.relatedAccountId();
             long conversationId = requireThread(facts.caseId(), appellant, message.conversationId());
             Instant now = now();
+            if (!CaseVocabulary.RESOLUTION_UPHOLD.equals(message.resolution())) {
+                reverse(transaction, facts, appellant, message, actor, now);
+            }
             var appended = threads.append(transaction, facts.caseId(), appellant,
                     CaseVocabulary.KIND_MANAGER_REPLY, CaseVocabulary.ACTOR_MANAGER, actor, message.body());
             long actionId = store.addAction(new CaseRecords.Action(0, facts.caseId(),
@@ -606,6 +606,41 @@ public class CaseApplication {
             store.touch(facts.caseId(), now);
             audit(transaction, "case.appeal.resolve", facts.caseId(), actor);
             return messageResponse(facts, conversationId, appended, actionId, CaseVocabulary.KIND_MANAGER_REPLY);
+        }
+
+        /**
+         * Reverses or adjusts the recorded enforcement that affected the appellant. The adapter
+         * resolves the subject record from the case source, so no subject identifier is accepted
+         * from the client and no state is changed when the capability is unavailable.
+         */
+        private void reverse(WriteTransaction transaction, CaseRecords.Facts facts, long appellant,
+                             CaseCommands.Message message, long manager, Instant now) {
+            if (enforcement == null) {
+                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "撤销或调整须由处置执行提供");
+            }
+            var recorded = store.enforcements(facts.caseId()).stream()
+                    .filter(item -> item.affectedAccountIds().contains(appellant))
+                    .reduce((first, second) -> second)
+                    .orElseThrow(() -> new BusinessError("STATE_CONFLICT", 409, "没有可撤销的执行记录"));
+            String basisRef = "case:" + facts.caseId();
+            var outcomes = enforcement.reverse(transaction, transaction.context(), facts.caseId(), recorded,
+                    message.resolution(), basisRef, message.basisRef(), now);
+            for (var outcome : outcomes) {
+                store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
+                        outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
+                        outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
+                        outcome.currentState(), outcome.affectedAccountIds(), null, null, now));
+                if (!outcome.affectedAccountIds().isEmpty()) {
+                    notifications.create(transaction, enforcementEvent(outcome.action()),
+                            "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":reversed",
+                            new ResourceRef("case", facts.caseId()),
+                            Set.copyOf(outcome.affectedAccountIds()),
+                            Map.of("case_id", Long.toString(facts.caseId()),
+                                    "reason", message.basisRef() == null ? "" : message.basisRef()), now);
+                }
+            }
+            store.markEnforcementLifted(facts.caseId(), recorded.enforcementId(), manager,
+                    message.basisRef() == null ? message.resolution() : message.basisRef(), now);
         }
 
         private WriteResult.Response<?> messageResponse(CaseRecords.Facts facts, long conversationId,
@@ -780,12 +815,7 @@ public class CaseApplication {
             if (outcome.affectedAccountIds().isEmpty()) {
                 return;
             }
-            String event = switch (outcome.action()) {
-                case "freeze_trade" -> CaseVocabulary.EVENT_TRADE_FROZEN;
-                case "lift_trade_freeze" -> CaseVocabulary.EVENT_TRADE_UNFROZEN;
-                case "adjust_trade_status" -> CaseVocabulary.EVENT_TRADE_ADJUSTED;
-                default -> CaseVocabulary.EVENT_DECIDED;
-            };
+            String event = enforcementEvent(outcome.action());
             notifications.create(transaction, event,
                     "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":affected",
                     new ResourceRef("case", facts.caseId()), Set.copyOf(outcome.affectedAccountIds()),
@@ -949,6 +979,15 @@ public class CaseApplication {
         node.put("case_id", caseId);
         node.set("input", json.valueToTree(input));
         return node;
+    }
+
+    private static String enforcementEvent(String action) {
+        return switch (action) {
+            case "freeze_trade" -> CaseVocabulary.EVENT_TRADE_FROZEN;
+            case "lift_trade_freeze" -> CaseVocabulary.EVENT_TRADE_UNFROZEN;
+            case "adjust_trade_status" -> CaseVocabulary.EVENT_TRADE_ADJUSTED;
+            default -> CaseVocabulary.EVENT_DECIDED;
+        };
     }
 
     private static long actor(ExecutionContext context) {

@@ -1,6 +1,7 @@
 package io.github.iy88.project1.casemanagement.application;
 
 import io.github.iy88.project1.core.ExecutionContext;
+import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.LockPlan;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteTransaction;
@@ -83,5 +84,18 @@ public final class CasePorts {
                                                      long caseId, String reason, String basisRef,
                                                      List<CaseRecords.EnforcementInstruction> instructions,
                                                      Instant occurredAt);
+
+        /**
+         * Reverses or adjusts one recorded enforcement for an appeal. The adapter resolves the
+         * subject record from the case source (never from a client-supplied freeze id) and returns
+         * the compensating outcome. Adapters delivered by S4-01 (#81) implement this; until then
+         * the default keeps the appeal resolution unavailable instead of faking success.
+         */
+        default List<CaseRecords.EnforcementOutcome> reverse(WriteTransaction transaction,
+                                                             ExecutionContext context, long caseId,
+                                                             CaseRecords.Enforcement recorded, String resolution,
+                                                             String basisRef, String reason, Instant occurredAt) {
+            throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "撤销或调整须由处置执行提供");
+        }
     }
 }
