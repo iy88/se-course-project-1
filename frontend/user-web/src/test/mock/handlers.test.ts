@@ -9,8 +9,8 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { handleMockRequest, resetMockState } from "./handlers";
-import { ApiError } from "../api/errors";
-import type { HttpMethod } from "../api/http";
+import { ApiError } from "../../api/errors";
+import type { HttpMethod } from "../../api/http";
 
 async function call<T>(
   method: HttpMethod,

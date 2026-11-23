@@ -26,7 +26,7 @@ import type {
   TradeAction,
   TradeStatus,
   TradeView,
-} from "../api/contracts";
+} from "../../api/contracts";
 
 export interface MockAccount {
   account_id: string;

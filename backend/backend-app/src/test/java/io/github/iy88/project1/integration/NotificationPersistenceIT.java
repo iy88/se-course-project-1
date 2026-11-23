@@ -115,6 +115,8 @@ class NotificationPersistenceIT {
         assertThat(created.replayed()).isFalse();
         assertThat(notificationRows(intentKey)).isEqualTo(2);
         assertThat(eventRows(intentKey)).isEqualTo(2);
+        // The delivery event is notification_created and points at the row it announced.
+        assertThat(createdEventsLinkingNotification(intentKey)).isEqualTo(2);
 
         var replay = create("notification.create", intentKey, intent);
         assertThat(replay.replayed()).isTrue();
@@ -136,6 +138,23 @@ class NotificationPersistenceIT {
         // A fresh idempotency key models a different action that reuses the intent
         // key; the retry path with the same key is covered by the replay test.
         assertThatThrownBy(() -> create("notification.create", key("conflict-second"), conflicting))
+                .isInstanceOf(BusinessError.class)
+                .satisfies(error -> assertThat(((BusinessError) error).code())
+                        .isEqualTo("NOTIFICATION_INTENT_CONFLICT"));
+        assertThat(notificationRows(intentKey)).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsTheSameIntentKeyWithDifferentTemplateParameters() {
+        String intentKey = key("params");
+        create("notification.create", intentKey, intent(intentKey, "product_audit.passed", SELLER));
+
+        // Same event type, source and template; only a template parameter differs.
+        var conflicting = new NotificationIntent(Set.of(SELLER), null, "product_audit.passed",
+                new ResourceRef("product_audit", 1001L), intentKey, "notification.template", "1",
+                Map.of("summary", "另一条说明"), Instant.parse("2026-11-22T10:00:00Z"));
+
+        assertThatThrownBy(() -> create("notification.create", key("params-second"), conflicting))
                 .isInstanceOf(BusinessError.class)
                 .satisfies(error -> assertThat(((BusinessError) error).code())
                         .isEqualTo("NOTIFICATION_INTENT_CONFLICT"));
@@ -336,5 +355,21 @@ class NotificationPersistenceIT {
     private static long readEventRows(long notificationId) {
         return db.sql("SELECT count(*) FROM user_event WHERE event_type = 'notification_read' AND payload_id = ?")
                 .param(notificationId).query(Long.class).single();
+    }
+
+    /**
+     * Counts delivery events that are {@code notification_created} and whose payload
+     * is the notification row of the same recipient and intent scope.
+     */
+    private static long createdEventsLinkingNotification(String intentKey) {
+        return db.sql("""
+                SELECT count(*) FROM user_event e
+                JOIN notification n
+                  ON n.notification_id = e.payload_id
+                 AND n.recipient_account_id = e.recipient_account_id
+                 AND n.intent_key = e.intent_key
+                WHERE e.intent_key = ? AND e.event_type = 'notification_created'
+                """)
+                .param(intentKey).query(Long.class).single();
     }
 }

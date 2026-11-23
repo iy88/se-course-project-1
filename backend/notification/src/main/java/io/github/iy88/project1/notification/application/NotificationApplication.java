@@ -7,7 +7,6 @@ import io.github.iy88.project1.notification.persistence.NotificationStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -24,6 +23,16 @@ public class NotificationApplication {
     /** Delivery schema version of the notification event payloads. */
     public static final int SCHEMA_VERSION = 1;
 
+    /**
+     * Delivery event type of a newly created notification.
+     *
+     * The business type (for example {@code product_audit.rejected}) stays in the
+     * notification row; the delivery event is always this one and carries the
+     * created notification id, so the realtime projection can decide by recipient
+     * qualification instead of by business label.
+     */
+    public static final String CREATED_EVENT_TYPE = "notification_created";
+
     /** Event type of the first-read notification. */
     public static final String READ_EVENT_TYPE = "notification_read";
 
@@ -38,17 +47,17 @@ public class NotificationApplication {
     }
 
     /**
-     * Persist one notification per recipient and register the matching delivery
-     * intents in the caller's transaction.
+     * Persist one notification per recipient and register one delivery intent per
+     * created notification in the caller's transaction.
      *
      * A retried intent returns the stored notifications and registers no second
-     * event. The same key with a different event type, source or template is a
-     * conflict, because the stored row would otherwise describe another action.
+     * event. The same key with different event type, source, template or template
+     * parameters is a conflict, because the stored row would otherwise describe
+     * another action.
      */
     public NotificationBatch createNotifications(WriteTransaction transaction, NotificationIntent intent) {
         Instant now = clock.instant();
         List<NotificationItem> items = new ArrayList<>();
-        Set<Long> created = new LinkedHashSet<>();
         for (long recipient : intent.sortedRecipients()) {
             var existing = store.find(recipient, intent.intentKey());
             if (existing.isPresent()) {
@@ -59,12 +68,13 @@ public class NotificationApplication {
                 items.add(existing.get().item());
                 continue;
             }
-            items.add(store.insert(recipient, intent, now).item());
-            created.add(recipient);
-        }
-        if (!created.isEmpty()) {
-            transaction.addEventIntent(Set.copyOf(created), intent.eventIntentType(), SCHEMA_VERSION,
-                    intent.source(), intent.intentKey(), null, null);
+            var created = store.insert(recipient, intent, now);
+            items.add(created.item());
+            // One delivery event per created notification, addressed to its
+            // recipient and pointing at the notification the client must load.
+            transaction.addEventIntent(Set.of(recipient), CREATED_EVENT_TYPE, SCHEMA_VERSION,
+                    intent.source(), intent.intentKey(),
+                    new ResourceRef(NOTIFICATION_RESOURCE, created.notificationId()), null);
         }
         return new NotificationBatch(items);
     }
