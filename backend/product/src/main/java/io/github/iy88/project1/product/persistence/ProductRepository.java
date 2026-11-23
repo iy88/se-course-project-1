@@ -19,6 +19,14 @@ public interface ProductRepository extends Repository<Product, Long> {
     @Query("select p from Product p where p.id = :id")
     Optional<Product> lockById(@Param("id") long id);
 
+    @Query("""
+            select p from Product p
+            where p.sellerAccountId = :sellerId and p.deletedAt is null
+              and (:state is null or p.lifecycleState = :state)
+            order by p.updatedAt desc, p.id desc
+            """)
+    Page<Product> findForSeller(@Param("sellerId") long sellerId, @Param("state") String state, Pageable pageable);
+
     @Query(value = """
             select p from Product p
             where p.deletedAt is null and p.lifecycleState = 'public'

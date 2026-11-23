@@ -311,6 +311,29 @@ public class ProductService {
                 .isPresent();
     }
 
+    public MyResources myResources(long accountId, String state, Integer page, Integer pageSize) {
+        int currentPage = page == null ? 1 : page;
+        int size = pageSize == null ? settings.pageSize() : pageSize;
+        if (currentPage < 1 || size < 1 || size > settings.pageSizeMax()) {
+            throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
+        }
+        String normalized = state == null ? null : state.trim();
+        if (normalized != null && !normalized.isEmpty()
+                && !Set.of(Product.PENDING_REVIEW, Product.REVIEW_REJECTED, Product.PUBLIC, Product.IN_TRADE,
+                Product.OFF_SHELF).contains(normalized)) {
+            throw new BusinessError("INPUT_INVALID", 422, "商品状态无效");
+        }
+        if (normalized != null && normalized.isEmpty()) {
+            normalized = null;
+        }
+        var result = products.findForSeller(accountId, normalized, PageRequest.of(currentPage - 1, size));
+        List<MyResourceItem> items = result.getContent().stream()
+                .map(product -> new MyResourceItem(Long.toString(product.id()), product.title(),
+                        product.lifecycleState(), product.updatedAt()))
+                .toList();
+        return new MyResources("product", items, currentPage, size, result.getTotalElements(), Instant.now());
+    }
+
     public PageResult<EditView> editHistory(long viewerId, long productId, Integer page, Integer pageSize) {
         Product product = products.findById(productId).filter(found -> !found.deleted())
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
@@ -625,6 +648,13 @@ public class ProductService {
                                 List<ImageRef> images, List<CategoryRef> categories, SellerRef seller,
                                 String lifecycleState, int contentVersion, Instant createdAt, Instant updatedAt,
                                 ReviewRef pendingReview, ReviewRef latestReview, Permissions permissions) {
+    }
+
+    public record MyResourceItem(String productId, String title, String lifecycleState, Instant updatedAt) {
+    }
+
+    public record MyResources(String kind, List<MyResourceItem> items, int page, int pageSize, long total,
+                              Instant asOf) {
     }
 
     public record EditView(String editId, Instant editedAt, String operatorKind, String editKind,
