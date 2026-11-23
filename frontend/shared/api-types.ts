@@ -289,6 +289,177 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/cases": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 本人举报与收到的事项 */
+    get: operations["listCases"];
+    put?: never;
+    /** 提交举报（同对象未结时转为补充） */
+    post: operations["submitReport"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/cases/{case_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 事项详情与进度（按视角裁剪） */
+    get: operations["getCase"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/cases/{case_id}/supplements": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 补充举报材料 */
+    post: operations["supplementCase"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/cases/{case_id}/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 提交说明、申辩或管理员回复 */
+    post: operations["postCaseMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/case-results": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 匿名公开的举报结果 */
+    get: operations["listCaseResults"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/cases/{case_id}/claim": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 认领事项（商品审核与处置事项共用） */
+    post: operations["claimCase"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/cases/{case_id}/inquiries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 向相关账户发起问询 */
+    post: operations["inquireCase"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/cases/{case_id}/decisions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 作出决定并按执行项处置 */
+    post: operations["decideCase"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/cases/{case_id}/close": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 结案并归档事项及各线程 */
+    post: operations["closeCase"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/cases/{case_id}/publish-result": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 确认并匿名公开举报结果 */
+    post: operations["publishCaseResult"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -598,6 +769,170 @@ export interface components {
       /** Format: int64 */
       head_seq: number;
       has_more: boolean;
+    };
+    CaseTarget: {
+      /** @enum {string} */
+      target_type: "product" | "comment" | "message" | "evaluation" | "account" | "trade";
+      target_id: string;
+      /** @enum {string} */
+      conversation_kind?: "chat" | "trade" | "case";
+      conversation_id?: string;
+    };
+    CaseThread: {
+      /** @constant */
+      conversation_kind: "case";
+      conversation_id: string;
+    };
+    CaseActionView: {
+      action_kind: string;
+      /** Format: date-time */
+      occurred_at: string;
+      /** @enum {string} */
+      actor_kind: "account" | "manager" | "system";
+    };
+    CaseEnforcementView: {
+      enforcement_id: string;
+      action: string;
+      /** @enum {string} */
+      result_status: "applied" | "replayed" | "failed";
+      current_state?: string | null;
+    };
+    CasePendingInquiry: {
+      inquiry_action_id: string;
+      /** Format: date-time */
+      asked_at: string;
+      scope_text: string;
+      related_account_id?: string | null;
+    };
+    CaseListItem: {
+      case_id: string;
+      /** @enum {string} */
+      scope: "mine" | "received";
+      case_type?: string;
+      /** @enum {string} */
+      case_status: "pending" | "claimed" | "decided";
+      decision_kind?: string | null;
+      /** Format: date-time */
+      archived_at?: string | null;
+      /** Format: date-time */
+      public_result_at?: string | null;
+      /** Format: date-time */
+      updated_at: string;
+      thread?: components["schemas"]["CaseThread"] | null;
+    };
+    CaseDetail: {
+      case_id: string;
+      case_type: string;
+      /** @enum {string} */
+      case_status: "pending" | "claimed" | "decided";
+      decision_kind?: string | null;
+      /** Format: date-time */
+      archived_at?: string | null;
+      /** Format: date-time */
+      public_result_at?: string | null;
+      reason_text?: string | null;
+      reported_reason?: string | null;
+      /** @enum {string} */
+      viewpoint: "reporter" | "related_account" | "manager";
+      /** Format: date-time */
+      appeal_deadline_at?: string | null;
+      available_actions: (
+        | "supplement_evidence"
+        | "respond_inquiry"
+        | "submit_appeal"
+        | "inquire"
+        | "decide"
+        | "resolve_appeal"
+        | "close"
+        | "publish_result"
+      )[];
+      pending_inquiries?: components["schemas"]["CasePendingInquiry"][];
+      thread?: components["schemas"]["CaseThread"] | null;
+      threads?: {
+        related_account_id: string;
+        /** @constant */
+        conversation_kind: "case";
+        conversation_id: string;
+      }[];
+      evidence?: {
+        evidence_id: string;
+        file_id?: string | null;
+      }[];
+      actions?: components["schemas"]["CaseActionView"][];
+      enforcements?: components["schemas"]["CaseEnforcementView"][];
+    };
+    CaseResult: {
+      case_id: string;
+      decision_kind: string;
+      public_summary: string;
+      public_reason: string;
+      /** Format: date-time */
+      published_at: string;
+    };
+    CaseMessageView: {
+      case_message_id: string;
+      seq: number;
+      /** @enum {string} */
+      message_kind: "inquiry" | "statement" | "appeal" | "manager_reply" | "system_notice";
+      body: string;
+      /** Format: date-time */
+      created_at: string;
+      thread?: components["schemas"]["CaseThread"];
+    };
+    CaseSubmitRequest: {
+      target: components["schemas"]["CaseTarget"];
+      reason: string;
+      note?: string | null;
+      attachments?: {
+        file_id: string;
+      }[];
+    };
+    CaseSupplementRequest: {
+      note?: string | null;
+      attachments?: {
+        file_id: string;
+      }[];
+    };
+    CaseMessageRequest: {
+      thread?: components["schemas"]["CaseThread"];
+      /** @enum {string} */
+      message_kind: "statement" | "appeal" | "manager_reply";
+      body: string;
+      inquiry_action_id?: string | null;
+      appeal_action_id?: string | null;
+      /** @enum {string|null} */
+      resolution?: "uphold" | "revoke" | "adjust" | null;
+      basis_ref?: string | null;
+    };
+    CaseInquiryRequest: {
+      peer_account_id: string;
+      scope_text: string;
+    };
+    CaseDecisionRequest: {
+      /** @enum {string} */
+      decision_kind: "no_action" | "not_actionable" | "violation";
+      reason: string;
+      basis_refs: string[];
+      enforcements?: {
+        /** @enum {string} */
+        action:
+          | "restrict_account"
+          | "lift_account_restriction"
+          | "withdraw_public_access"
+          | "restore_display"
+          | "remove_content"
+          | "freeze_trade"
+          | "lift_trade_freeze"
+          | "adjust_trade_status"
+          | "remove_evaluation_content";
+        target_type: string;
+        target_id: string;
+        expected_result?: string | null;
+      }[];
+    };
+    CasePublishRequest: {
+      public_summary: string;
+      public_reason: string;
     };
   };
   responses: never;
@@ -1529,6 +1864,731 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["EventPage"];
+        };
+      };
+    };
+  };
+  listCases: {
+    parameters: {
+      query: {
+        scope: "mine" | "received";
+        status?: "pending" | "claimed" | "decided";
+        archived?: boolean;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items: components["schemas"]["CaseListItem"][];
+            page: number;
+            page_size: number;
+            total: number;
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  submitReport: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CaseSubmitRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            case_id: string;
+            case_status: string;
+            /** @constant */
+            reused: true;
+          };
+        };
+      };
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            case_id: string;
+            case_status: string;
+            /** @constant */
+            reused: false;
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description CASE_CLOSED */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID / TARGET_INVALID / EVIDENCE_OUT_OF_SCOPE */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getCase: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CaseDetail"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  supplementCase: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CaseSupplementRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            case_id: string;
+            supplement_count: number;
+            /** Format: date-time */
+            updated_at: string;
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description NOT_CASE_PARTICIPANT */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description CASE_CLOSED */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID / EVIDENCE_OUT_OF_SCOPE */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  postCaseMessage: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CaseMessageRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CaseMessageView"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description PARTICIPANT_REQUIRED / NOT_CASE_MANAGER */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description CASE_CLOSED / CASE_APPEAL_WINDOW_ENDED / STATE_CONFLICT */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  listCaseResults: {
+    parameters: {
+      query?: {
+        target_type?: string;
+        target_id?: string;
+        conversation_kind?: string;
+        conversation_id?: string;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items: components["schemas"]["CaseResult"][];
+            page: number;
+            page_size: number;
+            total: number;
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  claimCase: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            case_id: string;
+            case_status: string;
+            claimed_manager_id: string;
+            /** Format: date-time */
+            claimed_at: string;
+            already_claimed: boolean;
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description CASE_ALREADY_CLAIMED / CASE_CLOSED */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  inquireCase: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CaseInquiryRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            inquiry_action_id: string;
+            case_message_id: string;
+            thread: components["schemas"]["CaseThread"];
+            case_status: string;
+            /** Format: date-time */
+            notified_at?: string;
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description NOT_CASE_MANAGER */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description CASE_CLOSED */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  decideCase: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CaseDecisionRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            case_id: string;
+            decision_kind: string;
+            /** Format: date-time */
+            decided_at: string;
+            /** @constant */
+            case_status: "decided";
+            enforcements: components["schemas"]["CaseEnforcementView"][];
+            notified_account_ids: string[];
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description NOT_CASE_MANAGER */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description STATE_CONFLICT / CASE_CLOSED / TARGET_STATE_CONFLICT / TRADE_TERMINAL */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID / BASIS_REQUIRED / TARGET_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  closeCase: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            case_id: string;
+            /** @constant */
+            case_status: "decided";
+            /** Format: date-time */
+            archived_at: string;
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description NOT_CASE_MANAGER */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description STATE_CONFLICT / CASE_APPEAL_WINDOW_OPEN / CASE_APPEAL_PENDING */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  publishCaseResult: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CasePublishRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            case_id: string;
+            /** Format: date-time */
+            public_result_at: string;
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description NOT_CASE_MANAGER */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description STATE_CONFLICT */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };
