@@ -16,6 +16,7 @@ import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.core.WriteTransaction;
+import io.github.iy88.project1.trade.application.TradePorts;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
@@ -821,6 +822,28 @@ class ProductReviewIT {
         @Bean
         CsrfGuard.Verifier csrfVerifier() {
             return (request, token) -> CSRF.equals(token);
+        }
+
+        // Trade is outside this test's scope; the composition baseline supplies the real ports in
+        // S3-02/S4. Mocked here so the review workflow can start the full application context.
+        @Bean
+        TradePorts.Product tradeProduct() {
+            return org.mockito.Mockito.mock(TradePorts.Product.class);
+        }
+
+        @Bean
+        TradePorts.Accounts tradeAccounts() {
+            return org.mockito.Mockito.mock(TradePorts.Accounts.class);
+        }
+
+        @Bean
+        TradePorts.Cases tradeCases() {
+            return org.mockito.Mockito.mock(TradePorts.Cases.class);
+        }
+
+        @Bean
+        TradePorts.Notifications tradeNotifications() {
+            return org.mockito.Mockito.mock(TradePorts.Notifications.class);
         }
     }
 }
