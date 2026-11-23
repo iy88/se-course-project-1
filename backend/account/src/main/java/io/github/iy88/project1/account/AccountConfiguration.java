@@ -6,6 +6,6 @@ import org.springframework.context.annotation.Profile;
 
 @Configuration(proxyBeanMethods = false)
 @Profile("infrastructure")
-@EnableConfigurationProperties(AccountSettings.class)
+@EnableConfigurationProperties({AccountSettings.class, EmailDeliverySettings.class})
 public class AccountConfiguration {
 }

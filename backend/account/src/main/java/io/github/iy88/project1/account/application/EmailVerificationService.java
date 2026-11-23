@@ -25,16 +25,13 @@ public class EmailVerificationService {
     private final EmailVerificationRepository verifications;
     private final AccountRepository accounts;
     private final AccountSettings settings;
-    private final VerificationMail mail;
     private final TransactionTemplate transaction;
 
     public EmailVerificationService(EmailVerificationRepository verifications, AccountRepository accounts,
-                                    AccountSettings settings, VerificationMail mail,
-                                    PlatformTransactionManager manager) {
+                                    AccountSettings settings, PlatformTransactionManager manager) {
         this.verifications = verifications;
         this.accounts = accounts;
         this.settings = settings;
-        this.mail = mail;
         this.transaction = new TransactionTemplate(manager);
     }
 
@@ -65,10 +62,8 @@ public class EmailVerificationService {
                 existing.map(Account::id).orElse(null), entry.nonceDigest(), UUID.randomUUID(),
                 existing.map(Account::credentialVersion).orElse(null), now, expiresAt, code,
                 settings.emailCodeLength(), settings.emailCodeMaxFailedAttempts(), "s2-v1",
-                rules(), now.plusSeconds(settings.emailResendIntervalSeconds()));
+                rules(), now);
         transaction.executeWithoutResult(status -> verifications.save(record));
-        send(email, code);
-        markSent(record.id());
         return new Requested(List.of(new Item(record.id(), purpose, expiresAt)),
                 settings.emailResendIntervalSeconds());
     }
@@ -90,21 +85,15 @@ public class EmailVerificationService {
         String newCode = code(settings.emailCodeLength());
         EmailVerification oldRow = new EmailVerification("email_change_old", account.email(), account.id(), null,
                 group, account.credentialVersion(), now, expiresAt, oldCode, settings.emailCodeLength(),
-                settings.emailCodeMaxFailedAttempts(), "s2-v1", rules(),
-                now.plusSeconds(settings.emailResendIntervalSeconds()));
+                settings.emailCodeMaxFailedAttempts(), "s2-v1", rules(), now);
         EmailVerification newRow = new EmailVerification("email_change_new", newEmail, account.id(), null,
                 group, account.credentialVersion(), now, expiresAt, newCode, settings.emailCodeLength(),
-                settings.emailCodeMaxFailedAttempts(), "s2-v1", rules(),
-                now.plusSeconds(settings.emailResendIntervalSeconds()));
+                settings.emailCodeMaxFailedAttempts(), "s2-v1", rules(), now);
         transaction.executeWithoutResult(status -> {
             verifications.invalidateEmailChange(account.id(), now);
             verifications.save(oldRow);
             verifications.save(newRow);
         });
-        send(account.email(), oldCode);
-        send(newEmail, newCode);
-        markSent(oldRow.id());
-        markSent(newRow.id());
         return new Requested(List.of(new Item(oldRow.id(), "email_change_old", expiresAt),
                 new Item(newRow.id(), "email_change_new", expiresAt)), settings.emailResendIntervalSeconds());
     }
@@ -113,22 +102,6 @@ public class EmailVerificationService {
         return Map.of("max_attempts", 3, "retry_seconds", settings.emailResendIntervalSeconds());
     }
 
-    private void send(String recipient, String code) {
-        try {
-            mail.sendCode(recipient, code, settings.emailCodeTtlSeconds());
-        } catch (BusinessError dependency) {
-            throw dependency;
-        } catch (RuntimeException failure) {
-            throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "验证码发送失败，请稍后重试");
-        }
-    }
-
-    private void markSent(long verificationId) {
-        transaction.executeWithoutResult(status -> verifications.findById(verificationId).ifPresent(saved -> {
-            saved.markSent(Instant.now());
-            verifications.save(saved);
-        }));
-    }
 
     private static String code(int length) {
         StringBuilder value = new StringBuilder(length);
