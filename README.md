@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.56
-Version-Datetime: 2026-11-19T23:03:15+08:00
+Version: 0.1.59
+Version-Datetime: 2026-11-22T00:16:57+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -267,10 +267,12 @@ java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --spring.pro
 
 ### 实时 HTTP 与 WebSocket
 
-通过 `ALLOWED_ORIGINS` 和 `RealtimeAccess` bean 启用 `realtime-api`。适配器认证 Session Cookie，重新检查其当前状态，验证 hello CSRF 令牌，并投影可见的事件来源。
+正常业务入口以 `infrastructure` servlet API 运行，自动装配 HTTP 补拉、`/api/v1/realtime` WebSocket、公开配置接口和业务事件投影，不需要额外的实时 profile 或能力开关。按[快速开始](#快速开始)启动的 API 进程即采用该角色；依赖探针、`file-probe` 以及不监听 HTTP 的 worker／scheduler 不装配这些组件，未启用 `infrastructure` 的轻量单元测试也不会加载。适配器认证 Session Cookie，重新检查其当前状态，验证 hello CSRF 令牌，并投影可见的事件来源。
 
+- 业务入口要求账户 Session、通知和会话读取适配器同时存在；缺少任一适配器时启动失败，不使用替身或空实现。正式适配器由 Issue #78／#79／#80 提供。其他业务来源通过 `RealtimeEventSources.SourceAccess` 登记当前可见性。
+- `GET /api/v1/capabilities` 返回 `config_version` 与账户公开 `limits`；无 Cookie 只返回访客限制，已失效 Cookie 按身份契约返回 401，响应使用 `no-store`。
 - `GET /api/v1/account/events/head` 返回账户纪元、头部序列和重放下限。`GET /api/v1/account/events?epoch=<uuid>&after_seq=<seq>` 在限定范围内扫描一页数据。
-- `/api/v1/realtime` 接受版本 1 的 `hello` 帧。有效游标会恢复投递。触发 `sync_reset` 后，加载当前快照并使用新游标发送 `resume`。通过 `ack` 确认最后连续处理的序列。
+- `/api/v1/realtime` 接受版本 1 的 `hello` 帧。有效游标会恢复投递。收到 `sync_reset` 后，先读取事件头，再加载通知、会话及其已读进度；全部查询成功后使用刚取得的头部游标发送 `resume`。通过 `ack` 确认最后连续处理的序列。
 - 在将来源连接记录到执行上下文之前，通过 `OriginConnectionLookup` 解析 `X-Origin-Connection-Id`。Redis 将连接租约限定到已认证的账户和 Session。
 
 ### 文件服务测试页

@@ -3,6 +3,9 @@ package io.github.iy88.project1.conversation.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.github.iy88.project1.conversation.ConversationSettings;
@@ -30,11 +33,7 @@ class ConversationCasePageTests {
 
     @Test
     void pagesCaseThreadWithRoleProjection() {
-        var conversation = mock(CaseConversation.class);
-        when(conversation.id()).thenReturn(3L);
-        when(conversation.caseId()).thenReturn(9L);
-        when(conversation.relatedAccountId()).thenReturn(7L);
-        when(conversation.archived()).thenReturn(false);
+        var conversation = caseConversation(3L, 9L, 7L);
         when(store.caseConversation(3L)).thenReturn(conversation);
         when(cases.canAccess(9L, 7L, 7L)).thenReturn(true);
 
@@ -62,16 +61,55 @@ class ConversationCasePageTests {
 
     @Test
     void rejectsAccountsWithoutCaseAccess() {
-        var conversation = mock(CaseConversation.class);
-        when(conversation.id()).thenReturn(3L);
-        when(conversation.caseId()).thenReturn(9L);
-        when(conversation.relatedAccountId()).thenReturn(7L);
+        var conversation = caseConversation(3L, 9L, 7L);
         when(store.caseConversation(3L)).thenReturn(conversation);
         when(cases.canAccess(9L, 7L, 8L)).thenReturn(false);
 
         assertThatThrownBy(() -> queries.pageCase(actor(8L), 3L, null, null, 20))
                 .isInstanceOfSatisfying(BusinessError.class,
                         failure -> assertThat(failure.code()).isEqualTo("PARTICIPANT_REQUIRED"));
+        verify(cases).canAccess(9L, 7L, 8L);
+        verifyNoInteractions(reader, accounts);
+    }
+
+    @Test
+    void deniesPeerThreadsOfTheSameCaseSeparately() {
+        var own = caseConversation(3L, 9L, 7L);
+        var peer = caseConversation(4L, 9L, 8L);
+        when(store.caseConversation(3L)).thenReturn(own);
+        when(store.caseConversation(4L)).thenReturn(peer);
+        when(cases.canAccess(9L, 7L, 7L)).thenReturn(true);
+        when(cases.canAccess(9L, 8L, 7L)).thenReturn(false);
+        when(reader.caseMessages(3L, null, null, 20)).thenReturn(List.of());
+        when(accounts.profiles(java.util.Set.of())).thenReturn(Map.of());
+
+        assertThat(queries.pageCase(actor(7L), 3L, null, null, 20).items()).isEmpty();
+        assertThatThrownBy(() -> queries.pageCase(actor(7L), 4L, null, null, 20))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("PARTICIPANT_REQUIRED"));
+        verify(reader, never()).caseMessages(4L, null, null, 20);
+    }
+
+    @Test
+    void allowsEligibleAssignedManager() {
+        var conversation = caseConversation(3L, 9L, 7L);
+        when(store.caseConversation(3L)).thenReturn(conversation);
+        when(cases.canAccess(9L, 7L, 99L)).thenReturn(true);
+        when(reader.caseMessages(3L, null, null, 20)).thenReturn(List.of());
+        when(accounts.profiles(java.util.Set.of())).thenReturn(Map.of());
+
+        var page = queries.pageCase(actor(99L), 3L, null, null, 20);
+
+        assertThat(page.items()).isEmpty();
+    }
+
+    private static CaseConversation caseConversation(long id, long caseId, long relatedAccountId) {
+        var conversation = mock(CaseConversation.class);
+        when(conversation.id()).thenReturn(id);
+        when(conversation.caseId()).thenReturn(caseId);
+        when(conversation.relatedAccountId()).thenReturn(relatedAccountId);
+        when(conversation.archived()).thenReturn(false);
+        return conversation;
     }
 
     @Test
@@ -101,14 +139,6 @@ class ConversationCasePageTests {
         assertThatThrownBy(() -> queries.pageCase(actor(7L), 4L, null, null, 20))
                 .isInstanceOfSatisfying(BusinessError.class,
                         failure -> assertThat(failure.code()).isEqualTo("PARTICIPANT_REQUIRED"));
-    }
-
-    private static CaseConversation caseConversation(long id, long caseId, long relatedAccountId) {
-        var conversation = mock(CaseConversation.class);
-        when(conversation.id()).thenReturn(id);
-        when(conversation.caseId()).thenReturn(caseId);
-        when(conversation.relatedAccountId()).thenReturn(relatedAccountId);
-        return conversation;
     }
 
     private static CaseMessage caseMessage(long id, long seq, String senderKind, Long senderAccountId,

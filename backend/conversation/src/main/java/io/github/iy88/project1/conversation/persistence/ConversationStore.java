@@ -8,12 +8,14 @@ import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.LockPlan;
 import io.github.iy88.project1.core.WriteTransaction;
 import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +28,7 @@ import org.springframework.stereotype.Service;
  */
 @Lazy
 @Service
+@Profile("infrastructure")
 public class ConversationStore {
     private static final long MAX_SAFE_SEQUENCE = 9007199254740991L;
 
@@ -72,7 +75,7 @@ public class ConversationStore {
                         """)
                 .param("low", pair.lowAccountId())
                 .param("high", pair.highAccountId())
-                .param("createdAt", now)
+                .param("createdAt", now.atOffset(ZoneOffset.UTC))
                 .update();
         var conversation = chats.findByAccountLowIdAndAccountHighId(pair.lowAccountId(), pair.highAccountId())
                 .orElseThrow(() -> new IllegalStateException("Chat conversation was not persisted"));
@@ -157,7 +160,7 @@ public class ConversationStore {
                         on conflict (trade_id) do nothing
                         """)
                 .param("tradeId", tradeId)
-                .param("createdAt", clock.instant())
+                .param("createdAt", clock.instant().atOffset(ZoneOffset.UTC))
                 .update();
         var conversation = trades.findByTradeId(tradeId)
                 .orElseThrow(() -> new IllegalStateException("Trade conversation was not persisted"));
@@ -170,6 +173,11 @@ public class ConversationStore {
 
     public Optional<TradeConversation> findTrade(long tradeId) {
         return trades.findByTradeId(tradeId);
+    }
+
+    /** Gets the trade conversation already locked or created by the calling transaction. */
+    public TradeConversation tradeConversation(long conversationId) {
+        return trades.findById(conversationId).orElseThrow(ConversationStore::participantRequired);
     }
 
     public TradeConversation lockTrade(WriteTransaction transaction, long conversationId) {
@@ -252,7 +260,7 @@ public class ConversationStore {
                         """)
                 .param("caseId", caseId)
                 .param("accountId", relatedAccountId)
-                .param("createdAt", clock.instant())
+                .param("createdAt", clock.instant().atOffset(ZoneOffset.UTC))
                 .update();
         var conversation = cases.findByCaseIdAndRelatedAccountId(caseId, relatedAccountId)
                 .orElseThrow(() -> new IllegalStateException("Case conversation was not persisted"));

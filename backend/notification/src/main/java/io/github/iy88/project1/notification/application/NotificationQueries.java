@@ -43,6 +43,12 @@ public class NotificationQueries {
         return project(context, row);
     }
 
+    /** Recipient-scoped transport metadata; the source module is not consulted. */
+    public Optional<NotificationItem> findRecipientItem(ExecutionContext context, long notificationId) {
+        long accountId = recipientOf(context);
+        return store.findForRecipient(notificationId, accountId).map(NotificationStore.Stored::item);
+    }
+
     private NotificationView project(ExecutionContext context, NotificationStore.Stored row) {
         var projected = sources.flatMap(port -> port.project(context, facts(row)));
         return projected

@@ -18,11 +18,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /** Read-only conversation queries; they never advance read progress. */
 @Lazy
 @Service
+@Profile("infrastructure")
 public class ConversationQueries {
     private final ConversationStore store;
     private final ConversationReader reader;
@@ -148,8 +150,8 @@ public class ConversationQueries {
                 ? new ConversationViews.Sender(null, "系统", "system")
                 : new ConversationViews.Sender(message.senderAccountId(),
                         displayName(message.senderAccountId(), profiles), "account");
-        // Source eligibility is not wired yet, so the reference stays hidden; API-CONV-003 only
-        // returns it once the trade module confirms the record belongs to this trade and is visible.
+        // API-CONV-003 allows a source reference only after ownership and visibility checks. No typed
+        // adapter covers the stored heterogeneous references yet, so keep the persisted facts off the wire.
         return new ConversationViews.Message(message.id(), message.seq(), sender, message.messageType(),
                 message.body(), message.createdAt(), message.eventType(), null);
     }
