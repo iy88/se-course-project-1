@@ -305,6 +305,12 @@ public class ProductService {
         return detail(product, owner ? viewerId : 0, owner ? latestAudit(productId) : null);
     }
 
+    public boolean ownsProduct(long accountId, long productId) {
+        return products.findById(productId)
+                .filter(product -> !product.deleted() && product.sellerAccountId() == accountId)
+                .isPresent();
+    }
+
     public PageResult<EditView> editHistory(long viewerId, long productId, Integer page, Integer pageSize) {
         Product product = products.findById(productId).filter(found -> !found.deleted())
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
