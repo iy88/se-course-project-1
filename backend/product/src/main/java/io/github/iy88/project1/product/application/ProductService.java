@@ -385,7 +385,8 @@ public class ProductService {
                 product.contentVersion(), product.createdAt(), product.updatedAt(), pending, latest, permissions);
     }
 
-    private List<ProductSummary> summaries(List<Product> page) {
+    /** Shared list projection for callers that already loaded product rows. */
+    public List<ProductSummary> summaries(List<Product> page) {
         if (page.isEmpty()) {
             return List.of();
         }

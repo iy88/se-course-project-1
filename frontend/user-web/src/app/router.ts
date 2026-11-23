@@ -74,6 +74,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: "/me/favorites",
+    name: "my-favorites",
+    component: () => import("../views/products/FavoritesView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
     path: "/me/settings",
     name: "settings",
     component: () => import("../views/account/SettingsView.vue"),

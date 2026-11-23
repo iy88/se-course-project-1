@@ -14,6 +14,7 @@ import type {
   Agreement,
   CaseDetail,
   CaseMessage,
+  CommentView,
   ConversationKind,
   CreateUploadResult,
   DecisionKind,
@@ -36,6 +37,7 @@ import {
   tradeView,
   unreadCount,
   type MockCase,
+  type MockComment,
   type MockMessage,
   type MockProduct,
   type MockState,
@@ -184,6 +186,24 @@ function productSummary(product: MockProduct): ProductSummary {
       return { id: ref.id, display_name: ref.display_name };
     })(),
     created_at: product.created_at,
+  };
+}
+
+function commentView(comment: MockComment): CommentView {
+  const author = accountRef(state, comment.author_id);
+  return {
+    id: comment.id,
+    product_id: comment.product_id,
+    author: { id: author.id, display_name: author.display_name },
+    body: comment.body,
+    status: comment.removed_at
+      ? "removed_by_admin"
+      : comment.deleted_at
+        ? "deleted_by_author"
+        : "published",
+    reply_to_comment_id: comment.parent_id,
+    created_at: comment.created_at,
+    replies: [],
   };
 }
 
@@ -983,6 +1003,244 @@ const routes: Route[] = [
       product.lifecycle_state = "public";
       product.updated_at = nowIso();
       return productDetail(product, accountId);
+    },
+  },
+
+  /* -- product interaction: comments and favourites -- */
+  {
+    method: "GET",
+    pattern: ["products", ":productId", "comments"],
+    handler: ({ accountId, params, query }) => {
+      const product = productById(params.productId);
+      const seller = product.seller_id === accountId;
+      const visible =
+        product.lifecycle_state === "public" || product.lifecycle_state === "in_trade";
+      const caseId = typeof query.case_id === "string" ? query.case_id : null;
+      let scope: "public" | "author" | "case" = "public";
+      if (!visible) {
+        const claimed =
+          caseId !== null &&
+          state.cases.some(
+            (item) =>
+              item.case_id === caseId &&
+              item.manager_id === accountId &&
+              item.target?.target_type === "product" &&
+              item.target.target_id === product.id,
+          );
+        if (seller) {
+          scope = "author";
+        } else if (claimed) {
+          scope = "case";
+        } else if (
+          state.comments.some(
+            (item) => item.product_id === product.id && item.author_id === accountId,
+          )
+        ) {
+          scope = "author";
+        } else {
+          fail(404, "RESOURCE_NOT_VISIBLE", "商品不存在或当前不可查看。");
+        }
+      }
+      const readable = (comment: MockComment): boolean => {
+        if (scope === "public") return !comment.deleted_at && !comment.removed_at;
+        if (scope === "author") {
+          return comment.author_id === accountId || (!comment.deleted_at && !comment.removed_at);
+        }
+        return true;
+      };
+      const topLevel = state.comments
+        .filter(
+          (item) => item.product_id === product.id && item.parent_id === null && readable(item),
+        )
+        .sort(
+          (first, second) =>
+            second.created_at.localeCompare(first.created_at) || second.id.localeCompare(first.id),
+        );
+      const paged = paginate(topLevel, query);
+      const items = paged.items.map((item) => {
+        const replies = state.comments
+          .filter((reply) => reply.parent_id === item.id && readable(reply))
+          .sort(
+            (first, second) =>
+              first.created_at.localeCompare(second.created_at) ||
+              first.id.localeCompare(second.id),
+          )
+          .map((reply) => commentView(reply));
+        return { ...commentView(item), replies };
+      });
+      return { ...paged, items };
+    },
+  },
+  {
+    method: "POST",
+    pattern: ["products", ":productId", "comments"],
+    handler: ({ accountId, params, body }) => {
+      const product = productById(params.productId);
+      if (accountById(accountId).write_restricted) {
+        fail(403, "ACCOUNT_WRITE_RESTRICTED", "账户当前受限。");
+      }
+      const visible =
+        product.lifecycle_state === "public" || product.lifecycle_state === "in_trade";
+      if (!visible && product.seller_id !== accountId) {
+        fail(404, "RESOURCE_NOT_VISIBLE", "商品不存在或当前不可查看。");
+      }
+      if (!visible) fail(409, "COMMENT_NOT_ALLOWED", "当前商品不能发表评论。");
+      const text = requireString(body, "body").trim();
+      if ([...text].length > 500) fail(422, "INPUT_INVALID", "评论内容过长。");
+      const comment: MockComment = {
+        id: nextId(state, "comments"),
+        product_id: product.id,
+        author_id: accountId,
+        parent_id: null,
+        body: text,
+        created_at: nowIso(),
+        deleted_at: null,
+        removed_at: null,
+        removed_reason: null,
+        basis_ref: null,
+      };
+      state.comments.push(comment);
+      return commentView(comment);
+    },
+  },
+  {
+    method: "POST",
+    pattern: ["products", ":productId", "comments", ":commentId", "replies"],
+    handler: ({ accountId, params, body }) => {
+      const product = productById(params.productId);
+      if (accountById(accountId).write_restricted) {
+        fail(403, "ACCOUNT_WRITE_RESTRICTED", "账户当前受限。");
+      }
+      if (product.seller_id !== accountId) {
+        fail(403, "COMMENT_REPLY_NOT_ALLOWED", "只能由商品卖方回复评论。");
+      }
+      if (product.lifecycle_state !== "public" && product.lifecycle_state !== "in_trade") {
+        fail(409, "COMMENT_NOT_ALLOWED", "当前商品不能回复评论。");
+      }
+      const parent = state.comments.find(
+        (item) => item.id === params.commentId && item.product_id === product.id,
+      );
+      if (!parent) fail(404, "RESOURCE_NOT_VISIBLE", "评论不存在。");
+      if (parent.parent_id !== null) fail(409, "STATE_CONFLICT", "只能回复已发表的顶级评论。");
+      if (parent.deleted_at || parent.removed_at) fail(409, "STATE_CONFLICT", "评论已不可回复。");
+      const text = requireString(body, "body").trim();
+      if ([...text].length > 500) fail(422, "INPUT_INVALID", "回复内容过长。");
+      const reply: MockComment = {
+        id: nextId(state, "comments"),
+        product_id: product.id,
+        author_id: accountId,
+        parent_id: parent.id,
+        body: text,
+        created_at: nowIso(),
+        deleted_at: null,
+        removed_at: null,
+        removed_reason: null,
+        basis_ref: null,
+      };
+      state.comments.push(reply);
+      return commentView(reply);
+    },
+  },
+  {
+    method: "DELETE",
+    pattern: ["products", ":productId", "comments", ":commentId"],
+    handler: ({ accountId, params }) => {
+      const comment = state.comments.find(
+        (item) => item.id === params.commentId && item.product_id === params.productId,
+      );
+      if (!comment) fail(404, "RESOURCE_NOT_VISIBLE", "评论不存在。");
+      if (accountById(accountId).write_restricted) {
+        fail(403, "ACCOUNT_WRITE_RESTRICTED", "账户当前受限。");
+      }
+      if (comment.author_id !== accountId) fail(403, "ACTION_NOT_ALLOWED", "只能删除本人评论。");
+      if (comment.removed_at) fail(409, "COMMENT_ALREADY_REMOVED", "评论已被管理员移除。");
+      if (!comment.deleted_at) comment.deleted_at = nowIso();
+      return undefined;
+    },
+  },
+  {
+    method: "GET",
+    pattern: ["me", "favorites"],
+    handler: ({ accountId, query }) => {
+      const rows = state.favorites
+        .filter((favorite) => favorite.account_id === accountId)
+        .sort((first, second) => second.created_at.localeCompare(first.created_at))
+        .map((favorite) => {
+          const product = state.products.find((item) => item.id === favorite.product_id);
+          if (
+            product &&
+            (product.lifecycle_state === "public" || product.lifecycle_state === "in_trade")
+          ) {
+            return {
+              product_id: favorite.product_id,
+              status: "valid",
+              favorited_at: favorite.created_at,
+              product: productSummary(product),
+            };
+          }
+          return {
+            product_id: favorite.product_id,
+            status: "invalid",
+            favorited_at: favorite.created_at,
+            product: null,
+            message: "该商品已失效",
+          };
+        });
+      return paginate(rows, query);
+    },
+  },
+  {
+    method: "GET",
+    pattern: ["me", "favorites", ":productId"],
+    handler: ({ accountId, params }) => {
+      const product = state.products.find((item) => item.id === params.productId);
+      const valid =
+        product !== undefined &&
+        (product.lifecycle_state === "public" || product.lifecycle_state === "in_trade");
+      const favorite = state.favorites.find(
+        (item) => item.account_id === accountId && item.product_id === params.productId,
+      );
+      if (!favorite && !valid) fail(404, "RESOURCE_NOT_VISIBLE", "商品不存在或当前不可查看。");
+      return {
+        favorited: favorite !== undefined,
+        valid,
+        favorited_at: favorite?.created_at ?? null,
+      };
+    },
+  },
+  {
+    method: "PUT",
+    pattern: ["me", "favorites", ":productId"],
+    handler: ({ accountId, params }) => {
+      if (accountById(accountId).write_restricted) {
+        fail(403, "ACCOUNT_WRITE_RESTRICTED", "账户当前受限。");
+      }
+      const product = state.products.find((item) => item.id === params.productId);
+      const valid =
+        product !== undefined &&
+        (product.lifecycle_state === "public" || product.lifecycle_state === "in_trade");
+      if (!valid) fail(404, "RESOURCE_NOT_VISIBLE", "商品不存在或当前不可查看。");
+      let favorite = state.favorites.find(
+        (item) => item.account_id === accountId && item.product_id === params.productId,
+      );
+      if (!favorite) {
+        favorite = { account_id: accountId, product_id: params.productId, created_at: nowIso() };
+        state.favorites.push(favorite);
+      }
+      return { favorited: true, valid: true, favorited_at: favorite.created_at };
+    },
+  },
+  {
+    method: "DELETE",
+    pattern: ["me", "favorites", ":productId"],
+    handler: ({ accountId, params }) => {
+      if (accountById(accountId).write_restricted) {
+        fail(403, "ACCOUNT_WRITE_RESTRICTED", "账户当前受限。");
+      }
+      state.favorites = state.favorites.filter(
+        (item) => !(item.account_id === accountId && item.product_id === params.productId),
+      );
+      return undefined;
     },
   },
 
