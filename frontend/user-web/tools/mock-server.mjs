@@ -6,10 +6,13 @@
  * bundler at it:
  *
  *   node --import ./tools/register-ts.mjs tools/mock-server.mjs
- *   API_PROXY_TARGET=http://127.0.0.1:4321 pnpm dev
+ *   API_PROXY_TARGET=http://127.0.0.1:4321 npx rsbuild --port 3010
  *
  * The fixtures under `src/test/mock` are reused verbatim, so the development
- * behaviour matches the unit-tested mock instead of a second implementation.
+ * behaviour matches the unit-tested mock instead of a second implementation. Two
+ * dev-only adaptions keep the browser inside this origin: the signed upload target
+ * and the file preview URLs both point here, and previews are answered with a
+ * generated placeholder image.
  */
 import { createServer } from "node:http";
 import { handleMockRequest } from "../src/test/mock/handlers.ts";
@@ -25,6 +28,9 @@ function readBody(request) {
     request.on("end", () => {
       const raw = Buffer.concat(chunks).toString("utf8");
       if (raw === "") return resolve(undefined);
+      // The bucket upload posts a multipart form; only JSON bodies are parsed.
+      const contentType = String(request.headers["content-type"] ?? "");
+      if (!contentType.includes("application/json")) return resolve(undefined);
       try {
         resolve(JSON.parse(raw));
       } catch {
@@ -32,6 +38,19 @@ function readBody(request) {
       }
     });
   });
+}
+
+/** Placeholder preview so uploaded files and seeded images render locally. */
+function placeholderImage(fileId) {
+  let hash = 0;
+  for (const character of String(fileId)) {
+    hash = (hash * 31 + character.codePointAt(0)) % 360;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect width="256" height="256" fill="hsl(${hash} 30% 88%)"/>
+  <circle cx="128" cy="100" r="38" fill="hsl(${hash} 32% 68%)"/>
+  <rect x="56" y="152" width="144" height="58" rx="29" fill="hsl(${hash} 32% 68%)"/>
+</svg>`;
 }
 
 function parseQuery(search) {
@@ -60,6 +79,15 @@ const server = createServer(async (request, response) => {
     return;
   }
   const { path, query } = splitPath(request.url);
+
+  // Generated preview for file references, so the browser never leaves this origin.
+  const content = path.match(/^\/files\/([^/]+)\/content$/);
+  if (content && request.method === "GET") {
+    response.writeHead(200, { "Content-Type": "image/svg+xml; charset=utf-8" });
+    response.end(placeholderImage(content[1]));
+    return;
+  }
+
   try {
     const body = await readBody(request);
     const result = await handleMockRequest(request.method ?? "GET", path, {
