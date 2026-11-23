@@ -460,6 +460,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/admin/cases/{case_id}/enforcements/{enforcement_id}/lift": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 解除事项执行限制（API-CASE-008） */
+    post: operations["liftCaseEnforcement"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2584,6 +2601,98 @@ export interface operations {
       };
       /** @description INPUT_INVALID */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  liftCaseEnforcement: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        case_id: string;
+        enforcement_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          reason: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            enforcement_id: string;
+            /** Format: date-time */
+            lifted_at: string;
+            lifted_by: string;
+            restored_scope: string[];
+            remaining_restrictions: string[];
+          };
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description NOT_CASE_MANAGER / RESOURCE_NOT_VISIBLE */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description RESTRICTION_NOT_ACTIVE / TRADE_FREEZE_NOT_ACTIVE */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description BASIS_REQUIRED / INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description DEPENDENCY_UNAVAILABLE */
+      503: {
         headers: {
           [name: string]: unknown;
         };

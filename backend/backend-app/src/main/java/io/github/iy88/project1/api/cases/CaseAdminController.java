@@ -99,6 +99,18 @@ public class CaseAdminController {
                 CaseIds.publish(body)));
     }
 
+    @PostMapping("/{case_id}/enforcements/{enforcement_id}/lift")
+    ResponseEntity<JsonNode> lift(HttpServletRequest request,
+                                  @PathVariable("case_id") String caseId,
+                                  @PathVariable("enforcement_id") String enforcementId,
+                                  @RequestBody(required = false) CaseRequests.Lift body,
+                                  @RequestHeader(name = IDEMPOTENCY_HEADER, required = false) String key) {
+        var context = support.context(request);
+        String reason = body == null ? null : body.reason();
+        return write(support.application().lift(context, idempotency(key), CaseIds.path(caseId),
+                enforcementId, reason));
+    }
+
     private static ResponseEntity<JsonNode> write(WriteResult<?> result) {
         return ResponseEntity.status(result.status()).cacheControl(CacheControl.noStore())
                 .body((JsonNode) result.data());

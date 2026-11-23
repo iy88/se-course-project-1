@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -46,6 +47,7 @@ public class CaseApplication {
     public static final String DECIDE = "case.decide";
     public static final String CLOSE = "case.close";
     public static final String PUBLISH = "case.publish_result";
+    public static final String LIFT = "case.enforcement.lift";
 
     private static final Set<String> ENFORCEMENT_ACTIONS = Set.of(
             "restrict_account", "lift_account_restriction", "withdraw_public_access", "restore_display",
@@ -137,6 +139,14 @@ public class CaseApplication {
                 new PublishUseCase());
     }
 
+    /** API-CASE-008: lifts one recorded enforcement by its case-stable execution identifier. */
+    public WriteResult<JsonNode> lift(ExecutionContext context, String idempotencyKey, long caseId,
+                                      String enforcementId, String reason) {
+        managers.requireManager(context);
+        return writes.run(context, LIFT, idempotencyKey, new LiftRequest(caseId, enforcementId, reason),
+                new LiftUseCase());
+    }
+
     private record SupplementRequest(long caseId, CaseCommands.Supplement supplement) {
     }
 
@@ -156,6 +166,9 @@ public class CaseApplication {
     }
 
     private record PublishRequest(long caseId, CaseCommands.Publish publish) {
+    }
+
+    private record LiftRequest(long caseId, String enforcementId, String reason) {
     }
 
     // ------------------------------------------------------------------ submit and supplement
@@ -472,7 +485,22 @@ public class CaseApplication {
                 resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
                         List.of(request.message().conversationId())));
             }
-            return new LockPlan(Map.of(), resources);
+            var plan = new LockPlan(Map.of(), resources);
+            var message = request.message();
+            if (enforcement != null && CaseVocabulary.KIND_MANAGER_REPLY.equals(message.messageKind())
+                    && message.resolution() != null
+                    && !CaseVocabulary.RESOLUTION_UPHOLD.equals(message.resolution())
+                    && message.appealActionId() != null) {
+                var appeal = store.action(facts.caseId(), message.appealActionId()).orElse(null);
+                if (appeal != null && appeal.relatedAccountId() != null) {
+                    var recorded = latestEnforcementFor(facts.caseId(), appeal.relatedAccountId());
+                    if (recorded.isPresent()) {
+                        plan = plan.merge(enforcement.reversePlan(context, facts.caseId(), recorded.get(),
+                                message.resolution()));
+                    }
+                }
+            }
+            return plan;
         }
 
         @Override
@@ -618,29 +646,19 @@ public class CaseApplication {
             if (enforcement == null) {
                 throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "撤销或调整须由处置执行提供");
             }
-            var recorded = store.enforcements(facts.caseId()).stream()
-                    .filter(item -> item.affectedAccountIds().contains(appellant))
-                    .reduce((first, second) -> second)
+            var recorded = latestEnforcementFor(facts.caseId(), appellant)
                     .orElseThrow(() -> new BusinessError("STATE_CONFLICT", 409, "没有可撤销的执行记录"));
             String basisRef = "case:" + facts.caseId();
             var outcomes = enforcement.reverse(transaction, transaction.context(), facts.caseId(), recorded,
                     message.resolution(), basisRef, message.basisRef(), now);
-            for (var outcome : outcomes) {
-                store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
-                        outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
-                        outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
-                        outcome.currentState(), outcome.affectedAccountIds(), null, null, now));
-                if (!outcome.affectedAccountIds().isEmpty()) {
-                    notifications.create(transaction, enforcementEvent(outcome.action()),
-                            "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":reversed",
-                            new ResourceRef("case", facts.caseId()),
-                            Set.copyOf(outcome.affectedAccountIds()),
-                            Map.of("case_id", Long.toString(facts.caseId()),
-                                    "reason", message.basisRef() == null ? "" : message.basisRef()), now);
-                }
-            }
+            recordReversal(transaction, facts, outcomes, manager, message.basisRef(), now);
             store.markEnforcementLifted(facts.caseId(), recorded.enforcementId(), manager,
                     message.basisRef() == null ? message.resolution() : message.basisRef(), now);
+            if (CaseVocabulary.RESOLUTION_REVOKE.equals(message.resolution())) {
+                store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_LIFT,
+                        CaseVocabulary.ACTOR_MANAGER, manager, now, null, appellant, null, null, null,
+                        message.basisRef(), null));
+            }
         }
 
         private WriteResult.Response<?> messageResponse(CaseRecords.Facts facts, long conversationId,
@@ -972,6 +990,108 @@ public class CaseApplication {
         }
     }
 
+    // ------------------------------------------------------------------ lift
+
+    private final class LiftUseCase implements WriteExecutor.UseCase<LiftRequest, LiftRequest> {
+        @Override
+        public JsonNode digestInput(LiftRequest request) {
+            var node = json.createObjectNode();
+            node.put("case_id", request.caseId());
+            node.put("enforcement_id", request.enforcementId());
+            node.put("reason", request.reason());
+            return node;
+        }
+
+        @Override
+        public LockPlan prepare(ExecutionContext context, LiftRequest request) {
+            var facts = store.find(request.caseId()).orElseThrow(CaseApplication::notVisible);
+            var recorded = requireRecorded(request.caseId(), request.enforcementId());
+            var resources = new TreeSet<LockPlan.Key>();
+            resources.add(CaseLifecycleStore.lockKey(facts.caseId()));
+            var accounts = new TreeMap<Long, LockPlan.AccountMode>();
+            for (long accountId : targets.relatedAccountIds(facts)) {
+                accounts.put(accountId, LockPlan.AccountMode.SHARED);
+            }
+            var plan = new LockPlan(accounts, resources);
+            if (enforcement != null) {
+                plan = plan.merge(enforcement.reversePlan(context, facts.caseId(), recorded, "revoke"));
+            }
+            return plan;
+        }
+
+        @Override
+        public LiftRequest qualify(ExecutionContext context, LiftRequest request, LockPlan plan) {
+            managers.requireManagerForWrite(context);
+            return request;
+        }
+
+        @Override
+        public void requireReplayAccess(ExecutionContext context, LiftRequest qualification, ResourceRef resource) {
+            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
+                throw notVisible();
+            }
+            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
+            if (!facts.claimedBy(actor(context))) {
+                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
+            }
+        }
+
+        @Override
+        public WriteResult.Response<?> write(WriteTransaction transaction, LiftRequest request,
+                                             LiftRequest qualification, LockPlan plan) {
+            long manager = actor(transaction.context());
+            var facts = store.lock(transaction, request.caseId());
+            requireLifecycle(facts);
+            if (!facts.claimedBy(manager)) {
+                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
+            }
+            String reason = requiredText(request.reason(), settings.getMaxNoteLength(), "解除原因");
+            var recorded = requireRecorded(facts.caseId(), request.enforcementId());
+            var existing = store.lift(facts.caseId(), request.enforcementId());
+            if (existing.isPresent()) {
+                return lifted(recorded, existing.get(), List.of());
+            }
+            if (!"applied".equals(recorded.resultStatus())) {
+                throw new BusinessError("RESTRICTION_NOT_ACTIVE", 409, "执行记录不在生效状态");
+            }
+            if (enforcement == null) {
+                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "解除须由处置执行提供");
+            }
+            Instant now = now();
+            String basisRef = "case:" + facts.caseId();
+            var outcomes = enforcement.reverse(transaction, transaction.context(), facts.caseId(), recorded,
+                    "revoke", basisRef, reason, now);
+            recordReversal(transaction, facts, outcomes, manager, reason, now);
+            store.markEnforcementLifted(facts.caseId(), request.enforcementId(), manager, reason, now);
+            store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_LIFT,
+                    CaseVocabulary.ACTOR_MANAGER, manager, now, null, null, null, null, null, reason, null));
+            store.touch(facts.caseId(), now);
+            audit(transaction, "case.enforcement.lift", facts.caseId(), manager);
+            var lifted = store.lift(facts.caseId(), request.enforcementId())
+                    .orElse(new CaseRecords.Lift(now, manager));
+            return lifted(recorded, lifted, outcomes);
+        }
+
+        private WriteResult.Response<?> lifted(CaseRecords.Enforcement recorded, CaseRecords.Lift lift,
+                                               List<CaseRecords.EnforcementOutcome> outcomes) {
+            var body = json.createObjectNode();
+            body.put("enforcement_id", recorded.enforcementId());
+            body.put("lifted_at", lift.liftedAt().toString());
+            body.put("lifted_by", Long.toString(lift.liftedBy()));
+            var scope = body.putArray("restored_scope");
+            var seen = new TreeSet<Long>();
+            for (var outcome : outcomes) {
+                for (long accountId : outcome.affectedAccountIds()) {
+                    if (seen.add(accountId)) {
+                        scope.add("account:" + accountId);
+                    }
+                }
+            }
+            body.putArray("remaining_restrictions");
+            return new WriteResult.Response<>(200, body, new ResourceRef("case", recorded.caseId()));
+        }
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private JsonNode digest(long caseId, Object input) {
@@ -988,6 +1108,41 @@ public class CaseApplication {
             case "adjust_trade_status" -> CaseVocabulary.EVENT_TRADE_ADJUSTED;
             default -> CaseVocabulary.EVENT_DECIDED;
         };
+    }
+
+    private Optional<CaseRecords.Enforcement> latestEnforcementFor(long caseId, long accountId) {
+        return store.enforcements(caseId).stream()
+                .filter(item -> item.affectedAccountIds().contains(accountId))
+                .reduce((first, second) -> second);
+    }
+
+    private CaseRecords.Enforcement requireRecorded(long caseId, String enforcementId) {
+        if (enforcementId == null || enforcementId.isBlank()) {
+            throw new BusinessError("INPUT_INVALID", 422, "enforcement_id 不能为空");
+        }
+        return store.enforcement(caseId, enforcementId)
+                .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "执行记录不存在"));
+    }
+
+    /** Persists compensating enforcement links and notifies their affected accounts. */
+    private void recordReversal(WriteTransaction transaction, CaseRecords.Facts facts,
+                                List<CaseRecords.EnforcementOutcome> outcomes, long manager, String reason,
+                                Instant now) {
+        String basisRef = "case:" + facts.caseId();
+        for (var outcome : outcomes) {
+            store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
+                    outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
+                    outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
+                    outcome.currentState(), outcome.affectedAccountIds(), null, null, now));
+            if (!outcome.affectedAccountIds().isEmpty()) {
+                notifications.create(transaction, enforcementEvent(outcome.action()),
+                        "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":reversed",
+                        new ResourceRef("case", facts.caseId()),
+                        Set.copyOf(outcome.affectedAccountIds()),
+                        Map.of("case_id", Long.toString(facts.caseId()), "reason", reason == null ? "" : reason),
+                        now);
+            }
+        }
     }
 
     private static long actor(ExecutionContext context) {

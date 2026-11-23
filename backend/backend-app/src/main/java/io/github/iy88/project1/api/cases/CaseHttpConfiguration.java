@@ -28,6 +28,7 @@ import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.product.persistence.ProductRepository;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.persistence.FileReferences;
+import io.github.iy88.project1.storage.persistence.FileRegistry;
 import io.github.iy88.project1.storage.persistence.UploadRegistration;
 import io.github.iy88.project1.trade.application.TradePorts;
 import java.time.Clock;
@@ -259,14 +260,34 @@ public class CaseHttpConfiguration {
     private record CaseEvidenceAdapter(FileReferences files) implements CasePorts.EvidenceFiles {
         @Override
         public void lockFile(long fileId) {
-            files.lockFiles(List.of(fileId));
+            try {
+                files.lockFiles(List.of(fileId));
+            } catch (FileRegistry.Rejected rejected) {
+                throw evidenceError(rejected);
+            }
         }
 
         @Override
         public List<Long> attach(WriteTransaction transaction, long caseId, long submitterId, List<Long> fileIds) {
             var target = new UploadRegistration.Target("case", caseId);
-            return files.attach(submitterId, target, FilePurpose.CASE_EVIDENCE, fileIds, "evidence").stream()
-                    .map(FileReferences.Reference::referenceId).toList();
+            try {
+                return files.attach(submitterId, target, FilePurpose.CASE_EVIDENCE, fileIds, "evidence").stream()
+                        .map(FileReferences.Reference::referenceId).toList();
+            } catch (FileRegistry.Rejected rejected) {
+                throw evidenceError(rejected);
+            }
+        }
+
+        /**
+         * Maps the shared file rejections onto the case evidence contract: a missing or foreign
+         * file stays hidden, while an unverified or wrong-purpose file is evidence out of scope.
+         */
+        private static BusinessError evidenceError(FileRegistry.Rejected rejected) {
+            String code = rejected.getMessage();
+            if ("RESOURCE_NOT_VISIBLE".equals(code)) {
+                return new BusinessError("RESOURCE_NOT_VISIBLE", 404, "文件不可见");
+            }
+            return new BusinessError("EVIDENCE_OUT_OF_SCOPE", 422, "证据文件不可引用");
         }
     }
 

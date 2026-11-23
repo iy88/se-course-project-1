@@ -38,4 +38,7 @@ public final class CaseRequests {
 
     public record Publish(String publicSummary, String publicReason) {
     }
+
+    public record Lift(String reason) {
+    }
 }

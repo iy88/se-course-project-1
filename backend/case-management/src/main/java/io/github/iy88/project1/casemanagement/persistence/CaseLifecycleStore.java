@@ -434,6 +434,17 @@ public class CaseLifecycleStore {
                 .param(stamp(at)).param(managerId).param(reason).param(caseId).param(enforcementId).update();
     }
 
+    /** Lift facts when the enforcement was already reverted, used for idempotent replays. */
+    public Optional<CaseRecords.Lift> lift(long caseId, String enforcementId) {
+        return jdbc.sql("""
+                        select lifted_at, lifted_by from case_enforcement
+                         where case_id = ? and enforcement_id = ? and lifted_at is not null
+                        """)
+                .param(caseId).param(enforcementId)
+                .query((rs, row) -> new CaseRecords.Lift(instant(rs, "lifted_at"), rs.getLong("lifted_by")))
+                .optional();
+    }
+
     /** Distinct related accounts that hold a thread or an appeal for this case. */
     public List<Long> relatedAccountIds(long caseId) {
         return jdbc.sql("""

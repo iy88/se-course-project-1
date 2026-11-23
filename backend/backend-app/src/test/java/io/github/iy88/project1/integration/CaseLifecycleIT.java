@@ -225,8 +225,35 @@ class CaseLifecycleIT {
     }
 
     @Test
-    void closedReportRejectsANewSubmissionForTheSameObject() {
+    void liftRevertsTheDecisionEnforcementAndIsIdempotent() {
         long reporter = REPORTER.get();
+        long related2 = account("related2-" + RUN_ID, "相关用户二", "user");
+        var submitted = cases.submit(context(reporter), "submit-lift-" + RUN_ID, new CaseCommands.Report(
+                new CaseCommands.Target("account", related2, null, null), "虚假信息", null, List.of()));
+        long caseId = Long.parseLong(submitted.data().get("case_id").asString());
+        cases.claim(context(MANAGER_1.get()), "claim-lift-" + RUN_ID, caseId);
+        var decision = cases.decide(context(MANAGER_1.get()), "decision-lift-" + RUN_ID, caseId,
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:" + caseId),
+                        List.of(new CaseCommands.Enforcement("restrict_account", "account", related2, null))));
+        String enforcementId = decision.data().get("enforcements").get(0).get("enforcement_id").asString();
+
+        var lifted = cases.lift(context(MANAGER_1.get()), "lift-" + RUN_ID, caseId, enforcementId, "解除限制");
+        assertThat(lifted.status()).isEqualTo(200);
+        assertThat(lifted.data().get("restored_scope").get(0).asString()).isEqualTo("account:" + related2);
+        assertThat(db.sql("select lifted_at from case_enforcement where case_id = ? and enforcement_id = ?")
+                .param(caseId).param(enforcementId).query(OffsetDateTime.class).single()).isNotNull();
+        assertThat(store.actions(caseId).stream()
+                .anyMatch(action -> CaseVocabulary.ACTION_LIFT.equals(action.actionKind()))).isTrue();
+
+        var repeated = cases.lift(context(MANAGER_1.get()), "lift-again-" + RUN_ID, caseId, enforcementId,
+                "再次解除");
+        assertThat(repeated.status()).isEqualTo(200);
+        assertThat(repeated.data().get("lifted_at").asString())
+                .isEqualTo(lifted.data().get("lifted_at").asString());
+    }
+
+    @Test
+    void closedReportRejectsANewSubmissionForTheSameObject() {        long reporter = REPORTER.get();
         long related = RELATED.get();
         var target = new CaseCommands.Target("account", related, null, null);
         long closedCase = db.sql("""
@@ -292,6 +319,18 @@ class CaseLifecycleIT {
                                 "applied", "active", "restricted", List.of(item.targetId()), occurredAt));
                     }
                     return outcomes;
+                }
+
+                @Override
+                public List<CaseRecords.EnforcementOutcome> reverse(WriteTransaction transaction,
+                                                                    ExecutionContext context, long caseId,
+                                                                    CaseRecords.Enforcement recorded,
+                                                                    String resolution, String basisRef,
+                                                                    String reason, Instant occurredAt) {
+                    return List.of(new CaseRecords.EnforcementOutcome(recorded.enforcementId() + "-lift",
+                            "lift_account_restriction", recorded.targetType(), recorded.targetId(),
+                            "account_restriction", recorded.targetId(), "applied", "restricted", "active",
+                            List.of(recorded.targetId()), occurredAt));
                 }
             };
         }

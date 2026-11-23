@@ -264,6 +264,63 @@ class CaseApplicationTests {
                         error -> assertThat(error.code()).isEqualTo("DEPENDENCY_UNAVAILABLE"));
     }
 
+    // ------------------------------------------------------------------ lift
+
+    @Test
+    void liftReversesTheRecordedEnforcementAndReportsTheRestoredScope() {
+        var reversing = new CasePorts.Enforcement() {
+            @Override
+            public LockPlan plan(ExecutionContext context, long caseId,
+                                 List<CaseRecords.EnforcementInstruction> instructions) {
+                return new LockPlan(Map.of(), Set.of());
+            }
+
+            @Override
+            public List<CaseRecords.EnforcementOutcome> execute(WriteTransaction transaction,
+                                                                ExecutionContext context, long caseId,
+                                                                String reason, String basisRef,
+                                                                List<CaseRecords.EnforcementInstruction> instructions,
+                                                                Instant occurredAt) {
+                return List.of();
+            }
+
+            @Override
+            public List<CaseRecords.EnforcementOutcome> reverse(WriteTransaction transaction,
+                                                                ExecutionContext context, long caseId,
+                                                                CaseRecords.Enforcement enforcement,
+                                                                String resolution, String basisRef, String reason,
+                                                                Instant occurredAt) {
+                return List.of(new CaseRecords.EnforcementOutcome("enf-1-lift", "lift_trade_freeze", "trade",
+                        900L, "trade", 900L, "applied", "frozen", "active", List.of(RELATED), occurredAt));
+            }
+        };
+        var harness = harness(decided(), reversing);
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recordedEnforcement()));
+        when(harness.store.lift(CASE_ID, "enf-1")).thenReturn(Optional.empty(),
+                Optional.of(new CaseRecords.Lift(NOW, MANAGER)));
+
+        var result = harness.application.lift(context(MANAGER), "lift-1", CASE_ID, "enf-1", "解除封禁");
+        assertThat(result.status()).isEqualTo(200);
+        assertThat(result.data().get("lifted_by").asString()).isEqualTo("31");
+        assertThat(result.data().get("restored_scope").get(0).asString()).isEqualTo("account:21");
+        verify(harness.store).markEnforcementLifted(eq(CASE_ID), eq("enf-1"), eq(MANAGER), eq("解除封禁"), eq(NOW));
+    }
+
+    @Test
+    void liftFailsClosedWithoutAnExecutionPort() {
+        var harness = harness(decided());
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recordedEnforcement()));
+        when(harness.store.lift(CASE_ID, "enf-1")).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> harness.application.lift(context(MANAGER), "lift-2", CASE_ID, "enf-1", "解除"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("DEPENDENCY_UNAVAILABLE"));
+    }
+
+    private static CaseRecords.Enforcement recordedEnforcement() {
+        return new CaseRecords.Enforcement("enf-1", CASE_ID, "freeze_trade", "trade", 900L, "case:41", MANAGER,
+                NOW, "trade", 900L, "applied", "frozen", "active", List.of(RELATED), null, null, NOW);
+    }
+
     // ------------------------------------------------------------------ harness
 
     private static Harness harness(CaseRecords.Facts initial) {

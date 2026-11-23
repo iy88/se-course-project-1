@@ -86,16 +86,26 @@ public final class CasePorts {
                                                      Instant occurredAt);
 
         /**
-         * Reverses or adjusts one recorded enforcement for an appeal. The adapter resolves the
-         * subject record from the case source (never from a client-supplied freeze id) and returns
-         * the compensating outcome. Adapters delivered by S4-01 (#81) implement this; until then
-         * the default keeps the appeal resolution unavailable instead of faking success.
+         * Reverses or adjusts one recorded enforcement for an appeal or an explicit lift. The
+         * adapter resolves the subject record from the case source (never from a client-supplied
+         * freeze id) and returns the compensating outcome. Adapters delivered by S4-01 (#81)
+         * implement this; until then the default keeps the action unavailable instead of faking
+         * success.
          */
         default List<CaseRecords.EnforcementOutcome> reverse(WriteTransaction transaction,
                                                              ExecutionContext context, long caseId,
                                                              CaseRecords.Enforcement recorded, String resolution,
                                                              String basisRef, String reason, Instant occurredAt) {
             throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "撤销或调整须由处置执行提供");
+        }
+
+        /**
+         * Locks required by {@link #reverse}. The case lock is added by the caller; adapters add
+         * subject locks in the public order so a reversal composes with the write transaction.
+         */
+        default LockPlan reversePlan(ExecutionContext context, long caseId, CaseRecords.Enforcement recorded,
+                                     String resolution) {
+            return new LockPlan(Map.of(), Set.of());
         }
     }
 }

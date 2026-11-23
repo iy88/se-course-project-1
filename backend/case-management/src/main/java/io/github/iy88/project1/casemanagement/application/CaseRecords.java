@@ -66,6 +66,10 @@ public final class CaseRecords {
     public record Thread(long conversationId, long caseId, long relatedAccountId) {
     }
 
+    /** Lift facts of one enforcement record. */
+    public record Lift(Instant liftedAt, long liftedBy) {
+    }
+
     public record ThreadMessage(long conversationId, long messageId, long seq, Instant createdAt) {
     }
 
