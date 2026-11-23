@@ -8,9 +8,11 @@ import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import java.util.HashSet;
 import java.util.Map;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 /** Read-only case-thread query; access is delegated to the case module's qualification rules. */
+@Lazy
 @Service
 public class CaseConversationQueries {
     private final ConversationStore store;
@@ -32,7 +34,7 @@ public class CaseConversationQueries {
                                                   Long afterSeq, int limit) {
         long actor = accountId(context);
         var conversation = store.caseConversation(conversationId);
-        if (!cases.canAccess(conversation.caseId(), actor)) {
+        if (!cases.canAccess(conversation.caseId(), conversation.relatedAccountId(), actor)) {
             throw participantRequired();
         }
         if (beforeSeq != null && afterSeq != null) {

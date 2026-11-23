@@ -17,9 +17,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 /** Read-only conversation queries; they never advance read progress. */
+@Lazy
 @Service
 public class ConversationQueries {
     private final ConversationStore store;
@@ -113,7 +115,9 @@ public class ConversationQueries {
                         .reversed())
                 .toList();
 
-        int from = Math.min((currentPage - 1) * size, summaries.size());
+        // Use a long offset so an oversized page cannot overflow into a negative index.
+        long offset = (long) (currentPage - 1) * size;
+        int from = (int) Math.min(offset, summaries.size());
         int to = Math.min(from + size, summaries.size());
         return new ConversationViews.Page<>(summaries.subList(from, to), currentPage, size, summaries.size());
     }
@@ -144,9 +148,10 @@ public class ConversationQueries {
                 ? new ConversationViews.Sender(null, "系统", "system")
                 : new ConversationViews.Sender(message.senderAccountId(),
                         displayName(message.senderAccountId(), profiles), "account");
-        String sourceRef = message.sourceType() == null ? null : message.sourceType() + ":" + message.sourceId();
+        // Source eligibility is not wired yet, so the reference stays hidden; API-CONV-003 only
+        // returns it once the trade module confirms the record belongs to this trade and is visible.
         return new ConversationViews.Message(message.id(), message.seq(), sender, message.messageType(),
-                message.body(), message.createdAt(), message.eventType(), sourceRef);
+                message.body(), message.createdAt(), message.eventType(), null);
     }
 
     private static List<ConversationViews.Branch> sortedBranches(List<ConversationViews.Branch> branches) {
