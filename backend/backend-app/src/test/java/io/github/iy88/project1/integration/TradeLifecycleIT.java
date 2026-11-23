@@ -1037,6 +1037,7 @@ class TradeLifecycleIT {
         }
 
         @Bean
+        @Primary
         public CsrfGuard.Verifier csrfVerifier() {
             return (request, token) -> "it-csrf".equals(token);
         }
