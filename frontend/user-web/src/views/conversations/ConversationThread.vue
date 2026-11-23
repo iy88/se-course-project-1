@@ -18,7 +18,9 @@ import { useRoute, useRouter } from "vue-router";
 import { advanceReadProgress, listMessages, sendMessage } from "../../api/conversations";
 import type { ConversationKind, ConversationMessage } from "../../api/contracts";
 import { refreshBadges } from "../../app/badges";
+import { shouldSendOnEnter } from "../../app/composer";
 import { peerName } from "../../app/conversation-directory";
+import { buildConversationRows, type ConversationRow } from "../../app/conversation-rows";
 import { formatDateTime, formatRelative } from "../../app/format";
 import { newIdempotencyKey } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
@@ -27,23 +29,6 @@ import { session } from "../../app/session";
 import { notify } from "../../app/toast";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
-
-interface DateGroup {
-  kind: "date";
-  key: string;
-  label: string;
-}
-
-interface MessageGroup {
-  kind: "message";
-  key: string;
-  message: ConversationMessage;
-  mine: boolean;
-  system: boolean;
-  merged: boolean;
-}
-
-type Row = DateGroup | MessageGroup;
 
 const route = useRoute();
 const router = useRouter();
@@ -77,58 +62,9 @@ const title = computed(() => {
 
 const heading = computed(() => peerName(kind.value, conversationId.value) ?? title.value);
 
-function dayKey(value: string): string {
-  return value.slice(0, 10);
-}
-
-function dayLabel(value: string): string {
-  const today = new Date();
-  const target = new Date(value);
-  const sameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
-  if (sameDay(target, today)) return "今天";
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (sameDay(target, yesterday)) return "昨天";
-  return formatDateTime(value).split(" ")[0] ?? value;
-}
-
-function minuteKey(value: string): string {
-  return value.slice(0, 16);
-}
-
-const rows = computed<Row[]>(() => {
-  const result: Row[] = [];
-  let currentDay = "";
-  let previous: ConversationMessage | null = null;
-  for (const message of messages.value) {
-    const day = dayKey(message.created_at);
-    if (day !== currentDay) {
-      currentDay = day;
-      previous = null;
-      result.push({ kind: "date", key: `date:${day}`, label: dayLabel(message.created_at) });
-    }
-    const system = message.sender.sender_kind === "system";
-    const mine = !system && message.sender.account_id === session.accountId.value;
-    const merged =
-      !system &&
-      previous !== null &&
-      previous.sender.account_id === message.sender.account_id &&
-      minuteKey(previous.created_at) === minuteKey(message.created_at);
-    result.push({
-      kind: "message",
-      key: message.message_id,
-      message,
-      mine,
-      system,
-      merged,
-    });
-    previous = message;
-  }
-  return result;
-});
+const rows = computed<ConversationRow[]>(() =>
+  buildConversationRows(messages.value, { viewerAccountId: session.accountId.value }),
+);
 
 async function loadTail(): Promise<void> {
   loading.value = true;
@@ -206,9 +142,8 @@ async function send(): Promise<void> {
 }
 
 function onComposerKeydown(event: KeyboardEvent): void {
-  if (event.key !== "Enter" || event.shiftKey) return;
   // Enter belongs to the IME candidate list while composing.
-  if (composing || event.isComposing) return;
+  if (!shouldSendOnEnter(event, composing)) return;
   event.preventDefault();
   void send();
 }
