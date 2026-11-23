@@ -260,6 +260,16 @@ function iso(offsetMs: number): string {
   return new Date(DEMO_NOW.getTime() + offsetMs).toISOString();
 }
 
+/**
+ * Offset from the real clock.
+ *
+ * Used for windows that must still be open when the demo runs — for example the
+ * appeal deadline — because `DEMO_NOW` is a fixed moment in the past.
+ */
+function isoFromNow(offsetMs: number): string {
+  return new Date(Date.now() + offsetMs).toISOString();
+}
+
 export function nextId(state: MockState, scope: string): string {
   const next = (state.sequences[scope] ?? 0) + 1;
   state.sequences[scope] = next;
@@ -649,6 +659,25 @@ export function createSeedState(): MockState {
       created_at: iso(-1 * DAY),
       source_ref: { resource_type: "case", resource_id: "6" },
     },
+    {
+      // Thread of case 8: a decided report against account 1 whose appeal window
+      // is still open, so the appeal entry can be exercised locally.
+      conversation_id: "2",
+      kind: "case",
+      participant_ids: ["1", "4"],
+      archived_at: null,
+      created_at: iso(-5 * DAY),
+      source_ref: { resource_type: "case", resource_id: "8" },
+    },
+    {
+      // Branch of a completed trade that was archived, for the read-only composer.
+      conversation_id: "3",
+      kind: "trade",
+      participant_ids: ["1", "3"],
+      archived_at: iso(-18 * DAY),
+      created_at: iso(-25 * DAY),
+      source_ref: { resource_type: "trade", resource_id: "3" },
+    },
   ];
   state.sequences.conversations = 6;
 
@@ -742,8 +771,53 @@ export function createSeedState(): MockState {
       created_at: iso(-1 * DAY),
       case_message_kind: "inquiry",
     },
+    {
+      message_id: "9",
+      conversation_id: "2",
+      kind: "case",
+      seq: 1,
+      sender_id: "4",
+      sender_kind: "user",
+      message_type: "manager_reply",
+      body: "已核实该账户在会话中重复发送站外交易链接，决定撤销相关商品公开访问。你可在截止前提交申辩。",
+      created_at: iso(-2 * DAY),
+      case_message_kind: "manager_reply",
+    },
+    {
+      message_id: "10",
+      conversation_id: "3",
+      kind: "trade",
+      seq: 1,
+      sender_id: null,
+      sender_kind: "system",
+      message_type: "system",
+      body: "交易已建立：钱同学提交的购买请求已被接受。",
+      created_at: iso(-25 * DAY),
+    },
+    {
+      message_id: "11",
+      conversation_id: "3",
+      kind: "trade",
+      seq: 2,
+      sender_id: "3",
+      sender_kind: "user",
+      message_type: "text",
+      body: "已经收到，谢谢！",
+      created_at: iso(-24 * DAY),
+    },
+    {
+      message_id: "12",
+      conversation_id: "3",
+      kind: "trade",
+      seq: 3,
+      sender_id: null,
+      sender_kind: "system",
+      message_type: "system",
+      body: "交易已完成，会话已归档。",
+      created_at: iso(-18 * DAY),
+    },
   ];
-  state.sequences.messages = 8;
+  state.sequences.messages = 12;
 
   state.readProgress = [
     {
@@ -1112,8 +1186,43 @@ export function createSeedState(): MockState {
         published_at: iso(-10 * DAY),
       },
     },
+    {
+      // Decided case against account 1 with an open appeal window, so the appeal
+      // entry and its deadline copy can be walked through locally.
+      case_id: "8",
+      case_type: "report",
+      status: "decided",
+      reporter_id: null,
+      related_ids: ["1"],
+      manager_id: "4",
+      claimed_at: iso(-4 * DAY),
+      decision_kind: "violation",
+      reason_text: "经核实该账户在会话中重复发送站外交易链接，已撤销相关商品公开访问。",
+      note: null,
+      archived_at: null,
+      appeal_deadline_at: isoFromNow(2 * DAY),
+      public_result_at: null,
+      created_at: iso(-5 * DAY),
+      updated_at: iso(-2 * DAY),
+      supplement_count: 0,
+      thread_id: "2",
+      actions: [
+        { action_kind: "submit", occurred_at: iso(-5 * DAY), actor_kind: "reporter" },
+        { action_kind: "claim", occurred_at: iso(-4 * DAY), actor_kind: "manager" },
+        { action_kind: "inquire", occurred_at: iso(-4 * DAY + 2 * HOUR), actor_kind: "manager" },
+        { action_kind: "statement", occurred_at: iso(-4 * DAY + 5 * HOUR), actor_kind: "account" },
+        { action_kind: "decide", occurred_at: iso(-2 * DAY), actor_kind: "manager" },
+        { action_kind: "execute", occurred_at: iso(-2 * DAY), actor_kind: "manager" },
+      ],
+      enforcements: [
+        { action: "withdraw_public_access", current_state: "restricted" },
+        { action: "remove_content", current_state: "removed" },
+      ],
+      target: { target_type: "product", target_id: "4" },
+      public_result: null,
+    },
   ];
-  state.sequences.cases = 7;
+  state.sequences.cases = 8;
 
   return state;
 }
