@@ -215,6 +215,8 @@ class ProductReviewIT {
         assertThat(rejection.intentKey()).isEqualTo(notificationIntentKey(firstAudit));
         assertThat(rejection.decision()).isEqualTo("rejected");
         assertThat(rejection.reason()).isEqualTo("prohibited");
+        assertThat(createdNotificationEvents(firstAudit, rejection.notificationId())).isEqualTo(1);
+        assertThat(sellerCreatedNotificationEvents()).isEqualTo(1);
 
         long secondAudit = AUDITS.getAndIncrement();
         long secondCase = submit(secondAudit, NOW.plusSeconds(60), "v2", 2);
@@ -239,6 +241,8 @@ class ProductReviewIT {
         assertThat(approval.intentKey()).isEqualTo(notificationIntentKey(secondAudit));
         assertThat(approval.decision()).isEqualTo("passed");
         assertThat(approval.reason()).isNull();
+        assertThat(createdNotificationEvents(secondAudit, approval.notificationId())).isEqualTo(1);
+        assertThat(sellerCreatedNotificationEvents()).isEqualTo(2);
         assertThat(caseActionCount(secondCase, "decide")).isEqualTo(1);
     }
 
@@ -261,6 +265,8 @@ class ProductReviewIT {
 
         var decision = decide(MANAGER_1, MANAGER_1_SESSION, auditId, ReviewAction.APPROVE, null, null, null,
                 "decide-replay");
+        var decisionNotification = notification(auditId);
+        assertThat(createdNotificationEvents(auditId, decisionNotification.notificationId())).isEqualTo(1);
         var decisionReplay = decide(MANAGER_1, MANAGER_1_SESSION, auditId, ReviewAction.APPROVE, null, null, null,
                 "decide-replay");
         assertThat(decisionReplay.replayed()).isTrue();
@@ -270,12 +276,14 @@ class ProductReviewIT {
                 .isInstanceOfSatisfying(BusinessError.class,
                         error -> assertThat(error.code()).isEqualTo("REVIEW_NOT_PENDING"));
         assertThat(sellerNotificationCount()).isEqualTo(1);
+        assertThat(sellerCreatedNotificationEvents()).isEqualTo(1);
         var replayNotification = notification(auditId);
         assertThat(replayNotification.eventType()).isEqualTo("product_audit.passed");
         assertThat(replayNotification.sourceType()).isEqualTo("product_audit");
         assertThat(replayNotification.sourceId()).isEqualTo(auditId);
         assertThat(replayNotification.intentKey()).isEqualTo(notificationIntentKey(auditId));
         assertThat(replayNotification.reason()).isNull();
+        assertThat(createdNotificationEvents(auditId, replayNotification.notificationId())).isEqualTo(1);
         assertThat(caseActionCount(caseId, "decide")).isEqualTo(1);
         assertThat(caseAuditCount(caseId)).isEqualTo(2);
     }
@@ -357,12 +365,14 @@ class ProductReviewIT {
         assertThat(operationCount(key)).isZero();
         assertThat(auditCount(failure.operationId())).isZero();
         assertThat(sellerNotificationCount()).isEqualTo(1);
+        assertThat(sellerCreatedNotificationEvents()).isZero();
         assertThat(notificationRowAsJson(conflictingNotificationId)).isEqualTo(conflictingBefore);
 
         // Remove only the conflict seed; the retry must then commit through the real adapter.
         db.sql("DELETE FROM notification WHERE notification_id = ?")
                 .param(conflictingNotificationId).update();
         assertThat(sellerNotificationCount()).isZero();
+        assertThat(sellerCreatedNotificationEvents()).isZero();
 
         var recovered = decide(MANAGER_1, MANAGER_1_SESSION, auditId, ReviewAction.APPROVE, null,
                 ReviewAction.APPROVE, "new category accepted", key);
@@ -374,12 +384,14 @@ class ProductReviewIT {
         assertThat(categoryApplicationStatus(auditId)).isEqualTo("approved");
         assertThat(caseActionCount(caseId, "decide")).isEqualTo(1);
         assertThat(sellerNotificationCount()).isEqualTo(1);
+        assertThat(sellerCreatedNotificationEvents()).isEqualTo(1);
         var recoveredNotification = notification(auditId);
         assertThat(recoveredNotification.eventType()).isEqualTo("product_audit.passed");
         assertThat(recoveredNotification.sourceType()).isEqualTo("product_audit");
         assertThat(recoveredNotification.sourceId()).isEqualTo(auditId);
         assertThat(recoveredNotification.intentKey()).isEqualTo(notificationIntentKey(auditId));
         assertThat(recoveredNotification.reason()).isNull();
+        assertThat(createdNotificationEvents(auditId, recoveredNotification.notificationId())).isEqualTo(1);
     }
 
     @Test
@@ -625,6 +637,31 @@ class ProductReviewIT {
     private static String notificationRowAsJson(long notificationId) {
         return db.sql("SELECT to_jsonb(n)::text FROM notification n WHERE notification_id = ?")
                 .param(notificationId).query(String.class).single();
+    }
+
+    /**
+     * Counts the delivery events that announce this notification, addressed to the seller and
+     * carrying the product-audit business source in the SQL columns.
+     */
+    private static long createdNotificationEvents(long auditId, long notificationId) {
+        return db.sql("""
+                SELECT count(*) FROM user_event
+                WHERE event_type = 'notification_created'
+                  AND recipient_account_id = ?
+                  AND payload_type = 'notification'
+                  AND payload_id = ?
+                  AND source_type = 'product_audit'
+                  AND source_id = ?
+                  AND intent_key = ?
+                """).param(SELLER).param(notificationId).param(auditId)
+                .param(notificationIntentKey(auditId)).query(Long.class).single();
+    }
+
+    private static long sellerCreatedNotificationEvents() {
+        return db.sql("""
+                SELECT count(*) FROM user_event
+                WHERE event_type = 'notification_created' AND recipient_account_id = ?
+                """).param(SELLER).query(Long.class).single();
     }
 
     private static long insertConflictingNotification(long auditId) {

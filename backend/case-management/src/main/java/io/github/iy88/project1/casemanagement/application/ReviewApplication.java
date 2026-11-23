@@ -75,6 +75,12 @@ public class ReviewApplication {
                 new DecisionUseCase(product, notify));
     }
 
+    /**
+     * Reads the audit link, claim and current product content under one snapshot. The returned
+     * projection must still describe the requested audit and the authorized case before it is
+     * serialized; a concurrent change that mixes those facts fails closed.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode detail(ExecutionContext context, long auditId) {
         var product = product();
         manager().requireManager(context, "RESOURCE_NOT_VISIBLE", 404);
@@ -82,7 +88,11 @@ public class ReviewApplication {
         if (!claim.claimedBy(actor(context))) {
             throw notVisible();
         }
-        return ReviewWire.detail(json, product.detail(context, auditId), claim);
+        var detail = product.detail(context, auditId);
+        if (detail.auditId() != auditId || detail.caseId() != claim.caseId()) {
+            throw notVisible();
+        }
+        return ReviewWire.detail(json, detail, claim);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)

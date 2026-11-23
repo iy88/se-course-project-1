@@ -184,11 +184,41 @@ class ReviewApplicationTests {
 
         var body = harness.application.detail(harness.context, AUDIT_ID);
 
+        assertThat(body.path("audit_id").stringValue()).isEqualTo("9");
+        assertThat(body.path("case_id").stringValue()).isEqualTo("3");
         assertThat(body.path("seller").path("display_name").stringValue()).isEqualTo("Seller");
         assertThat(body.path("claim").path("manager_id").stringValue()).isEqualTo("7");
         assertThat(body.path("current_content").path("categories").get(0).path("id").stringValue()).isEqualTo("5");
         assertThat(body.path("banned_scope").get(0).path("group").stringValue()).isEqualTo("medicine_device");
         assertThat(body.path("review_result").isNull()).isTrue();
+    }
+
+    @Test
+    void detailFailsClosedWhenTheProjectionIdentifiesAnotherAudit() {
+        var harness = harness();
+        when(harness.products.caseIdForAudit(AUDIT_ID)).thenReturn(CASE_ID);
+        when(harness.cases.read(CASE_ID)).thenReturn(claimed());
+        when(harness.products.detail(harness.context, AUDIT_ID)).thenReturn(detail(AUDIT_ID + 1, CASE_ID));
+
+        assertThatThrownBy(() -> harness.application.detail(harness.context, AUDIT_ID))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE");
+                    assertThat(error.status()).isEqualTo(404);
+                });
+    }
+
+    @Test
+    void detailFailsClosedWhenTheProjectionIdentifiesAnotherCase() {
+        var harness = harness();
+        when(harness.products.caseIdForAudit(AUDIT_ID)).thenReturn(CASE_ID);
+        when(harness.cases.read(CASE_ID)).thenReturn(claimed());
+        when(harness.products.detail(harness.context, AUDIT_ID)).thenReturn(detail(AUDIT_ID, CASE_ID + 1));
+
+        assertThatThrownBy(() -> harness.application.detail(harness.context, AUDIT_ID))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE");
+                    assertThat(error.status()).isEqualTo(404);
+                });
     }
 
     @Test
@@ -200,6 +230,22 @@ class ReviewApplicationTests {
         assertThatThrownBy(() -> harness.application.detail(harness.context, AUDIT_ID))
                 .isInstanceOfSatisfying(BusinessError.class,
                         error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+        verify(harness.products, never()).detail(any(), anyLong());
+    }
+
+    @Test
+    void detailHidesAClaimOwnedByAnotherManagerBeforeReadingContent() {
+        var harness = harness();
+        when(harness.products.caseIdForAudit(AUDIT_ID)).thenReturn(CASE_ID);
+        when(harness.cases.read(CASE_ID))
+                .thenReturn(new CaseClaim(CASE_ID, "product_review", NOW, MANAGER_ID + 1, NOW));
+
+        assertThatThrownBy(() -> harness.application.detail(harness.context, AUDIT_ID))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE");
+                    assertThat(error.status()).isEqualTo(404);
+                });
+        verify(harness.products, never()).detail(any(), anyLong());
     }
 
     @Test
@@ -305,7 +351,11 @@ class ReviewApplicationTests {
     }
 
     private static ProductReviewDetail detail() {
-        return new ProductReviewDetail(AUDIT_ID, PRODUCT_ID, CASE_ID, "pending", NOW,
+        return detail(AUDIT_ID, CASE_ID);
+    }
+
+    private static ProductReviewDetail detail(long auditId, long caseId) {
+        return new ProductReviewDetail(auditId, PRODUCT_ID, caseId, "pending", NOW,
                 new ProductReviewDetail.Seller(SELLER_ID, "Seller"),
                 new ProductReviewDetail.CurrentContent("Title", "Description", List.of(), 1000, List.of(new ProductReviewDetail.Category(5L, "Category")), 2),
                 null,
