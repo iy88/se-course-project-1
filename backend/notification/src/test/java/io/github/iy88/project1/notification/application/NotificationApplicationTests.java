@@ -18,10 +18,12 @@ import io.github.iy88.project1.core.WriteTransaction;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class NotificationApplicationTests {
     private static final Instant NOW = Instant.parse("2026-11-20T09:00:00Z");
@@ -39,11 +41,12 @@ class NotificationApplicationTests {
         application = new NotificationApplication(store, clock);
         transaction = mock(WriteTransaction.class);
         when(transaction.addEventIntent(any(), any(), anyInt(), any(), any(), any(), any()))
-                .thenReturn(new EventIntent.Batch(java.util.List.of()));
+                .thenReturn(new EventIntent.Batch(List.of()));
     }
 
     @Test
-    void persistsOneNotificationPerRecipientAndRegistersDeliveryIntents() {
+    @SuppressWarnings("unchecked")
+    void persistsOneNotificationPerRecipientAndRegistersOneCreatedEventEach() {
         var intent = intent(Set.of(7L, 3L), "product_audit.decision:1001");
 
         var batch = application.createNotifications(transaction, intent);
@@ -52,8 +55,19 @@ class NotificationApplicationTests {
         assertThat(batch.items()).extracting(NotificationItem::recipientAccountId).containsExactly(3L, 7L);
         assertThat(batch.items()).allSatisfy(item -> assertThat(item.readAt()).isNull());
         assertThat(store.size()).isEqualTo(2);
-        verify(transaction).addEventIntent(eq(Set.of(3L, 7L)), eq("product_audit_passed"), eq(1),
-                eq(PRODUCT_AUDIT), eq("product_audit.decision:1001"), any(), any());
+
+        // The business label stays in the row; delivery is always notification_created
+        // and carries the created notification id for that recipient.
+        var recipients = ArgumentCaptor.forClass(Set.class);
+        var eventTypes = ArgumentCaptor.forClass(String.class);
+        var payloads = ArgumentCaptor.forClass(ResourceRef.class);
+        verify(transaction, times(2)).addEventIntent(recipients.capture(), eventTypes.capture(), eq(1),
+                eq(PRODUCT_AUDIT), eq("product_audit.decision:1001"), payloads.capture(), any());
+        assertThat(eventTypes.getAllValues()).containsOnly(NotificationApplication.CREATED_EVENT_TYPE);
+        assertThat(recipients.getAllValues()).containsExactly(Set.of(3L), Set.of(7L));
+        assertThat(payloads.getAllValues()).containsExactly(
+                new ResourceRef("notification", batch.items().get(0).notificationId()),
+                new ResourceRef("notification", batch.items().get(1).notificationId()));
     }
 
     @Test
@@ -68,7 +82,7 @@ class NotificationApplicationTests {
     }
 
     @Test
-    void rejectsTheSameKeyWithDifferentContent() {
+    void rejectsTheSameKeyWithADifferentEventType() {
         application.createNotifications(transaction, intent(Set.of(7L), "product_audit.decision:1001"));
         var conflicting = new NotificationIntent(Set.of(7L), null, "product_audit.rejected", PRODUCT_AUDIT,
                 "product_audit.decision:1001", "product_audit.decision", "1",
@@ -84,16 +98,31 @@ class NotificationApplicationTests {
     }
 
     @Test
+    void rejectsTheSameKeyWithADifferentTemplateParameter() {
+        application.createNotifications(transaction, intent(Set.of(7L), "product_audit.decision:1001"));
+        // Same event type, source and template; only the reason differs.
+        var conflicting = new NotificationIntent(Set.of(7L), null, "product_audit.passed", PRODUCT_AUDIT,
+                "product_audit.decision:1001", "product_audit.decision", "1",
+                Map.of("product_id", "42", "decision", "passed", "reason", "不同理由"), OCCURRED);
+
+        assertThatThrownBy(() -> application.createNotifications(transaction, conflicting))
+                .isInstanceOf(BusinessError.class)
+                .satisfies(error -> assertThat(((BusinessError) error).code())
+                        .isEqualTo("NOTIFICATION_INTENT_CONFLICT"));
+        assertThat(store.size()).isEqualTo(1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void registersDeliveryIntentsOnlyForNewlyCreatedRecipients() {
         application.createNotifications(transaction, intent(Set.of(3L), "product_audit.decision:1001"));
         application.createNotifications(transaction, intent(Set.of(3L, 7L), "product_audit.decision:1001"));
 
         // The first call registers one recipient, the second only the new one.
-        verify(transaction).addEventIntent(eq(Set.of(3L)), eq("product_audit_passed"), eq(1),
-                eq(PRODUCT_AUDIT), eq("product_audit.decision:1001"), any(), any());
-        verify(transaction).addEventIntent(eq(Set.of(7L)), eq("product_audit_passed"), eq(1),
-                eq(PRODUCT_AUDIT), eq("product_audit.decision:1001"), any(), any());
-        verify(transaction, times(2)).addEventIntent(any(), any(), anyInt(), any(), any(), any(), any());
+        var recipients = ArgumentCaptor.forClass(Set.class);
+        verify(transaction, times(2)).addEventIntent(recipients.capture(), eq(NotificationApplication.CREATED_EVENT_TYPE),
+                eq(1), eq(PRODUCT_AUDIT), eq("product_audit.decision:1001"), any(), any());
+        assertThat(recipients.getAllValues()).containsExactly(Set.of(3L), Set.of(7L));
         assertThat(store.size()).isEqualTo(2);
     }
 
@@ -141,5 +170,4 @@ class NotificationApplicationTests {
         return new NotificationIntent(recipients, null, "product_audit.passed", PRODUCT_AUDIT, intentKey,
                 "product_audit.decision", "1", Map.of("product_id", "42", "decision", "passed"), OCCURRED);
     }
-
 }
