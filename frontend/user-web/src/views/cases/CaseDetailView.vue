@@ -14,6 +14,7 @@ import { listMyTodos } from "../../api/aggregation";
 import { listMessages } from "../../api/conversations";
 import type { CaseDetail, CaseMessage, CaseMessageKind } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
+import { caseHasScope } from "../../app/case-directory";
 import { formatDateTime, formatRemaining } from "../../app/format";
 import { newIdempotencyKey } from "../../app/keys";
 import {
@@ -63,7 +64,13 @@ const supplementFiles = ref<string[]>([]);
 const supplementPending = ref(false);
 const supplementError = ref<string | null>(null);
 
-const isReporterView = computed(() => detail.data.value?.appeal_deadline_at === null);
+/*
+ * The reporter viewpoint comes from the list scope, not from the appeal deadline:
+ * `appeal_deadline_at` only exists for the punished side, so a merely inquired
+ * account would otherwise look like a reporter. A deep link has no remembered
+ * scope and therefore hides the reporter-only entry instead of guessing.
+ */
+const isReporterView = computed(() => caseHasScope(caseId.value, "mine"));
 const archived = computed(() => Boolean(detail.data.value?.archived_at));
 const appealDeadline = computed(() => detail.data.value?.appeal_deadline_at ?? null);
 const appealOpen = computed(() => {
@@ -428,6 +435,20 @@ async function submitSupplement(): Promise<void> {
           </p>
         </template>
       </section>
+
+      <!--
+        Reporter-only entry: the viewpoint is not part of the detail payload, so it
+        is taken from the list scope. Without it the entry stays hidden and the page
+        says how to reach it instead of guessing.
+      -->
+      <p
+        v-if="
+          !canSupplement && !archived && detail.data.value.case_type === 'report' && !isReporterView
+        "
+        class="banner banner--info"
+      >
+        从「我的事项 → 我提交的」打开本事项，才能补充说明与证据。
+      </p>
 
       <section v-if="canSupplement" class="card">
         <div class="card__head"><h2>补充材料</h2></div>

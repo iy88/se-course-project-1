@@ -24,6 +24,7 @@ import type { EmailVerificationTicket } from "../../api/contracts";
 import { uploadVerifiedFile } from "../../api/files";
 import { resetBadges } from "../../app/badges";
 import { resetRealtimeCursor } from "../../app/realtime";
+import { clearCaseScopes } from "../../app/case-directory";
 import { ensureEntryContext, entryLimits, passwordRuleText } from "../../app/entry";
 import { newIdempotencyKey } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
@@ -147,6 +148,7 @@ async function submitPassword(): Promise<void> {
       newIdempotencyKey(),
     );
     clearSession();
+    clearCaseScopes();
     resetRealtimeCursor();
     resetBadges();
     notify.info("密码已更新，请使用新密码重新登录。");
@@ -196,6 +198,7 @@ async function submitEmail(): Promise<void> {
       newIdempotencyKey(),
     );
     clearSession();
+    clearCaseScopes();
     resetRealtimeCursor();
     resetBadges();
     notify.info("邮箱已更换，请使用新邮箱重新登录。");

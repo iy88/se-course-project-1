@@ -5,11 +5,12 @@
  * The `received` scope only lists cases with an actual decision, so an inquiry
  * that has not led to an enforcement is not presented as "我收到的事项".
  */
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { listMyCases } from "../../api/cases";
 import type { CaseScope, CaseStatus, MyCaseItem } from "../../api/contracts";
 import { usePagedList } from "../../app/async";
+import { rememberCaseScope } from "../../app/case-directory";
 import { formatRelative } from "../../app/format";
 import { caseDecisionLabels, caseStatusLabels, caseStatusTones } from "../../app/labels";
 import EmptyState from "../../components/EmptyState.vue";
@@ -53,12 +54,24 @@ onMounted(() => {
   void list.load(1);
 });
 
+watch(
+  () => list.items.value,
+  (items) => {
+    for (const item of items) rememberCaseScope(item.case_id, item.scope);
+  },
+);
+
 function selectScope(next: CaseScope): void {
   scope.value = next;
   void list.load(1);
 }
 
+/**
+ * Remember the scope each case was listed under: the detail endpoint does not state
+ * the viewpoint, and only the reporter may add supplements.
+ */
 function open(item: MyCaseItem): void {
+  rememberCaseScope(item.case_id, item.scope);
   void router.push({ name: "case-detail", params: { caseId: item.case_id } });
 }
 </script>
