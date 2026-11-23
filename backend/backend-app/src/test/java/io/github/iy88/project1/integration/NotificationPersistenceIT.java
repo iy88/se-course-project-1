@@ -53,6 +53,8 @@ class NotificationPersistenceIT {
     private static final long SELLER = ThreadLocalRandom.current().nextLong(1L << 42, 1L << 52);
     private static final long SECOND_RECIPIENT = SELLER + 1;
     private static final long OTHER_ACCOUNT = SELLER + 2;
+    /** Dedicated recipient for the paging test so other cases cannot change its totals. */
+    private static final long PAGE_RECIPIENT = SELLER + 3;
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final LockPlan EMPTY = new LockPlan(Map.of(), Set.of());
 
@@ -96,7 +98,7 @@ class NotificationPersistenceIT {
     static void cleanUp() {
         if (app == null) return;
         try (var context = app) {
-            for (long account : List.of(SELLER, SECOND_RECIPIENT, OTHER_ACCOUNT)) {
+            for (long account : List.of(SELLER, SECOND_RECIPIENT, OTHER_ACCOUNT, PAGE_RECIPIENT)) {
                 db.sql("DELETE FROM notification WHERE recipient_account_id = ?").param(account).update();
                 db.sql("DELETE FROM user_event WHERE recipient_account_id = ?").param(account).update();
                 db.sql("DELETE FROM account_event_head WHERE account_id = ?").param(account).update();
@@ -107,22 +109,48 @@ class NotificationPersistenceIT {
     }
 
     @Test
-    void persistsOneNotificationPerRecipientAndReplaysTheSameIntent() {
+    void writesOneCreatedEventPerRecipientWithThatNotificationReference() {
         String intentKey = key("create");
         var intent = intent(intentKey, "product_audit.passed", SELLER, SECOND_RECIPIENT);
 
         var created = create("notification.create", intentKey, intent);
         assertThat(created.replayed()).isFalse();
         assertThat(notificationRows(intentKey)).isEqualTo(2);
+
+        // Two outbox rows, each addressed to its own recipient and referencing that
+        // recipient's notification; no row is duplicated or cross-referenced.
         assertThat(eventRows(intentKey)).isEqualTo(2);
-        // The delivery event is notification_created and points at the row it announced.
-        assertThat(createdEventsLinkingNotification(intentKey)).isEqualTo(2);
+        assertThat(createdEventsFor(intentKey, SELLER)).isEqualTo(1);
+        assertThat(createdEventsFor(intentKey, SECOND_RECIPIENT)).isEqualTo(1);
+        assertThat(mismatchedCreatedEvents(intentKey)).isZero();
+        assertThat(duplicateCreatedEvents(intentKey)).isZero();
 
         var replay = create("notification.create", intentKey, intent);
         assertThat(replay.replayed()).isTrue();
         assertThat(replay.operationId()).isEqualTo(created.operationId());
         assertThat(notificationRows(intentKey)).isEqualTo(2);
         assertThat(eventRows(intentKey)).isEqualTo(2);
+        assertThat(duplicateCreatedEvents(intentKey)).isZero();
+    }
+
+    @Test
+    void registersACreatedEventOnlyForTheRecipientThatWasNotStoredYet() {
+        String intentKey = key("partial");
+
+        // First call stores the seller only, so only the seller gets an event.
+        create("notification.create", intentKey, intent(intentKey, "product_audit.passed", SELLER));
+        assertThat(createdEventsFor(intentKey, SELLER)).isEqualTo(1);
+        assertThat(createdEventsFor(intentKey, SECOND_RECIPIENT)).isZero();
+
+        // The second call is a different action (fresh idempotency key, same intent
+        // key) that adds the missing recipient; the stored one is left alone.
+        create("notification.create", key("partial-second"),
+                intent(intentKey, "product_audit.passed", SELLER, SECOND_RECIPIENT));
+        assertThat(notificationRows(intentKey)).isEqualTo(2);
+        assertThat(createdEventsFor(intentKey, SELLER)).isEqualTo(1);
+        assertThat(createdEventsFor(intentKey, SECOND_RECIPIENT)).isEqualTo(1);
+        assertThat(mismatchedCreatedEvents(intentKey)).isZero();
+        assertThat(duplicateCreatedEvents(intentKey)).isZero();
     }
 
     @Test
@@ -202,12 +230,12 @@ class NotificationPersistenceIT {
         for (int index = 0; index < eventTypes.length; index++) {
             String intentKey = base + ":" + index;
             create("notification.create", intentKey,
-                    intent(intentKey, eventTypes[index], SECOND_RECIPIENT));
+                    intent(intentKey, eventTypes[index], PAGE_RECIPIENT));
         }
-        long newest = store.find(SECOND_RECIPIENT, base + ":2").orElseThrow().notificationId();
-        markRead(SECOND_RECIPIENT, newest, key("page-read"));
+        long newest = store.find(PAGE_RECIPIENT, base + ":2").orElseThrow().notificationId();
+        markRead(PAGE_RECIPIENT, newest, key("page-read"));
 
-        var context = context(SECOND_RECIPIENT);
+        var context = context(PAGE_RECIPIENT);
         NotificationPage unread = queries.list(context,
                 new NotificationQuery(1, 20, NotificationQuery.ReadFilter.UNREAD, null));
         NotificationPage all = queries.list(context,
@@ -358,17 +386,42 @@ class NotificationPersistenceIT {
     }
 
     /**
-     * Counts delivery events that are {@code notification_created} and whose payload
-     * is the notification row of the same recipient and intent scope.
+     * Counts {@code notification_created} rows for one recipient in the intent scope.
      */
-    private static long createdEventsLinkingNotification(String intentKey) {
+    private static long createdEventsFor(String intentKey, long recipient) {
+        return db.sql("""
+                SELECT count(*) FROM user_event
+                WHERE intent_key = ? AND recipient_account_id = ? AND event_type = 'notification_created'
+                """)
+                .param(intentKey).param(recipient).query(Long.class).single();
+    }
+
+    /**
+     * Counts created events whose notification reference or recipient does not match
+     * the stored notification. A non-zero result means the realtime projection would
+     * announce the wrong row to the wrong account.
+     */
+    private static long mismatchedCreatedEvents(String intentKey) {
         return db.sql("""
                 SELECT count(*) FROM user_event e
-                JOIN notification n
-                  ON n.notification_id = e.payload_id
-                 AND n.recipient_account_id = e.recipient_account_id
-                 AND n.intent_key = e.intent_key
+                LEFT JOIN notification n ON n.notification_id = e.payload_id
                 WHERE e.intent_key = ? AND e.event_type = 'notification_created'
+                  AND (n.notification_id IS NULL
+                       OR n.recipient_account_id <> e.recipient_account_id
+                       OR n.intent_key <> e.intent_key)
+                """)
+                .param(intentKey).query(Long.class).single();
+    }
+
+    /** Counts recipients that received more than one created event for the same intent. */
+    private static long duplicateCreatedEvents(String intentKey) {
+        return db.sql("""
+                SELECT count(*) FROM (
+                    SELECT recipient_account_id FROM user_event
+                    WHERE intent_key = ? AND event_type = 'notification_created'
+                    GROUP BY recipient_account_id
+                    HAVING count(*) > 1
+                ) duplicated
                 """)
                 .param(intentKey).query(Long.class).single();
     }
