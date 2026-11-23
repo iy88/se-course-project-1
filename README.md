@@ -259,7 +259,7 @@ java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --spring.pro
 
 ### 事件投递与定时任务
 
-启动后端进程前应用最新的 Flyway 迁移。使用一个 JVM 并设置 `--spring.profiles.active=delivery-scheduler`，以入队到期任务、分发事件并清理过期事件。运行一个或多个 JVM 并设置 `--spring.profiles.active=delivery-worker`，以认领、执行和确认任务。这两个 profile 均不启动 HTTP 监听器。启用 OSS 清理时，为调度器添加 `file-cleanup`；为加载 SMTP 发送器的角色添加 `mail-delivery`。
+启动后端进程前应用最新的 Flyway 迁移。使用一个 JVM 并设置 `--spring.profiles.active=delivery-scheduler`，以入队到期任务、分发事件并清理过期事件。运行一个或多个 JVM 并设置 `--spring.profiles.active=delivery-worker`，以认领、执行和确认任务。这两个进程均不启动 HTTP 监听器。调度器自动回收 OSS 中到期且无引用的上传对象，启动时需要 `OSS_*` 配置。业务 HTTP 服务和工作进程自动装配共享 SMTP 发送器，启动时需要 `SMTP_*` 配置。
 
 - 使用 `WriteTransaction.addEventIntent` 将事件追加到与业务写入相同的事务中。`UserEvents.head` 和 `UserEvents.scan` 读取 PostgreSQL 游标。`EventSignals` 使用每个实例独立的游标读取 Redis 提示。使用 `EventReplay`，按已认证账户和当前来源权限投影事件。
 - 在业务事务中使用 `TaskSchedules.schedule`。在调度器和每个工作进程中注册相同的 `TaskHandler` 集合。调度器使用已注册的任务类型选择到期任务。工作进程使用共享写入事务处理业务变更并记录任务结果。

@@ -33,7 +33,7 @@ public final class SmtpDelivery {
 
     public void send(String recipient, String subject, String body) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
-            throw new IllegalStateException("SMTP delivery requires a committed work lease");
+            throw new IllegalStateException("SMTP delivery requires no active database transaction");
         }
         var message = new SimpleMailMessage();
         message.setFrom(from);
