@@ -229,6 +229,8 @@ export interface MockCase {
   actions: { action_kind: string; occurred_at: string; actor_kind: string }[];
   enforcements: { action: string; current_state: string }[];
   target: { target_type: string; target_id: string } | null;
+  /** Server-projected actions for the seeded viewer; absent exercises the fallback. */
+  available_actions?: string[] | null;
   public_result: PublicCaseResult | null;
 }
 
@@ -1201,6 +1203,8 @@ export function createSeedState(): MockState {
       note: null,
       archived_at: null,
       appeal_deadline_at: isoFromNow(2 * DAY),
+      // Server-projected actions: only the appeal window is open for this viewer.
+      available_actions: ["submit_appeal"],
       public_result_at: null,
       created_at: iso(-5 * DAY),
       updated_at: iso(-2 * DAY),
@@ -1236,6 +1240,8 @@ export function createSeedState(): MockState {
       note: null,
       archived_at: null,
       appeal_deadline_at: isoFromNow(-1 * DAY),
+      // Nothing is actionable for this viewer any more.
+      available_actions: [],
       public_result_at: null,
       created_at: iso(-21 * DAY),
       updated_at: iso(-15 * DAY),
@@ -1499,6 +1505,7 @@ export function caseDetail(item: MockCase): CaseDetail {
     actions: item.actions,
     enforcements: item.enforcements,
     public_result_at: item.public_result_at,
+    available_actions: item.available_actions ?? null,
   };
 }
 

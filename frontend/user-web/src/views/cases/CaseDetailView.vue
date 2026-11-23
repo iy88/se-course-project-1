@@ -15,6 +15,7 @@ import { listMessages } from "../../api/conversations";
 import type { CaseDetail, CaseMessage, CaseMessageKind } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
 import { caseHasScope } from "../../app/case-directory";
+import { caseActionAvailability } from "../../app/case-actions";
 import { formatDateTime, formatRemaining } from "../../app/format";
 import { newIdempotencyKey } from "../../app/keys";
 import {
@@ -82,9 +83,24 @@ const appealRemaining = computed(() => {
   return Math.max(0, Math.round((new Date(appealDeadline.value).getTime() - Date.now()) / 1000));
 });
 
-const canSupplement = computed(
-  () => !archived.value && isReporterView.value && detail.data.value?.case_type === "report",
+/*
+ * Server-projected actions win when present; otherwise the viewer falls back to the
+ * list scope (reporter entry), the appeal deadline and the pending inquiry ids.
+ */
+const availability = computed(() =>
+  caseActionAvailability({
+    projected: detail.data.value?.available_actions ?? null,
+    archived: archived.value,
+    reporterView: isReporterView.value,
+    caseType: detail.data.value?.case_type ?? null,
+    appealOpen: appealOpen.value,
+    pendingInquiryCount: pendingInquiryIds.value.length,
+  }),
 );
+
+const canSupplement = computed(() => availability.value.supplement);
+const canRespond = computed(() => availability.value.respond);
+const canAppeal = computed(() => availability.value.appeal);
 
 async function loadThread(): Promise<void> {
   const thread = detail.data.value?.thread;
@@ -363,7 +379,7 @@ async function submitSupplement(): Promise<void> {
           事项已结案，不能再发言；历史记录仍可查看。
         </p>
         <template v-else>
-          <div v-if="pendingInquiryIds.length" class="stack stack--tight">
+          <div v-if="canRespond" class="stack stack--tight">
             <span class="field__label">待回复的问询</span>
             <div v-for="(actionId, index) in pendingInquiryIds" :key="actionId" class="reply-entry">
               <div class="inline">
@@ -404,7 +420,7 @@ async function submitSupplement(): Promise<void> {
             </div>
           </div>
 
-          <template v-if="appealDeadline && appealOpen">
+          <template v-if="canAppeal">
             <div class="reply-entry">
               <div class="inline">
                 <span class="field__label">处置申辩</span>
@@ -430,7 +446,7 @@ async function submitSupplement(): Promise<void> {
             </div>
           </template>
 
-          <p v-if="!pendingInquiryIds.length && !(appealDeadline && appealOpen)" class="muted">
+          <p v-if="!canRespond && !canAppeal" class="muted">
             当前没有需要回复的问询或可提交的申辩。
           </p>
         </template>
@@ -468,8 +484,11 @@ async function submitSupplement(): Promise<void> {
           label="证据文件"
           hint="支持 JPG、PNG、PDF"
           :max-count="5"
-          :target="{ resource_type: 'case', resource_id: detail.data.value.case_id }"
+          :target="null"
         />
+        <p class="muted">
+          证据先按暂存上传，提交补充时随材料一起绑定到该事项；事项归属核验随事项后端接入后改用事项目标。
+        </p>
         <p v-if="supplementError" class="field__error" role="alert">{{ supplementError }}</p>
         <div class="inline">
           <button

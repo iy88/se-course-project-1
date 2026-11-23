@@ -817,6 +817,12 @@ export interface CaseDetail {
   appeal_deadline_at?: string | null;
   actions: CaseActionView[];
   enforcements: CaseEnforcementView[];
+  /**
+   * Actions the server allows for the current viewer. An array is authoritative and
+   * an empty array means no write entry is available; a missing field means the
+   * backend does not project the capability yet, so the client keeps its own rules.
+   */
+  available_actions?: string[] | null;
   public_result_at?: string | null;
 }
 
