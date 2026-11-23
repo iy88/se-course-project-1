@@ -5,10 +5,12 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 /** Read-only conversation access; callers apply participant and visibility rules. */
+@Lazy
 @Service
 public class ConversationReader {
     private final ChatConversationRepository chats;

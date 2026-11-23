@@ -13,13 +13,18 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
 /**
  * Transactional conversation primitives. Callers own the transaction and the lock plan; these
  * methods never commit and never resolve participant eligibility beyond the conversation row.
+ *
+ * <p>Lazy so a context without a data source still starts before the conversation HTTP layer is
+ * wired; the persistence dependencies are resolved on first use.
  */
+@Lazy
 @Service
 public class ConversationStore {
     private static final long MAX_SAFE_SEQUENCE = 9007199254740991L;

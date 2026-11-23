@@ -7,12 +7,14 @@ import io.github.iy88.project1.core.WriteTransaction;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 /**
  * Trade-facing conversation capability. The trade module owns trade records; this facade only
  * creates, appends to and archives the one conversation attached to a trade.
  */
+@Lazy
 @Service
 public class TradeConversations {
     private final ConversationStore store;
