@@ -7,15 +7,21 @@
  * those capabilities from the case payload (`thread`, `appeal_deadline_at`,
  * archived state) instead of from the case status alone.
  */
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getCase, postCaseMessage, supplementReport } from "../../api/cases";
 import { listMyTodos } from "../../api/aggregation";
 import { listMessages } from "../../api/conversations";
-import type { CaseDetail, CaseMessage, CaseMessageKind } from "../../api/contracts";
+import type { CaseDetail, CaseMessage, CaseMessageKind, TodoItem } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
 import { caseHasScope } from "../../app/case-directory";
 import { caseActionAvailability } from "../../app/case-actions";
+import {
+  appealOpenAt,
+  appealRemainingMs,
+  inquiryIdsForCase,
+  shouldLoadNextPage,
+} from "../../app/case-inquiries";
 import { formatDateTime, formatRemaining } from "../../app/format";
 import { newIdempotencyKey } from "../../app/keys";
 import {
@@ -66,22 +72,31 @@ const supplementPending = ref(false);
 const supplementError = ref<string | null>(null);
 
 /*
- * The reporter viewpoint comes from the list scope, not from the appeal deadline:
- * `appeal_deadline_at` only exists for the punished side, so a merely inquired
- * account would otherwise look like a reporter. A deep link has no remembered
- * scope and therefore hides the reporter-only entry instead of guessing.
+ * The reporter viewpoint comes from the server projection when present, otherwise from
+ * the list scope. It never comes from the appeal deadline: that field only exists for
+ * the punished side, so a merely inquired account would otherwise look like a reporter.
+ * A deep link has no remembered scope and therefore hides the reporter-only entry.
  */
-const isReporterView = computed(() => caseHasScope(caseId.value, "mine"));
+const isReporterView = computed(() => {
+  const viewpoint = detail.data.value?.viewpoint;
+  if (viewpoint) return viewpoint === "reporter";
+  // A deep link has no remembered list scope, so fall back to it only when the
+  // server did not project a viewpoint.
+  return caseHasScope(caseId.value, "mine");
+});
 const archived = computed(() => Boolean(detail.data.value?.archived_at));
 const appealDeadline = computed(() => detail.data.value?.appeal_deadline_at ?? null);
-const appealOpen = computed(() => {
-  if (!appealDeadline.value) return false;
-  return new Date(appealDeadline.value).getTime() > Date.now();
-});
-const appealRemaining = computed(() => {
-  if (!appealDeadline.value) return 0;
-  return Math.max(0, Math.round((new Date(appealDeadline.value).getTime() - Date.now()) / 1000));
-});
+/*
+ * The deadline is compared against a ticking clock: a computed that reads `Date.now()`
+ * only recomputes when its dependencies change, so a page left open across the deadline
+ * would keep offering the appeal form.
+ */
+const clock = ref(Date.now());
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+const appealOpen = computed(() => appealOpenAt(appealDeadline.value, clock.value));
+const appealRemaining = computed(() =>
+  Math.round(appealRemainingMs(appealDeadline.value, clock.value) / 1000),
+);
 
 /*
  * Server-projected actions win when present; otherwise the viewer falls back to the
@@ -130,26 +145,57 @@ async function loadThread(): Promise<void> {
   }
 }
 
+/*
+ * The todo projection is global, so the case is located by paging `inquiry_response`
+ * todos until it appears. The request counter drops a response that belongs to a case
+ * the reader already left, which would otherwise write ids into the new page.
+ */
+const INQUIRY_PAGE_SIZE = 50;
+const INQUIRY_MAX_PAGES = 5;
+let inquiryRequest = 0;
+
 async function loadPendingInquiries(): Promise<void> {
   const current = detail.data.value;
+  const request = ++inquiryRequest;
   pendingInquiryIds.value = [];
   if (!current) return;
+  const caseId = current.case_id;
+  const projected = current.pending_inquiries;
+  if (Array.isArray(projected)) {
+    // The detail projection is authoritative and already limited to this viewer.
+    pendingInquiryIds.value = projected
+      .map((inquiry) => String(inquiry.inquiry_action_id ?? "").trim())
+      .filter((id) => id !== "");
+    return;
+  }
+  const pages: TodoItem[][] = [];
   try {
-    const todos = await listMyTodos({ page: 1, page_size: 50 });
-    const ids = new Set<string>();
-    for (const todo of todos.items) {
-      if (todo.kind !== "inquiry_response") continue;
-      const source = todo.source as { case_id?: unknown; inquiry_action_ids?: unknown };
-      if (String(source.case_id ?? "") !== current.case_id) continue;
-      if (!Array.isArray(source.inquiry_action_ids)) continue;
-      for (const id of source.inquiry_action_ids) {
-        if (id !== null && id !== undefined && String(id) !== "") ids.add(String(id));
+    for (let page = 1; page <= INQUIRY_MAX_PAGES; page += 1) {
+      const todos = await listMyTodos({
+        kind: "inquiry_response",
+        page,
+        page_size: INQUIRY_PAGE_SIZE,
+      });
+      if (request !== inquiryRequest || detail.data.value?.case_id !== caseId) return;
+      pages.push(todos.items);
+      const found = inquiryIdsForCase(pages, caseId).length > 0;
+      if (
+        !shouldLoadNextPage({
+          found,
+          pagesRead: page,
+          pageSize: INQUIRY_PAGE_SIZE,
+          total: todos.total,
+          maxPages: INQUIRY_MAX_PAGES,
+        })
+      ) {
+        break;
       }
     }
-    pendingInquiryIds.value = [...ids];
+    if (request !== inquiryRequest) return;
+    pendingInquiryIds.value = inquiryIdsForCase(pages, caseId);
   } catch {
     // The todo projection is an auxiliary entry point; a failure must not hide the case.
-    pendingInquiryIds.value = [];
+    if (request === inquiryRequest) pendingInquiryIds.value = [];
   }
 }
 
@@ -160,7 +206,18 @@ async function load(): Promise<void> {
 }
 
 onMounted(() => {
+  // A one second tick is enough to hide the appeal entry at its deadline.
+  clockTimer = setInterval(() => {
+    clock.value = Date.now();
+  }, 1000);
   void load();
+});
+
+onUnmounted(() => {
+  if (clockTimer !== null) {
+    clearInterval(clockTimer);
+    clockTimer = null;
+  }
 });
 
 watch(caseId, () => {
@@ -453,7 +510,7 @@ async function submitSupplement(): Promise<void> {
       </section>
 
       <!--
-        Reporter-only entry: the viewpoint is not part of the detail payload, so it
+        Reporter-only entry: shown when the server projects the reporter viewpoint, or
         is taken from the list scope. Without it the entry stays hidden and the page
         says how to reach it instead of guessing.
       -->

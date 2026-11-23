@@ -807,6 +807,15 @@ export interface CaseEnforcementView {
 }
 
 /** API-CASE-010 `GET /cases/{case_id}` — projected by the reader's viewpoint. */
+export type CaseViewpoint = "reporter" | "related_account" | "manager";
+
+export interface PendingInquiry {
+  inquiry_action_id: string;
+  asked_at?: string | null;
+  scope_text?: string | null;
+  related_account_id?: string | null;
+}
+
 export interface CaseDetail {
   case_id: string;
   case_type: CaseKind;
@@ -819,11 +828,22 @@ export interface CaseDetail {
   actions: CaseActionView[];
   enforcements: CaseEnforcementView[];
   /**
+   * How the server sees the caller on this case. `reporter` drives the supplement
+   * entry; when the field is absent the client falls back to the list scope.
+   */
+  viewpoint?: CaseViewpoint | null;
+  /**
    * Actions the server allows for the current viewer. An array is authoritative and
    * an empty array means no write entry is available; a missing field means the
    * backend does not project the capability yet, so the client keeps its own rules.
    */
   available_actions?: string[] | null;
+  /**
+   * Inquiries this viewer may answer, each carrying the id the statement must send.
+   * Absent means the backend does not project it yet, so the client reads the todo
+   * projection instead.
+   */
+  pending_inquiries?: PendingInquiry[] | null;
   public_result_at?: string | null;
 }
 

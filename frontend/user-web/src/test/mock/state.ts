@@ -231,6 +231,10 @@ export interface MockCase {
   target: { target_type: string; target_id: string } | null;
   /** Server-projected actions for the seeded viewer; absent exercises the fallback. */
   available_actions?: string[] | null;
+  /** Server-projected viewpoint; absent exercises the list-scope fallback. */
+  viewpoint?: CaseDetail["viewpoint"];
+  /** Inquiries the seeded viewer may answer; absent exercises the todo fallback. */
+  pending_inquiries?: CaseDetail["pending_inquiries"];
   public_result: PublicCaseResult | null;
 }
 
@@ -1133,6 +1137,12 @@ export function createSeedState(): MockState {
       status: "claimed",
       reporter_id: null,
       related_ids: ["1"],
+      // The inquired seller may answer, and the server says so explicitly.
+      viewpoint: "related_account",
+      available_actions: ["respond_inquiry"],
+      pending_inquiries: [
+        { inquiry_action_id: "31", asked_at: iso(-1 * DAY), scope_text: "请说明商品来源" },
+      ],
       manager_id: "4",
       claimed_at: iso(-1 * DAY),
       decision_kind: null,
@@ -1506,6 +1516,8 @@ export function caseDetail(item: MockCase): CaseDetail {
     enforcements: item.enforcements,
     public_result_at: item.public_result_at,
     available_actions: item.available_actions ?? null,
+    viewpoint: item.viewpoint ?? null,
+    pending_inquiries: item.pending_inquiries ?? null,
   };
 }
 
