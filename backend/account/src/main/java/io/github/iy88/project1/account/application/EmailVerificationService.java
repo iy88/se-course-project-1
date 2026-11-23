@@ -25,16 +25,16 @@ public class EmailVerificationService {
     private final EmailVerificationRepository verifications;
     private final AccountRepository accounts;
     private final AccountSettings settings;
-    private final AccountMailer mailer;
+    private final VerificationMail mail;
     private final TransactionTemplate transaction;
 
     public EmailVerificationService(EmailVerificationRepository verifications, AccountRepository accounts,
-                                    AccountSettings settings, AccountMailer mailer,
+                                    AccountSettings settings, VerificationMail mail,
                                     PlatformTransactionManager manager) {
         this.verifications = verifications;
         this.accounts = accounts;
         this.settings = settings;
-        this.mailer = mailer;
+        this.mail = mail;
         this.transaction = new TransactionTemplate(manager);
     }
 
@@ -115,7 +115,9 @@ public class EmailVerificationService {
 
     private void send(String recipient, String code) {
         try {
-            mailer.sendCode(recipient, code, settings.emailCodeTtlSeconds());
+            mail.sendCode(recipient, code, settings.emailCodeTtlSeconds());
+        } catch (BusinessError dependency) {
+            throw dependency;
         } catch (RuntimeException failure) {
             throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "验证码发送失败，请稍后重试");
         }
