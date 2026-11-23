@@ -325,7 +325,7 @@ const routes: Route[] = [
       limits: {
         password_min_length: 10,
         password_max_length: 128,
-        display_name_max_length: 24,
+        display_name_max_length: 64,
       },
     }),
   },
@@ -426,7 +426,7 @@ const routes: Route[] = [
         resend_interval_seconds: 60,
         password_min_length: 10,
         password_max_length: 128,
-        display_name_max_length: 24,
+        display_name_max_length: 64,
       },
     }),
   },
@@ -437,15 +437,18 @@ const routes: Route[] = [
     handler: ({ body }) => {
       const purpose = requireString(body, "purpose");
       const email = requireString(body, "email");
+      const expiresAt = new Date(Date.now() + 600_000).toISOString();
+      // An email change sends one code to the current mailbox and one to the new one,
+      // and the two tickets are distinguished by purpose rather than by order.
+      const purposes =
+        purpose === "email_change" ? ["email_change_old", "email_change_new"] : [purpose];
       return {
         purpose,
-        requests: [
-          {
-            verification_id: `V-${Date.now()}`,
-            purpose,
-            expires_at: new Date(Date.now() + 600_000).toISOString(),
-          },
-        ],
+        requests: purposes.map((ticketPurpose, index) => ({
+          verification_id: `V-${Date.now()}-${index}`,
+          purpose: ticketPurpose,
+          expires_at: expiresAt,
+        })),
         retry_after_seconds: 60,
         email,
       };
@@ -494,6 +497,9 @@ const routes: Route[] = [
       if (hasAvatar) {
         const fileId = body.avatar_file_id;
         if (fileId === null) {
+          // The endpoint cannot tell an explicit null from an omitted field, so a
+          // null keeps the current avatar; removal is the "0" sentinel.
+        } else if (fileId === "" || fileId === "0") {
           account.avatar_file_id = null;
         } else {
           const id = typeof fileId === "string" ? fileId : "";
