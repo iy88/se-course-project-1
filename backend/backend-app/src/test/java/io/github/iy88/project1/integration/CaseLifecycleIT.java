@@ -253,6 +253,27 @@ class CaseLifecycleIT {
     }
 
     @Test
+    void failedExecutionKeepsAFailureTrailWithoutSubjectChanges() {
+        long related3 = account("related3-" + RUN_ID, "相关用户三", "user");
+        var submitted = cases.submit(context(REPORTER.get()), "submit-fail-" + RUN_ID, new CaseCommands.Report(
+                new CaseCommands.Target("account", related3, null, null), "虚假信息", null, List.of()));
+        long caseId = Long.parseLong(submitted.data().get("case_id").asString());
+
+        store.recordFailure(caseId, "enf-fail", "restrict_account", "account", related3, "case:" + caseId,
+                MANAGER_1.get(), "TARGET_STATE_CONFLICT", "目标状态冲突", Instant.now());
+
+        var row = db.sql("""
+                        select result_status, failure_code, failure_reason from case_enforcement
+                         where case_id = ? and enforcement_id = ?
+                        """)
+                .param(caseId).param("enf-fail")
+                .query((rs, index) -> List.of(rs.getString("result_status"), rs.getString("failure_code"),
+                        rs.getString("failure_reason")))
+                .single();
+        assertThat(row).containsExactly("failed", "TARGET_STATE_CONFLICT", "目标状态冲突");
+    }
+
+    @Test
     void closedReportRejectsANewSubmissionForTheSameObject() {        long reporter = REPORTER.get();
         long related = RELATED.get();
         var target = new CaseCommands.Target("account", related, null, null);

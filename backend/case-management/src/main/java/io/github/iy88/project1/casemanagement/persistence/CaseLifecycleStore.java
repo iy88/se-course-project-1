@@ -20,6 +20,8 @@ import java.util.stream.Collectors;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Case-owned persistence for the report/dispute/exception lifecycle. The product-review rows keep
@@ -422,6 +424,29 @@ public class CaseLifecycleStore {
                         from case_enforcement where case_id = ? and enforcement_id = ?
                         """)
                 .param(caseId).param(enforcementId).query(this::enforcement).optional();
+    }
+
+    /**
+     * Records the failure trail after the subject transaction rolled back. The caller invokes
+     * this outside the failed transaction (REQUIRES_NEW) so the case keeps a named failure while
+     * every subject change is rolled back; an already applied link is never overwritten.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordFailure(long caseId, String enforcementId, String action, String targetType, long targetId,
+                              String basisRef, long managerId, String errorCode, String reason, Instant at) {
+        jdbc.sql("""
+                        insert into case_enforcement (case_id, enforcement_id, action, target_type, target_id,
+                            basis_ref, requested_by, requested_at, result_status, failure_code, failure_reason,
+                            affected_scope, occurred_at)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, 'failed', ?, ?, '[]'::jsonb, ?)
+                        on conflict (case_id, enforcement_id) do update
+                            set result_status = 'failed', failure_code = excluded.failure_code,
+                                failure_reason = excluded.failure_reason, occurred_at = excluded.occurred_at
+                            where case_enforcement.result_status <> 'applied'
+                        """)
+                .param(caseId).param(enforcementId).param(action).param(targetType).param(targetId)
+                .param(basisRef).param(managerId).param(stamp(at)).param(errorCode).param(reason)
+                .param(stamp(at)).update();
     }
 
     /** Records that the original enforcement was reversed by an appeal resolution or a lift. */
