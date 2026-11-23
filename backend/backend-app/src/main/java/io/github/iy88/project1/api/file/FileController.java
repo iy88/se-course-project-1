@@ -140,10 +140,10 @@ class FileController {
         if (input == null) {
             return null;
         }
-        if (!"product".equals(input.type())) {
+        if (!"product".equals(input.resourceType())) {
             throw new BusinessError("FILE_PURPOSE_MISMATCH", 422, "目标类型不符");
         }
-        long productId = identifier(input.id());
+        long productId = identifier(input.resourceId());
         if (!products.ownsProduct(accountId, productId)) {
             throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在");
         }
@@ -220,7 +220,7 @@ class FileController {
         T get();
     }
 
-    record TargetInput(String type, String id) {
+    record TargetInput(String resourceType, String resourceId) {
     }
 
     record UploadRequest(String purpose, Long declaredSize, String declaredContentType, TargetInput target) {
