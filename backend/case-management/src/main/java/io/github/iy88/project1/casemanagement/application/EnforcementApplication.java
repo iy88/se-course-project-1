@@ -145,7 +145,7 @@ public final class EnforcementApplication implements WriteExecutor.UseCase<Enfor
             var prior = access.priorExecutions().get(instruction.enforcementId());
             if (prior != null) {
                 if (prior.action() != instruction.action() || !prior.target().equals(instruction.target())) {
-                    throw new BusinessError("STATE_CONFLICT", 409, "执行标识已用于其他动作或目标");
+                    throw new BusinessError("IDEMPOTENCY_PAYLOAD_CONFLICT", 409, "执行标识已用于其他动作或目标");
                 }
                 instruction.action().requireResult(instruction.target(), prior.result());
                 outcomes.add(prior.replayed());

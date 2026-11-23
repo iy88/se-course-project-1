@@ -30,6 +30,7 @@ CREATE TABLE enforcement_execution_fixture (
     current_state TEXT,
     occurred_at TIMESTAMPTZ NOT NULL,
     status TEXT NOT NULL,
+    request_payload TEXT NOT NULL,
     PRIMARY KEY (run_id, case_id, enforcement_id));
 
 CREATE TABLE enforcement_subject_fixture (

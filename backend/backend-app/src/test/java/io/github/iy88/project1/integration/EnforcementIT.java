@@ -55,6 +55,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
+import tools.jackson.databind.cfg.JsonNodeFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -280,6 +281,54 @@ class EnforcementIT {
     }
 
     @Test
+    void rejectsChangedPayloadForPersistedExecutionIdWithoutChangingPriorOutcome() {
+        String key = RUN_ID + "-payload-conflict";
+        var command = command(List.of(withdraw("e1")), List.of());
+        var first = enforcement.execute(context(MANAGER_ID), key, command);
+        var original = execution("e1");
+        assertThat(operationCount(key)).isEqualTo(1);
+
+        trace.clear();
+        String changedExpectedKey = RUN_ID + "-payload-conflict-expected";
+        var changedExpected = new EnforcementInstruction("e1", EnforcementAction.WITHDRAW_PUBLIC_ACCESS,
+                new ResourceRef("product", PRODUCT_ID), null, "unexpected");
+        assertThatThrownBy(() -> enforcement.execute(context(MANAGER_ID), changedExpectedKey,
+                command(List.of(changedExpected), List.of())))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("IDEMPOTENCY_PAYLOAD_CONFLICT");
+                    assertThat(error.status()).isEqualTo(409);
+                });
+        assertPriorPayloadUnchanged(first.operationId(), original);
+        assertThat(operationCount(changedExpectedKey)).isZero();
+        assertThat(trace.keys()).containsExactly(CASE_KEY);
+
+        trace.clear();
+        String changedSharedKey = RUN_ID + "-payload-conflict-shared";
+        assertThatThrownBy(() -> enforcement.execute(context(MANAGER_ID), changedSharedKey,
+                command(List.of(withdraw("e1")), List.of(), "changed reason")))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("IDEMPOTENCY_PAYLOAD_CONFLICT");
+                    assertThat(error.status()).isEqualTo(409);
+                });
+        assertPriorPayloadUnchanged(first.operationId(), original);
+        assertThat(operationCount(changedSharedKey)).isZero();
+        assertThat(trace.keys()).containsExactly(CASE_KEY);
+
+        trace.clear();
+        String changedBasisKey = RUN_ID + "-payload-conflict-basis";
+        var changedBasis = new EnforcementCommand(CASE_ID, List.of(withdraw("e1")), List.of(BASIS_ID + 1),
+                List.of(), "governance reason", OCCURRED_AT);
+        assertThatThrownBy(() -> enforcement.execute(context(MANAGER_ID), changedBasisKey, changedBasis))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("IDEMPOTENCY_PAYLOAD_CONFLICT");
+                    assertThat(error.status()).isEqualTo(409);
+                });
+        assertPriorPayloadUnchanged(first.operationId(), original);
+        assertThat(operationCount(changedBasisKey)).isZero();
+        assertThat(trace.keys()).containsExactly(CASE_KEY);
+    }
+
+    @Test
     void terminalAdjustmentAppendsTheSystemMessageBeforeArchiving() {
         var terminate = new EnforcementInstruction("terminal", EnforcementAction.ADJUST_TRADE_STATUS,
                 new ResourceRef("trade", TRADE_ID), null, "terminated");
@@ -373,6 +422,15 @@ class EnforcementIT {
                 });
         assertThat(fileReferenceCount(fileId)).isZero();
         assertThat(executionCount()).isZero();
+    }
+
+    private static void assertPriorPayloadUnchanged(UUID operationId, ExecutionSnapshot original) {
+        assertThat(state("product", PRODUCT_ID)).isEqualTo("DISPLAY_WITHDRAWN");
+        assertThat(executionCount()).isEqualTo(1);
+        assertThat(execution("e1")).isEqualTo(original);
+        assertThat(auditCount(operationId)).isEqualTo(1);
+        assertThat(eventCount(PARTY_A)).isEqualTo(1);
+        assertThat(eventCount(PARTY_B)).isZero();
     }
 
     private static EnforcementCommand command(List<EnforcementInstruction> enforcements, List<Long> evidence) {
@@ -488,6 +546,21 @@ class EnforcementIT {
                 .param(RUN_ID).param(CASE_ID).query(Long.class).single();
     }
 
+    private static ExecutionSnapshot execution(String enforcementId) {
+        return db.sql("""
+                SELECT action, target_type, target_id, result_type, result_id, previous_state, current_state,
+                       occurred_at, status
+                FROM enforcement_execution_fixture
+                WHERE run_id = ? AND case_id = ? AND enforcement_id = ?
+                """).param(RUN_ID).param(CASE_ID).param(enforcementId)
+                .query((row, index) -> new ExecutionSnapshot(row.getString("action"),
+                        row.getString("target_type"), row.getLong("target_id"),
+                        row.getString("result_type"), row.getLong("result_id"),
+                        row.getString("previous_state"), row.getString("current_state"),
+                        row.getTimestamp("occurred_at").toInstant(), row.getString("status")))
+                .single();
+    }
+
     private static long fileReferenceCount(long fileId) {
         return db.sql("SELECT count(*) FROM file_reference WHERE file_id = ? AND target_type = 'case' AND target_id = ?")
                 .param(fileId).param(CASE_ID).query(Long.class).single();
@@ -521,6 +594,10 @@ class EnforcementIT {
 
     private record FileTarget(String type, long id) {}
 
+    private record ExecutionSnapshot(String action, String targetType, long targetId, String resultType,
+                                     long resultId, String previousState, String currentState,
+                                     Instant occurredAt, String status) {}
+
     static final class LockTrace {
         private final List<LockPlan.Key> keys = new CopyOnWriteArrayList<>();
 
@@ -538,6 +615,9 @@ class EnforcementIT {
     }
 
     static final class FixtureCases implements CaseEnforcementPort {
+        private static final JsonMapper CANONICAL = JsonMapper.builder()
+                .enable(JsonNodeFeature.WRITE_PROPERTIES_SORTED, JsonNodeFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+                .build();
         private final JdbcClient db;
         private final LockTrace trace;
 
@@ -559,7 +639,21 @@ class EnforcementIT {
         @Override
         public CaseAccess revalidate(WriteTransaction transaction, ExecutionContext context,
                                      EnforcementCommand command, CaseAccess current) {
-            return load(context, command);
+            var access = load(context, command);
+            // The coordinator already holds the CASE row lock. Compare only the current
+            // instruction with its own persisted request before allowing its outcome to replay.
+            for (var instruction : command.enforcements()) {
+                var original = db.sql("""
+                        SELECT request_payload FROM enforcement_execution_fixture
+                        WHERE run_id = ? AND case_id = ? AND enforcement_id = ?
+                        """).param(RUN_ID).param(command.caseId()).param(instruction.enforcementId())
+                        .query(String.class).optional();
+                if (original.isPresent() && !original.get().equals(payload(command, instruction))) {
+                    throw new BusinessError("IDEMPOTENCY_PAYLOAD_CONFLICT", 409,
+                            "execution id already used with another payload");
+                }
+            }
+            return access;
         }
 
         @Override
@@ -591,18 +685,54 @@ class EnforcementIT {
         public void recordExecution(WriteTransaction transaction, ExecutionContext context,
                                     EnforcementCommand command, List<EnforcementOutcome> outcomes,
                                     List<FileReferences.Reference> references) {
+            var instructions = new java.util.HashMap<String, EnforcementInstruction>();
+            command.enforcements().forEach(instruction -> instructions.put(instruction.enforcementId(), instruction));
             for (var outcome : outcomes) {
+                var instruction = instructions.get(outcome.enforcementId());
+                if (instruction == null) {
+                    throw new IllegalStateException("Missing instruction for " + outcome.enforcementId());
+                }
                 db.sql("""
                         INSERT INTO enforcement_execution_fixture
                             (run_id, case_id, enforcement_id, action, target_type, target_id,
-                             result_type, result_id, previous_state, current_state, occurred_at, status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             result_type, result_id, previous_state, current_state, occurred_at, status,
+                             request_payload)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """).param(RUN_ID).param(CASE_ID).param(outcome.enforcementId())
                         .param(outcome.action().name()).param(outcome.target().type()).param(outcome.target().id())
                         .param(outcome.result().type()).param(outcome.result().id())
                         .param(outcome.previousState()).param(outcome.currentState())
-                        .param(java.sql.Timestamp.from(outcome.occurredAt())).param(outcome.status().name()).update();
+                        .param(java.sql.Timestamp.from(outcome.occurredAt())).param(outcome.status().name())
+                        .param(payload(command, instruction)).update();
             }
+        }
+
+        /**
+         * Canonical view of one original execution request. Occurred time, the outer HTTP
+         * idempotency key, derived outcomes and sibling instructions are intentionally excluded.
+         */
+        private static String payload(EnforcementCommand command, EnforcementInstruction instruction) {
+            var root = CANONICAL.createObjectNode();
+            root.put("case_id", command.caseId());
+            root.put("enforcement_id", instruction.enforcementId());
+            root.put("action", instruction.action().name());
+            var target = root.putObject("target");
+            target.put("type", instruction.target().type());
+            target.put("id", instruction.target().id());
+            if (instruction.detail() != null) {
+                var detail = root.putObject("detail");
+                detail.put("type", instruction.detail().type());
+                detail.put("id", instruction.detail().id());
+            }
+            if (instruction.expectedResult() != null) {
+                root.put("expected_result", instruction.expectedResult());
+            }
+            var basis = root.putArray("basis_refs");
+            command.basisRefs().forEach(basis::add);
+            var evidence = root.putArray("evidence_file_ids");
+            command.evidenceFileIds().forEach(evidence::add);
+            root.put("reason", command.reason());
+            return CANONICAL.writeValueAsString(root);
         }
 
         @Override
