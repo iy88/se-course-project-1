@@ -97,6 +97,10 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             digest = digest(request.getMethod(), request.getRequestURI(), requestBody);
             claim = claim(actor, operation, key, digest);
             if (claim.replay != null) {
+                if (expiredUploadAuthorisation(request, claim.replay)) {
+                    writeError(response, 409, "UPLOAD_AUTH_EXPIRED", "上传授权已过期", requestId);
+                    return;
+                }
                 replay(response, claim.replay, requestId);
                 return;
             }
@@ -248,6 +252,22 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             return digest.digest();
         } catch (Exception impossible) {
             throw new IllegalStateException("Could not digest the idempotent request", impossible);
+        }
+    }
+
+    private boolean expiredUploadAuthorisation(HttpServletRequest request, Replay replay) {
+        if (!request.getRequestURI().endsWith("/files/uploads") || replay.body() == null) {
+            return false;
+        }
+        try {
+            JsonNode node = json.readTree(replay.body());
+            JsonNode expiresAt = node.get("expires_at");
+            if (expiresAt == null || !expiresAt.isString()) {
+                return false;
+            }
+            return !Instant.now().isBefore(Instant.parse(expiresAt.asString()));
+        } catch (RuntimeException invalid) {
+            return false;
         }
     }
 
