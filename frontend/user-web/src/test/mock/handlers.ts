@@ -552,8 +552,9 @@ const routes: Route[] = [
       if (!["product_image", "case_evidence", "account_avatar"].includes(purpose)) {
         fail(422, "FILE_PURPOSE_MISMATCH", "不支持的文件用途。");
       }
+      const fileId = nextId(state, "files");
       const file = {
-        file_id: nextId(state, "files"),
+        file_id: fileId,
         owner_account_id: accountId,
         purpose,
         state: "uploading" as const,
@@ -562,7 +563,9 @@ const routes: Route[] = [
         object_key: `dev/${purpose}/${Date.now()}`,
         expires_at: new Date(Date.now() + 900_000).toISOString(),
         verified_at: null,
-        url: `https://oss.example.invalid/dev/${purpose}/${Date.now()}?x-oss-signature=mock`,
+        // Same-origin preview: the dev server proxies this to the mock service,
+        // which answers with a generated placeholder image for the file.
+        url: `/api/v1/files/${fileId}/content`,
       };
       state.files.push(file);
       const result: CreateUploadResult = {
@@ -570,19 +573,23 @@ const routes: Route[] = [
         state: "uploading",
         expires_at: file.expires_at,
         upload: {
+          // Same-origin so the browser can actually post the bytes; the dev server
+          // proxies this path to the mock service, which accepts the transfer.
           method: "POST",
-          url: "https://oss.example.invalid/",
-          fields: {
-            key: file.object_key,
-            policy: "mock-policy",
-            "x-oss-signature-version": "OSS4-HMAC-SHA256",
-            success_action_status: "204",
-          },
+          url: "/api/v1/files/mock-upload",
+          fields: { key: file.object_key },
         },
         limits: { max_bytes: 104_857_600, allowed_content_types: [declaredType] },
       };
       return result;
     },
+  },
+  {
+    // Stands in for the bucket entry point: the browser posts the signed form and
+    // the bytes here, and the dev server forwards it to this service.
+    method: "POST",
+    pattern: ["files", "mock-upload"],
+    handler: () => undefined,
   },
   {
     method: "POST",
