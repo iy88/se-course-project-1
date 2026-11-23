@@ -2,7 +2,10 @@ package io.github.iy88.project1.conversation.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -70,15 +73,48 @@ class ConversationsTests {
     }
 
     @Test
+    void sendRejectsWriteRestrictedInitiator() {
+        var conversation = chat(7L, 42L);
+        when(store.lockChat(transaction, 1L)).thenReturn(conversation);
+        when(accounts.writeRestricted(7L)).thenReturn(true);
+
+        assertThatThrownBy(() -> conversations.sendChat(transaction, actor(7L), 1L, "hello"))
+                .isInstanceOfSatisfying(BusinessError.class, failure -> {
+                    assertThat(failure.code()).isEqualTo("MESSAGE_SEND_FORBIDDEN");
+                    assertThat(failure.status()).isEqualTo(403);
+                    assertThat(failure.getMessage()).isEqualTo("账户当前不能发送消息");
+                });
+        assertNoChatWrite(conversation);
+    }
+
+    @Test
+    void sendRejectsWriteRestrictedPeer() {
+        var conversation = chat(7L, 42L);
+        when(store.lockChat(transaction, 1L)).thenReturn(conversation);
+        when(accounts.writeRestricted(7L)).thenReturn(false);
+        when(accounts.writeRestricted(42L)).thenReturn(true);
+
+        assertThatThrownBy(() -> conversations.sendChat(transaction, actor(7L), 1L, "hello"))
+                .isInstanceOfSatisfying(BusinessError.class, failure -> {
+                    assertThat(failure.code()).isEqualTo("MESSAGE_SEND_FORBIDDEN");
+                    assertThat(failure.status()).isEqualTo(403);
+                    assertThat(failure.getMessage()).isEqualTo("账户当前不能发送消息");
+                });
+        assertNoChatWrite(conversation);
+    }
+
+    @Test
     void sendRejectsFrozenPair() {
         var conversation = chat(7L, 42L);
         when(store.lockChat(transaction, 1L)).thenReturn(conversation);
         when(accounts.writeRestricted(7L)).thenReturn(false);
+        when(accounts.writeRestricted(42L)).thenReturn(false);
         when(trades.pairFrozen(7L, 42L)).thenReturn(true);
 
         assertThatThrownBy(() -> conversations.sendChat(transaction, actor(7L), 1L, "hello"))
                 .isInstanceOfSatisfying(BusinessError.class,
                         failure -> assertThat(failure.code()).isEqualTo("MESSAGE_SEND_FORBIDDEN"));
+        assertNoChatWrite(conversation);
     }
 
     @Test
@@ -86,6 +122,7 @@ class ConversationsTests {
         var conversation = chat(7L, 42L);
         when(store.lockChat(transaction, 1L)).thenReturn(conversation);
         when(accounts.writeRestricted(7L)).thenReturn(false);
+        when(accounts.writeRestricted(42L)).thenReturn(false);
         when(trades.pairFrozen(7L, 42L)).thenReturn(false);
         var message = mock(ChatMessage.class);
         when(message.id()).thenReturn(11L);
@@ -101,7 +138,13 @@ class ConversationsTests {
         assertThat(view.seq()).isEqualTo(6L);
         assertThat(view.peerUnread()).isEqualTo(3L);
         assertThat(view.senderDisplayName()).isEqualTo("张新悦");
+        verify(store).appendChatText(transaction, conversation, 7L, "hello");
         verify(store).advanceChatRead(transaction, conversation, 7L, 6L);
+    }
+
+    private void assertNoChatWrite(ChatConversation conversation) {
+        verify(store, never()).appendChatText(transaction, conversation, 7L, "hello");
+        verify(store, never()).advanceChatRead(any(), any(), anyLong(), anyLong());
     }
 
     @Test

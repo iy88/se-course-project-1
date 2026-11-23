@@ -47,10 +47,11 @@ public class Conversations {
         long actor = accountId(context);
         var conversation = store.lockChat(transaction, conversationId);
         requireParticipant(conversation, actor);
-        if (accounts.writeRestricted(actor)) {
-            throw new BusinessError("ACCOUNT_WRITE_RESTRICTED", 403, "账户当前不能发送消息");
-        }
         long peer = conversation.otherAccount(actor);
+        // A single denial for either participant avoids disclosing which account is restricted.
+        if (accounts.writeRestricted(actor) || accounts.writeRestricted(peer)) {
+            throw new BusinessError("MESSAGE_SEND_FORBIDDEN", 403, "账户当前不能发送消息");
+        }
         if (trades.pairFrozen(actor, peer)) {
             throw new BusinessError("MESSAGE_SEND_FORBIDDEN", 403, "账户之间存在交易冻结");
         }
