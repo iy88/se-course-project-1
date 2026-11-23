@@ -56,8 +56,14 @@ class AccountSessionController {
 
     @DeleteMapping
     ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
-        var identity = current.require(request);
-        sessions.revoke(identity);
+        try {
+            var identity = current.require(request);
+            sessions.revoke(identity);
+        } catch (io.github.iy88.project1.core.BusinessError failure) {
+            if (failure.status() != 401) {
+                throw failure;
+            }
+        }
         response.addHeader(HttpHeaders.SET_COOKIE, AccountCookies.clear(AccountCookies.SESSION).toString());
         response.addHeader(HttpHeaders.SET_COOKIE, AccountCookies.clear(AccountCookies.CSRF).toString());
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();

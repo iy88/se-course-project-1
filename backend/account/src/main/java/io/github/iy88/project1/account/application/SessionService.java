@@ -51,7 +51,12 @@ public class SessionService {
         this.transaction = new TransactionTemplate(manager);
     }
 
-    public Issued issue(Account account) {
+    /** Creates the guard inside the caller's account transaction; Redis is written by {@link #complete}. */
+    public Prepared prepare(Account account) {
+        if (!org.springframework.transaction.support.TransactionSynchronizationManager
+                .isActualTransactionActive()) {
+            throw new IllegalStateException("Session guards must be created inside the account transaction");
+        }
         Instant now = Instant.now();
         byte[] token = randomBytes();
         byte[] csrf = randomBytes();
@@ -63,15 +68,21 @@ public class SessionService {
         SessionGuard guard = new SessionGuard(sessionId, tokenDigest, account.id(), account.credentialVersion(),
                 now, absoluteExpiresAt, settings.sessionIdleSeconds(), settings.sessionRenewIntervalSeconds(),
                 csrfDigest);
-        transaction.executeWithoutResult(status -> guards.save(guard));
+        guards.save(guard);
+        return new Prepared(sessionId, ENCODER.encodeToString(token), csrfToken, account, now, absoluteExpiresAt,
+                tokenDigest);
+    }
+
+    /** Writes the Redis value after the guard transaction commits. */
+    public Issued complete(Prepared prepared) {
         try {
-            store(sessionId, tokenDigest, absoluteExpiresAt, now);
+            store(prepared.sessionId(), prepared.tokenDigest(), prepared.absoluteExpiresAt(), prepared.issuedAt());
         } catch (DataAccessException unavailable) {
-            revokePersisted(sessionId, now);
+            revokePersisted(prepared.sessionId(), prepared.issuedAt());
             throw unavailable();
         }
-        return new Issued(sessionId, ENCODER.encodeToString(token), csrfToken, account,
-                now, absoluteExpiresAt);
+        return new Issued(prepared.sessionId(), prepared.token(), prepared.csrfToken(), prepared.account(),
+                prepared.issuedAt(), prepared.absoluteExpiresAt());
     }
 
     public Identity authenticate(String cookieToken) {
@@ -193,6 +204,10 @@ public class SessionService {
 
     private static BusinessError unavailable() {
         return new BusinessError("AUTHENTICATION_UNAVAILABLE", 503, "身份服务暂不可用");
+    }
+
+    public record Prepared(UUID sessionId, String token, String csrfToken, Account account, Instant issuedAt,
+                           Instant absoluteExpiresAt, byte[] tokenDigest) {
     }
 
     public record Issued(UUID sessionId, String token, String csrfToken, Account account, Instant issuedAt,

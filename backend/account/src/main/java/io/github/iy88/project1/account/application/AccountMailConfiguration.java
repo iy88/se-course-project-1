@@ -10,12 +10,19 @@ import org.springframework.core.env.Environment;
 public class AccountMailConfiguration {
     @Bean
     public AccountMailer accountMailer(Environment environment) {
+        String host = environment.getProperty("SMTP_HOST", "");
+        String username = environment.getProperty("SMTP_USERNAME", "");
+        String password = environment.getProperty("SMTP_PASSWORD", "");
+        String from = environment.getProperty("SMTP_FROM", "");
+        if (host.isBlank() || username.isBlank() || password.isBlank() || from.isBlank()) {
+            throw new IllegalArgumentException("SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and SMTP_FROM are required");
+        }
         return new AccountMailer(
-                environment.getProperty("SMTP_HOST", ""),
+                host,
                 environment.getProperty("SMTP_PORT", Integer.class, 587),
                 environment.getProperty("SMTP_TLS_MODE", "starttls"),
-                environment.getProperty("SMTP_USERNAME", ""),
-                environment.getProperty("SMTP_PASSWORD", ""),
-                environment.getProperty("SMTP_FROM", ""));
+                username,
+                password,
+                from);
     }
 }

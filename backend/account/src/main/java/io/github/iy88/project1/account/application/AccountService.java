@@ -94,9 +94,16 @@ public class AccountService {
         if (!hasher.matches(password, found.get().passwordHash())) {
             throw new BusinessError("CREDENTIALS_INVALID", 401, "邮箱或密码错误");
         }
-        Account current = transaction.execute(status -> accounts.lockById(found.get().id())
-                .orElseThrow(() -> new BusinessError("CREDENTIALS_INVALID", 401, "邮箱或密码错误")));
-        return sessions.issue(current);
+        SessionService.Prepared prepared = transaction.execute(status -> {
+            Account locked = accounts.lockById(found.get().id())
+                    .orElseThrow(() -> new BusinessError("CREDENTIALS_INVALID", 401, "邮箱或密码错误"));
+            if (locked.credentialVersion() != found.get().credentialVersion()
+                    && !hasher.matches(password, locked.passwordHash())) {
+                throw new BusinessError("CREDENTIALS_INVALID", 401, "邮箱或密码错误");
+            }
+            return sessions.prepare(locked);
+        });
+        return sessions.complete(prepared);
     }
 
     public void changePassword(Account account, String currentPassword, String newPassword) {
