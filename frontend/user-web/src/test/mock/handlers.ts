@@ -9,7 +9,7 @@
  * unknown or unauthorised objects answer 404, and idempotent replays return the
  * first result. Validation rules use the same error codes as the contracts.
  */
-import { AbortedError, ApiError } from "../api/errors";
+import { AbortedError, ApiError } from "../../api/errors";
 import type {
   Agreement,
   CaseDetail,
@@ -22,8 +22,8 @@ import type {
   ProductDetail,
   ProductSummary,
   TradeReview,
-} from "../api/contracts";
-import type { HttpMethod, RequestOptions } from "../api/http";
+} from "../../api/contracts";
+import type { HttpMethod, RequestOptions } from "../../api/http";
 import {
   accountRef,
   caseDetail,

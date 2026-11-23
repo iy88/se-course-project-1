@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 
@@ -49,19 +50,13 @@ public record NotificationIntent(Set<Long> recipientAccountIds, UUID businessEve
     }
 
     /**
-     * Event-intent name for the delivery record.
+     * Stable display parameters in key order.
      *
-     * The registry label is dot-separated ({@code product_audit.rejected}) while
-     * the shared event-intent rule accepts {@code [a-z][a-z0-9_]*}, so the dots
-     * are folded into underscores.
+     * Two intents that differ only in a template parameter are different actions,
+     * so the parameters take part in the same-intent comparison.
      */
-    public String eventIntentType() {
-        return eventType.replace('.', '_');
-    }
-
-    /** Stable display parameters in key order, used for conflict comparison. */
     public Map<String, String> orderedDisplayParams() {
-        return new LinkedHashMap<>(new java.util.TreeMap<>(displayParams));
+        return new LinkedHashMap<>(new TreeMap<>(displayParams));
     }
 
     private static void requireText(String value, String field, int maxLength) {

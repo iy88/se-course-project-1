@@ -1,24 +1,20 @@
 /*
  * Single HTTP seam for the user web client.
  *
- * Every call goes through `request`, which either performs a real XHR through
- * axios or, when the local data source is set to `mock`, answers from the
- * in-memory fixtures in `../mock`. Views never talk to axios or to the mock
- * directly, so switching a work package from simulated to real dependencies is
- * a configuration change rather than a code change.
+ * Every call goes through `request`, which performs a real XHR through axios.
+ * Views never talk to axios directly, so the call sites stay uniform. There is no
+ * in-browser simulation switch: the shipped bundle always talks to the real API.
+ * When a work package needs simulated dependencies during development, point the
+ * dev-server proxy at a separate mock service (`API_PROXY_TARGET`), which keeps
+ * the browser code free of test data.
  */
 import axios, { AxiosError, AxiosHeaders } from "axios";
 import type { ErrorEnvelope } from "./contracts";
 import { AbortedError, ApiError } from "./errors";
-import { handleMockRequest } from "../mock/handlers";
 
 export { AbortedError, ApiError } from "./errors";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-
-export type DataSource = "live" | "mock";
-
-const DATA_SOURCE_KEY = "user-web:data-source";
 
 const http = axios.create({
   baseURL: "/api/v1",
@@ -43,34 +39,6 @@ export interface RequestOptions {
   /** Verified connection id used by the realtime server to suppress self-echo. */
   originConnectionId?: string;
   signal?: AbortSignal;
-}
-
-let currentSource: DataSource | null = null;
-
-function defaultSource(): DataSource {
-  return process.env.NODE_ENV === "development" ? "mock" : "live";
-}
-
-/** Current data source; `mock` answers from fixtures instead of the network. */
-export function getDataSource(): DataSource {
-  if (currentSource) return currentSource;
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(DATA_SOURCE_KEY);
-  } catch {
-    stored = null;
-  }
-  currentSource = stored === "mock" || stored === "live" ? stored : defaultSource();
-  return currentSource;
-}
-
-export function setDataSource(source: DataSource): void {
-  currentSource = source;
-  try {
-    window.localStorage.setItem(DATA_SOURCE_KEY, source);
-  } catch {
-    // Storage may be unavailable in private windows; the in-memory value still applies.
-  }
 }
 
 function buildQuery(query?: object): string {
@@ -128,7 +96,7 @@ function toApiError(error: unknown): ApiError {
 }
 
 /**
- * Perform a request against the configured data source.
+ * Perform a request against the API.
  *
  * The returned promise rejects with {@link ApiError} for every failure mode and
  * with {@link AbortedError} when the caller's signal fires.
@@ -139,15 +107,6 @@ export async function request<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   if (options.signal?.aborted) throw new AbortedError();
-
-  if (getDataSource() === "mock") {
-    try {
-      return (await handleMockRequest(method, path, options)) as T;
-    } catch (error) {
-      if (isAbort(error)) throw error instanceof AbortedError ? error : new AbortedError();
-      throw toApiError(error);
-    }
-  }
 
   const headers = new AxiosHeaders();
   if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);

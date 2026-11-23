@@ -19,20 +19,22 @@ class NotificationIntentTests {
     private static final Instant OCCURRED = Instant.parse("2026-11-20T08:55:00Z");
 
     @Test
-    void foldsTheRegistryLabelOntoTheSharedEventIntentName() {
-        var intent = new NotificationIntent(Set.of(1L), null, "product_audit.rejected",
-                new ResourceRef("product_audit", 5L), "key", "template", "1", Map.of(), OCCURRED);
-
-        assertThat(intent.eventIntentType()).isEqualTo("product_audit_rejected");
-    }
-
-    @Test
     void sortsAndDeduplicatesRecipients() {
         Set<Long> recipients = new java.util.HashSet<>(java.util.List.of(9L, 3L, 9L));
         var intent = new NotificationIntent(recipients, null, "case.inquiry_created",
                 new ResourceRef("case", 5L), "key", "template", "1", Map.of(), OCCURRED);
 
         assertThat(intent.sortedRecipients()).containsExactly(3L, 9L);
+    }
+
+    @Test
+    void keepsTemplateParametersInKeyOrderForComparison() {
+        var intent = new NotificationIntent(Set.of(1L), null, "case.inquiry_created",
+                new ResourceRef("case", 5L), "key", "template", "1",
+                Map.of("reason", "b", "product_id", "a"), OCCURRED);
+
+        assertThat(intent.orderedDisplayParams()).containsExactly(
+                Map.entry("product_id", "a"), Map.entry("reason", "b"));
     }
 
     @Test
@@ -63,9 +65,11 @@ class NotificationIntentTests {
         assertThat(stored.source()).isEqualTo(new ResourceRef("product_audit", 1001L));
         assertThat(stored.displayParams()).containsEntry("reason", "封面图片含盗版影印页面");
         assertThat(stored.displayParams()).containsEntry("product_id", "42");
-        verify(transaction).addEventIntent(eq(Set.of(7L)), eq("product_audit_rejected"), eq(1),
+        // Delivery is the standard notification_created event, addressed to the seller
+        // and pointing at the stored notification.
+        verify(transaction).addEventIntent(eq(Set.of(7L)), eq(NotificationApplication.CREATED_EVENT_TYPE), eq(1),
                 eq(new ResourceRef("product_audit", 1001L)), eq(ReviewNotificationAdapter.intentKey(1001L)),
-                eq(null), eq(null));
+                eq(new ResourceRef("notification", stored.notificationId())), eq(null));
     }
 
     @Test
@@ -87,7 +91,7 @@ class NotificationIntentTests {
         var application = new NotificationApplication(store, Clock.fixed(OCCURRED, ZoneOffset.UTC));
         var adapter = new EnforcementNotificationAdapter(application);
 
-        adapter.create(mock(WriteTransaction.class), "case.trade_frozen", "case.enforcement:22", 
+        adapter.create(mock(WriteTransaction.class), "case.trade_frozen", "case.enforcement:22",
                 new ResourceRef("case", 22L), Set.of(5L, 6L), "交易存在异常，暂停确认计时", OCCURRED);
 
         var first = store.find(5L, "case.enforcement:22").orElseThrow();
