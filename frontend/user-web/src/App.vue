@@ -9,6 +9,7 @@ import { computed, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { session } from "./app/session";
 import { badges, refreshBadges } from "./app/badges";
+import { registerSnapshotReloader } from "./app/realtime";
 
 import ToastHost from "./components/ToastHost.vue";
 import AvatarBadge from "./components/AvatarBadge.vue";
@@ -23,6 +24,10 @@ const primaryNav = [
 ];
 
 const isAuthScreen = computed(() => route.meta.anonymous === true);
+
+// Unread badges belong to the resync snapshot: after a `sync_reset` the client
+// reloads every registered snapshot before resuming from the recorded head.
+registerSnapshotReloader(() => refreshBadges());
 
 watch(
   () => route.fullPath,
