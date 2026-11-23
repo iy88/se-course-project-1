@@ -36,6 +36,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -78,6 +79,8 @@ class BusinessRealtimeIT {
     private static final long ACCOUNT_B = ACCOUNT_A + 1;
     private static final String ORIGIN = "http://127.0.0.1:3000";
     private static final String CSRF = RUN_ID.toString();
+    private static final int UNACKNOWLEDGED_WINDOW = 3;
+    private static final int BACKLOG_SIZE = UNACKNOWLEDGED_WINDOW + 2;
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private static final Controlled SOURCES = new Controlled();
@@ -332,22 +335,28 @@ class BusinessRealtimeIT {
             var reset = connection.receiveType("sync_reset");
             assertThat(reset).isNotNull();
             assertThat(reset.path("epoch").stringValue()).isNotEqualTo(staleEpoch.toString());
+            String epoch = reset.path("epoch").stringValue();
+            long anchor = reset.path("head_seq").asLong();
 
             var capabilities = request(first, "/api/v1/capabilities", SESSION_A1);
             assertThat(capabilities.path("config_version").isMissingNode()).isFalse();
             assertThat(capabilities.path("enabled_capabilities").isMissingNode()).isTrue();
             assertThat(capabilities.path("limits").path("password_min_length").asInt()).isEqualTo(12);
 
-            var head = request(first, "/api/v1/account/events/head", SESSION_A1);
-            long headSequence = head.path("head_seq").asLong();
-            String epoch = head.path("epoch").stringValue();
             long notification = createNotification(first, ACCOUNT_A);
             persist(first, context(ACCOUNT_A, SESSION_A1), List.of(
                     notificationCreated(ACCOUNT_A, notification, "cold:" + RUN_ID)));
 
-            connection.send(Map.of("type", "resume", "epoch", epoch, "after_seq", headSequence));
+            var head = request(first, "/api/v1/account/events/head", SESSION_A1);
+            assertThat(head.path("epoch").stringValue()).isEqualTo(epoch);
+            assertThat(head.path("head_seq").asLong()).isGreaterThan(anchor);
+
+            connection.send(Map.of("type", "resume", "epoch", epoch, "after_seq", anchor));
             var frame = connection.receiveEvent();
-            assertThat(frame.path("account_seq").asLong()).isEqualTo(headSequence + 1);
+            assertThat(frame.path("type").stringValue()).isEqualTo("event");
+            assertThat(frame.path("epoch").stringValue()).isEqualTo(epoch);
+            assertThat(frame.path("account_seq").asLong()).isEqualTo(anchor + 1);
+            assertThat(frame.path("event_type").stringValue()).isEqualTo("notification_created");
             assertThat(frame.path("data").path("notification_id").stringValue())
                     .isEqualTo(Long.toString(notification));
         }
@@ -357,6 +366,40 @@ class BusinessRealtimeIT {
             stale.send(hello(UUID.fromString(head.path("epoch").stringValue()), head.path("head_seq").asLong() + 100));
             assertThat(stale.receiveType("hello_ok")).isNotNull();
             assertThat(stale.receiveType("sync_reset")).isNotNull();
+        }
+    }
+
+    @Test
+    void reconnectReplaysBacklogAcrossTheUnacknowledgedWindowAfterDeliveredAcks() throws Exception {
+        var events = first.getBean(UserEvents.class);
+        var before = events.head(ACCOUNT_A);
+        var notifications = new ArrayList<Long>();
+        var intents = new ArrayList<EventIntent>();
+        for (int index = 0; index < BACKLOG_SIZE; index++) {
+            long notification = createNotification(first, ACCOUNT_A);
+            notifications.add(notification);
+            intents.add(notificationCreated(ACCOUNT_A, notification, "backlog:" + RUN_ID + ":" + index));
+        }
+        persist(first, context(ACCOUNT_A, SESSION_A1), intents);
+
+        try (var connection = open(first, SESSION_A1)) {
+            connection.send(hello(before.epoch(), before.headSequence()));
+            var hello = connection.receiveType("hello_ok");
+            assertThat(hello).isNotNull();
+            assertThat(hello.path("head_seq").asLong()).isEqualTo(before.headSequence() + BACKLOG_SIZE);
+
+            for (int index = 0; index < notifications.size(); index++) {
+                var frame = connection.receiveEvent();
+                long receivedSequence = frame.path("account_seq").asLong();
+                assertThat(receivedSequence).isEqualTo(before.headSequence() + index + 1);
+                assertThat(frame.path("event_type").stringValue()).isEqualTo("notification_created");
+                assertThat(frame.path("data").path("notification_id").stringValue())
+                        .isEqualTo(Long.toString(notifications.get(index)));
+                if (index + 1 == UNACKNOWLEDGED_WINDOW) {
+                    connection.send(Map.of("type", "ack", "epoch", before.epoch().toString(),
+                            "through_seq", receivedSequence));
+                }
+            }
         }
     }
 
@@ -390,6 +433,9 @@ class BusinessRealtimeIT {
         properties.setProperty("REDIS_NAMESPACE", namespace);
         properties.setProperty("ALLOWED_ORIGINS", ORIGIN);
         properties.setProperty("EVENT_HEAD_POLL_SECONDS", "60");
+        // Keep replay pages and the unacknowledged window equal so one pump exposes the window boundary.
+        properties.setProperty("EVENT_REPLAY_LIMIT", Integer.toString(UNACKNOWLEDGED_WINDOW));
+        properties.setProperty("IM_UNACKED_WINDOW", Integer.toString(UNACKNOWLEDGED_WINDOW));
         var application = new SpringApplication(BackendAppApplication.class, Fixtures.class,
                 TradeLifecycleIT.Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
