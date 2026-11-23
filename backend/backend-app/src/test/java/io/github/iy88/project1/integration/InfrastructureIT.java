@@ -433,6 +433,7 @@ class InfrastructureIT {
         }
 
         @Bean
+        @Primary
         public RealtimeSessions realtimeSessions() {
             return new RealtimeSessions() {
                 @Override
@@ -461,6 +462,7 @@ class InfrastructureIT {
         }
 
         @Bean
+        @Primary
         public RealtimeEventSources.Conversations conversationSource() {
             return org.mockito.Mockito.mock(RealtimeEventSources.Conversations.class);
         }
@@ -536,3 +538,4 @@ class InfrastructureIT {
         }
     }
 }
+

@@ -3,6 +3,7 @@ package io.github.iy88.project1.integration;
 import io.github.iy88.project1.BackendAppApplication;
 import io.github.iy88.project1.api.ApiRequestContext;
 import io.github.iy88.project1.api.CsrfGuard;
+import io.github.iy88.project1.api.trade.TradeActorResolver;
 import io.github.iy88.project1.casemanagement.application.ProductReviewCases;
 import io.github.iy88.project1.casemanagement.application.ReviewAction;
 import io.github.iy88.project1.casemanagement.application.ReviewApplication;
@@ -844,6 +845,13 @@ class ProductReviewIT {
         @Bean
         TradePorts.Notifications tradeNotifications() {
             return org.mockito.Mockito.mock(TradePorts.Notifications.class);
+        }
+
+        @Bean
+        TradeActorResolver tradeActorResolver() {
+            return request -> {
+                throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "fixture");
+            };
         }
     }
 }

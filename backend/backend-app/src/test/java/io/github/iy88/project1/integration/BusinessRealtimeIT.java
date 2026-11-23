@@ -60,6 +60,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -677,6 +678,7 @@ class BusinessRealtimeIT {
     @TestConfiguration(proxyBeanMethods = false)
     public static class Fixtures {
         @Bean
+        @Primary
         public RealtimeSessions realtimeSessions() {
             return new RealtimeSessions() {
                 @Override
@@ -715,6 +717,7 @@ class BusinessRealtimeIT {
         }
 
         @Bean
+        @Primary
         public RealtimeEventSources.Conversations fixtureConversationProjection() {
             return new RealtimeEventSources.Conversations() {
                 @Override
@@ -828,3 +831,4 @@ class BusinessRealtimeIT {
         }
     }
 }
+
