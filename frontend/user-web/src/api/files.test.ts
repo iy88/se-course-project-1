@@ -8,11 +8,11 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { ApiError } from "./errors";
-import { uploadToOss } from "./files";
+import { uploadRequestBody, uploadToOss } from "./files";
 
 const upload = {
   method: "POST" as const,
-  url: "/api/v1/files/mock-upload",
+  url: "https://bucket.example.com/",
   fields: { key: "dev/product_image/1" },
 };
 
@@ -67,5 +67,43 @@ describe("upload transfer", () => {
         return true;
       },
     );
+  });
+});
+describe("upload request body", () => {
+  it("omits the target for an account avatar", () => {
+    const body = uploadRequestBody({
+      purpose: "account_avatar",
+      declared_size: 693,
+      declared_content_type: "image/jpeg",
+      target: null,
+    });
+
+    assert.equal("target" in body, false);
+    assert.deepEqual(body, {
+      purpose: "account_avatar",
+      declared_size: 693,
+      declared_content_type: "image/jpeg",
+    });
+  });
+
+  it("omits the target for a staged upload with no target", () => {
+    const body = uploadRequestBody({
+      purpose: "case_evidence",
+      declared_size: 1024,
+      declared_content_type: "application/pdf",
+    });
+
+    assert.equal("target" in body, false);
+  });
+
+  it("keeps an explicit resource target", () => {
+    const body = uploadRequestBody({
+      purpose: "product_image",
+      declared_size: 2048,
+      declared_content_type: "image/png",
+      target: { resource_type: "product", resource_id: "5" },
+    });
+
+    assert.deepEqual(body.target, { resource_type: "product", resource_id: "5" });
   });
 });

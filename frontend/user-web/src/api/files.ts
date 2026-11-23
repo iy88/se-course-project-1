@@ -17,12 +17,29 @@ export function readUploadCapabilities(signal?: AbortSignal): Promise<UploadCapa
   return request<UploadCapabilities>("GET", "/files/upload-capabilities", { signal });
 }
 
+/**
+ * Request body of `POST /files/uploads`.
+ *
+ * A null target is sent as an omitted key: the server derives the account for
+ * `account_avatar` from the session and requires no target for staged
+ * `product_image` or `case_evidence` uploads.
+ */
+export function uploadRequestBody(payload: CreateUploadRequest): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    purpose: payload.purpose,
+    declared_size: payload.declared_size,
+    declared_content_type: payload.declared_content_type,
+  };
+  if (payload.target) body.target = payload.target;
+  return body;
+}
+
 export function createUpload(
   payload: CreateUploadRequest,
   idempotencyKey: string,
 ): Promise<CreateUploadResult> {
   return request<CreateUploadResult>("POST", "/files/uploads", {
-    body: payload,
+    body: uploadRequestBody(payload),
     idempotencyKey,
   });
 }
