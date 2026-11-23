@@ -9,12 +9,14 @@ import io.github.iy88.project1.core.WriteTransaction;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 /**
  * Case-facing conversation capability. The case module owns the claim, inquiry and appeal rules;
  * this facade only maintains the thread attached to a case and related account.
  */
+@Lazy
 @Service
 public class CaseConversations {
     private final ConversationStore store;
