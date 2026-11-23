@@ -1221,8 +1221,38 @@ export function createSeedState(): MockState {
       target: { target_type: "product", target_id: "4" },
       public_result: null,
     },
+    {
+      // Same viewpoint as case 8 but with the appeal window already closed, so the
+      // "appeal window ended" copy and the missing entry can be checked.
+      case_id: "9",
+      case_type: "report",
+      status: "decided",
+      reporter_id: null,
+      related_ids: ["1"],
+      manager_id: "4",
+      claimed_at: iso(-20 * DAY),
+      decision_kind: "violation",
+      reason_text: "经核实存在重复发布违规内容，已限制账户发布资格。",
+      note: null,
+      archived_at: null,
+      appeal_deadline_at: isoFromNow(-1 * DAY),
+      public_result_at: null,
+      created_at: iso(-21 * DAY),
+      updated_at: iso(-15 * DAY),
+      supplement_count: 0,
+      thread_id: null,
+      actions: [
+        { action_kind: "submit", occurred_at: iso(-21 * DAY), actor_kind: "reporter" },
+        { action_kind: "claim", occurred_at: iso(-20 * DAY), actor_kind: "manager" },
+        { action_kind: "decide", occurred_at: iso(-16 * DAY), actor_kind: "manager" },
+        { action_kind: "execute", occurred_at: iso(-16 * DAY), actor_kind: "manager" },
+      ],
+      enforcements: [{ action: "restrict_account", current_state: "restricted_account" }],
+      target: { target_type: "account", target_id: "1" },
+      public_result: null,
+    },
   ];
-  state.sequences.cases = 8;
+  state.sequences.cases = 9;
 
   return state;
 }
