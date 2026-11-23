@@ -115,6 +115,18 @@ class ConversationQueriesTests {
                 .containsExactly(1L, 2L);
     }
 
+    @Test
+    void listsOversizedPageAsEmpty() {
+        when(reader.chatConversations(7L)).thenReturn(List.of());
+        when(trades.tradeIdsOf(7L)).thenReturn(List.of());
+
+        var page = queries.list(actor(7L), Integer.MAX_VALUE, 20);
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.page()).isEqualTo(Integer.MAX_VALUE);
+        assertThat(page.total()).isZero();
+    }
+
     private static ChatMessage chatMessage(long id, long seq, long sender, String body, Instant at) {
         var message = mock(ChatMessage.class);
         when(message.id()).thenReturn(id);

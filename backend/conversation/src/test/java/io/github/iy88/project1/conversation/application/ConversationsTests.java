@@ -2,7 +2,10 @@ package io.github.iy88.project1.conversation.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -75,6 +78,32 @@ class ConversationsTests {
         when(store.lockChat(transaction, 1L)).thenReturn(conversation);
         when(accounts.writeRestricted(7L)).thenReturn(false);
         when(trades.pairFrozen(7L, 42L)).thenReturn(true);
+
+        assertThatThrownBy(() -> conversations.sendChat(transaction, actor(7L), 1L, "hello"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("MESSAGE_SEND_FORBIDDEN"));
+    }
+
+    @Test
+    void sendRejectsWriteRestrictedPeerWithoutAFreeze() {
+        var conversation = chat(7L, 42L);
+        when(store.lockChat(transaction, 1L)).thenReturn(conversation);
+        when(accounts.writeRestricted(7L)).thenReturn(false);
+        when(accounts.writeRestricted(42L)).thenReturn(true);
+        when(trades.pairFrozen(7L, 42L)).thenReturn(false);
+
+        assertThatThrownBy(() -> conversations.sendChat(transaction, actor(7L), 1L, "hello"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("MESSAGE_SEND_FORBIDDEN"));
+        verify(store, never()).appendChatText(transaction, conversation, 7L, "hello");
+        verify(store, never()).advanceChatRead(any(), any(), anyLong(), anyLong());
+    }
+
+    @Test
+    void sendRejectsWriteRestrictedSender() {
+        var conversation = chat(7L, 42L);
+        when(store.lockChat(transaction, 1L)).thenReturn(conversation);
+        when(accounts.writeRestricted(7L)).thenReturn(true);
 
         assertThatThrownBy(() -> conversations.sendChat(transaction, actor(7L), 1L, "hello"))
                 .isInstanceOfSatisfying(BusinessError.class,

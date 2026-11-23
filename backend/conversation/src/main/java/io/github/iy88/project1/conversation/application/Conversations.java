@@ -6,12 +6,14 @@ import io.github.iy88.project1.conversation.persistence.ConversationStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.WriteTransaction;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 /**
  * Private-chat use cases. Callers own the write transaction and idempotency; these methods apply
  * participant, qualification and freeze rules before touching the conversation store.
  */
+@Lazy
 @Service
 public class Conversations {
     private final ConversationStore store;
@@ -45,10 +47,11 @@ public class Conversations {
         long actor = accountId(context);
         var conversation = store.lockChat(transaction, conversationId);
         requireParticipant(conversation, actor);
-        if (accounts.writeRestricted(actor)) {
-            throw new BusinessError("ACCOUNT_WRITE_RESTRICTED", 403, "账户当前不能发送消息");
-        }
         long peer = conversation.otherAccount(actor);
+        // API-CONV-004: both parties must be allowed to take part, not only the sender.
+        if (accounts.writeRestricted(actor) || accounts.writeRestricted(peer)) {
+            throw new BusinessError("MESSAGE_SEND_FORBIDDEN", 403, "账户当前不能发送消息");
+        }
         if (trades.pairFrozen(actor, peer)) {
             throw new BusinessError("MESSAGE_SEND_FORBIDDEN", 403, "账户之间存在交易冻结");
         }

@@ -33,9 +33,10 @@ class ConversationCasePageTests {
         var conversation = mock(CaseConversation.class);
         when(conversation.id()).thenReturn(3L);
         when(conversation.caseId()).thenReturn(9L);
+        when(conversation.relatedAccountId()).thenReturn(7L);
         when(conversation.archived()).thenReturn(false);
         when(store.caseConversation(3L)).thenReturn(conversation);
-        when(cases.canAccess(9L, 7L)).thenReturn(true);
+        when(cases.canAccess(9L, 7L, 7L)).thenReturn(true);
 
         var inquiry = caseMessage(30L, 1L, "manager", 99L, "inquiry", "请说明情况", null);
         var statement = caseMessage(31L, 2L, "account", 7L, "statement", "这是我的说明", null);
@@ -64,12 +65,50 @@ class ConversationCasePageTests {
         var conversation = mock(CaseConversation.class);
         when(conversation.id()).thenReturn(3L);
         when(conversation.caseId()).thenReturn(9L);
+        when(conversation.relatedAccountId()).thenReturn(7L);
         when(store.caseConversation(3L)).thenReturn(conversation);
-        when(cases.canAccess(9L, 8L)).thenReturn(false);
+        when(cases.canAccess(9L, 7L, 8L)).thenReturn(false);
 
         assertThatThrownBy(() -> queries.pageCase(actor(8L), 3L, null, null, 20))
                 .isInstanceOfSatisfying(BusinessError.class,
                         failure -> assertThat(failure.code()).isEqualTo("PARTICIPANT_REQUIRED"));
+    }
+
+    @Test
+    void bindsAccessToTheSpecificCaseThread() {
+        var threadForSeven = caseConversation(3L, 9L, 7L);
+        var threadForEight = caseConversation(4L, 9L, 8L);
+        when(store.caseConversation(3L)).thenReturn(threadForSeven);
+        when(store.caseConversation(4L)).thenReturn(threadForEight);
+        when(cases.canAccess(9L, 7L, 7L)).thenReturn(true);
+        when(cases.canAccess(9L, 8L, 8L)).thenReturn(true);
+        var sevenMessage = caseMessage(30L, 1L, "account", 7L, "statement", "七号的线程", null);
+        var eightMessage = caseMessage(40L, 1L, "account", 8L, "statement", "八号的线程", null);
+        when(reader.caseMessages(3L, null, null, 20)).thenReturn(List.of(sevenMessage));
+        when(reader.caseMessages(4L, null, null, 20)).thenReturn(List.of(eightMessage));
+        when(accounts.profiles(java.util.Set.of(7L))).thenReturn(Map.of(
+                7L, new AccountDirectory.Profile(7L, "张新悦")));
+        when(accounts.profiles(java.util.Set.of(8L))).thenReturn(Map.of(
+                8L, new AccountDirectory.Profile(8L, "李四")));
+
+        var sevenPage = queries.pageCase(actor(7L), 3L, null, null, 20);
+        var eightPage = queries.pageCase(actor(8L), 4L, null, null, 20);
+
+        assertThat(sevenPage.items()).extracting(ConversationViews.Message::body)
+                .containsExactly("七号的线程");
+        assertThat(eightPage.items()).extracting(ConversationViews.Message::body)
+                .containsExactly("八号的线程");
+        assertThatThrownBy(() -> queries.pageCase(actor(7L), 4L, null, null, 20))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("PARTICIPANT_REQUIRED"));
+    }
+
+    private static CaseConversation caseConversation(long id, long caseId, long relatedAccountId) {
+        var conversation = mock(CaseConversation.class);
+        when(conversation.id()).thenReturn(id);
+        when(conversation.caseId()).thenReturn(caseId);
+        when(conversation.relatedAccountId()).thenReturn(relatedAccountId);
+        return conversation;
     }
 
     private static CaseMessage caseMessage(long id, long seq, String senderKind, Long senderAccountId,
