@@ -8,12 +8,18 @@ import io.github.iy88.project1.api.realtime.RealtimeSocket;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.EventIntent;
 import io.github.iy88.project1.core.ExecutionContext;
+import io.github.iy88.project1.core.LockPlan;
 import io.github.iy88.project1.core.ResourceRef;
+import io.github.iy88.project1.core.WriteExecutor;
+import io.github.iy88.project1.core.WriteResult;
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.messaging.EventDispatch;
 import io.github.iy88.project1.messaging.RealtimeEventSources;
 import io.github.iy88.project1.messaging.RealtimeEventSources.ConversationKind;
 import io.github.iy88.project1.messaging.RealtimeEventSources.ConversationRef;
 import io.github.iy88.project1.messaging.UserEvents;
+import io.github.iy88.project1.notification.application.NotificationApplication;
+import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.notification.application.NotificationQueries;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,6 +31,7 @@ import java.net.http.WebSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -74,6 +81,7 @@ class BusinessRealtimeIT {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     private static final Controlled SOURCES = new Controlled();
+    private static final LockPlan EMPTY = new LockPlan(Map.of(), Set.of());
 
     private static Properties environment;
     private static String namespace;
@@ -121,6 +129,8 @@ class BusinessRealtimeIT {
                         .param(ACCOUNT_A).param(ACCOUNT_B).update();
                 db.sql("DELETE FROM account_event_head WHERE account_id IN (?, ?)")
                         .param(ACCOUNT_A).param(ACCOUNT_B).update();
+                db.sql("DELETE FROM operation_record WHERE actor_kind = 'account' AND actor_id IN (?, ?)")
+                        .param(Long.toString(ACCOUNT_A)).param(Long.toString(ACCOUNT_B)).update();
             }
             if (redis != null) {
                 var keys = redis.keys(namespace + "*");
@@ -140,12 +150,12 @@ class BusinessRealtimeIT {
             helloAtHead(a1, first, ACCOUNT_A);
             helloAtHead(a2, second, ACCOUNT_A);
             helloAtHead(b, first, ACCOUNT_B);
-            long firstNotification = createNotification(first, ACCOUNT_A);
-            long secondNotification = createNotification(first, ACCOUNT_B);
-
-            persist(first, context(ACCOUNT_A, SESSION_A1), List.of(
-                    notificationCreated(ACCOUNT_A, firstNotification, "same:a:" + RUN_ID),
-                    notificationCreated(ACCOUNT_B, secondNotification, "same:b:" + RUN_ID)));
+            var created = createNotifications(first, "realtime:" + RUN_ID + ":same");
+            assertThat(created.size()).isEqualTo(2);
+            long firstNotification = created.path(Long.toString(ACCOUNT_A)).asLong();
+            long secondNotification = created.path(Long.toString(ACCOUNT_B)).asLong();
+            assertThat(firstNotification).isPositive().isNotEqualTo(secondNotification);
+            assertThat(secondNotification).isPositive();
             dispatch(first);
 
             var one = a1.receiveEvent();
@@ -158,8 +168,14 @@ class BusinessRealtimeIT {
             assertThat(one.path("data").path("notification_id").stringValue())
                     .isEqualTo(Long.toString(firstNotification));
             assertThat(one.path("data").path("summary").isMissingNode()).isTrue();
+            assertThat(two.path("data").size()).isEqualTo(1);
+            assertThat(two.path("data").path("notification_id").stringValue())
+                    .isEqualTo(Long.toString(firstNotification));
+            assertThat(two.path("data").path("summary").isMissingNode()).isTrue();
+            assertThat(other.path("data").size()).isEqualTo(1);
             assertThat(other.path("data").path("notification_id").stringValue())
                     .isEqualTo(Long.toString(secondNotification));
+            assertThat(other.path("data").path("summary").isMissingNode()).isTrue();
             assertThat(a1.noFrame(Duration.ofSeconds(1))).isTrue();
 
             var queries = first.getBean(NotificationQueries.class);
@@ -409,6 +425,45 @@ class BusinessRealtimeIT {
                                 List<EventIntent> intents) {
         app.getBean(TransactionTemplate.class).executeWithoutResult(status ->
                 app.getBean(UserEvents.class).persist(context, intents));
+    }
+
+    private static JsonNode createNotifications(ConfigurableApplicationContext app, String intentKey) {
+        var notifications = app.getBean(NotificationApplication.class);
+        var clock = app.getBeanProvider(Clock.class).getIfAvailable(Clock::systemUTC);
+        var intent = new NotificationIntent(Set.of(ACCOUNT_A, ACCOUNT_B), null, "product_audit.passed",
+                new ResourceRef("product_audit", 1001L), intentKey, "product_audit.decision", "1",
+                Map.of("decision", "passed"), clock.instant());
+        var result = app.getBean(WriteExecutor.class).run(context(ACCOUNT_A, SESSION_A1), "notification.create", intentKey,
+                intent, new WriteExecutor.UseCase<NotificationIntent, Boolean>() {
+                    @Override
+                    public JsonNode digestInput(NotificationIntent request) {
+                        return JSON.createObjectNode().put("intent_key", request.intentKey());
+                    }
+
+                    @Override
+                    public LockPlan prepare(ExecutionContext context, NotificationIntent request) {
+                        return EMPTY;
+                    }
+
+                    @Override
+                    public Boolean qualify(ExecutionContext context, NotificationIntent request, LockPlan plan) {
+                        return Boolean.TRUE;
+                    }
+
+                    @Override
+                    public void requireReplayAccess(ExecutionContext context, Boolean qualified,
+                                                    ResourceRef resource) {}
+
+                    @Override
+                    public WriteResult.Response<?> write(WriteTransaction transaction, NotificationIntent request,
+                                                         Boolean qualified, LockPlan plan) {
+                        var response = JSON.createObjectNode();
+                        notifications.createNotifications(transaction, request).items().forEach(item ->
+                                response.put(Long.toString(item.recipientAccountId()), item.notificationId()));
+                        return new WriteResult.Response<>(201, response, request.source());
+                    }
+                });
+        return result.data();
     }
 
     private static long createNotification(ConfigurableApplicationContext app, long account) {
