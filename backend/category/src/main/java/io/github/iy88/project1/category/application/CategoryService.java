@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -23,13 +24,16 @@ public class CategoryService {
     private final CategoryRepository categories;
     private final CategoryNameRepository names;
     private final CategorySettings settings;
+    private final ObjectProvider<CategoryProductVisibility> productVisibility;
     private final TransactionTemplate transaction;
 
     public CategoryService(CategoryRepository categories, CategoryNameRepository names, CategorySettings settings,
+                           ObjectProvider<CategoryProductVisibility> productVisibility,
                            PlatformTransactionManager manager) {
         this.categories = categories;
         this.names = names;
         this.settings = settings;
+        this.productVisibility = productVisibility;
         this.transaction = new TransactionTemplate(manager);
     }
 
@@ -44,7 +48,7 @@ public class CategoryService {
                 continue;
             }
             boolean selectable = !category.disabled();
-            boolean hasPublicProducts = false;
+            boolean hasPublicProducts = hasPublicProducts(category.id());
             if (category.disabled() && !hasPublicProducts) {
                 continue;
             }
@@ -179,9 +183,14 @@ public class CategoryService {
         return grouped;
     }
 
+    private boolean hasPublicProducts(long categoryId) {
+        CategoryProductVisibility visibility = productVisibility.getIfAvailable();
+        return visibility != null && visibility.hasPublicProducts(categoryId);
+    }
+
     private long associatedProductCount(long categoryId) {
-        // Filled in with the product module; categories have no associations before S2 product delivery.
-        return 0;
+        CategoryProductVisibility visibility = productVisibility.getIfAvailable();
+        return visibility == null ? 0 : visibility.associatedProductCount(categoryId);
     }
 
     private String name(String value) {
