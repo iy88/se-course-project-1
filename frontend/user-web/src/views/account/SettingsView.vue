@@ -53,6 +53,9 @@ const newEmail = ref("");
 const oldCode = ref("");
 const newCode = ref("");
 const ticketGroup = ref<EmailVerificationTicket[]>([]);
+/** Tickets of an email change, selected by purpose rather than by list order. */
+const oldTicket = computed(() => pickTicket("email_change_old", 0));
+const newTicket = computed(() => pickTicket("email_change_new", 1));
 const sendingEmailCode = ref(false);
 const emailPending = ref(false);
 const emailError = ref<string | null>(null);
@@ -62,6 +65,13 @@ const nameChanged = computed(
   () => displayName.value.trim() !== session.displayName.value && displayName.value.trim() !== "",
 );
 const maxNameLength = computed(() => entryLimits.value?.display_name_max_length ?? 24);
+function pickTicket(purpose: EmailVerificationTicket["purpose"], fallbackIndex: number) {
+  const matches = ticketGroup.value.filter((ticket) => ticket.purpose === purpose);
+  if (matches.length > 0) return matches[0];
+  // Older servers label both tickets `email_change`; fall back to the documented order.
+  return ticketGroup.value[fallbackIndex];
+}
+
 const passwordsMatch = computed(
   () => newPassword.value.length > 0 && newPassword.value === confirmingPassword.value,
 );
@@ -181,16 +191,16 @@ async function sendEmailCodes(): Promise<void> {
 }
 
 async function submitEmail(): Promise<void> {
-  if (emailPending.value || ticketGroup.value.length < 2) return;
+  if (emailPending.value || !oldTicket.value || !newTicket.value) return;
   emailError.value = null;
   emailPending.value = true;
   try {
     await changeEmail(
       {
         new_email: newEmail.value.trim(),
-        old_verification_id: ticketGroup.value[0].verification_id,
+        old_verification_id: oldTicket.value.verification_id,
         old_code: oldCode.value.trim(),
-        new_verification_id: ticketGroup.value[1].verification_id,
+        new_verification_id: newTicket.value.verification_id,
         new_code: newCode.value.trim(),
       },
       newIdempotencyKey(),
@@ -317,7 +327,7 @@ async function submitEmail(): Promise<void> {
         <button
           type="button"
           class="btn btn--primary"
-          :disabled="emailPending || ticketGroup.length < 2 || !oldCode || !newCode"
+          :disabled="emailPending || !oldTicket || !newTicket || !oldCode || !newCode"
           @click="submitEmail"
         >
           {{ emailPending ? "正在更换…" : "更换邮箱" }}

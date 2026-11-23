@@ -76,7 +76,14 @@ export interface EntryLimits {
   display_name_max_length: number;
 }
 
-export type VerificationPurpose = "registration" | "password_reset" | "email_change";
+export type VerificationPurpose =
+  | "registration"
+  | "password_reset"
+  | "email_change"
+  /** Ticket for the current mailbox in an email change; pairs with `email_change_new`. */
+  | "email_change_old"
+  /** Ticket for the new mailbox in an email change. */
+  | "email_change_new";
 
 /** API-COM-MAIL-001 `POST /account/email-verifications`. */
 export interface EmailVerificationRequest {
@@ -136,12 +143,19 @@ export interface ChangeEmailRequest {
 
 /**
  * API-COM-AUTH-009 `PATCH /account/profile` (design 0.2.6, renamed to
- * 修改个人资料). At least one field must be sent; an omitted field keeps its
- * current value and `avatar_file_id: null` removes the avatar. A provided file id
- * must be the caller's already verified `account_avatar`.
+ * 修改个人资料). At least one field must be sent and an omitted field keeps its
+ * current value. Design text gives `avatar_file_id: null` as the removal signal,
+ * but the deployed endpoint binds the field to a plain string and therefore cannot
+ * tell an explicit `null` from an omission: it removes only on the `"0"` sentinel
+ * (S2-02 handoff). The design wording needs the same correction.
  */
 export interface UpdateProfileRequest {
   display_name?: string;
+  /**
+   * Avatar binding: a verified `account_avatar` file id replaces the avatar, `"0"`
+   * removes it, and omitting the field (or sending `null`, which the endpoint cannot
+   * distinguish from an omission) keeps the current avatar.
+   */
   avatar_file_id?: string | null;
 }
 

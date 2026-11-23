@@ -716,11 +716,20 @@ describe("file uploads", () => {
     const identity = await call<Identity>("GET", "/account/session");
     assert.equal(identity.account.avatar_url, profile.avatar_url);
 
+    // An explicit null is indistinguishable from an omitted field, so it keeps the
+    // avatar; the "0" sentinel is the removal signal the deployed endpoint uses.
+    const kept = await call<{ display_name: string; avatar_url: string | null }>(
+      "PATCH",
+      "/account/profile",
+      { body: { avatar_file_id: null }, idempotencyKey: "avatar-2" },
+    );
+    assert.equal(kept.avatar_url, profile.avatar_url);
+
     // Removing the avatar reports the default state and keeps the name.
     const removed = await call<{ display_name: string; avatar_url: string | null }>(
       "PATCH",
       "/account/profile",
-      { body: { avatar_file_id: null }, idempotencyKey: "avatar-2" },
+      { body: { avatar_file_id: "0" }, idempotencyKey: "avatar-3" },
     );
     assert.equal(removed.avatar_url, null);
     assert.equal(removed.display_name, "林同学");
