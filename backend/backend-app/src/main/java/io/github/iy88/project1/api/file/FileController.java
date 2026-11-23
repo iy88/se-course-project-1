@@ -127,9 +127,9 @@ class FileController {
     private UploadRegistration.Target target(long accountId, FilePurpose purpose, TargetInput input) {
         if (purpose == FilePurpose.ACCOUNT_AVATAR) {
             if (input != null) {
-                throw new BusinessError("FILE_PURPOSE_MISMATCH", 422, "头像上传不需要目标");
+                throw new BusinessError("INPUT_INVALID", 422, "头像上传由服务端确定目标");
             }
-            return null;
+            return new UploadRegistration.Target("account", accountId);
         }
         if (purpose == FilePurpose.CASE_EVIDENCE) {
             if (input != null) {
