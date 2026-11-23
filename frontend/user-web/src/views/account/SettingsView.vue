@@ -183,8 +183,8 @@ async function sendEmailCodes(): Promise<void> {
     ticketGroup.value = accepted.requests;
     emailNotice.value =
       accepted.requests.length >= 2
-        ? "验证码已分别发送到当前邮箱与新邮箱，请填写两组验证码。"
-        : "验证码已发送，请填写后确认。";
+        ? "验证码申请已受理，正在分别发送到当前邮箱与新邮箱，请留意收件。"
+        : "验证码申请已受理，正在发送，请留意收件。";
   } catch (caught) {
     emailError.value = problemMessage(caught);
   } finally {

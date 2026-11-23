@@ -177,11 +177,15 @@ async function open(): Promise<void> {
       case "hello_ok": {
         const accepted = payload as {
           epoch?: unknown;
-          head_seq?: unknown;
           heartbeat_seconds?: unknown;
         };
         if (typeof accepted.epoch === "string") epoch = accepted.epoch;
-        if (typeof accepted.head_seq === "number") cursor = Math.max(accepted.head_seq, cursor);
+        /*
+         * `head_seq` is deliberately ignored: it is the server's newest sequence, not
+         * a sequence this client received. Adopting it would acknowledge events the
+         * server never sent (a backlog replay from 10 with head 100 would ACK 100 on
+         * the first event). Only `event` and `cursor_advance` advance the cursor.
+         */
         state.value = "ready";
         attempt = 0;
         if (typeof accepted.heartbeat_seconds === "number") {
@@ -196,7 +200,7 @@ async function open(): Promise<void> {
       case "pong":
         return;
       case "sync_reset":
-        void handleSyncReset();
+        void handleSyncReset(payload as SyncResetFrame, connection);
         return;
       case "auth_required":
         state.value = "unauthenticated";
@@ -243,18 +247,38 @@ async function open(): Promise<void> {
   });
 }
 
-async function handleSyncReset(): Promise<void> {
+/**
+ * The reset frame carries the head the server will replay from, so no extra HTTP
+ * read is needed and the resume always belongs to the connection that asked for it.
+ */
+interface SyncResetFrame {
+  epoch?: unknown;
+  head_seq?: unknown;
+  replay_floor?: unknown;
+}
+
+/**
+ * Resynchronise after `sync_reset`.
+ *
+ * The snapshot is reloaded first and the resume is sent only to the connection that
+ * received the reset and is still the active one; a stale connection must not write
+ * the shared cursor or resume a newer socket. When the snapshot fails the original
+ * connection is closed so the single close path owns reconnection.
+ */
+async function handleSyncReset(frame: SyncResetFrame, connection: RealtimeSocket): Promise<void> {
+  const resetEpoch = typeof frame.epoch === "string" ? frame.epoch : null;
+  const resetHead = typeof frame.head_seq === "number" ? frame.head_seq : null;
+  const resetFloor = typeof frame.replay_floor === "number" ? frame.replay_floor : 0;
   try {
-    // Record the head before reading the snapshot: events written between the end
-    // of the snapshot read and a later head read must be replayed, not skipped.
-    const head = await deps.fetchHead();
     await reloadRealtimeSnapshot();
-    epoch = head.epoch;
-    cursor = Math.max(head.replay_floor, head.head_seq);
-    send({ type: "resume", epoch, after_seq: cursor });
   } catch {
-    scheduleReconnect(1);
+    connection.close();
+    return;
   }
+  if (socket !== connection || connection.readyState !== SOCKET_OPEN) return;
+  if (resetEpoch !== null) epoch = resetEpoch;
+  if (resetHead !== null) cursor = Math.max(resetFloor, resetHead);
+  send({ type: "resume", epoch, after_seq: cursor });
 }
 
 function scheduleReconnect(multiplier: number): void {

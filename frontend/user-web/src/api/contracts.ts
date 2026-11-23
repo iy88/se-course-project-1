@@ -188,7 +188,8 @@ export interface CreateUploadRequest {
   purpose: FilePurpose;
   declared_size: number;
   declared_content_type: string;
-  target: ResourceRef | null;
+  /** Omitted when the server derives the target from the session or the upload is staged. */
+  target?: ResourceRef | null;
 }
 
 export interface CreateUploadResult {
