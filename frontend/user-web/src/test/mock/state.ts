@@ -328,7 +328,7 @@ export function createSeedState(): MockState {
       object_key: "dev/product_image/seed-11.jpg",
       expires_at: iso(30 * DAY),
       verified_at: iso(-5 * DAY),
-      url: "https://oss.example.invalid/dev/product_image/seed-11.jpg?x-oss-signature=seed11",
+      url: "/api/v1/files/11/content",
     },
     {
       file_id: "12",
@@ -340,7 +340,7 @@ export function createSeedState(): MockState {
       object_key: "dev/product_image/seed-12.jpg",
       expires_at: iso(30 * DAY),
       verified_at: iso(-5 * DAY),
-      url: "https://oss.example.invalid/dev/product_image/seed-12.jpg?x-oss-signature=seed12",
+      url: "/api/v1/files/12/content",
     },
     {
       file_id: "13",
@@ -352,7 +352,7 @@ export function createSeedState(): MockState {
       object_key: "dev/product_image/seed-13.png",
       expires_at: iso(30 * DAY),
       verified_at: iso(-5 * DAY),
-      url: "https://oss.example.invalid/dev/product_image/seed-13.png?x-oss-signature=seed13",
+      url: "/api/v1/files/13/content",
     },
     {
       file_id: "14",
@@ -364,7 +364,7 @@ export function createSeedState(): MockState {
       object_key: "dev/case_evidence/seed-14.png",
       expires_at: iso(30 * DAY),
       verified_at: iso(-2 * DAY),
-      url: "https://oss.example.invalid/dev/case_evidence/seed-14.png?x-oss-signature=seed14",
+      url: "/api/v1/files/14/content",
     },
   ];
   state.sequences.files = 14;

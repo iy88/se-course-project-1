@@ -168,6 +168,11 @@ const copy: Record<string, ProblemCopy> = {
     retryable: false,
     requiresLogin: false,
   },
+  UPLOAD_TRANSFER_FAILED: {
+    message: "无法连接对象存储，请检查网络后重试。",
+    retryable: true,
+    requiresLogin: false,
+  },
   STORAGE_CONFIGURATION_INVALID: {
     message: "文件服务配置异常，请联系管理员。",
     retryable: false,
