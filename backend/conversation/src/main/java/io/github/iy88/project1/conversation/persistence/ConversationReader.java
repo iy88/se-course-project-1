@@ -35,6 +35,18 @@ public class ConversationReader {
         return chats.findByAccountLowIdOrAccountHighId(accountId, accountId);
     }
 
+    public Optional<ChatMessage> chatMessage(long messageId) {
+        return chatMessages.findById(messageId);
+    }
+
+    public Optional<TradeMessage> tradeMessage(long messageId) {
+        return tradeMessages.findById(messageId);
+    }
+
+    public Optional<CaseMessage> caseMessage(long messageId) {
+        return caseMessages.findById(messageId);
+    }
+
     public List<TradeConversation> tradeConversations(Collection<Long> tradeIds) {
         if (tradeIds.isEmpty()) {
             return List.of();
