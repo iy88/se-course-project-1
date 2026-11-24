@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.57
-Version-Datetime: 2026-11-25T01:17:15+08:00
+Version: 0.1.58
+Version-Datetime: 2026-11-25T01:29:42+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -19,13 +19,13 @@ macOS 或 Linux：
 
 ```bash
 umask 077
-cp -n backend/.env.example backend/.env.dev
+cp -n backend/.env.dev.example backend/.env.dev
 ```
 
 Windows PowerShell 5.1 或更高版本：
 
 ```powershell
-Copy-Item backend/.env.example backend/.env.dev -ErrorAction SilentlyContinue
+Copy-Item backend/.env.dev.example backend/.env.dev -ErrorAction SilentlyContinue
 ```
 
 按[开发配置](#开发配置)填写数据库、Redis 和所需的外部服务凭据。
@@ -77,7 +77,7 @@ Windows PowerShell 5.1 或更高版本：
 
 ## 开发配置
 
-`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.example`](backend/.env.example) 后替换示例值，不要把实际凭据提交到仓库。
+`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.dev.example`](backend/.env.dev.example) 后替换示例值，不要把实际凭据提交到仓库。
 
 | 资源 | 必需配置 |
 |---|---|
