@@ -18,7 +18,11 @@ public interface ProductInteractionStore {
         CASE
     }
 
-    record FavoriteRow(long productId, Instant favoritedAt) {
+    record FavoriteRow(long favoriteId, long productId, Instant favoritedAt) {
+        /** Compatibility constructor for fixtures that only model the product relation. */
+        FavoriteRow(long productId, Instant favoritedAt) {
+            this(0L, productId, favoritedAt);
+        }
     }
 
     long insertComment(long productId, long authorAccountId, Long parentCommentId, String body, Instant now);

@@ -215,9 +215,10 @@ public class ProductInteractions {
         for (ProductInteractionStore.FavoriteRow row : rows) {
             ProductService.ProductSummary summary = summaries.get(row.productId());
             items.add(summary == null
-                    ? new FavoriteItem(Long.toString(row.productId()), "invalid", row.favoritedAt(), null,
-                    "该商品已失效")
-                    : new FavoriteItem(Long.toString(row.productId()), "valid", row.favoritedAt(), summary, null));
+                    ? new FavoriteItem(Long.toString(row.favoriteId()), Long.toString(row.productId()), "invalid",
+                    row.favoritedAt(), null, "该商品已失效")
+                    : new FavoriteItem(Long.toString(row.favoriteId()), Long.toString(row.productId()), "valid",
+                    row.favoritedAt(), summary, null));
         }
         return new FavoritePage(items, paging[0], paging[1], total);
     }
@@ -366,7 +367,7 @@ public class ProductInteractions {
     public record CommentPage(List<CommentView> items, int page, int pageSize, long total) {
     }
 
-    public record FavoriteItem(String productId, String status, Instant favoritedAt,
+    public record FavoriteItem(String favoriteId, String productId, String status, Instant favoritedAt,
                                ProductService.ProductSummary product, String message) {
     }
 

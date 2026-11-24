@@ -152,22 +152,27 @@ public class JdbcProductInteractionStore implements ProductInteractionStore {
 
     @Override
     public Optional<FavoriteRow> favorite(long accountId, long productId) {
-        return jdbc.sql("select product_id, created_at from product_favorite where account_id = ? and product_id = ?")
+        return jdbc.sql("""
+                        select favorite_id, product_id, created_at from product_favorite
+                         where account_id = ? and product_id = ?
+                        """)
                 .param(accountId).param(productId)
-                .query((rs, row) -> new FavoriteRow(rs.getLong("product_id"), instant(rs, "created_at")))
+                .query((rs, row) -> new FavoriteRow(rs.getLong("favorite_id"), rs.getLong("product_id"),
+                        instant(rs, "created_at")))
                 .optional();
     }
 
     @Override
     public List<FavoriteRow> favorites(long accountId, int limit, long offset) {
         return jdbc.sql("""
-                        select product_id, created_at from product_favorite
+                        select favorite_id, product_id, created_at from product_favorite
                          where account_id = ?
                          order by created_at desc, favorite_id desc
                          limit ? offset ?
                         """)
                 .param(accountId).param(limit).param(offset)
-                .query((rs, row) -> new FavoriteRow(rs.getLong("product_id"), instant(rs, "created_at")))
+                .query((rs, row) -> new FavoriteRow(rs.getLong("favorite_id"), rs.getLong("product_id"),
+                        instant(rs, "created_at")))
                 .list();
     }
 
