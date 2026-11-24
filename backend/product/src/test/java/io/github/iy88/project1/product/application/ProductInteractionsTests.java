@@ -10,7 +10,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.github.iy88.project1.account.application.AccountQueries;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.domain.ProductComment;
@@ -43,7 +42,7 @@ class ProductInteractionsTests {
     private final ProductService details = mock(ProductService.class);
     private final ProductInteractionStore store = mock(ProductInteractionStore.class);
     private final CaseCommentAccess cases = mock(CaseCommentAccess.class);
-    private final AccountQueries accounts = mock(AccountQueries.class);
+    private final CommentAccountAccess accounts = mock(CommentAccountAccess.class);
     private final ProductSettings settings = new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 2, 60);
     private ProductInteractions interactions;
 
@@ -53,9 +52,9 @@ class ProductInteractionsTests {
         when(manager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         interactions = new ProductInteractions(products, details, store, cases, accounts, settings, manager,
                 Clock.fixed(NOW, ZoneOffset.UTC));
-        when(accounts.profiles(any())).thenReturn(Map.of(
-                VIEWER, new AccountQueries.Profile(VIEWER, "Viewer"),
-                SELLER, new AccountQueries.Profile(SELLER, "Seller")));
+        when(accounts.displayNames(any())).thenReturn(Map.of(
+                VIEWER, "Viewer",
+                SELLER, "Seller"));
     }
 
     @Test
