@@ -88,26 +88,87 @@ public class BannedScopeService {
         return view();
     }
 
+    public ItemMutation create(long adminId, ItemInput input) {
+        Validated validated = validate(input.group(), input.content(), input.displayOrder());
+        return transaction.execute(status -> {
+            BannedScopeState state = lockState();
+            Instant now = Instant.now();
+            BannedItem item = items.save(new BannedItem(validated.group, validated.content,
+                    validated.displayOrder, adminId, now));
+            state.touch(now);
+            states.save(state);
+            return new ItemMutation(now, itemView(item));
+        });
+    }
+
+    public ItemMutation update(long adminId, long itemId, ItemInput input) {
+        Validated validated = validate(input.group(), input.content(), input.displayOrder());
+        return transaction.execute(status -> {
+            BannedScopeState state = lockState();
+            BannedItem item = requireCurrent(itemId);
+            Instant now = Instant.now();
+            item.update(validated.group, validated.content, validated.displayOrder, adminId, now);
+            items.save(item);
+            state.touch(now);
+            states.save(state);
+            return new ItemMutation(now, itemView(item));
+        });
+    }
+
+    public ScopeMutation delete(long itemId) {
+        return transaction.execute(status -> {
+            BannedScopeState state = lockState();
+            BannedItem item = requireCurrent(itemId);
+            if (items.findByDeletedAtIsNullOrderByDisplayOrderAscIdAsc().size() <= 1) {
+                throw new BusinessError("BANNED_SCOPE_INCOMPLETE", 422, "禁发范围至少保留一条细目");
+            }
+            Instant now = Instant.now();
+            item.delete(now);
+            items.save(item);
+            state.touch(now);
+            states.save(state);
+            return new ScopeMutation(now);
+        });
+    }
+
+    private BannedScopeState lockState() {
+        return states.lock().orElseThrow(() -> new IllegalStateException("Banned scope state row is missing"));
+    }
+
+    private BannedItem requireCurrent(long itemId) {
+        return items.findById(itemId)
+                .filter(item -> !item.deleted())
+                .orElseThrow(() -> new BusinessError("INPUT_INVALID", 422, "禁发条目不存在"));
+    }
+
     private Validated validate(Input input) {
-        if (!GROUPS.contains(input.group())) {
+        return validate(input.group(), input.content(), input.displayOrder(), input.bannedItemId());
+    }
+
+    private Validated validate(String group, String content, Integer displayOrder) {
+        return validate(group, content, displayOrder, null);
+    }
+
+    private Validated validate(String group, String rawContent, Integer displayOrder, String rawId) {
+        if (!GROUPS.contains(group)) {
             throw new BusinessError("INPUT_INVALID", 422, "禁发分组无效");
         }
-        String content = input.content() == null ? "" : input.content().trim();
+        String content = rawContent == null ? "" : rawContent.trim();
         if (content.isEmpty() || content.codePointCount(0, content.length()) > settings.bannedContentMaxLength()) {
             throw new BusinessError("INPUT_INVALID", 422, "禁发内容无效");
         }
-        if (input.displayOrder() == null || input.displayOrder() < 0) {
+        if (displayOrder == null || displayOrder < 0) {
             throw new BusinessError("INPUT_INVALID", 422, "展示顺序无效");
         }
         Long id = null;
-        if (input.bannedItemId() != null && !input.bannedItemId().isBlank()) {
+        if (rawId != null && !rawId.isBlank()) {
             try {
-                id = Long.parseLong(input.bannedItemId());
+                id = Long.parseLong(rawId);
             } catch (NumberFormatException invalid) {
                 throw new BusinessError("INPUT_INVALID", 422, "禁发条目标识无效");
             }
         }
-        return new Validated(id, input.group(), content, input.displayOrder());
+        return new Validated(id, group, content, displayOrder);
     }
 
     private record Validated(Long id, String group, String content, int displayOrder) {
@@ -116,12 +177,25 @@ public class BannedScopeService {
     public record Input(String bannedItemId, String group, String content, Integer displayOrder) {
     }
 
+    public record ItemInput(String group, String content, Integer displayOrder) {
+    }
+
     public record ItemView(String id, String content, int displayOrder) {
+    }
+
+    public record ItemMutation(Instant updatedAt, ItemView item) {
+    }
+
+    public record ScopeMutation(Instant updatedAt) {
     }
 
     public record GroupView(String group, List<ItemView> items) {
     }
 
     public record BannedScopeView(Instant updatedAt, List<GroupView> groups) {
+    }
+
+    private static ItemView itemView(BannedItem item) {
+        return new ItemView(Long.toString(item.id()), item.content(), item.displayOrder());
     }
 }

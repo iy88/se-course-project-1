@@ -1,18 +1,24 @@
 <script setup lang="ts">
 /*
- * Banned-scope maintenance (API-PRD-013). The endpoint replaces the whole
- * scope: retained rows keep their identifier, new rows are created and omitted
- * rows are logically removed by the server.
+ * Banned-scope maintenance (API-PRD-013). Each detail is saved individually
+ * inside its category section; the whole-scope replacement endpoint remains
+ * available for API compatibility.
  */
-import { onMounted, ref } from "vue";
-import type { BannedGroupKey, BannedItemInput } from "../api/contracts";
-import { readBannedScope, replaceBannedScope } from "../api/banned";
+import { computed, onMounted, ref } from "vue";
+import UiIcon from "../../../shared/UiIcon.vue";
+import type { BannedGroupKey, BannedItemPayload, BannedItemView } from "../api/contracts";
+import {
+  createBannedItem,
+  deleteBannedItem,
+  readBannedScope,
+  updateBannedItem,
+} from "../api/banned";
 import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { bannedGroupLabels, bannedGroupOrder } from "../app/labels";
 import { problemMessage } from "../app/problems";
 import { notify } from "../app/toast";
-import EmptyState from "../components/EmptyState.vue";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
@@ -22,20 +28,27 @@ interface EditRow {
   id: string | null;
   group: BannedGroupKey;
   content: string;
+  savedContent: string;
   order: number;
+  savedOrder: number;
+  saving: boolean;
 }
 
 const rows = ref<EditRow[]>([]);
 const loading = ref(false);
-const saving = ref(false);
 const error = ref<unknown>(null);
 const updatedAt = ref<string | null>(null);
+const pendingRemove = ref<EditRow | null>(null);
 const keys = new IdempotencyKeys();
 let nextKey = 1;
 
-function blankRow(): EditRow {
-  return { key: nextKey++, id: null, group: "other", content: "", order: rows.value.length + 1 };
-}
+const groupSections = computed(() =>
+  bannedGroupOrder.map((group) => ({
+    group,
+    label: bannedGroupLabels[group],
+    rows: rows.value.filter((row) => row.group === group),
+  })),
+);
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -44,15 +57,8 @@ async function load(): Promise<void> {
     const scope = await readBannedScope();
     updatedAt.value = scope.updated_at;
     rows.value = scope.groups.flatMap((group) =>
-      group.items.map((item) => ({
-        key: nextKey++,
-        id: item.id,
-        group: group.group,
-        content: item.content,
-        order: item.display_order,
-      })),
+      group.items.map((item) => editRow(group.group, item)),
     );
-    if (!rows.value.length) rows.value = [blankRow()];
   } catch (caught) {
     error.value = caught;
   } finally {
@@ -62,157 +68,310 @@ async function load(): Promise<void> {
 
 onMounted(load);
 
-function addRow(): void {
-  rows.value = [...rows.value, blankRow()];
+function editRow(group: BannedGroupKey, item: BannedItemView): EditRow {
+  return {
+    key: nextKey++,
+    id: item.id,
+    group,
+    content: item.content,
+    savedContent: item.content,
+    order: item.display_order,
+    savedOrder: item.display_order,
+    saving: false,
+  };
 }
 
-function removeRow(key: number): void {
-  if (rows.value.length <= 1) {
-    notify.error("禁发范围至少保留一条细目。");
+function nextOrder(group: BannedGroupKey): number {
+  return (
+    Math.max(0, ...rows.value.filter((row) => row.group === group).map((row) => row.order)) + 1
+  );
+}
+
+function addRow(group: BannedGroupKey): void {
+  rows.value = [
+    ...rows.value,
+    {
+      key: nextKey++,
+      id: null,
+      group,
+      content: "",
+      savedContent: "",
+      order: nextOrder(group),
+      savedOrder: 0,
+      saving: false,
+    },
+  ];
+}
+
+function isDirty(row: EditRow): boolean {
+  return (
+    row.id === null ||
+    row.content.trim() !== row.savedContent ||
+    Number(row.order) !== row.savedOrder
+  );
+}
+
+function requestRemove(row: EditRow): void {
+  if (row.id === null) {
+    rows.value = rows.value.filter((candidate) => candidate.key !== row.key);
     return;
   }
-  rows.value = rows.value.filter((row) => row.key !== key);
+  pendingRemove.value = row;
 }
 
-async function save(): Promise<void> {
-  if (saving.value) return;
-  const inputs: BannedItemInput[] = [];
-  for (const row of rows.value) {
-    const content = row.content.trim();
-    if (!content) {
-      notify.error("每条禁发细目都需要填写内容。");
-      return;
-    }
-    const order = Number(row.order);
-    if (String(row.order).trim() === "" || !Number.isInteger(order) || order < 0) {
-      notify.error("每条禁发细目的顺序必须是非负整数。");
-      return;
-    }
-    inputs.push({
-      ...(row.id ? { banned_item_id: row.id } : {}),
-      group: row.group,
-      content,
-      display_order: order,
-    });
-  }
-  saving.value = true;
+async function confirmRemove(): Promise<void> {
+  const row = pendingRemove.value;
+  pendingRemove.value = null;
+  if (!row?.id || row.saving) return;
+  row.saving = true;
   try {
-    const scope = await replaceBannedScope(inputs, keys.current("banned-save"));
-    keys.rotate("banned-save");
-    updatedAt.value = scope.updated_at;
-    notify.success("禁发范围已保存。");
-    await load();
+    const mutation = await deleteBannedItem(row.id, keys.current(`banned-item-${row.id}`));
+    keys.rotate(`banned-item-${row.id}`);
+    rows.value = rows.value.filter((candidate) => candidate.key !== row.key);
+    updatedAt.value = mutation.updated_at;
+    notify.success("禁发细目已移除。");
   } catch (caught) {
     notify.error(problemMessage(caught));
   } finally {
-    saving.value = false;
+    row.saving = false;
+  }
+}
+
+function payload(row: EditRow): BannedItemPayload | null {
+  const content = row.content.trim();
+  if (!content) {
+    notify.error("禁发细目内容不能为空。");
+    return null;
+  }
+  const order = Number(row.order);
+  if (String(row.order).trim() === "" || !Number.isInteger(order) || order < 0) {
+    notify.error("展示顺序必须是非负整数。");
+    return null;
+  }
+  return { group: row.group, content, display_order: order };
+}
+
+async function saveRow(row: EditRow): Promise<void> {
+  if (row.saving) return;
+  const input = payload(row);
+  if (!input) return;
+  const operation = row.id ? `banned-item-${row.id}` : `banned-item-new-${row.key}`;
+  row.saving = true;
+  try {
+    const mutation = row.id
+      ? await updateBannedItem(row.id, input, keys.current(operation))
+      : await createBannedItem(input, keys.current(operation));
+    keys.rotate(operation);
+    row.id = mutation.item.id;
+    row.content = mutation.item.content;
+    row.savedContent = mutation.item.content;
+    row.order = mutation.item.display_order;
+    row.savedOrder = mutation.item.display_order;
+    updatedAt.value = mutation.updated_at;
+    notify.success("禁发细目已保存。");
+  } catch (caught) {
+    notify.error(problemMessage(caught));
+  } finally {
+    row.saving = false;
   }
 }
 </script>
 
 <template>
   <div class="stack stack--loose">
-    <PageHeader
-      title="禁发范围"
-      description="维护发布前展示的禁发细目。保存时保留现有条目、新建新增条目，未保留的条目会被移除。"
-    >
+    <PageHeader title="禁发范围" description="按大类维护禁发细目；每一条都可以单独保存或移除。">
       <template #actions>
         <span class="chip">最近更新 {{ formatDateTime(updatedAt) }}</span>
       </template>
     </PageHeader>
 
-    <section class="card" :aria-busy="loading">
-      <LoadingBlock v-if="loading && !rows.length" label="正在加载禁发范围…" />
-      <ErrorNotice v-else-if="error" :error="error" @retry="load" />
-      <EmptyState
-        v-else-if="!rows.length"
-        title="还没有禁发细目"
-        description="添加第一条细目后保存。"
-      />
-      <template v-else>
-        <div class="table-wrap">
-          <table class="table banned-table">
-            <thead>
-              <tr>
-                <th>分组</th>
-                <th>细目内容</th>
-                <th>顺序</th>
-                <th><span class="visually-hidden">操作</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in rows" :key="row.key">
-                <td>
-                  <select v-model="row.group" class="select" :aria-label="`第 ${row.order} 条分组`">
-                    <option v-for="group in bannedGroupOrder" :key="group" :value="group">
-                      {{ bannedGroupLabels[group] }}
-                    </option>
-                  </select>
-                </td>
-                <td>
-                  <input
-                    v-model="row.content"
-                    class="input"
-                    maxlength="200"
-                    :aria-label="`第 ${row.order} 条内容`"
-                    placeholder="例如：处方药与医疗器械"
-                  />
-                </td>
-                <td class="order-cell">
-                  <input
-                    v-model.number="row.order"
-                    class="input"
-                    type="number"
-                    min="0"
-                    :aria-label="`第 ${row.order} 条顺序`"
-                  />
-                </td>
-                <td class="row-actions">
-                  <button
-                    type="button"
-                    class="btn btn--small btn--ghost"
-                    @click="removeRow(row.key)"
-                  >
-                    移除
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+    <LoadingBlock v-if="loading && !rows.length" label="正在加载禁发范围…" />
+    <ErrorNotice v-else-if="error" :error="error" @retry="load" />
+    <form v-else class="banned-groups" aria-label="禁发范围" @submit.prevent>
+      <fieldset
+        v-for="section in groupSections"
+        :key="section.group"
+        class="banned-group"
+        :data-group="section.group"
+      >
+        <legend>
+          <span>{{ section.label }}</span>
+          <span class="banned-group__count">{{ section.rows.length }} 条</span>
+        </legend>
+        <div class="banned-group__body">
+          <p v-if="!section.rows.length" class="banned-group__empty">
+            暂无细目，可在本大类下添加。
+          </p>
+          <ul v-else class="banned-list">
+            <li
+              v-for="row in section.rows"
+              :key="row.key"
+              class="banned-row"
+              :class="{ 'banned-row--dirty': isDirty(row) }"
+            >
+              <div class="field banned-row__content">
+                <label :for="`banned-content-${row.key}`">细目内容</label>
+                <input
+                  :id="`banned-content-${row.key}`"
+                  v-model="row.content"
+                  class="input"
+                  maxlength="200"
+                  placeholder="例如：处方药与医疗器械"
+                />
+              </div>
+              <div class="field banned-row__order">
+                <label :for="`banned-order-${row.key}`">顺序</label>
+                <input
+                  :id="`banned-order-${row.key}`"
+                  v-model.number="row.order"
+                  class="input"
+                  type="number"
+                  min="0"
+                  inputmode="numeric"
+                />
+              </div>
+              <div class="banned-row__actions">
+                <button
+                  type="button"
+                  class="btn btn--primary btn--small"
+                  :disabled="row.saving || (row.id !== null && !isDirty(row))"
+                  @click="saveRow(row)"
+                >
+                  {{ row.saving ? "保存中…" : row.id ? "保存" : "添加" }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn--ghost btn--small"
+                  :disabled="row.saving"
+                  @click="requestRemove(row)"
+                >
+                  {{ row.id ? "移除" : "取消" }}
+                </button>
+              </div>
+            </li>
+          </ul>
+          <button
+            type="button"
+            class="btn btn--small banned-group__add"
+            @click="addRow(section.group)"
+          >
+            <UiIcon name="plus" />
+            添加细目
+          </button>
         </div>
+      </fieldset>
+    </form>
 
-        <div class="spread banned-actions">
-          <button type="button" class="btn btn--small" @click="addRow">添加细目</button>
-          <div class="inline">
-            <button type="button" class="btn btn--ghost" :disabled="saving" @click="load">
-              放弃修改
-            </button>
-            <button type="button" class="btn btn--primary" :disabled="saving" @click="save">
-              {{ saving ? "正在保存…" : "保存禁发范围" }}
-            </button>
-          </div>
-        </div>
-      </template>
-    </section>
+    <ConfirmDialog
+      :open="pendingRemove !== null"
+      title="移除这条禁发细目？"
+      description="移除后，发布和审核页面将不再展示该细目；已有审核记录不会改变。"
+      confirm-label="确认移除"
+      tone="danger"
+      @cancel="pendingRemove = null"
+      @confirm="confirmRemove"
+    />
   </div>
 </template>
 
 <style scoped>
-.banned-table td {
-  vertical-align: top;
+.banned-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 27rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
 }
 
-.order-cell {
-  inline-size: 5.5rem;
+.banned-group {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  overflow: clip;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
 }
 
-.row-actions {
-  text-align: end;
+.banned-group legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  inline-size: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel-soft) 42%, var(--panel));
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 700;
 }
 
-.banned-actions {
-  margin-block-start: var(--space-3);
-  border-block-start: 1px solid var(--line);
-  padding-block-start: var(--space-3);
+.banned-group__count {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.banned-group__body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.banned-group__empty {
+  padding-block: var(--space-2);
+  color: var(--ink-faint);
+  font-size: 0.8125rem;
+}
+
+.banned-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.banned-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5.5rem auto;
+  align-items: end;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel-soft) 34%, var(--panel));
+}
+
+.banned-row--dirty {
+  border-color: var(--brand);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.banned-row .field {
+  gap: var(--space-1);
+}
+
+.banned-row__content {
+  min-inline-size: 0;
+}
+
+.banned-row__actions {
+  display: flex;
+  gap: var(--space-1);
+  padding-block-end: 0.0625rem;
+}
+
+.banned-group__add {
+  justify-self: start;
+}
+
+@media (width < 40rem) {
+  .banned-row {
+    grid-template-columns: minmax(0, 1fr) 5rem;
+  }
+
+  .banned-row__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
 }
 </style>

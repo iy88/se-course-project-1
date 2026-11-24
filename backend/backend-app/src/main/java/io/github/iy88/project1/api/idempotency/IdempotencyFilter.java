@@ -361,6 +361,9 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             return "category.disabled";
         if (upper.equals("DELETE") && path.matches("/api/v1/admin/categories/\\d+")) return "category.deleted";
         if (upper.equals("PUT") && path.equals("/api/v1/admin/banned-items")) return "banned_scope.replaced";
+        if (upper.equals("POST") && path.equals("/api/v1/admin/banned-items")) return "banned_item.created";
+        if (upper.equals("PATCH") && path.matches("/api/v1/admin/banned-items/\\d+")) return "banned_item.updated";
+        if (upper.equals("DELETE") && path.matches("/api/v1/admin/banned-items/\\d+")) return "banned_item.deleted";
         if (upper.equals("POST") && path.equals("/api/v1/products")) return "product.submitted";
         if (upper.equals("PATCH") && path.matches("/api/v1/products/\\d+")) return "product.edited";
         if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/review-submissions"))

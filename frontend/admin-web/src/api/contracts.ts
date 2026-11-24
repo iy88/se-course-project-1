@@ -75,6 +75,21 @@ export interface BannedItemInput {
   display_order: number;
 }
 
+export interface BannedItemPayload {
+  group: BannedGroupKey;
+  content: string;
+  display_order: number;
+}
+
+export interface BannedItemMutation {
+  updated_at: string;
+  item: BannedItemView;
+}
+
+export interface BannedScopeMutation {
+  updated_at: string;
+}
+
 export interface ManagementTodoItem {
   case_id: string;
   kind: string;
