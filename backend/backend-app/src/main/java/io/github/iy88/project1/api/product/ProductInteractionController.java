@@ -48,6 +48,7 @@ class ProductInteractionController {
     @PostMapping("/api/v1/products/{productId}/comments")
     ResponseEntity<ProductInteractions.CommentView> createComment(@PathVariable String productId,
                                                                   @RequestBody CommentRequest body,
+                                                                  @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                                   HttpServletRequest request) {
         var identity = current.require(request);
         long product = id(productId, "product_id");
@@ -60,6 +61,7 @@ class ProductInteractionController {
     ResponseEntity<ProductInteractions.CommentView> reply(@PathVariable String productId,
                                                           @PathVariable String commentId,
                                                           @RequestBody CommentRequest body,
+                                                          @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                           HttpServletRequest request) {
         var identity = current.require(request);
         long product = id(productId, "product_id");
@@ -99,6 +101,7 @@ class ProductInteractionController {
 
     @PutMapping("/api/v1/me/favorites/{productId}")
     ResponseEntity<ProductInteractions.FavoriteStatus> addFavorite(@PathVariable String productId,
+                                                                   @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                                    HttpServletRequest request) {
         var identity = current.require(request);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
