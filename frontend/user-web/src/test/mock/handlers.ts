@@ -1016,21 +1016,21 @@ const routes: Route[] = [
       const visible =
         product.lifecycle_state === "public" || product.lifecycle_state === "in_trade";
       const caseId = typeof query.case_id === "string" ? query.case_id : null;
+      const claimed =
+        caseId !== null &&
+        state.cases.some(
+          (item) =>
+            item.case_id === caseId &&
+            item.manager_id === accountId &&
+            item.target?.target_type === "product" &&
+            item.target.target_id === product.id,
+        );
       let scope: "public" | "author" | "case" = "public";
-      if (!visible) {
-        const claimed =
-          caseId !== null &&
-          state.cases.some(
-            (item) =>
-              item.case_id === caseId &&
-              item.manager_id === accountId &&
-              item.target?.target_type === "product" &&
-              item.target.target_id === product.id,
-          );
+      if (claimed) {
+        scope = "case";
+      } else if (!visible) {
         if (seller) {
           scope = "author";
-        } else if (claimed) {
-          scope = "case";
         } else if (
           state.comments.some(
             (item) => item.product_id === product.id && item.author_id === accountId,
@@ -1043,9 +1043,7 @@ const routes: Route[] = [
       }
       const readable = (comment: MockComment): boolean => {
         if (scope === "public") return !comment.deleted_at && !comment.removed_at;
-        if (scope === "author") {
-          return comment.author_id === accountId || (!comment.deleted_at && !comment.removed_at);
-        }
+        if (scope === "author") return comment.author_id === accountId;
         return true;
       };
       const topLevel = state.comments

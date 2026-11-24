@@ -669,8 +669,20 @@ export function createSeedState(): MockState {
       removed_reason: null,
       basis_ref: null,
     },
+    {
+      id: "4",
+      product_id: "8",
+      author_id: "3",
+      parent_id: null,
+      body: "这件商品下架前的评论。",
+      created_at: iso(-3 * DAY),
+      deleted_at: null,
+      removed_at: null,
+      removed_reason: null,
+      basis_ref: null,
+    },
   ];
-  state.sequences.comments = 3;
+  state.sequences.comments = 4;
 
   // Product 7 is public, product 8 is off shelf: the second favourite is a valid
   // "expired" fixture for the personal list.

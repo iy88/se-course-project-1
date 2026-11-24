@@ -836,6 +836,16 @@ describe("product interaction", () => {
     await expectFailure("GET", "/products/8/comments", {}, "RESOURCE_NOT_VISIBLE");
   });
 
+  it("scopes hidden-product comments to the reader's own thread", async () => {
+    await loginAs("zhao@campus.example.edu");
+    await expectFailure("GET", "/products/8/comments", {}, "RESOURCE_NOT_VISIBLE");
+
+    await loginAs("qian@campus.example.edu");
+    const page = await call<CommentPageShape>("GET", "/products/8/comments", {});
+    assert.equal(page.total, 1);
+    assert.equal(page.items[0].id, "4");
+  });
+
   it("allows the seller to reply once to a top-level comment", async () => {
     await loginAs("lin@campus.example.edu");
 

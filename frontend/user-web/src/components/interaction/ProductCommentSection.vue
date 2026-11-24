@@ -239,6 +239,17 @@ async function confirmDelete(): Promise<void> {
               <span class="muted">{{ formatRelative(reply.created_at) }}</span>
             </header>
             <p v-if="reply.body" class="comment__body pre-line break-anywhere">{{ reply.body }}</p>
+            <div class="comment__actions">
+              <button
+                v-if="canDelete(reply)"
+                type="button"
+                class="btn btn--small btn--ghost"
+                :disabled="removing === reply.id"
+                @click="commentToDelete = reply"
+              >
+                删除
+              </button>
+            </div>
           </li>
         </ul>
       </li>
