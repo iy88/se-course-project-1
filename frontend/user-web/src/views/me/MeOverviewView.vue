@@ -154,6 +154,10 @@ function refresh(): void {
           <span>我的事项</span>
           <span class="muted">举报进度、问询与申辩</span>
         </RouterLink>
+        <RouterLink to="/me/favorites" class="link-tile">
+          <span>我的收藏</span>
+          <span class="muted">失效商品可在这里清理</span>
+        </RouterLink>
         <RouterLink to="/me/banned-items" class="link-tile">
           <span>禁发范围</span>
           <span class="muted">发布前确认</span>

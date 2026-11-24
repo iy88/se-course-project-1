@@ -60,6 +60,10 @@ const permissions = computed(() => product.data.value?.permissions ?? null);
 const activeImageIndex = ref(0);
 const images = computed(() => product.data.value?.images ?? []);
 const activeImage = computed(() => images.value[activeImageIndex.value] ?? null);
+const canComment = computed(() => {
+  const state = product.data.value?.lifecycle_state;
+  return !isOwner.value && (state === "public" || state === "in_trade");
+});
 
 watch(productId, () => {
   activeImageIndex.value = 0;
@@ -361,7 +365,8 @@ async function confirmOffShelf(): Promise<void> {
 
       <ProductCommentSection
         :product-id="product.data.value.id"
-        :can-comment="product.data.value.lifecycle_state === 'public'"
+        :can-comment="canComment"
+        :seller-id="product.data.value.seller.id"
       />
     </template>
 

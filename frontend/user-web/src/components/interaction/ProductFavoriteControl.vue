@@ -1,26 +1,87 @@
 <script setup lang="ts">
 /*
- * Slot for the favourite control owned by the product-interaction work package
- * (S2-04, issue #76).
+ * Favourite control (API-PRD-029—031).
  *
- * Contract for the real component:
- *   props: { productId: string }
- *   reads: API-PRD-029 favourite status, API-PRD-030 add, API-PRD-031 remove
- *
- * A disabled control is rendered instead of a silent no-op so the user is not
- * told the action succeeded when the capability is not wired yet.
+ * The server decides whether the current product may be favourited. When the
+ * status read answers 404 (hidden product, not favourited) the control stays
+ * hidden instead of offering an action the backend would reject.
  */
-defineProps<{ productId: string }>();
+import { onMounted, ref, watch } from "vue";
+import { ApiError } from "../../api/errors";
+import { addFavorite, getFavoriteStatus, removeFavorite } from "../../api/products";
+import { IdempotencyKeys } from "../../app/keys";
+import { problemMessage } from "../../app/problems";
+import { notify } from "../../app/toast";
+
+const props = defineProps<{ productId: string }>();
+
+const favorited = ref(false);
+const visible = ref(false);
+const pending = ref(false);
+const keys = new IdempotencyKeys();
+
+async function load(): Promise<void> {
+  try {
+    const status = await getFavoriteStatus(props.productId);
+    favorited.value = status.favorited;
+    visible.value = status.valid || status.favorited;
+  } catch (caught) {
+    if (caught instanceof ApiError && caught.status === 404) {
+      favorited.value = false;
+      visible.value = false;
+      return;
+    }
+    // Keep the button hidden until the status can be read rather than showing a
+    // state the server has not confirmed.
+    visible.value = false;
+  }
+}
+
+onMounted(load);
+watch(
+  () => props.productId,
+  () => {
+    favorited.value = false;
+    visible.value = false;
+    void load();
+  },
+);
+
+async function toggle(): Promise<void> {
+  if (pending.value) return;
+  pending.value = true;
+  try {
+    if (favorited.value) {
+      const operation = "favorite-remove";
+      await removeFavorite(props.productId, keys.current(operation));
+      keys.rotate(operation);
+      favorited.value = false;
+      notify.info("已取消收藏。");
+    } else {
+      const operation = "favorite-add";
+      const status = await addFavorite(props.productId, keys.current(operation));
+      keys.rotate(operation);
+      favorited.value = status.favorited;
+      notify.success("已收藏。");
+    }
+  } catch (caught) {
+    notify.error(problemMessage(caught));
+  } finally {
+    pending.value = false;
+  }
+}
 </script>
 
 <template>
-  <span class="slot-control" :title="`收藏能力由商品互动工作包提供（productId=${productId}）`">
-    <button type="button" class="btn btn--ghost" disabled>收藏（待接入）</button>
-  </span>
+  <button
+    v-if="visible"
+    type="button"
+    class="btn"
+    :class="{ 'btn--ghost': !favorited }"
+    :aria-pressed="favorited"
+    :disabled="pending"
+    @click="toggle"
+  >
+    {{ favorited ? "已收藏" : "收藏" }}
+  </button>
 </template>
-
-<style scoped>
-.slot-control {
-  display: inline-flex;
-}
-</style>

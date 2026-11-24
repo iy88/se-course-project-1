@@ -762,3 +762,173 @@ describe("file uploads", () => {
     );
   });
 });
+
+interface CommentShape {
+  id: string;
+  status: string;
+  body: string;
+  reply_to_comment_id: string | null;
+  author: { id: string; display_name: string };
+  replies: CommentShape[];
+}
+
+interface CommentPageShape {
+  items: CommentShape[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+interface FavoritePageShape {
+  items: {
+    product_id: string;
+    status: string;
+    favorited_at: string;
+    product: { id: string; title: string } | null;
+    message: string | null;
+  }[];
+  total: number;
+}
+
+interface FavoriteStatusShape {
+  favorited: boolean;
+  valid: boolean;
+  favorited_at: string | null;
+}
+
+describe("product interaction", () => {
+  beforeEach(() => {
+    resetMockState();
+  });
+
+  it("lists published comments with the seller reply inside the thread", async () => {
+    await loginAs("zhao@campus.example.edu");
+
+    const page = await call<CommentPageShape>("GET", "/products/1/comments", {
+      query: { page: 1, page_size: 20 },
+    });
+
+    assert.equal(page.total, 2);
+    assert.equal(page.items[0].id, "3");
+    const thread = page.items.find((item) => item.id === "1");
+    assert.ok(thread);
+    assert.equal(thread.replies.length, 1);
+    assert.equal(thread.replies[0].author.display_name, "林同学");
+    assert.equal(thread.replies[0].reply_to_comment_id, "1");
+  });
+
+  it("publishes a comment and hides comments of an off-shelf product", async () => {
+    await loginAs("zhao@campus.example.edu");
+
+    const created = await call<CommentShape>("POST", "/products/1/comments", {
+      body: { body: "  周末可以自取  " },
+      idempotencyKey: "comment-create-1",
+    });
+    assert.equal(created.status, "published");
+    assert.equal(created.body, "周末可以自取");
+
+    await expectFailure(
+      "POST",
+      "/products/8/comments",
+      { body: { body: "还在吗" }, idempotencyKey: "comment-create-2" },
+      "RESOURCE_NOT_VISIBLE",
+    );
+    await expectFailure("GET", "/products/8/comments", {}, "RESOURCE_NOT_VISIBLE");
+  });
+
+  it("scopes hidden-product comments to the reader's own thread", async () => {
+    await loginAs("zhao@campus.example.edu");
+    await expectFailure("GET", "/products/8/comments", {}, "RESOURCE_NOT_VISIBLE");
+
+    await loginAs("qian@campus.example.edu");
+    const page = await call<CommentPageShape>("GET", "/products/8/comments", {});
+    assert.equal(page.total, 1);
+    assert.equal(page.items[0].id, "4");
+  });
+
+  it("allows the seller to reply once to a top-level comment", async () => {
+    await loginAs("lin@campus.example.edu");
+
+    const reply = await call<CommentShape>("POST", "/products/1/comments/1/replies", {
+      body: { body: "还在的" },
+      idempotencyKey: "comment-reply-1",
+    });
+    assert.equal(reply.reply_to_comment_id, "1");
+
+    await expectFailure(
+      "POST",
+      `/products/1/comments/${reply.id}/replies`,
+      { body: { body: "再回复一层" }, idempotencyKey: "comment-reply-2" },
+      "STATE_CONFLICT",
+    );
+
+    await loginAs("zhao@campus.example.edu");
+    await expectFailure(
+      "POST",
+      "/products/1/comments/1/replies",
+      { body: { body: "非卖方回复" }, idempotencyKey: "comment-reply-3" },
+      "COMMENT_REPLY_NOT_ALLOWED",
+    );
+  });
+
+  it("removes the author's comment from the public list", async () => {
+    await loginAs("zhao@campus.example.edu");
+
+    await call("DELETE", "/products/1/comments/1", { idempotencyKey: "comment-delete-1" });
+    const page = await call<CommentPageShape>("GET", "/products/1/comments", {});
+    assert.equal(page.total, 1);
+    assert.equal(page.items[0].id, "3");
+
+    await expectFailure(
+      "DELETE",
+      "/products/1/comments/3",
+      { idempotencyKey: "comment-delete-2" },
+      "ACTION_NOT_ALLOWED",
+    );
+  });
+
+  it("keeps the first favourite time and marks hidden products invalid", async () => {
+    await loginAs("lin@campus.example.edu");
+
+    const before = await call<FavoritePageShape>("GET", "/me/favorites", {});
+    assert.equal(before.total, 2);
+    const valid = before.items.find((item) => item.product_id === "7");
+    const invalid = before.items.find((item) => item.product_id === "8");
+    assert.ok(valid && invalid);
+    assert.equal(valid.status, "valid");
+    assert.ok(valid.product);
+    assert.equal(invalid.status, "invalid");
+    assert.equal(invalid.product, null);
+    assert.equal(invalid.message, "该商品已失效");
+
+    const added = await call<FavoriteStatusShape>("PUT", "/me/favorites/7", {
+      idempotencyKey: "favorite-add-1",
+    });
+    assert.equal(added.favorited, true);
+    assert.equal(added.favorited_at, valid.favorited_at);
+
+    await expectFailure(
+      "PUT",
+      "/me/favorites/8",
+      { idempotencyKey: "favorite-add-2" },
+      "RESOURCE_NOT_VISIBLE",
+    );
+    await call("DELETE", "/me/favorites/8", { idempotencyKey: "favorite-remove-1" });
+    const after = await call<FavoritePageShape>("GET", "/me/favorites", {});
+    assert.equal(after.total, 1);
+  });
+
+  it("answers favourite status only for visible or already favourited products", async () => {
+    await loginAs("lin@campus.example.edu");
+
+    const status = await call<FavoriteStatusShape>("GET", "/me/favorites/7");
+    assert.equal(status.favorited, true);
+    assert.equal(status.valid, true);
+
+    await loginAs("qian@campus.example.edu");
+    await expectFailure("GET", "/me/favorites/8", {}, "RESOURCE_NOT_VISIBLE");
+    const unfavorited = await call<FavoriteStatusShape>("GET", "/me/favorites/7");
+    assert.equal(unfavorited.favorited, false);
+    assert.equal(unfavorited.valid, true);
+  });
+});

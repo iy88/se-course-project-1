@@ -93,6 +93,25 @@ export interface MockProductEdit {
   reason: string | null;
 }
 
+export interface MockComment {
+  id: string;
+  product_id: string;
+  author_id: string;
+  parent_id: string | null;
+  body: string;
+  created_at: string;
+  deleted_at: string | null;
+  removed_at: string | null;
+  removed_reason: string | null;
+  basis_ref: string | null;
+}
+
+export interface MockFavorite {
+  account_id: string;
+  product_id: string;
+  created_at: string;
+}
+
 export interface MockConfirmation {
   id: string;
   agreement_id: string;
@@ -231,6 +250,8 @@ export interface MockState {
   files: MockFile[];
   categories: MockCategory[];
   products: MockProduct[];
+  comments: MockComment[];
+  favorites: MockFavorite[];
   trades: MockTrade[];
   conversations: MockConversation[];
   messages: MockMessage[];
@@ -266,6 +287,8 @@ export function createSeedState(): MockState {
     files: [],
     categories: [],
     products: [],
+    comments: [],
+    favorites: [],
     trades: [],
     conversations: [],
     messages: [],
@@ -608,6 +631,65 @@ export function createSeedState(): MockState {
     },
   ];
   state.sequences.products = 8;
+
+  state.comments = [
+    {
+      id: "1",
+      product_id: "1",
+      author_id: "2",
+      parent_id: null,
+      body: "请问下册的习题册还在吗？",
+      created_at: iso(-2 * DAY),
+      deleted_at: null,
+      removed_at: null,
+      removed_reason: null,
+      basis_ref: null,
+    },
+    {
+      id: "2",
+      product_id: "1",
+      author_id: "1",
+      parent_id: "1",
+      body: "在的，上下册和习题册一起出。",
+      created_at: iso(-2 * DAY + 10 * MINUTE),
+      deleted_at: null,
+      removed_at: null,
+      removed_reason: null,
+      basis_ref: null,
+    },
+    {
+      id: "3",
+      product_id: "1",
+      author_id: "3",
+      parent_id: null,
+      body: "可以周末在图书馆门口交易吗？",
+      created_at: iso(-1 * DAY),
+      deleted_at: null,
+      removed_at: null,
+      removed_reason: null,
+      basis_ref: null,
+    },
+    {
+      id: "4",
+      product_id: "8",
+      author_id: "3",
+      parent_id: null,
+      body: "这件商品下架前的评论。",
+      created_at: iso(-3 * DAY),
+      deleted_at: null,
+      removed_at: null,
+      removed_reason: null,
+      basis_ref: null,
+    },
+  ];
+  state.sequences.comments = 4;
+
+  // Product 7 is public, product 8 is off shelf: the second favourite is a valid
+  // "expired" fixture for the personal list.
+  state.favorites = [
+    { account_id: "1", product_id: "7", created_at: iso(-3 * DAY) },
+    { account_id: "1", product_id: "8", created_at: iso(-5 * DAY) },
+  ];
 
   state.conversations = [
     {

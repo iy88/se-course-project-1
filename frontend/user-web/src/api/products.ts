@@ -6,7 +6,11 @@ import { request } from "./http";
 import type {
   BannedScopeView,
   CategoryView,
+  CommentPage,
+  CommentView,
   CreateProductRequest,
+  FavoritePage,
+  FavoriteStatus,
   Page,
   ProductDetail,
   ProductEditSnapshot,
@@ -119,4 +123,67 @@ export function listEditHistory(
     query: { page, page_size: pageSize },
     signal,
   });
+}
+
+export function listProductComments(
+  productId: string,
+  query: { page?: number; page_size?: number; case_id?: string },
+  signal?: AbortSignal,
+): Promise<CommentPage> {
+  return request<CommentPage>("GET", `/products/${productId}/comments`, { query, signal });
+}
+
+export function createProductComment(
+  productId: string,
+  body: string,
+  idempotencyKey: string,
+): Promise<CommentView> {
+  return request<CommentView>("POST", `/products/${productId}/comments`, {
+    body: { body },
+    idempotencyKey,
+  });
+}
+
+export function replyToProductComment(
+  productId: string,
+  commentId: string,
+  body: string,
+  idempotencyKey: string,
+): Promise<CommentView> {
+  return request<CommentView>("POST", `/products/${productId}/comments/${commentId}/replies`, {
+    body: { body },
+    idempotencyKey,
+  });
+}
+
+export function deleteProductComment(
+  productId: string,
+  commentId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  return request<void>("DELETE", `/products/${productId}/comments/${commentId}`, {
+    idempotencyKey,
+  });
+}
+
+export function listMyFavorites(
+  query: { page?: number; page_size?: number },
+  signal?: AbortSignal,
+): Promise<FavoritePage> {
+  return request<FavoritePage>("GET", "/me/favorites", { query, signal });
+}
+
+export function getFavoriteStatus(
+  productId: string,
+  signal?: AbortSignal,
+): Promise<FavoriteStatus> {
+  return request<FavoriteStatus>("GET", `/me/favorites/${productId}`, { signal });
+}
+
+export function addFavorite(productId: string, idempotencyKey: string): Promise<FavoriteStatus> {
+  return request<FavoriteStatus>("PUT", `/me/favorites/${productId}`, { idempotencyKey });
+}
+
+export function removeFavorite(productId: string, idempotencyKey: string): Promise<void> {
+  return request<void>("DELETE", `/me/favorites/${productId}`, { idempotencyKey });
 }
