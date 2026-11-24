@@ -33,16 +33,28 @@ public class ReviewCaseStore implements ProductReviewCases {
 
     @Override
     public long open(WriteTransaction transaction, Instant submittedAt) {
-        if (!TransactionSynchronizationManager.isActualTransactionActive()
-                || TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
-            throw new IllegalStateException("Product review cases must be created inside a write transaction");
-        }
+        return open(submittedAt);
+    }
+
+    public long open(Instant submittedAt) {
+        requireWriteTransaction();
         return cases.save(new ModerationCase(PRODUCT_REVIEW, submittedAt)).id();
     }
 
     @Override
     public void requireUnclaimed(WriteTransaction transaction, long caseId) {
         transaction.lock(ProductReviewCases.lockKey(caseId), () -> lockRow(caseId));
+        checkUnclaimed(caseId);
+    }
+
+    /** Used by product withdrawal after it locks the product and the pending audit. */
+    public void requireUnclaimed(long caseId) {
+        requireWriteTransaction();
+        lockRow(caseId);
+        checkUnclaimed(caseId);
+    }
+
+    private void checkUnclaimed(long caseId) {
         var current = require(caseId);
         if (current.claimed()) {
             throw new BusinessError("REVIEW_ALREADY_CLAIMED", 409, "审核已被认领");
@@ -88,6 +100,13 @@ public class ReviewCaseStore implements ProductReviewCases {
         return cases.findById(caseId)
                 .filter(item -> PRODUCT_REVIEW.equals(item.snapshot().caseType()))
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "事项不可见"));
+    }
+
+    private static void requireWriteTransaction() {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()
+                || TransactionSynchronizationManager.isCurrentTransactionReadOnly()) {
+            throw new IllegalStateException("Product review case changes require a write transaction");
+        }
     }
 
     private void lockRow(long caseId) {
