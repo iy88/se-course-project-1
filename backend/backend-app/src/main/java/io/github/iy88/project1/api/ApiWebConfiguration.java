@@ -10,7 +10,7 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(CsrfGuard.Origins.class)
+@EnableConfigurationProperties({CsrfGuard.Origins.class, PageSettings.class})
 public class ApiWebConfiguration implements WebMvcConfigurer {
     private final CsrfGuard csrfGuard;
 
