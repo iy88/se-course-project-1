@@ -1017,6 +1017,7 @@ class TradeLifecycleIT {
         }
 
         @Bean
+        @Primary
         public FixturePorts fixturePorts() {
             return new FixturePorts();
         }

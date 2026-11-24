@@ -416,7 +416,8 @@ class InfrastructureIT {
         }
 
         @Bean
-        public TradePorts.Cases tradeCases() {
+        @Primary
+        public TradePorts.Cases fixtureTradeCases() {
             return mock(TradePorts.Cases.class);
         }
 

@@ -840,7 +840,8 @@ class ProductReviewIT {
         }
 
         @Bean
-        TradePorts.Cases tradeCases() {
+        @Primary
+        TradePorts.Cases fixtureTradeCases() {
             return org.mockito.Mockito.mock(TradePorts.Cases.class);
         }
 
