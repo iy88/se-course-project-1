@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.56
-Version-Datetime: 2026-11-19T23:03:15+08:00
+Version: 0.1.58
+Version-Datetime: 2026-11-25T01:29:42+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -19,13 +19,13 @@ macOS 或 Linux：
 
 ```bash
 umask 077
-cp -n backend/.env.example backend/.env.dev
+cp -n backend/.env.dev.example backend/.env.dev
 ```
 
 Windows PowerShell 5.1 或更高版本：
 
 ```powershell
-Copy-Item backend/.env.example backend/.env.dev -ErrorAction SilentlyContinue
+Copy-Item backend/.env.dev.example backend/.env.dev -ErrorAction SilentlyContinue
 ```
 
 按[开发配置](#开发配置)填写数据库、Redis 和所需的外部服务凭据。
@@ -77,7 +77,7 @@ Windows PowerShell 5.1 或更高版本：
 
 ## 开发配置
 
-`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.example`](backend/.env.example) 后替换示例值，不要把实际凭据提交到仓库。
+`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.dev.example`](backend/.env.dev.example) 后替换示例值，不要把实际凭据提交到仓库。
 
 | 资源 | 必需配置 |
 |---|---|
@@ -138,6 +138,18 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 - 仅当旧数据库仍由 app 角色持有时，confirmed `db reset` 才需要额外传入 `--admin-user` 完成角色迁移。
 - `oss reset` 清空 `OSS_BUCKET` 内的全部对象，每批最多删除 1,000 个。开发和联调时，维护配置应指向开发桶。
 - 重置中途失败时保持写入停止，修复后重新预览并执行完整命令。数据库重置会按当前 Flyway 迁移重建结构。
+
+### 创建管理端账号
+
+数据库迁移完成后，在仓库根目录打开终端执行以下命令，并替换邮箱和显示名称。
+
+```bash
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  account create-manager --env-file=backend/.env.dev \
+  --email=manager@example.com --display-name="测试管理员"
+```
+
+核对输出的目标数据库，按提示输入两次登录密码。密码输入无回显。命令使用配置的数据库 owner 创建 `manager` 账户并记录审计，密码采用和普通账户相同的长度规则与哈希算法。创建完成后，使用该邮箱和密码登录管理端。邮箱已注册时，命令报错并保留该账户原有角色和密码。
 
 ## 后端开发
 
@@ -289,7 +301,7 @@ pnpm --dir frontend exec rsbuild dev --root file-probe
 
 ## CI 与发布
 
-GitHub Actions 在 Linux 上并行执行后端、后端集成和前端检查。后端使用 OpenJDK 27 和 Maven 执行 `verify` 并输出覆盖率；集成 job 使用独立的 PostgreSQL 和 Redis 容器，先执行 Flyway 迁移，再运行 `verify -Pintegration`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，检查 OpenAPI 生成类型、lint 和格式，再分别检查并构建两个应用。
+GitHub Actions 在 Linux 上并行执行后端、后端集成和前端检查。后端使用 OpenJDK 27 和 Maven 执行 `verify` 并输出覆盖率；集成 job 使用独立的 PostgreSQL 和 Redis 容器，先执行 Flyway 迁移，再运行 `verify -Pintegration`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，检查 OpenAPI 生成类型、lint 和格式，运行各工作区的单元测试，再分别检查并构建两个应用。
 
 Jenkins 使用 OpenJDK 27、Maven 3.10.1、`.node-version`、`frontend/package.json` 中的 pnpm 版本和 Python 3。发布包构建跳过测试，前端仍需通过 TypeScript 类型检查；单元测试、集成测试、lint 和格式检查由 GitHub Actions 执行。本地运行发布脚本前，把已安装 Maven 的 `mvn` 加入 PATH。从仓库根目录构建：
 

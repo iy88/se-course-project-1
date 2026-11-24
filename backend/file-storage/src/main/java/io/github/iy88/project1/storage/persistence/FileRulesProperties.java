@@ -32,6 +32,7 @@ public record FileRulesProperties(String ruleVersion, Limits productImage, Limit
         var limits = switch (purpose) {
             case PRODUCT_IMAGE -> productImage;
             case CASE_EVIDENCE -> caseEvidence;
+            case ACCOUNT_AVATAR -> productImage;
         };
         return new UploadRegistration.Rules(ruleVersion, limits.maxBytes(), limits.allowedContentTypes());
     }

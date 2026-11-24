@@ -1,7 +1,12 @@
 package io.github.iy88.project1.maintenance;
 
+import io.github.iy88.project1.account.AccountInputRules;
+import io.github.iy88.project1.account.application.EmailAddress;
+import io.github.iy88.project1.account.application.PasswordHasher;
+import io.github.iy88.project1.core.BusinessError;
 import io.lettuce.core.RedisException;
 import java.io.IOException;
+import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -23,9 +28,11 @@ public final class MaintenanceCli {
                    java -jar maintenance.jar db reset --env-file PATH
                    java -jar maintenance.jar db reset --env-file PATH --confirm TOKEN [--admin-user USER]
                    java -jar maintenance.jar oss reset --env-file PATH [--confirm TOKEN]
+                   java -jar maintenance.jar account create-manager --env-file PATH --email EMAIL --display-name NAME
             --env-file is required. Reset without --confirm previews the configured targets.
             Reads the owner and application logins from the same .env file.
-            The administrator password is prompted only for db init and legacy db reset.
+            PostgreSQL administrator passwords are prompted for db init and legacy db reset.
+            The manager's login password is prompted twice for account create-manager.
             Database reset uses the configured owner; --admin-user is only for legacy databases not owned by it.
             Stop all writers before executing reset.
             """;
@@ -89,6 +96,7 @@ public final class MaintenanceCli {
                         System.out.println("OSS reset: complete (" + removed + " objects removed)");
                     }
                 }
+                case "account create-manager" -> createManager(config, options);
                 default -> throw new AssertionError(options.command());
             }
             return 0;
@@ -103,6 +111,8 @@ public final class MaintenanceCli {
             System.err.println("Redis step failed (" + failure.getClass().getSimpleName() + ")");
         } catch (FlywayException failure) {
             System.err.println("Flyway migration failed (" + failure.getClass().getSimpleName() + ")");
+        } catch (BusinessError failure) {
+            System.err.println(failure.getMessage());
         } catch (IllegalArgumentException | IllegalStateException failure) {
             System.err.println(failure.getMessage());
         } catch (IOException failure) {
@@ -112,6 +122,41 @@ public final class MaintenanceCli {
             System.err.println("PostgreSQL backup interrupted");
         }
         return 1;
+    }
+
+    private static void createManager(MaintenanceConfig config, Options options) throws SQLException {
+        var postgres = new PostgresMaintenance(config);
+        var inputs = new AccountInputRules(config.integerOrDefault("PASSWORD_MIN_LENGTH", 12),
+                config.integerOrDefault("PASSWORD_MAX_LENGTH", 256),
+                config.integerOrDefault("DISPLAY_NAME_MAX_LENGTH", 64));
+        String email = EmailAddress.normalize(options.email());
+        String name = inputs.displayName(options.displayName());
+        String configVersion = config.valueOrDefault("CONFIG_VERSION", "s1-v1");
+        System.out.println(postgres.scope());
+        var console = System.console();
+        if (console == null || !console.isTerminal()) {
+            throw new IllegalStateException("A terminal is required to enter the manager password.");
+        }
+
+        char[] password = console.readPassword("Manager password: ");
+        char[] confirmation = null;
+        try {
+            inputs.requirePassword(password == null ? null : CharBuffer.wrap(password));
+            confirmation = console.readPassword("Confirm manager password: ");
+            if (!Arrays.equals(password, confirmation)) {
+                throw new IllegalArgumentException("Manager passwords do not match.");
+            }
+            String passwordHash = new PasswordHasher().hash(password);
+            long id = postgres.createManager(email, name, passwordHash, configVersion);
+            System.out.println("Manager account created (account ID " + id + ").");
+        } finally {
+            if (password != null) {
+                Arrays.fill(password, '\0');
+            }
+            if (confirmation != null) {
+                Arrays.fill(confirmation, '\0');
+            }
+        }
     }
 
     private static void provision(PostgresMaintenance postgres, Options options, RedisMaintenance redis)
@@ -161,7 +206,8 @@ public final class MaintenanceCli {
         void run(char[] password) throws SQLException;
     }
 
-    record Options(Path envFile, String command, String confirmation, String adminUser, Path backupFile) {
+    record Options(Path envFile, String command, String confirmation, String adminUser, Path backupFile,
+                   String email, String displayName) {
         static Options parse(String[] args) {
             if (args.length < 3 || args.length > 8) {
                 return null;
@@ -171,6 +217,8 @@ public final class MaintenanceCli {
             String confirmation = null;
             String admin = null;
             Path backupFile = null;
+            String email = null;
+            String displayName = null;
             for (int index = 2; index < args.length;) {
                 String argument = args[index];
                 String option;
@@ -224,21 +272,39 @@ public final class MaintenanceCli {
                             return null;
                         }
                     }
+                    case "--email" -> {
+                        if (email != null) {
+                            return null;
+                        }
+                        email = value;
+                    }
+                    case "--display-name" -> {
+                        if (displayName != null) {
+                            return null;
+                        }
+                        displayName = value;
+                    }
                     default -> {
                         return null;
                     }
                 }
             }
+            boolean createManager = command.equals("account create-manager");
+            if (envFile == null || (backupFile != null && !command.equals("db backup"))
+                    || (!createManager && (email != null || displayName != null))) {
+                return null;
+            }
             boolean valid = switch (command) {
-                case "db init" -> envFile != null && admin != null && confirmation == null;
-                case "db migrate", "db validate" -> envFile != null && admin == null && confirmation == null;
-                case "db backup" -> envFile != null && admin == null && confirmation == null && backupFile != null;
-                case "db reset" -> envFile != null && (admin == null || confirmation != null);
-                case "oss reset" -> envFile != null && admin == null;
+                case "db init" -> admin != null && confirmation == null;
+                case "db migrate", "db validate" -> admin == null && confirmation == null;
+                case "db backup" -> admin == null && confirmation == null && backupFile != null;
+                case "db reset" -> admin == null || confirmation != null;
+                case "oss reset" -> admin == null;
+                case "account create-manager" -> admin == null && confirmation == null
+                        && email != null && displayName != null;
                 default -> false;
             };
-            return valid && (backupFile == null || command.equals("db backup"))
-                    ? new Options(envFile, command, confirmation, admin, backupFile) : null;
+            return valid ? new Options(envFile, command, confirmation, admin, backupFile, email, displayName) : null;
         }
     }
 
