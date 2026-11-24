@@ -113,6 +113,58 @@ public final class TradePorts {
                                     String terminalReason) {
     }
 
+    /** Read-only case-subject plan plus the exact rows the caller must lock before acting. */
+    public record CaseEnforcementPlan(LockPlan lockPlan, long conversationId, Long productId) {
+        public CaseEnforcementPlan {
+            java.util.Objects.requireNonNull(lockPlan);
+        }
+    }
+
+    /**
+     * Trade-owned facts returned by one case enforcement path. {@code transitionId} is the
+     * {@code trade_state_history} identifier used as the transition result reference.
+     * {@code frozenBefore}/{@code frozenAfter} describe the trade's freeze state at the transition.
+     */
+    public record CaseEnforcementOutcome(long tradeId, long transitionId, UUID businessEventId,
+                                         String previousStatus, String currentStatus,
+                                         String previousPhase, String currentPhase, boolean frozenBefore,
+                                         boolean frozenAfter, boolean alreadyEffective) {
+        public ResourceRef transitionRef() {
+            return new ResourceRef("trade_transition", transitionId);
+        }
+    }
+
+    /**
+     * Case-specific trade subject capability. The caller prepares a plan, locks the returned
+     * product (terminal adjustment only), trade and trade-conversation rows once in
+     * {@link LockPlan.Key} order together with its case lock. Action methods read current facts
+     * under those locks and leave notifications, audit and conversation messages to the case
+     * orchestrator.
+     */
+    public interface CaseEnforcement {
+        CaseEnforcementPlan prepare(long managerId, long tradeId, long caseId, boolean product);
+
+        void lockTrade(WriteTransaction transaction, long tradeId);
+
+        void lockConversation(WriteTransaction transaction, long conversationId);
+
+        void lockCaseProduct(WriteTransaction transaction, long productId);
+
+        CaseEnforcementOutcome freezeLocked(WriteTransaction transaction, long caseId, long tradeId,
+                                            String basisRef, String reason);
+
+        CaseEnforcementOutcome liftFreezeLocked(WriteTransaction transaction, long caseId,
+                                                long tradeId, long freezeTransitionId, String basisRef,
+                                                String reason);
+
+        CaseEnforcementOutcome adjustStatusLocked(WriteTransaction transaction, long caseId,
+                                                  long tradeId, String targetStatus,
+                                                  String basisRef, String reason);
+
+        CaseEnforcementOutcome restoreLocked(WriteTransaction transaction, long caseId, long tradeId,
+                                             String basisRef, String reason);
+    }
+
     /** Same-transaction governance capabilities; the case module keeps its own idempotency entry. */
     public interface GovernanceTransaction {
         LockPlan governancePlan(long managerId, long tradeId, long caseId, boolean product);

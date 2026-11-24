@@ -115,8 +115,9 @@ public final class TradeModels {
 
     public record History(long id, long tradeId, String action, String fromStatus, String toStatus,
                           String fromPhase, String toPhase, TradeVocabulary.ActorKind actorKind, Long actorId,
-                          String reason, String basisRef, Long caseId, Long agreementId, Long agreementDecisionId,
-                          Long confirmationId, Long cancellationId, Long cancellationDecisionId, Long disputeId,
+                          String reason, String basisRef, Long caseId, Long freezeId, Boolean fromFrozen,
+                          Boolean toFrozen, Long agreementId, Long agreementDecisionId, Long confirmationId,
+                          Long cancellationId, Long cancellationDecisionId, Long disputeId,
                           Long disputeResolutionConfirmationId, UUID businessEventId, Instant createdAt) {
     }
 

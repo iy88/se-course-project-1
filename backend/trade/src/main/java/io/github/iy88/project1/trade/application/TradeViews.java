@@ -277,10 +277,11 @@ final class TradeViews {
             var item = json.createObjectNode();
             item.put("id", Long.toString(entry.id()));
             item.put("action", entry.action());
-            item.put("from_status", entry.fromStatus());
-            item.put("to_status", entry.toStatus());
-            item.put("from_phase", entry.fromPhase());
-            item.put("to_phase", entry.toPhase());
+            boolean freezeTransition = entry.freezeId() != null;
+            item.put("from_status", freezeTransition ? null : entry.fromStatus());
+            item.put("to_status", freezeTransition ? null : entry.toStatus());
+            item.put("from_phase", freezeTransition ? null : entry.fromPhase());
+            item.put("to_phase", freezeTransition ? null : entry.toPhase());
             item.put("actor_kind", entry.actorKind().value());
             if (entry.actorId() == null || entry.actorKind() == TradeVocabulary.ActorKind.ADMIN
                     || entry.actorKind() == TradeVocabulary.ActorKind.SYSTEM) {

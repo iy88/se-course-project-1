@@ -50,7 +50,7 @@ import tools.jackson.databind.node.ObjectNode;
  * dependencies are narrow ports invoked inside that transaction.
  */
 public class TradeApplication implements TradePorts.Governance, TradePorts.GovernanceTransaction,
-        TradePorts.Participation, TradePorts.ReviewEligibility, TradePorts.Closure {
+        TradePorts.CaseEnforcement, TradePorts.Participation, TradePorts.ReviewEligibility, TradePorts.Closure {
     private final TradeRepository repository;
     private final TradeViews views;
     private final WriteExecutor writes;
@@ -747,6 +747,50 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     @Override
+    public TradePorts.CaseEnforcementPlan prepare(long managerId, long tradeId, long caseId, boolean product) {
+        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
+        long conversationId = requireConversationId(tradeId);
+        var accountsSet = new TreeSet<Long>(List.of(managerId, trade.buyerId(), trade.sellerId()));
+        var resources = new TreeSet<LockPlan.Key>();
+        if (product) {
+            resources.add(productKey(trade.productId()));
+        }
+        resources.add(tradeKey(tradeId));
+        resources.add(caseKey(caseId));
+        resources.add(conversationKey(conversationId));
+        return new TradePorts.CaseEnforcementPlan(new LockPlan(sharedAccounts(accountsSet), resources),
+                conversationId, product ? trade.productId() : null);
+    }
+
+    @Override
+    public void lockTrade(WriteTransaction transaction, long tradeId) {
+        repository.lockTrade(transaction, tradeId);
+    }
+
+    @Override
+    public void lockConversation(WriteTransaction transaction, long conversationId) {
+        conversations.lockConversation(transaction, conversationId);
+    }
+
+    @Override
+    public void lockCaseProduct(WriteTransaction transaction, long productId) {
+        lockProduct(transaction, productId);
+    }
+
+    @Override
+    public TradePorts.CaseEnforcementOutcome freezeLocked(WriteTransaction transaction, long caseId, long tradeId,
+                                                          String basisRef, String reason) {
+        var trade = requireLockedTrade(transaction, caseId, tradeId);
+        long manager = actor(transaction.context());
+        String validatedReason = requiredText(reason, 500, "冻结原因");
+        requireWrite(manager);
+        requireFreezable(trade);
+        return freezeFacts(transaction, trade, caseId, manager, basisRef, validatedReason, now(),
+                UUID.randomUUID()).orElseThrow(() -> new BusinessError(
+                        "TARGET_STATE_CONFLICT", 409, "已有事项冻结缺少原始执行记录"));
+    }
+
+    @Override
     public TradePorts.GovernanceOutcome freezeInTransaction(WriteTransaction transaction, ExecutionContext context,
                                                             long caseId, long tradeId, String basisRef,
                                                             String reason) {
@@ -754,28 +798,17 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         String validatedReason = requiredText(reason, 500, "冻结原因");
         requireWrite(manager);
         var trade = repository.lockTrade(transaction, tradeId);
-        trade.requireNotTerminal();
-        if (!trade.status().isActive()) {
-            throw Trade.stateConflict();
-        }
+        requireFreezable(trade);
         lockCase(transaction, caseId, manager, trade.id(), basisRef);
         long conversationId = requireConversation(transaction, trade.id());
-        var now = now();
-        boolean exists = repository.activeFreezes(trade.id()).stream()
-                .anyMatch(freeze -> freeze.source() == FreezeSource.ADMIN_CASE
-                        && Objects.equals(freeze.sourceRef(), caseId));
-        if (!exists) {
-            repository.insertFreeze(trade.id(), FreezeSource.ADMIN_CASE, caseId, validatedReason, now);
-            pauseWait(transaction, trade.id(), now);
-            repository.touch(trade.id(), now);
-            UUID eventId = UUID.randomUUID();
-            long freezeHistory = history(transaction, trade, trade, "trade.freeze", ActorKind.ADMIN, manager,
-                    validatedReason, basisRef, caseId, eventId, now);
+        UUID eventId = UUID.randomUUID();
+        var outcome = freezeFacts(transaction, trade, caseId, manager, basisRef, validatedReason, now(), eventId);
+        outcome.filter(frozen -> !frozen.alreadyEffective()).ifPresent(frozen -> {
             conversations.append(transaction, conversationId, eventId, "trade_frozen",
-                    "交易已被冻结", new ResourceRef("trade_transition", freezeHistory));
+                    "交易已被冻结", frozen.transitionRef());
             notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.frozen", eventId);
             audit(transaction, "trade.freeze", trade.id(), new ResourceRef("case", caseId));
-        }
+        });
         return governanceOutcome(trade.id());
     }
 
@@ -796,6 +829,29 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     @Override
+    public TradePorts.CaseEnforcementOutcome liftFreezeLocked(WriteTransaction transaction, long caseId,
+                                                              long tradeId, long freezeTransitionId,
+                                                              String basisRef, String reason) {
+        var trade = requireLockedTrade(transaction, caseId, tradeId);
+        long manager = actor(transaction.context());
+        String validatedReason = requiredText(reason, 500, "解除原因");
+        requireWrite(manager);
+        if (trade.status().isTerminal()) {
+            throw freezeNotActive();
+        }
+        var history = repository.history(freezeTransitionId).orElseThrow(TradeApplication::freezeNotActive);
+        if (history.freezeId() == null) {
+            throw freezeNotActive();
+        }
+        var freeze = repository.freeze(history.freezeId()).orElseThrow(TradeApplication::freezeNotActive);
+        if (!exactAdminCaseFreeze(history, freeze, trade, caseId)) {
+            throw freezeNotActive();
+        }
+        return liftFreezeFacts(transaction, trade, freeze, caseId, manager, basisRef, validatedReason, now(),
+                UUID.randomUUID());
+    }
+
+    @Override
     public TradePorts.GovernanceOutcome liftFreezeInTransaction(WriteTransaction transaction,
                                                                 ExecutionContext context, long caseId, long tradeId,
                                                                 long freezeId, String basisRef, String reason) {
@@ -806,20 +862,15 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         trade.requireNotTerminal();
         lockCase(transaction, caseId, manager, trade.id(), basisRef);
         long conversationId = requireConversation(transaction, trade.id());
-        var freeze = repository.freeze(freezeId)
-                .orElseThrow(() -> new BusinessError("TRADE_FREEZE_NOT_ACTIVE", 409, "冻结不存在或已解除"));
+        var freeze = repository.freeze(freezeId).orElseThrow(TradeApplication::freezeNotActive);
         if (freeze.tradeId() != trade.id() || !freeze.active()) {
-            throw new BusinessError("TRADE_FREEZE_NOT_ACTIVE", 409, "冻结不存在或已解除");
+            throw freezeNotActive();
         }
-        var now = now();
-        repository.endFreeze(freeze.id(), manager, now);
-        repository.touch(trade.id(), now);
-        resumeWaitIfPossible(transaction, trade, now);
         UUID eventId = UUID.randomUUID();
-        long unfreezeHistory = history(transaction, trade, trade, "trade.unfreeze", ActorKind.ADMIN, manager,
-                validatedReason, basisRef, caseId, eventId, now);
+        var outcome = liftFreezeFacts(transaction, trade, freeze, caseId, manager, basisRef, validatedReason,
+                now(), eventId);
         conversations.append(transaction, conversationId, eventId, "trade_unfrozen", "交易冻结已解除",
-                new ResourceRef("trade_transition", unfreezeHistory));
+                outcome.transitionRef());
         notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.unfrozen", eventId);
         audit(transaction, "trade.freeze.lift", trade.id(), new ResourceRef("case", caseId));
         return governanceOutcome(trade.id());
@@ -842,20 +893,28 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     @Override
+    public TradePorts.CaseEnforcementOutcome adjustStatusLocked(WriteTransaction transaction, long caseId,
+                                                                long tradeId, String targetStatus, String basisRef,
+                                                                String reason) {
+        var trade = requireLockedTrade(transaction, caseId, tradeId);
+        long manager = actor(transaction.context());
+        TradeStatus target = terminalTarget(targetStatus);
+        String validatedReason = requiredText(reason, 500, "调整原因");
+        requireWrite(manager);
+        trade.requireNotTerminal();
+        transaction.requireLocked(productKey(trade.productId()));
+        var state = product.read(trade.productId()).orElseThrow(TradeApplication::productUnavailable);
+        return adjustStatusFacts(transaction, trade, state, target, caseId, manager, basisRef,
+                validatedReason, now(), UUID.randomUUID());
+    }
+
+    @Override
     public TradePorts.GovernanceOutcome adjustStatusInTransaction(WriteTransaction transaction,
                                                                   ExecutionContext context, long caseId,
                                                                   long tradeId, String targetStatus,
                                                                   String basisRef, String reason) {
         long manager = actor(context);
-        TradeStatus target;
-        try {
-            target = TradeStatus.from(targetStatus);
-        } catch (RuntimeException invalid) {
-            throw inputInvalid("target_status 参数无效");
-        }
-        if (target != TradeStatus.COMPLETED && target != TradeStatus.TERMINATED) {
-            throw new BusinessError("TRANSITION_NOT_ALLOWED", 409, "目标状态不可调整");
-        }
+        TradeStatus target = terminalTarget(targetStatus);
         String validatedReason = requiredText(reason, 500, "调整原因");
         var pre = repository.find(tradeId).orElseThrow(Trade::notVisible);
         requireWrite(manager);
@@ -864,24 +923,12 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         trade.requireNotTerminal();
         lockCase(transaction, caseId, manager, trade.id(), basisRef);
         long conversationId = requireConversation(transaction, trade.id());
-        var now = now();
-        TerminalReason terminalReason = target == TradeStatus.COMPLETED
-                ? TerminalReason.COMPLETED : TerminalReason.ADMIN_TERMINATED;
-        var ended = changed(trade, target, trade.activeAgreementId(), null, terminalReason.value(),
-                trade.respondedAt(), now, now);
-        repository.save(ended);
-        endWait(transaction, trade.id(), target == TradeStatus.COMPLETED
-                ? WaitEndReason.COMPLETED : WaitEndReason.TERMINATED, now);
-        endFreezes(transaction, trade.id(), now);
-        repository.terminateOpenDisputes(trade.id(), now);
-        product.release(transaction, state, trade.id(), "admin_terminated");
         UUID eventId = UUID.randomUUID();
-        long historyId = historyAgreement(transaction, trade, ended,
-                target == TradeStatus.COMPLETED ? "trade.completed" : "trade.terminated", ActorKind.ADMIN,
-                manager, validatedReason, basisRef, caseId, trade.activeAgreementId(), null, eventId, now);
+        var outcome = adjustStatusFacts(transaction, trade, state, target, caseId, manager, basisRef,
+                validatedReason, now(), eventId);
         conversations.append(transaction, conversationId, eventId,
                 target == TradeStatus.COMPLETED ? "trade_completed" : "trade_terminated",
-                "管理员调整交易状态，如需继续出售，可前往商品详情重新上架。", new ResourceRef("trade_transition", historyId));
+                "管理员调整交易状态，如需继续出售，可前往商品详情重新上架。", outcome.transitionRef());
         notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.adjusted", eventId);
         archive(transaction, conversationId, trade.id(), "admin_" + target.value());
         audit(transaction, "trade.adjust", trade.id(), new ResourceRef("case", caseId));
@@ -904,6 +951,21 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     @Override
+    public TradePorts.CaseEnforcementOutcome restoreLocked(WriteTransaction transaction, long caseId, long tradeId,
+                                                           String basisRef, String reason) {
+        var trade = requireLockedTrade(transaction, caseId, tradeId);
+        long manager = actor(transaction.context());
+        String validatedReason = requiredText(reason, 500, "恢复原因");
+        requireWrite(manager);
+        trade.requireNotTerminal();
+        if (trade.status() != TradeStatus.ABNORMAL) {
+            throw restoreNotAllowed();
+        }
+        return restoreFacts(transaction, trade, caseId, manager, basisRef, validatedReason, now(),
+                UUID.randomUUID());
+    }
+
+    @Override
     public TradePorts.GovernanceOutcome restoreInTransaction(WriteTransaction transaction,
                                                              ExecutionContext context, long caseId, long tradeId,
                                                              String basisRef, String reason) {
@@ -913,21 +975,14 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         var trade = repository.lockTrade(transaction, tradeId);
         trade.requireNotTerminal();
         if (trade.status() != TradeStatus.ABNORMAL) {
-            throw new BusinessError("TRANSITION_NOT_ALLOWED", 409, "仅异常交易可恢复");
+            throw restoreNotAllowed();
         }
         lockCase(transaction, caseId, manager, trade.id(), basisRef);
         long conversationId = requireConversation(transaction, trade.id());
-        var now = now();
-        repository.invalidateConfirmations(trade.id(), InvalidationReason.ADMIN_RESTORED, now);
-        endWait(transaction, trade.id(), WaitEndReason.ADMIN_RESTORED, now);
-        var restored = changed(trade, TradeStatus.IN_PROGRESS, trade.activeAgreementId(),
-                trade.closeReason(), trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
-        repository.save(restored);
         UUID eventId = UUID.randomUUID();
-        long historyId = historyAgreement(transaction, trade, restored, "trade.restore", ActorKind.ADMIN,
-                manager, validatedReason, basisRef, caseId, trade.activeAgreementId(), null, eventId, now);
+        var outcome = restoreFacts(transaction, trade, caseId, manager, basisRef, validatedReason, now(), eventId);
         conversations.append(transaction, conversationId, eventId, "trade_restored",
-                "异常交易已恢复进行", new ResourceRef("trade_transition", historyId));
+                "异常交易已恢复进行", outcome.transitionRef());
         notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.restored", eventId);
         audit(transaction, "trade.restore", trade.id(), new ResourceRef("case", caseId));
         return governanceOutcome(trade.id());
@@ -1409,6 +1464,119 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         }
     }
 
+    private Trade requireLockedTrade(WriteTransaction transaction, long caseId, long tradeId) {
+        transaction.requireLocked(tradeKey(tradeId));
+        transaction.requireLocked(caseKey(caseId));
+        transaction.requireLocked(conversationKey(requireConversationId(tradeId)));
+        return repository.find(tradeId).orElseThrow(Trade::notVisible);
+    }
+
+    private static void requireFreezable(Trade trade) {
+        trade.requireNotTerminal();
+        if (!trade.status().isActive()) {
+            throw Trade.stateConflict();
+        }
+    }
+
+    private Optional<TradePorts.CaseEnforcementOutcome> freezeFacts(WriteTransaction transaction, Trade trade,
+                                                                    long caseId, long manager, String basisRef,
+                                                                    String reason, Instant now, UUID eventId) {
+        var active = repository.activeFreezes(trade.id());
+        var existing = active.stream()
+                .filter(freeze -> freeze.source() == FreezeSource.ADMIN_CASE
+                        && Objects.equals(freeze.sourceRef(), caseId))
+                .findFirst();
+        if (existing.isPresent()) {
+            var freeze = existing.orElseThrow();
+            return repository.freezeTransition(freeze.id())
+                    .filter(history -> exactAdminCaseFreeze(history, freeze, trade, caseId))
+                    .map(TradeApplication::replayedFreeze);
+        }
+        boolean frozenBefore = !active.isEmpty();
+        long freezeId = repository.insertFreeze(trade.id(), FreezeSource.ADMIN_CASE, caseId, reason, now);
+        pauseWait(transaction, trade.id(), now);
+        repository.touch(trade.id(), now);
+        long historyId = historyFreeze(transaction, trade, "trade.freeze", ActorKind.ADMIN, manager, reason,
+                basisRef, caseId, freezeId, frozenBefore, true, eventId, now);
+        return Optional.of(new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
+                trade.status().value(), phase(trade.phase()), phase(trade.phase()), frozenBefore, true, false));
+    }
+
+    private TradePorts.CaseEnforcementOutcome liftFreezeFacts(WriteTransaction transaction, Trade trade,
+                                                              TradeModels.Freeze freeze, long caseId, long manager,
+                                                              String basisRef, String reason, Instant now,
+                                                              UUID eventId) {
+        repository.endFreeze(freeze.id(), manager, now);
+        repository.touch(trade.id(), now);
+        resumeWaitIfPossible(transaction, trade, now);
+        boolean frozenAfter = !repository.activeFreezes(trade.id()).isEmpty();
+        long historyId = historyFreeze(transaction, trade, "trade.unfreeze", ActorKind.ADMIN, manager, reason,
+                basisRef, caseId, freeze.id(), true, frozenAfter, eventId, now);
+        return new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
+                trade.status().value(), phase(trade.phase()), phase(trade.phase()), true, frozenAfter, false);
+    }
+
+    private TradePorts.CaseEnforcementOutcome adjustStatusFacts(WriteTransaction transaction, Trade trade,
+                                                                TradePorts.ProductState state, TradeStatus target,
+                                                                long caseId, long manager, String basisRef,
+                                                                String reason, Instant now, UUID eventId) {
+        if (state.productId() != trade.productId()) {
+            throw Trade.stateConflict();
+        }
+        boolean frozenBefore = !repository.activeFreezes(trade.id()).isEmpty();
+        TerminalReason terminalReason = target == TradeStatus.COMPLETED
+                ? TerminalReason.COMPLETED : TerminalReason.ADMIN_TERMINATED;
+        var ended = changed(trade, target, trade.activeAgreementId(), null, terminalReason.value(),
+                trade.respondedAt(), now, now);
+        repository.save(ended);
+        endWait(transaction, trade.id(), target == TradeStatus.COMPLETED
+                ? WaitEndReason.COMPLETED : WaitEndReason.TERMINATED, now);
+        endFreezes(transaction, trade.id(), now);
+        repository.terminateOpenDisputes(trade.id(), now);
+        product.release(transaction, state, trade.id(), "admin_terminated");
+        long historyId = historyAgreement(transaction, trade, ended,
+                target == TradeStatus.COMPLETED ? "trade.completed" : "trade.terminated", ActorKind.ADMIN,
+                manager, reason, basisRef, caseId, trade.activeAgreementId(), null, eventId, now);
+        return new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
+                target.value(), phase(trade.phase()), phase(ended.phase()), frozenBefore, false, false);
+    }
+
+    private TradePorts.CaseEnforcementOutcome restoreFacts(WriteTransaction transaction, Trade trade, long caseId,
+                                                           long manager, String basisRef, String reason, Instant now,
+                                                           UUID eventId) {
+        boolean frozen = !repository.activeFreezes(trade.id()).isEmpty();
+        repository.invalidateConfirmations(trade.id(), InvalidationReason.ADMIN_RESTORED, now);
+        endWait(transaction, trade.id(), WaitEndReason.ADMIN_RESTORED, now);
+        var restored = changed(trade, TradeStatus.IN_PROGRESS, trade.activeAgreementId(),
+                trade.closeReason(), trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
+        repository.save(restored);
+        long historyId = historyAgreement(transaction, trade, restored, "trade.restore", ActorKind.ADMIN,
+                manager, reason, basisRef, caseId, trade.activeAgreementId(), null, eventId, now);
+        return new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
+                TradeStatus.IN_PROGRESS.value(), phase(trade.phase()), phase(restored.phase()), frozen, frozen,
+                false);
+    }
+
+    private static boolean exactAdminCaseFreeze(TradeModels.History history, TradeModels.Freeze freeze, Trade trade,
+                                                long caseId) {
+        return "trade.freeze".equals(history.action())
+                && history.tradeId() == trade.id()
+                && Objects.equals(history.caseId(), caseId)
+                && history.actorKind() == ActorKind.ADMIN
+                && history.freezeId() != null
+                && history.freezeId() == freeze.id()
+                && freeze.tradeId() == trade.id()
+                && freeze.source() == FreezeSource.ADMIN_CASE
+                && Objects.equals(freeze.sourceRef(), caseId)
+                && freeze.active();
+    }
+
+    private static TradePorts.CaseEnforcementOutcome replayedFreeze(TradeModels.History history) {
+        return new TradePorts.CaseEnforcementOutcome(history.tradeId(), history.id(), history.businessEventId(),
+                history.fromStatus(), history.toStatus(), history.fromPhase(), history.toPhase(),
+                Boolean.TRUE.equals(history.fromFrozen()), Boolean.TRUE.equals(history.toFrozen()), true);
+    }
+
     private TradePorts.ProductState lockProduct(WriteTransaction transaction, long productId) {
         var result = new java.util.concurrent.atomic.AtomicReference<TradePorts.ProductState>();
         transaction.lock(productKey(productId), () -> result.set(product.lock(transaction, productId)));
@@ -1544,9 +1712,24 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         String fromPhase = beforePhase == afterPhase ? null : phase(beforePhase);
         String toPhase = beforePhase == afterPhase ? null : phase(afterPhase);
         return repository.insertHistory(new TradeModels.History(0, before.id(), action, fromStatus, toStatus,
-                fromPhase, toPhase, actorKind, actorId, reason, basisRef, caseId, agreementId, agreementDecisionId,
-                confirmationId, cancellationId, cancellationDecisionId, disputeId, resolutionConfirmationId,
-                eventId, now));
+                fromPhase, toPhase, actorKind, actorId, reason, basisRef, caseId, null, null, null, agreementId,
+                agreementDecisionId, confirmationId, cancellationId, cancellationDecisionId, disputeId,
+                resolutionConfirmationId, eventId, now));
+    }
+
+    /**
+     * Records a freeze transition with its exact freeze association and a status snapshot. The
+     * snapshot is only exposed through the case-subject result; the public history projection keeps
+     * suppressing unchanged from/to values.
+     */
+    private long historyFreeze(WriteTransaction transaction, Trade trade, String action, ActorKind actorKind,
+                               Long actorId, String reason, String basisRef, Long caseId, long freezeId,
+                               boolean frozenBefore, boolean frozenAfter, UUID eventId, Instant now) {
+        String status = trade.status().value();
+        String tradePhase = phase(trade.phase());
+        return repository.insertHistory(new TradeModels.History(0, trade.id(), action, status, status,
+                tradePhase, tradePhase, actorKind, actorId, reason, basisRef, caseId, freezeId, frozenBefore,
+                frozenAfter, null, null, null, null, null, null, null, eventId, now));
     }
 
     private static String phase(TradePhase phase) {
@@ -1681,6 +1864,27 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         } catch (RuntimeException invalid) {
             throw inputInvalid("decision 参数无效");
         }
+    }
+
+    private static TradeStatus terminalTarget(String value) {
+        TradeStatus target;
+        try {
+            target = TradeStatus.from(value);
+        } catch (RuntimeException invalid) {
+            throw inputInvalid("target_status 参数无效");
+        }
+        if (target != TradeStatus.COMPLETED && target != TradeStatus.TERMINATED) {
+            throw new BusinessError("TRANSITION_NOT_ALLOWED", 409, "目标状态不可调整");
+        }
+        return target;
+    }
+
+    private static BusinessError restoreNotAllowed() {
+        return new BusinessError("TRANSITION_NOT_ALLOWED", 409, "仅异常交易可恢复");
+    }
+
+    private static BusinessError freezeNotActive() {
+        return new BusinessError("TRADE_FREEZE_NOT_ACTIVE", 409, "冻结不存在或已解除");
     }
 
     private Instant now() {

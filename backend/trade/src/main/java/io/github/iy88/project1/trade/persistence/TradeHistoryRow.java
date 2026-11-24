@@ -27,6 +27,9 @@ class TradeHistoryRow {
     private String reason;
     private String basisRef;
     private Long caseId;
+    private Long freezeId;
+    private Boolean fromFrozen;
+    private Boolean toFrozen;
     private Long agreementId;
     private Long agreementDecisionId;
     private Long confirmationId;
@@ -51,6 +54,9 @@ class TradeHistoryRow {
         reason = history.reason();
         basisRef = history.basisRef();
         caseId = history.caseId();
+        freezeId = history.freezeId();
+        fromFrozen = history.fromFrozen();
+        toFrozen = history.toFrozen();
         agreementId = history.agreementId();
         agreementDecisionId = history.agreementDecisionId();
         confirmationId = history.confirmationId();
@@ -68,8 +74,8 @@ class TradeHistoryRow {
 
     TradeModels.History toHistory() {
         return new TradeModels.History(id, tradeId, action, fromStatus, toStatus, fromPhase, toPhase,
-                ActorKind.from(actorKind), actorId, reason, basisRef, caseId, agreementId, agreementDecisionId,
-                confirmationId, cancellationId, cancellationDecisionId, disputeId, disputeResolutionConfirmationId,
-                businessEventId, createdAt);
+                ActorKind.from(actorKind), actorId, reason, basisRef, caseId, freezeId, fromFrozen, toFrozen,
+                agreementId, agreementDecisionId, confirmationId, cancellationId, cancellationDecisionId, disputeId,
+                disputeResolutionConfirmationId, businessEventId, createdAt);
     }
 }
