@@ -12,6 +12,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import UiIcon from "../../../../shared/UiIcon.vue";
 import {
   changeEmail,
   changePassword,
@@ -86,7 +87,7 @@ async function saveName(): Promise<void> {
   try {
     await updateProfile({ display_name: displayName.value.trim() }, newIdempotencyKey());
     await refreshSession();
-    notify.success("显示名称已更新。");
+    notify.success("昵称已更新。");
   } catch (caught) {
     avatarError.value = problemMessage(caught);
   } finally {
@@ -217,74 +218,71 @@ async function submitEmail(): Promise<void> {
 
 <template>
   <div class="stack stack--loose">
-    <PageHeader
-      eyebrow="我的"
-      title="账户设置"
-      description="头像与显示名称会展示在商品页、交易对方视图和会话中。"
-    />
+    <PageHeader eyebrow="我的" title="账户设置" description="头像和昵称会显示在商品页面。" />
 
     <section class="card">
-      <div class="card__head"><h2>头像</h2></div>
-      <div class="avatar-row">
-        <AvatarBadge
-          :display-name="session.displayName.value"
-          :url="session.avatarUrl.value"
-          size="lg"
-        />
-        <div class="stack stack--tight">
-          <div class="inline">
-            <button
-              type="button"
-              class="btn"
-              :disabled="uploadingAvatar"
-              @click="avatarInput?.click()"
-            >
-              {{ uploadingAvatar ? "上传中…" : session.avatarUrl.value ? "更换头像" : "上传头像" }}
-            </button>
-            <button
-              v-if="session.avatarUrl.value"
-              type="button"
-              class="btn btn--ghost"
-              :disabled="removingAvatar"
-              @click="clearAvatar"
-            >
-              {{ removingAvatar ? "移除中…" : "移除头像" }}
-            </button>
+      <div class="card__head"><h2>个人资料</h2></div>
+      <div class="profile-row">
+        <div class="profile-avatar">
+          <button
+            type="button"
+            class="profile-avatar__pick"
+            :disabled="uploadingAvatar || removingAvatar"
+            @click="avatarInput?.click()"
+          >
+            <span class="profile-avatar__preview" aria-hidden="true">
+              <AvatarBadge
+                :display-name="session.displayName.value"
+                :url="session.avatarUrl.value"
+                size="lg"
+              />
+              <span class="profile-avatar__mark"><UiIcon name="edit" /></span>
+            </span>
+            <span class="profile-avatar__label">更换头像</span>
+          </button>
+          <span v-if="uploadingAvatar" class="muted" role="status">上传中…</span>
+          <button
+            v-else-if="session.avatarUrl.value"
+            type="button"
+            class="btn btn--link"
+            :disabled="removingAvatar"
+            @click="clearAvatar"
+          >
+            {{ removingAvatar ? "移除中…" : "移除头像" }}
+          </button>
+        </div>
+        <div class="profile-name">
+          <div class="field">
+            <label class="field__label" for="display-name">昵称</label>
+            <input
+              id="display-name"
+              v-model="displayName"
+              class="input"
+              :maxlength="maxNameLength"
+              autocomplete="nickname"
+              aria-describedby="display-name-limit"
+            />
+            <span id="display-name-limit" class="field__hint">最多 {{ maxNameLength }} 个字符</span>
           </div>
-          <p class="muted">选择图片后可裁剪为正方形，确认后才会上传。支持 JPG、PNG。</p>
+          <button
+            type="button"
+            class="btn btn--primary"
+            :disabled="!nameChanged || savingName"
+            @click="saveName"
+          >
+            <UiIcon name="check" />
+            {{ savingName ? "保存中…" : "保存昵称" }}
+          </button>
         </div>
       </div>
       <input
         ref="avatarInput"
         type="file"
         accept="image/jpeg,image/png"
-        class="visually-hidden"
+        hidden
         @change="onAvatarPicked"
       />
       <p v-if="avatarError" class="field__error" role="alert">{{ avatarError }}</p>
-    </section>
-
-    <section class="card">
-      <div class="card__head"><h2>显示名称</h2></div>
-      <div class="field">
-        <label class="field__label" for="display-name">名称</label>
-        <input
-          id="display-name"
-          v-model="displayName"
-          class="input"
-          :maxlength="maxNameLength"
-          autocomplete="nickname"
-        />
-        <span class="field__hint">最多 {{ maxNameLength }} 个字符</span>
-      </div>
-      <button
-        type="button"
-        class="btn btn--primary"
-        :disabled="!nameChanged || savingName"
-        @click="saveName"
-      >
-        {{ savingName ? "保存中…" : "保存名称" }}
-      </button>
     </section>
 
     <section class="card">
@@ -305,6 +303,7 @@ async function submitEmail(): Promise<void> {
               autocomplete="email"
             />
             <button type="button" class="btn" :disabled="sendingEmailCode" @click="sendEmailCodes">
+              <UiIcon name="mail" />
               {{ sendingEmailCode ? "发送中…" : "发送验证码" }}
             </button>
           </div>
@@ -393,6 +392,80 @@ async function submitEmail(): Promise<void> {
 </template>
 
 <style scoped>
+.profile-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.profile-avatar,
+.profile-name {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.profile-avatar {
+  justify-items: center;
+}
+
+.profile-avatar__pick {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--brand-ink);
+  cursor: pointer;
+}
+
+.profile-avatar__pick:disabled {
+  cursor: not-allowed;
+  color: var(--ink-soft);
+}
+
+.profile-avatar__preview {
+  position: relative;
+  display: grid;
+}
+
+.profile-avatar__label {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.profile-avatar__mark {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  display: grid;
+  place-items: center;
+  inline-size: 1.375rem;
+  block-size: 1.375rem;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+}
+
+.profile-avatar__mark svg {
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
+}
+
+.profile-name {
+  inline-size: min(100%, 26rem);
+}
+
+.profile-name .field {
+  inline-size: 100%;
+}
+
 .facts {
   display: grid;
   grid-template-columns: minmax(6rem, auto) 1fr;
