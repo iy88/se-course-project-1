@@ -51,6 +51,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import org.junit.jupiter.api.AfterAll;
@@ -349,24 +350,24 @@ class TradeLifecycleIT {
 
         var prior = caseWrite("replay-case-freeze", caseId, tradeId, false,
                 tx -> trades.freezeLocked(tx, caseId, tradeId, basis, "under review"));
-        long originalTransition = prior.path("transitionId").asLong();
-        assertThat(prior.path("alreadyEffective").asBoolean()).isTrue();
-        assertThat(prior.path("frozenBefore").asBoolean()).isFalse();
+        long originalTransition = prior.transitionId();
+        assertThat(prior.alreadyEffective()).isTrue();
+        assertThat(prior.frozenBefore()).isFalse();
         assertThat(messageCount(tradeId, "trade_frozen")).isEqualTo(2);
 
         var lifted = caseWrite("lift-case-freeze", caseId, tradeId, false,
                 tx -> trades.liftFreezeLocked(tx, caseId, tradeId, originalTransition, basis, "released"));
-        assertThat(lifted.path("frozenAfter").asBoolean()).isTrue();
+        assertThat(lifted.frozenAfter()).isTrue();
         assertThat(db.sql("""
                 SELECT original.freeze_id = lifted.freeze_id
                 FROM trade_state_history original, trade_state_history lifted
                 WHERE original.id = ? AND lifted.id = ? AND lifted.action = 'trade.unfreeze'
-                """).param(originalTransition).param(lifted.path("transitionId").asLong())
+                """).param(originalTransition).param(lifted.transitionId())
                 .query(Boolean.class).single()).isTrue();
 
         var next = caseWrite("refreeze-case", caseId, tradeId, false,
                 tx -> trades.freezeLocked(tx, caseId, tradeId, basis, "new freeze"));
-        assertThat(next.path("transitionId").asLong()).isNotEqualTo(originalTransition);
+        assertThat(next.transitionId()).isNotEqualTo(originalTransition);
         assertThatThrownBy(() -> caseWrite("lift-old-case-freeze", caseId, tradeId, false,
                 tx -> trades.liftFreezeLocked(tx, caseId, tradeId, originalTransition, basis, "stale release")))
                 .isInstanceOfSatisfying(BusinessError.class,
@@ -390,10 +391,10 @@ class TradeLifecycleIT {
                             error -> assertThat(error.code()).isEqualTo("TRADE_TERMINAL"));
             return ended;
         });
-        assertThat(outcome.path("previousStatus").asString()).isEqualTo("in_progress");
-        assertThat(outcome.path("currentStatus").asString()).isEqualTo("terminated");
-        assertThat(outcome.path("frozenBefore").asBoolean()).isTrue();
-        assertThat(outcome.path("frozenAfter").asBoolean()).isFalse();
+        assertThat(outcome.previousStatus()).isEqualTo("in_progress");
+        assertThat(outcome.currentStatus()).isEqualTo("terminated");
+        assertThat(outcome.frozenBefore()).isTrue();
+        assertThat(outcome.frozenAfter()).isFalse();
     }
 
     @Test
@@ -687,10 +688,12 @@ class TradeLifecycleIT {
         assertThat(notVisible.statusCode()).isEqualTo(404);
     }
 
-    private static JsonNode caseWrite(String key, long caseId, long tradeId, boolean product,
-                                      Function<WriteTransaction, TradePorts.CaseEnforcementOutcome> action) {
+    private static TradePorts.CaseEnforcementOutcome caseWrite(
+            String key, long caseId, long tradeId, boolean product,
+            Function<WriteTransaction, TradePorts.CaseEnforcementOutcome> action) {
         var prepared = trades.prepare(MANAGER, tradeId, caseId, product);
-        return app.getBean(WriteExecutor.class).run(account(MANAGER), "test.case.trade", key + "-" + RUN, tradeId,
+        var outcome = new AtomicReference<TradePorts.CaseEnforcementOutcome>();
+        app.getBean(WriteExecutor.class).run(account(MANAGER), "test.case.trade", key + "-" + RUN, tradeId,
                 new WriteExecutor.UseCase<Long, Void>() {
                     @Override
                     public JsonNode digestInput(Long id) {
@@ -721,9 +724,11 @@ class TradeLifecycleIT {
                         tx.lock(new LockPlan.Key(LockPlan.Domain.CASE, List.of(caseId)),
                                 () -> ports.lockAndValidate(tx, caseId, MANAGER, id, "D-case"));
                         trades.lockConversation(tx, prepared.conversationId());
-                        return new WriteResult.Response<>(200, action.apply(tx), new ResourceRef("trade", id));
+                        outcome.set(action.apply(tx));
+                        return new WriteResult.Response<>(200, Map.of(), new ResourceRef("trade", id));
                     }
-                }).data();
+                });
+        return outcome.get();
     }
 
     private static Result acceptResult(CyclicBarrier ready, CountDownLatch start, long tradeId) throws Exception {
