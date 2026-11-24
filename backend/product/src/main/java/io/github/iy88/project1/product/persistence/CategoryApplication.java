@@ -28,6 +28,21 @@ public class CategoryApplication {
     @Column(nullable = false)
     private String status;
 
+    @Column
+    private String resolution;
+
+    @Column(name = "resolved_category_id")
+    private Long resolvedCategoryId;
+
+    @Column(name = "decided_by_admin_id")
+    private Long decidedByAdminId;
+
+    @Column(name = "decided_at")
+    private Instant decidedAt;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -43,12 +58,41 @@ public class CategoryApplication {
     }
 
     public long id() { return id; }
+    public long productId() { return productId; }
     public String proposedName() { return proposedName; }
     public String status() { return status; }
+    public String resolution() { return resolution; }
+    public Long resolvedCategoryId() { return resolvedCategoryId; }
+    public Long decidedByAdminId() { return decidedByAdminId; }
+    public Instant decidedAt() { return decidedAt; }
+    public String rejectionReason() { return rejectionReason; }
+
+    public void approve(long adminId, long categoryId, String resolution, Instant now) {
+        requirePending();
+        this.status = "approved";
+        this.resolution = resolution;
+        this.resolvedCategoryId = categoryId;
+        this.decidedByAdminId = adminId;
+        this.decidedAt = now;
+    }
+
+    public void reject(long adminId, String reason, Instant now) {
+        requirePending();
+        this.status = "rejected";
+        this.decidedByAdminId = adminId;
+        this.decidedAt = now;
+        this.rejectionReason = reason;
+    }
 
     public void withdraw(Instant now) {
         if ("pending".equals(status)) {
             status = "withdrawn";
+        }
+    }
+
+    private void requirePending() {
+        if (!"pending".equals(status)) {
+            throw new IllegalStateException("Only a pending category application can be decided");
         }
     }
 }

@@ -21,6 +21,13 @@ public interface CategoryNameRepository extends Repository<CategoryName, Long> {
 
     Optional<CategoryName> findByCategoryIdAndNameKindAndDeactivatedAtIsNull(long categoryId, String nameKind);
 
+    @Query(value = """
+            select * from category_name
+            where deactivated_at is null
+              and normalize_category_name(name) = normalize_category_name(:name)
+            """, nativeQuery = true)
+    Optional<CategoryName> findActiveByNormalizedName(@Param("name") String name);
+
     List<CategoryName> findByCategoryIdOrderByIdAsc(long categoryId);
 
     List<CategoryName> findByDeactivatedAtIsNullOrderByCategoryIdAscIdAsc();

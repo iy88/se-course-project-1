@@ -85,6 +85,52 @@ public class SessionService {
                 prepared.issuedAt(), prepared.absoluteExpiresAt());
     }
 
+    /**
+     * Revalidates the current session from PostgreSQL and its Redis projection.
+     *
+     * <p>Writes lock the account row before the guard row so password, email and session changes keep
+     * the existing account-first order. Reads do not renew the idle timestamp.
+     */
+    public Account requireCurrent(long accountId, UUID sessionId, long credentialVersion, boolean lockForWrite) {
+        if (accountId <= 0 || sessionId == null) {
+            throw required();
+        }
+        try {
+            Account account = (lockForWrite ? accounts.lockById(accountId) : accounts.findById(accountId))
+                    .orElseThrow(SessionService::required);
+            SessionGuard guard = (lockForWrite ? guards.lockById(sessionId) : guards.findById(sessionId))
+                    .orElseThrow(SessionService::required);
+            if (guard.accountId() != accountId || guard.credentialVersion() != credentialVersion
+                    || account.credentialVersion() != credentialVersion || guard.revoked()) {
+                throw required();
+            }
+            Instant now = Instant.now();
+            if (!now.isBefore(guard.absoluteExpiresAt())) {
+                throw required();
+            }
+            String value = redis.opsForValue().get(redisKey(guard.tokenDigest()));
+            if (value == null) {
+                throw required();
+            }
+            UUID storedSessionId;
+            long lastActivity;
+            try {
+                String[] parts = value.split("\\|", -1);
+                storedSessionId = UUID.fromString(parts[0]);
+                lastActivity = Long.parseLong(parts[1]);
+            } catch (RuntimeException malformed) {
+                throw required();
+            }
+            if (!sessionId.equals(storedSessionId)
+                    || now.getEpochSecond() >= lastActivity + guard.idleTimeoutSeconds()) {
+                throw required();
+            }
+            return account;
+        } catch (DataAccessException unavailable) {
+            throw unavailable();
+        }
+    }
+
     public Identity authenticate(String cookieToken) {
         byte[] digest = digestOfCookie(cookieToken);
         String value;

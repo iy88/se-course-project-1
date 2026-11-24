@@ -12,6 +12,8 @@ public interface CategoryApplicationRepository extends Repository<CategoryApplic
 
     Optional<CategoryApplication> findFirstByProductIdAndStatusOrderByIdDesc(long productId, String status);
 
+    Optional<CategoryApplication> findFirstByProductIdOrderByIdDesc(long productId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from CategoryApplication a where a.productId = :productId and a.status = 'pending'")
     Optional<CategoryApplication> lockPending(@Param("productId") long productId);

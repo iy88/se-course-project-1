@@ -47,16 +47,22 @@ public class ProductCategory {
     }
 
     public ProductCategory(long productId, long categoryId, long sellerId, Instant now) {
+        this(productId, categoryId, "seller", "seller", sellerId, now);
+    }
+
+    public ProductCategory(long productId, long categoryId, String source, String createdByKind,
+                           long createdById, Instant now) {
         this.productId = productId;
         this.categoryId = categoryId;
-        this.source = "seller";
-        this.createdByKind = "seller";
-        this.createdById = sellerId;
+        this.source = source;
+        this.createdByKind = createdByKind;
+        this.createdById = createdById;
         this.createdAt = now;
     }
 
     public long productId() { return productId; }
     public long categoryId() { return categoryId; }
+    public String source() { return source; }
     public boolean active() { return removedAt == null; }
 
     public void remove(Instant now, String kind, long actorId) {

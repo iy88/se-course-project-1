@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -62,6 +63,19 @@ public class CategoryService {
 
     public List<CategoryDetail> listAdmin() {
         return categories.activeRecords().stream().map(this::detail).toList();
+    }
+
+    /**
+     * Resolves an active category by the same normalized name used by the unique index. The category
+     * may be disabled; callers decide whether it is still selectable.
+     */
+    public Optional<Long> findActiveCategoryIdByName(String rawName) {
+        String name = name(rawName);
+        return names.findActiveByNormalizedName(name)
+                .map(CategoryName::categoryId)
+                .filter(categoryId -> categories.findById(categoryId)
+                        .filter(category -> !category.deleted())
+                        .isPresent());
     }
 
     public CategoryDetail create(long adminId, String rawName) {
