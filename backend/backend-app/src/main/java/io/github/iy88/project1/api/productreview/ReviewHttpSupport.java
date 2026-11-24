@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 /** Resolves the trusted account context and reports unavailable review dependencies as 503. */
 @Component
-class ReviewHttpSupport {
+public class ReviewHttpSupport {
     private final ObjectProvider<ReviewApplication> reviews;
     private final ObjectProvider<ReviewActorAccess> actors;
     private final ApiRequestContext requestContext;
@@ -30,7 +30,7 @@ class ReviewHttpSupport {
         return available;
     }
 
-    ExecutionContext context(HttpServletRequest request) {
+    public ExecutionContext context(HttpServletRequest request) {
         var access = actors.getIfAvailable();
         if (access == null) {
             throw unavailable();

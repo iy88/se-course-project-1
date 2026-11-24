@@ -1,5 +1,6 @@
 package io.github.iy88.project1.api.cases;
 
+import io.github.iy88.project1.api.productreview.ReviewHttpSupport;
 import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import io.github.iy88.project1.casemanagement.application.ReviewApplication;
 import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
@@ -33,19 +34,21 @@ public class CaseAdminController {
     private final CaseHttpSupport support;
     private final ObjectProvider<CaseLifecycleStore> store;
     private final ObjectProvider<ReviewApplication> reviews;
+    private final ObjectProvider<ReviewHttpSupport> reviewSupport;
 
     CaseAdminController(CaseHttpSupport support, ObjectProvider<CaseLifecycleStore> store,
-                        ObjectProvider<ReviewApplication> reviews) {
+                        ObjectProvider<ReviewApplication> reviews,
+                        ObjectProvider<ReviewHttpSupport> reviewSupport) {
         this.support = support;
         this.store = store;
         this.reviews = reviews;
+        this.reviewSupport = reviewSupport;
     }
 
     @PostMapping("/{case_id}/claim")
     ResponseEntity<JsonNode> claim(HttpServletRequest request,
                                    @PathVariable("case_id") String caseId,
                                    @RequestHeader(name = IDEMPOTENCY_HEADER, required = false) String key) {
-        var context = support.context(request);
         long id = CaseIds.path(caseId);
         String idempotency = idempotency(key);
         var lifecycle = store.getIfAvailable();
@@ -53,12 +56,14 @@ public class CaseAdminController {
                 : lifecycle.find(id);
         if (facts.isPresent() && CaseVocabulary.PRODUCT_REVIEW.equals(facts.get().caseType())) {
             var review = reviews.getIfAvailable();
-            if (review == null) {
+            var identity = reviewSupport.getIfAvailable();
+            if (review == null || identity == null) {
                 throw CaseHttpSupport.unavailable();
             }
-            return write(review.claim(context, idempotency, id));
+            // Review cases keep their own claim authority and identity adapter (S2-01).
+            return write(review.claim(identity.context(request), idempotency, id));
         }
-        return write(support.application().claim(context, idempotency, id));
+        return write(support.application().claim(support.context(request), idempotency, id));
     }
 
     @PostMapping("/{case_id}/inquiries")
