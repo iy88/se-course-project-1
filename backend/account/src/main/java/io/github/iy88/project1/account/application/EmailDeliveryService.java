@@ -40,7 +40,7 @@ public class EmailDeliveryService {
                                 send_attempts = send_attempts + 1
                             FROM candidate
                             WHERE v.id = candidate.id
-                            RETURNING v.id, v.email, v.code, v.expires_at, v.lease_token
+                            RETURNING v.id, v.email, v.purpose, v.code, v.expires_at, v.lease_token
                             """)
                     .param("now", Timestamp.from(now))
                     .param("maxAttempts", maxAttempts)
@@ -48,7 +48,7 @@ public class EmailDeliveryService {
                     .param("lease", lease)
                     .param("leaseUntil", Timestamp.from(leaseUntil))
                     .query((row, index) -> new Pending(row.getLong("id"), row.getString("email"),
-                            row.getString("code"), row.getTimestamp("expires_at").toInstant(),
+                            row.getString("purpose"), row.getString("code"), row.getTimestamp("expires_at").toInstant(),
                             row.getObject("lease_token", UUID.class)))
                     .list();
         } catch (DataAccessException unavailable) {
@@ -82,6 +82,6 @@ public class EmailDeliveryService {
                 .update();
     }
 
-    public record Pending(long id, String email, String code, Instant expiresAt, UUID leaseToken) {
+    public record Pending(long id, String email, String purpose, String code, Instant expiresAt, UUID leaseToken) {
     }
 }

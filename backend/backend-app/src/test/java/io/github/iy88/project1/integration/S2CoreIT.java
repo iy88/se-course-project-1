@@ -119,6 +119,7 @@ class S2CoreIT {
                     .filter(item -> item.id() == verificationId)
                     .findFirst()
                     .orElseThrow();
+            assertThat(pending.purpose()).isEqualTo("registration");
             app.getBean(EmailDeliveryService.class).markSent(pending.id(), pending.leaseToken(), Instant.now());
             var sentAt = db.sql("SELECT sent_at FROM email_verification WHERE id = ?")
                     .param(verificationId).query(java.sql.Timestamp.class).single();

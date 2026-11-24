@@ -35,7 +35,7 @@ class EmailDeliveryLoop {
             Instant now = Instant.now();
             long ttl = Math.max(60, Duration.between(now, pending.expiresAt()).toSeconds());
             try {
-                mail.sendCode(pending.email(), pending.code(), ttl);
+                mail.sendCode(pending.email(), pending.purpose(), pending.code(), ttl);
                 deliveries.markSent(pending.id(), pending.leaseToken(), now);
             } catch (RuntimeException failure) {
                 deliveries.markFailed(pending.id(), pending.leaseToken(),
