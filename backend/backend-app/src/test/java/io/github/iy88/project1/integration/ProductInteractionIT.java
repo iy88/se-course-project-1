@@ -27,13 +27,13 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 /**
  * Real PostgreSQL and Redis check for product interaction (S2-04). The database is the isolated
  * {@code project1_s2_04_it} database with the shipped Flyway scripts already applied; every test
- * truncates its own fixtures first, so no developer data is touched.
+ * cleans its own fixtures first, so no developer data is touched.
  */
 class ProductInteractionIT {
     private static final String ORIGIN = "http://127.0.0.1:3000";
     private static final UUID RUN_ID = UUID.randomUUID();
     private static final String EMAIL_DOMAIN = "interaction-it.example";
-    private static final String EMAIL_LIKE = "%@" + EMAIL_DOMAIN;
+    private static final String EMAIL_LIKE = "%-" + RUN_ID + "@" + EMAIL_DOMAIN;
     private static final String SELLER_EMAIL = "seller-" + RUN_ID + "@" + EMAIL_DOMAIN;
     private static final String BUYER_EMAIL = "buyer-" + RUN_ID + "@" + EMAIL_DOMAIN;
     private static final String OTHER_EMAIL = "other-" + RUN_ID + "@" + EMAIL_DOMAIN;
@@ -275,7 +275,8 @@ class ProductInteractionIT {
     }
 
     private static long count(String table) {
-        return db.sql("select count(*) from " + table).query(Long.class).single();
+        return db.sql("select count(*) from " + table + " where product_id in (" + MY_PRODUCTS + ")")
+                .param(EMAIL_LIKE).query(Long.class).single();
     }
 
     private static void assertFailure(Runnable action, String code) {
