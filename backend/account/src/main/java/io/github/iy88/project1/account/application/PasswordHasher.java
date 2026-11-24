@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
+import java.util.Arrays;
 import java.util.Base64;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
@@ -22,9 +23,18 @@ public class PasswordHasher {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     public String hash(String password) {
+        char[] characters = password.toCharArray();
+        try {
+            return hash(characters);
+        } finally {
+            Arrays.fill(characters, '\0');
+        }
+    }
+
+    public String hash(char[] password) {
         byte[] salt = new byte[SALT_LENGTH];
         RANDOM.nextBytes(salt);
-        byte[] derived = derive(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
+        byte[] derived = derive(password, salt, ITERATIONS, KEY_LENGTH);
         return PREFIX + "$" + ITERATIONS + "$" + base64(salt) + "$" + base64(derived);
     }
 

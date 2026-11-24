@@ -22,6 +22,13 @@ class PasswordHasherTests {
     }
 
     @Test
+    void hashesTerminalPasswordsInTheSameFormatAsLogin() {
+        String password = "管理员登录😃password";
+
+        assertThat(hasher.matches(password, hasher.hash(password.toCharArray()))).isTrue();
+    }
+
+    @Test
     void rejectsUnknownHashFormats() {
         assertThat(hasher.matches("password", "plain-text")).isFalse();
         assertThat(hasher.matches("password", "pbkdf2-sha256$1$bad")).isFalse();

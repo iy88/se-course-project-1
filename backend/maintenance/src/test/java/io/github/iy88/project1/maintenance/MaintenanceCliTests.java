@@ -79,4 +79,30 @@ class MaintenanceCliTests {
                 "oss", "reset", "--env-file", ".env.dev", "--admin-user", "postgres"
         })).isNull();
     }
+
+    @Test
+    void acceptsManagerIdentityOptions() {
+        var options = MaintenanceCli.Options.parse(new String[]{
+                "account", "create-manager", "--env-file", ".env.dev",
+                "--email", "manager@example.invalid", "--display-name=测试管理员"
+        });
+
+        assertThat(options).isNotNull();
+        assertThat(options.email()).isEqualTo("manager@example.invalid");
+        assertThat(options.displayName()).isEqualTo("测试管理员");
+    }
+
+    @Test
+    void rejectsIncompleteManagerIdentityAndPasswordArguments() {
+        assertThat(MaintenanceCli.Options.parse(new String[]{
+                "account", "create-manager", "--env-file=.env.dev", "--email=manager@example.invalid"
+        })).isNull();
+        assertThat(MaintenanceCli.Options.parse(new String[]{
+                "account", "create-manager", "--env-file=.env.dev", "--email=manager@example.invalid",
+                "--display-name=管理员", "--password=unsupported"
+        })).isNull();
+        assertThat(MaintenanceCli.Options.parse(new String[]{
+                "db", "migrate", "--env-file=.env.dev", "--email=manager@example.invalid"
+        })).isNull();
+    }
 }

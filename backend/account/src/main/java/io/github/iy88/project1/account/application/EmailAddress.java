@@ -4,13 +4,13 @@ import io.github.iy88.project1.core.BusinessError;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
-final class EmailAddress {
+public final class EmailAddress {
     private static final Pattern SHAPE = Pattern.compile("^[^@\\s]{1,64}@[^@\\s]{1,190}$");
 
     private EmailAddress() {
     }
 
-    static String normalize(String value) {
+    public static String normalize(String value) {
         String email = value == null ? "" : value.trim();
         if (email.length() > 254 || !SHAPE.matcher(email).matches()) {
             throw new BusinessError("INPUT_INVALID", 422, "邮箱格式无效");

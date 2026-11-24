@@ -19,12 +19,7 @@ public record AccountSettings(
         String entryKeyVersion) {
 
     public AccountSettings {
-        if (passwordMinLength < 8 || passwordMaxLength < passwordMinLength || passwordMaxLength > 1024) {
-            throw new IllegalArgumentException("Invalid password length settings");
-        }
-        if (displayNameMaxLength < 1 || displayNameMaxLength > 256) {
-            throw new IllegalArgumentException("Invalid display name length setting");
-        }
+        AccountInputRules.validateLimits(passwordMinLength, passwordMaxLength, displayNameMaxLength);
         if (sessionAbsoluteSeconds < 1 || sessionIdleSeconds < 1 || sessionIdleSeconds > sessionAbsoluteSeconds
                 || sessionRenewIntervalSeconds < 1 || sessionRenewIntervalSeconds >= sessionIdleSeconds) {
             throw new IllegalArgumentException("Invalid session duration settings");
@@ -41,5 +36,9 @@ public record AccountSettings(
                 || entryKeyVersion == null || entryKeyVersion.isBlank()) {
             throw new IllegalArgumentException("ACCOUNT_ENTRY_SIGNING_KEY must contain at least 32 bytes");
         }
+    }
+
+    public AccountInputRules inputRules() {
+        return new AccountInputRules(passwordMinLength, passwordMaxLength, displayNameMaxLength);
     }
 }

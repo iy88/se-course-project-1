@@ -1,5 +1,6 @@
 package io.github.iy88.project1.account.application;
 
+import io.github.iy88.project1.account.AccountInputRules;
 import io.github.iy88.project1.account.AccountSettings;
 import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.account.persistence.AccountRepository;
@@ -23,7 +24,7 @@ public class AccountService {
     private final PasswordHasher hasher;
     private final SessionService sessions;
     private final AccountAvatarService avatars;
-    private final AccountSettings settings;
+    private final AccountInputRules inputs;
     private final TransactionTemplate transaction;
 
     public AccountService(AccountRepository accounts, EmailVerificationRepository verifications,
@@ -34,15 +35,15 @@ public class AccountService {
         this.hasher = hasher;
         this.sessions = sessions;
         this.avatars = avatars;
-        this.settings = settings;
+        this.inputs = settings.inputRules();
         this.transaction = new TransactionTemplate(manager);
     }
 
     public Account register(String rawEmail, String displayName, String password, long verificationId, String code,
                             EntryTokenService.Claims entry) {
         String email = EmailAddress.normalize(rawEmail);
-        String name = name(displayName);
-        password(password);
+        String name = inputs.displayName(displayName);
+        inputs.requirePassword(password);
         if (entry == null) {
             throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "账户入口已失效");
         }
@@ -107,7 +108,7 @@ public class AccountService {
     }
 
     public void changePassword(Account account, String currentPassword, String newPassword) {
-        password(newPassword);
+        inputs.requirePassword(newPassword);
         if (!hasher.matches(currentPassword, account.passwordHash())) {
             throw new BusinessError("CURRENT_PASSWORD_INVALID", 422, "当前密码不正确");
         }
@@ -124,7 +125,7 @@ public class AccountService {
     }
 
     public void resetPassword(EntryTokenService.Claims entry, long verificationId, String code, String newPassword) {
-        password(newPassword);
+        inputs.requirePassword(newPassword);
         String hash = hasher.hash(newPassword);
         Object result = transaction.execute(status -> {
             Instant now = Instant.now();
@@ -232,7 +233,7 @@ public class AccountService {
         if (displayName == null && !avatar.changed()) {
             throw new BusinessError("INPUT_INVALID", 422, "没有可更新的资料");
         }
-        String name = displayName == null ? null : name(displayName);
+        String name = displayName == null ? null : inputs.displayName(displayName);
         return transaction.execute(status -> {
             Account locked = accounts.lockById(account.id())
                     .orElseThrow(() -> new BusinessError("AUTHENTICATION_REQUIRED", 401, "登录状态已失效"));
@@ -248,21 +249,6 @@ public class AccountService {
             }
             return accounts.save(locked);
         });
-    }
-
-    private String name(String value) {
-        String name = value == null ? "" : value.trim();
-        if (name.isEmpty() || name.codePointCount(0, name.length()) > settings.displayNameMaxLength()) {
-            throw new BusinessError("INPUT_INVALID", 422, "显示名称无效");
-        }
-        return name;
-    }
-
-    private void password(String value) {
-        int length = value == null ? 0 : value.codePointCount(0, value.length());
-        if (length < settings.passwordMinLength() || length > settings.passwordMaxLength()) {
-            throw new BusinessError("INPUT_INVALID", 422, "密码长度不符合要求");
-        }
     }
 
     public record ChangeEmailCommand(String newEmail, long oldVerificationId, String oldCode,

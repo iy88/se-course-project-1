@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.56
-Version-Datetime: 2026-11-19T23:03:15+08:00
+Version: 0.1.57
+Version-Datetime: 2026-11-25T01:17:15+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -138,6 +138,18 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 - 仅当旧数据库仍由 app 角色持有时，confirmed `db reset` 才需要额外传入 `--admin-user` 完成角色迁移。
 - `oss reset` 清空 `OSS_BUCKET` 内的全部对象，每批最多删除 1,000 个。开发和联调时，维护配置应指向开发桶。
 - 重置中途失败时保持写入停止，修复后重新预览并执行完整命令。数据库重置会按当前 Flyway 迁移重建结构。
+
+### 创建管理端账号
+
+数据库迁移完成后，在仓库根目录打开终端执行以下命令，并替换邮箱和显示名称。
+
+```bash
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  account create-manager --env-file=backend/.env.dev \
+  --email=manager@example.com --display-name="测试管理员"
+```
+
+核对输出的目标数据库，按提示输入两次登录密码。密码输入无回显。命令使用配置的数据库 owner 创建 `manager` 账户并记录审计，密码采用和普通账户相同的长度规则与哈希算法。创建完成后，使用该邮箱和密码登录管理端。邮箱已注册时，命令报错并保留该账户原有角色和密码。
 
 ## 后端开发
 
