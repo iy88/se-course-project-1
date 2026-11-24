@@ -83,11 +83,16 @@ async function save(): Promise<void> {
       notify.error("每条禁发细目都需要填写内容。");
       return;
     }
+    const order = Number(row.order);
+    if (String(row.order).trim() === "" || !Number.isInteger(order) || order < 0) {
+      notify.error("每条禁发细目的顺序必须是非负整数。");
+      return;
+    }
     inputs.push({
       ...(row.id ? { banned_item_id: row.id } : {}),
       group: row.group,
       content,
-      display_order: row.order,
+      display_order: order,
     });
   }
   saving.value = true;

@@ -10,6 +10,17 @@ describe("administrative problem copy", () => {
     assert.equal(problem.retryable, false);
   });
 
+  it("explains a rejected CSRF token and a primary-name alias removal", () => {
+    assert.equal(
+      describeProblem(new ApiError(403, "CSRF_INVALID", "rejected")).message,
+      "请求校验失败，请刷新页面后重试。",
+    );
+    assert.equal(
+      describeProblem(new ApiError(409, "CATEGORY_NAME_NOT_ALIAS", "not an alias")).message,
+      "该名称是该分类的主名称，不能作为别名移除。",
+    );
+  });
+
   it("maps unknown codes by HTTP status", () => {
     assert.equal(describeProblem(new ApiError(409, "SOMETHING_ELSE", "x")).retryable, true);
     assert.equal(

@@ -290,6 +290,8 @@ async function submit(): Promise<void> {
                 <dd>{{ detail.review_result.reason ?? "—" }}</dd>
                 <dt>审核内容版本</dt>
                 <dd>{{ detail.review_result.reviewed_content_version }}</dd>
+                <dt>审核管理员</dt>
+                <dd>{{ detail.review_result.decided_by }}</dd>
                 <dt>时间</dt>
                 <dd>{{ formatDateTime(detail.review_result.decided_at) }}</dd>
               </dl>

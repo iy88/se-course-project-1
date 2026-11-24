@@ -8,11 +8,16 @@ export interface ProblemCopy {
 
 const copy: Record<string, ProblemCopy> = {
   AUTHENTICATION_REQUIRED: { message: "登录状态已失效，请重新登录。", retryable: false },
+  CSRF_INVALID: { message: "请求校验失败，请刷新页面后重试。", retryable: false },
   CREDENTIALS_INVALID: { message: "邮箱或密码不正确。", retryable: false },
   ACTION_NOT_ALLOWED: { message: "当前账号不能执行该操作。", retryable: false },
   MANAGEMENT_NOT_ALLOWED: { message: "需要平台管理权限。", retryable: false },
   RESOURCE_NOT_VISIBLE: { message: "内容不存在，或当前账号无权查看。", retryable: false },
   CATEGORY_NAME_CONFLICT: { message: "该分类名称已被占用。", retryable: false },
+  CATEGORY_NAME_NOT_ALIAS: {
+    message: "该名称是该分类的主名称，不能作为别名移除。",
+    retryable: false,
+  },
   CATEGORY_NOT_DELETABLE: { message: "该分类曾关联商品，只能停用。", retryable: false },
   CATEGORY_NOT_SELECTABLE: { message: "所选分类当前不可用。", retryable: false },
   CATEGORY_APPLICATION_NOT_ALLOWED: { message: "当前分类申请不可修改。", retryable: false },
