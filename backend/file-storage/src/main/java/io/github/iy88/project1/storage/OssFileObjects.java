@@ -42,8 +42,8 @@ public final class OssFileObjects {
         this.bucket = bucket;
         this.prefix = prefix;
         managedKey = Pattern.compile(Pattern.quote(prefix) + "/("
-                + FilePurpose.PRODUCT_IMAGE.value() + "|" + FilePurpose.CASE_EVIDENCE.value()
-                + ")/" + UUID_PATTERN);
+                + FilePurpose.PRODUCT_IMAGE.value() + "|" + FilePurpose.CASE_EVIDENCE.value() + "|"
+                + FilePurpose.ACCOUNT_AVATAR.value() + ")/" + UUID_PATTERN);
     }
 
     public String bucket() { return bucket; }
