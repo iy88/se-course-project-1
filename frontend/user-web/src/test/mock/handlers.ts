@@ -247,6 +247,13 @@ function productDetail(product: MockProduct, viewerId: string): ProductDetail {
         }
       : null;
   detail.display_restrictions = product.display_restrictions;
+  if (product.category_application?.status === "pending") {
+    detail.category_application = {
+      id: product.category_application.application_id,
+      proposed_name: product.category_application.proposed_name,
+      status: "pending",
+    };
+  }
   detail.permissions = {
     can_edit: product.lifecycle_state !== "in_trade",
     can_off_shelf: product.lifecycle_state === "public",

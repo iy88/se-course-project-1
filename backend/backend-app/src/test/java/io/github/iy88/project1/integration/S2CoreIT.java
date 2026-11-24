@@ -89,11 +89,15 @@ class S2CoreIT {
             var category = app.getBean(CategoryService.class).create(account.id(), "Core " + suffix);
             long categoryId = Long.parseLong(category.id());
             var products = app.getBean(ProductService.class);
+            var proposedCategoryName = "Applied core " + suffix;
             var created = products.create(account.id(), new ProductService.CreateCommand(
                     "Core product " + suffix, "Integration product", List.of(), 1_200L,
-                    List.of(category.id()), null));
+                    List.of(category.id()), proposedCategoryName));
             long productId = Long.parseLong(created.id());
             assertThat(created.lifecycleState()).isEqualTo("pending_review");
+            assertThat(created.categoryApplication()).isNotNull();
+            assertThat(created.categoryApplication().proposedName()).isEqualTo(proposedCategoryName);
+            assertThat(created.categoryApplication().status()).isEqualTo("pending");
 
             db.sql("UPDATE product SET lifecycle_state = 'public' WHERE product_id = ?").param(productId).update();
             db.sql("""

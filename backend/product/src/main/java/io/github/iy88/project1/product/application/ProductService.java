@@ -398,9 +398,16 @@ public class ProductService {
                     Product.REVIEW_REJECTED.equals(product.lifecycleState())
                             || Product.OFF_SHELF.equals(product.lifecycleState()) && "rejected".equals(audit.status()));
         }
+        CategoryApplicationRef categoryApplication = owner
+                ? applications.findFirstByProductIdAndStatusOrderByIdDesc(product.id(), "pending")
+                .map(found -> new CategoryApplicationRef(Long.toString(found.id()), found.proposedName(),
+                        found.status()))
+                .orElse(null)
+                : null;
         return new ProductDetail(Long.toString(product.id()), product.title(), product.description(),
                 product.priceCents(), images(product.id()), categories, sellerRef, product.lifecycleState(),
-                product.contentVersion(), product.createdAt(), product.updatedAt(), pending, latest, permissions);
+                product.contentVersion(), product.createdAt(), product.updatedAt(), pending, latest, permissions,
+                categoryApplication);
     }
 
     /** Shared list projection for callers that already loaded product rows. */
@@ -707,7 +714,11 @@ public class ProductService {
     public record ProductDetail(String id, String title, String description, long priceCents,
                                 List<ImageRef> images, List<CategoryRef> categories, SellerRef seller,
                                 String lifecycleState, int contentVersion, Instant createdAt, Instant updatedAt,
-                                ReviewRef pendingReview, ReviewRef latestReview, Permissions permissions) {
+                                ReviewRef pendingReview, ReviewRef latestReview, Permissions permissions,
+                                CategoryApplicationRef categoryApplication) {
+    }
+
+    public record CategoryApplicationRef(String id, String proposedName, String status) {
     }
 
     public record MyResourceItem(String productId, String title, String lifecycleState, Instant updatedAt) {

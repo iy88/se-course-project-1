@@ -282,6 +282,12 @@ export interface DisplayRestriction {
   released_at?: string | null;
 }
 
+export interface CategoryApplicationRef {
+  id: string;
+  proposed_name: string;
+  status: "pending";
+}
+
 export interface ProductPermissions {
   can_edit: boolean;
   can_off_shelf: boolean;
@@ -307,6 +313,7 @@ export interface ProductDetail {
   latest_review?: LatestReviewRef | null;
   display_restrictions?: DisplayRestriction[] | null;
   permissions?: ProductPermissions | null;
+  category_application?: CategoryApplicationRef | null;
 }
 
 export interface CategoryApplicationInput {
