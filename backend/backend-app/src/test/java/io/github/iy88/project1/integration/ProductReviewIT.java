@@ -702,6 +702,7 @@ class ProductReviewIT {
         }
 
         @Bean
+        @Primary
         ProductReviewFixturePort fixturePort(JdbcClient db, JsonMapper json,
                                              ProductReviewFixturePort.LockTrace trace) {
             return new ProductReviewFixturePort(db, json, trace);
