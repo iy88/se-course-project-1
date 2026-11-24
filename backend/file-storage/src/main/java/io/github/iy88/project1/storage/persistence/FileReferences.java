@@ -7,7 +7,9 @@ import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.springframework.context.annotation.Profile;
@@ -74,6 +76,24 @@ public class FileReferences {
         requireText(slot);
         return references.findByTargetTypeAndTargetIdAndSlotOrderById(target.type(), target.id(), slot)
                 .stream().map(FileReference::snapshot).toList();
+    }
+
+    /** Return the first reference per target in one query, ordered by target and reference ID. */
+    @Transactional(readOnly = true)
+    public Map<Long, Reference> firstCurrent(String targetType, Collection<Long> targetIds, String slot) {
+        requireText(targetType);
+        requireText(slot);
+        var ids = orderedIds(targetIds);
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Reference> firstByTarget = new LinkedHashMap<>();
+        for (FileReference reference : references
+                .findByTargetTypeAndTargetIdInAndSlotOrderByTargetIdAscIdAsc(targetType, ids, slot)) {
+            Reference snapshot = reference.snapshot();
+            firstByTarget.putIfAbsent(snapshot.target().id(), snapshot);
+        }
+        return firstByTarget;
     }
 
     @Transactional(readOnly = true)

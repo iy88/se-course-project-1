@@ -422,12 +422,15 @@ public class ProductService {
         for (Account account : accounts.findByIdIn(sellerIds)) {
             sellers.put(account.id(), account.displayName());
         }
+        Map<Long, ImageRef> thumbnails = thumbnailImages(fileReferences.firstCurrent(
+                "product", productIds, "image"));
         List<ProductSummary> items = new ArrayList<>();
         for (Product product : page) {
             List<CategoryRef> categories = categoriesByProduct.getOrDefault(product.id(), List.of()).stream()
                     .filter(names::containsKey)
                     .map(id -> new CategoryRef(Long.toString(id), names.get(id))).toList();
-            items.add(new ProductSummary(Long.toString(product.id()), product.title(), product.priceCents(), null,
+            items.add(new ProductSummary(Long.toString(product.id()), product.title(), product.priceCents(),
+                    thumbnails.get(product.id()),
                     categories, new SellerRef(Long.toString(product.sellerAccountId()),
                     sellers.getOrDefault(product.sellerAccountId(), "")), product.createdAt()));
         }
@@ -490,6 +493,33 @@ public class ProductService {
             images.add(new ImageRef(Long.toString(reference.fileId()), read.url().toString(), read.expiresAt()));
         }
         return images;
+    }
+
+    private Map<Long, ImageRef> thumbnailImages(Map<Long, FileReferences.Reference> references) {
+        if (references.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            return OssClients.use(oss.endpoint(), oss.region(), oss.accessKeyId(), oss.accessKeySecret(),
+                    client -> {
+                        var objects = new OssFileObjects(client, oss.bucket(), oss.prefix());
+                        Map<Long, ImageRef> thumbnails = new LinkedHashMap<>();
+                        for (var entry : references.entrySet()) {
+                            var reference = entry.getValue();
+                            try {
+                                var read = fileReads.prepare(reference.target(), reference.fileId(), objects,
+                                        () -> { });
+                                thumbnails.put(entry.getKey(), new ImageRef(Long.toString(reference.fileId()),
+                                        read.url().toString(), read.expiresAt()));
+                            } catch (RuntimeException unavailable) {
+                                // One unavailable thumbnail must not hide its product from the list.
+                            }
+                        }
+                        return thumbnails;
+                    });
+        } catch (RuntimeException unavailable) {
+            return Map.of();
+        }
     }
 
     private static BusinessError fileError(String code) {
@@ -663,7 +693,7 @@ public class ProductService {
                               boolean canSubmitReview) {
     }
 
-    public record ProductSummary(String id, String title, long priceCents, Object thumbnail,
+    public record ProductSummary(String id, String title, long priceCents, ImageRef thumbnail,
                                  List<CategoryRef> categories, SellerRef seller, Instant createdAt) {
     }
 
