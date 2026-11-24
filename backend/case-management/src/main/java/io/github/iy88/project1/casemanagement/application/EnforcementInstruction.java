@@ -26,6 +26,23 @@ public record EnforcementInstruction(String enforcementId, EnforcementAction act
         if (action == EnforcementAction.LIFT_ACCOUNT_RESTRICTION && detail == null) {
             throw new BusinessError("INPUT_INVALID", 422, "解除账户限制须给出限制记录");
         }
+        String originalResultType = originalResultType(action);
+        if (detail != null && originalResultType != null && !originalResultType.equals(detail.type())) {
+            throw new BusinessError("INPUT_INVALID", 422, "执行原始结果与动作不匹配");
+        }
+    }
+
+    /**
+     * Original result type carried by {@code detail} for reverse actions. The reference is still
+     * sourced from persisted case execution links, never from a caller-provided identity.
+     */
+    private static String originalResultType(EnforcementAction action) {
+        return switch (action) {
+            case LIFT_ACCOUNT_RESTRICTION -> "account_restriction";
+            case LIFT_TRADE_FREEZE -> "trade_transition";
+            case RESTORE_DISPLAY -> "product_display_restriction";
+            default -> null;
+        };
     }
 
     public static EnforcementInstruction of(String enforcementId, EnforcementAction action, ResourceRef target) {

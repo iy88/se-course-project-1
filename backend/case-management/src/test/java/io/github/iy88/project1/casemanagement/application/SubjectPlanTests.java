@@ -110,4 +110,25 @@ class SubjectPlanTests {
                 .isInstanceOfSatisfying(BusinessError.class,
                         error -> assertThat(error.code()).isEqualTo("TARGET_INVALID"));
     }
+
+    @Test
+    void acceptsOriginalResultReferencesForReverseActions() {
+        assertThat(new EnforcementInstruction("l1", EnforcementAction.LIFT_ACCOUNT_RESTRICTION,
+                new ResourceRef("account", 2), new ResourceRef("account_restriction", 3), null).detail())
+                .isEqualTo(new ResourceRef("account_restriction", 3));
+        assertThat(new EnforcementInstruction("l2", EnforcementAction.LIFT_TRADE_FREEZE,
+                new ResourceRef("trade", 7), new ResourceRef("trade_transition", 8), null).detail())
+                .isEqualTo(new ResourceRef("trade_transition", 8));
+        assertThat(new EnforcementInstruction("l3", EnforcementAction.RESTORE_DISPLAY,
+                new ResourceRef("product", 5), new ResourceRef("product_display_restriction", 6), null).detail())
+                .isEqualTo(new ResourceRef("product_display_restriction", 6));
+    }
+
+    @Test
+    void rejectsAnOriginalResultReferenceOfTheWrongType() {
+        assertThatThrownBy(() -> new EnforcementInstruction("l1", EnforcementAction.LIFT_TRADE_FREEZE,
+                new ResourceRef("trade", 7), new ResourceRef("account_restriction", 3), null))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("INPUT_INVALID"));
+    }
 }

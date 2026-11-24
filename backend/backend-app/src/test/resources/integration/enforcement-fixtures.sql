@@ -9,6 +9,13 @@ CREATE TABLE enforcement_case_fixture (
     archived BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (run_id, case_id));
 
+CREATE TABLE enforcement_case_thread_fixture (
+    run_id UUID NOT NULL,
+    case_id BIGINT NOT NULL,
+    state TEXT NOT NULL,
+    decision_kind TEXT,
+    PRIMARY KEY (run_id, case_id));
+
 CREATE TABLE enforcement_case_evidence_fixture (
     run_id UUID NOT NULL,
     case_id BIGINT NOT NULL,

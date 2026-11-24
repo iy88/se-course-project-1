@@ -42,6 +42,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +56,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.cfg.JsonNodeFeature;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -92,6 +94,8 @@ class EnforcementIT {
     private static final LockPlan.Key PRODUCT_KEY = new LockPlan.Key(PRODUCT, List.of(PRODUCT_ID));
     private static final LockPlan.Key TRADE_KEY = new LockPlan.Key(TRADE, List.of(TRADE_ID));
     private static final LockPlan.Key CASE_KEY = new LockPlan.Key(LockPlan.Domain.CASE, List.of(CASE_ID));
+    private static final LockPlan.Key CASE_CONVERSATION_KEY = new LockPlan.Key(
+            LockPlan.Domain.CASE_CONVERSATION, List.of(CASE_ID));
 
     private static JdbcClient fixtureOwner;
     private static ConfigurableApplicationContext app;
@@ -100,6 +104,7 @@ class EnforcementIT {
     private static FileRegistry fileRegistry;
     private static FixtureSubjects subjects;
     private static EnforcementApplication enforcement;
+    private static FixtureDecision decision;
     private static LockTrace trace;
 
     @BeforeAll
@@ -133,6 +138,7 @@ class EnforcementIT {
         fileRegistry = app.getBean(FileRegistry.class);
         subjects = app.getBean(FixtureSubjects.class);
         enforcement = app.getBean(EnforcementApplication.class);
+        decision = app.getBean(FixtureDecision.class);
         trace = app.getBean(LockTrace.class);
     }
 
@@ -154,17 +160,23 @@ class EnforcementIT {
     @BeforeEach
     void resetFixtures() {
         db.sql("""
-                TRUNCATE enforcement_case_fixture, enforcement_case_evidence_fixture,
-                    enforcement_execution_fixture, enforcement_subject_fixture, enforcement_scope_fixture
+                TRUNCATE enforcement_case_fixture, enforcement_case_thread_fixture,
+                    enforcement_case_evidence_fixture, enforcement_execution_fixture,
+                    enforcement_subject_fixture, enforcement_scope_fixture
                 """).update();
         cleanupInfrastructure();
         subjects.reset();
+        decision.reset();
         trace.clear();
         db.sql("""
                 INSERT INTO enforcement_case_fixture
                     (run_id, case_id, manager_id, target_type, target_id, basis_type, basis_id, archived)
                 VALUES (?, ?, ?, 'product', ?, 'evidence', ?, FALSE)
                 """).param(RUN_ID).param(CASE_ID).param(MANAGER_ID).param(PRODUCT_ID).param(BASIS_ID).update();
+        db.sql("""
+                INSERT INTO enforcement_case_thread_fixture (run_id, case_id, state, decision_kind)
+                VALUES (?, ?, 'decided', 'violation')
+                """).param(RUN_ID).param(CASE_ID).update();
         insertSubject("account", MANAGER_ID, "ACTIVE");
         insertSubject("account", REPORTER_ID, "ACTIVE");
         insertSubject("account", PARTY_A, "ACTIVE");
@@ -413,6 +425,90 @@ class EnforcementIT {
         assertThat(executionCount()).isEqualTo(2);
     }
 
+    @Test
+    void outerDecisionRunsBatchAndCallerStepInOneTransactionAndReplaysWithoutSideEffects() {
+        pendingDecision();
+        long evidence = verifiedFile(REPORTER_ID, FilePurpose.CASE_EVIDENCE);
+        authorizeEvidence(evidence, REPORTER_ID, "evidence");
+        String key = RUN_ID + "-outer-decision";
+        var command = command(List.of(freeze("o1"), withdraw("o2")), List.of(evidence));
+
+        var result = decision.decide(context(MANAGER_ID), key, command);
+        assertThat(result.status()).isEqualTo(201);
+        assertThat(result.replayed()).isFalse();
+        assertThat(result.resource()).isEqualTo(new ResourceRef("case", CASE_ID));
+        assertThat(result.data().path("enforcements").size()).isEqualTo(2);
+        assertThat(decisionState()).isEqualTo("decided");
+        assertThat(decision.callerSteps()).isEqualTo(1);
+        assertThat(state("trade", TRADE_ID)).isEqualTo("FROZEN");
+        assertThat(state("product", PRODUCT_ID)).isEqualTo("DISPLAY_WITHDRAWN");
+        assertThat(trace.keys()).isSorted().doesNotHaveDuplicates()
+                .contains(PRODUCT_KEY, TRADE_KEY, CASE_KEY, CASE_CONVERSATION_KEY);
+        assertThat(lastIndex(PRODUCT_KEY)).isLessThan(lastIndex(TRADE_KEY));
+        assertThat(lastIndex(TRADE_KEY)).isLessThan(lastIndex(CASE_KEY));
+        assertThat(lastIndex(CASE_KEY)).isLessThan(lastIndex(CASE_CONVERSATION_KEY));
+        assertThat(auditCount(result.operationId())).isEqualTo(2);
+        assertThat(executionCount()).isEqualTo(2);
+        assertThat(eventCount(PARTY_A)).isEqualTo(2);
+        assertThat(eventCount(PARTY_B)).isEqualTo(1);
+        assertThat(fileReferenceCount(evidence)).isEqualTo(1);
+        assertThat(decisionOperationCount(key)).isEqualTo(1);
+
+        trace.clear();
+        var replay = decision.decide(context(MANAGER_ID), RUN_ID + "-outer-decision-replay", command);
+        assertThat(replay.replayed()).isFalse();
+        assertThat(replay.data().path("enforcements").get(0).path("status").asString()).isEqualTo("REPLAYED");
+        assertThat(decision.callerSteps()).isEqualTo(1);
+        assertThat(executionCount()).isEqualTo(2);
+        assertThat(auditCount(result.operationId())).isEqualTo(2);
+        assertThat(eventCount(PARTY_A)).isEqualTo(2);
+        assertThat(trace.keys()).containsExactly(CASE_KEY, CASE_CONVERSATION_KEY);
+    }
+
+    @Test
+    void outerDecisionRollbackRevertsCallerStepAndSubjectEffectsThenSameKeyRetries() {
+        pendingDecision();
+        long evidence = verifiedFile(REPORTER_ID, FilePurpose.CASE_EVIDENCE);
+        authorizeEvidence(evidence, REPORTER_ID, "evidence");
+        String key = RUN_ID + "-outer-rollback";
+        var command = command(List.of(freeze("f1"), withdraw("f2")), List.of(evidence));
+        subjects.failOn("f2");
+
+        assertThatThrownBy(() -> decision.decide(context(MANAGER_ID), key, command))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("TARGET_STATE_CONFLICT");
+                    assertThat(error.operationId()).isNotNull();
+                    assertThat(auditCount(error.operationId())).isZero();
+                });
+
+        assertThat(decisionState()).isEqualTo("pending");
+        assertThat(decision.callerSteps()).isEqualTo(1);
+        assertThat(state("trade", TRADE_ID)).isEqualTo("ACTIVE");
+        assertThat(state("product", PRODUCT_ID)).isEqualTo("PUBLIC");
+        assertThat(executionCount()).isZero();
+        assertThat(fileReferenceCount(evidence)).isZero();
+        assertThat(eventCount(PARTY_A)).isZero();
+        assertThat(decisionOperationCount(key)).isZero();
+
+        subjects.clearFailures();
+        trace.clear();
+        var recovered = decision.decide(context(MANAGER_ID), key, command);
+        assertThat(recovered.replayed()).isFalse();
+        assertThat(recovered.status()).isEqualTo(201);
+        assertThat(decisionState()).isEqualTo("decided");
+        assertThat(decision.callerSteps()).isEqualTo(2);
+        assertThat(state("trade", TRADE_ID)).isEqualTo("FROZEN");
+        assertThat(state("product", PRODUCT_ID)).isEqualTo("DISPLAY_WITHDRAWN");
+        assertThat(trace.keys()).isSorted().doesNotHaveDuplicates()
+                .contains(PRODUCT_KEY, TRADE_KEY, CASE_KEY, CASE_CONVERSATION_KEY);
+        assertThat(executionCount()).isEqualTo(2);
+        assertThat(auditCount(recovered.operationId())).isEqualTo(2);
+        assertThat(eventCount(PARTY_A)).isEqualTo(2);
+        assertThat(eventCount(PARTY_B)).isEqualTo(1);
+        assertThat(fileReferenceCount(evidence)).isEqualTo(1);
+        assertThat(decisionOperationCount(key)).isEqualTo(1);
+    }
+
     private static void assertEvidenceFailure(long fileId, String enforcementId, String code, int status) {
         assertThatThrownBy(() -> enforcement.execute(context(MANAGER_ID),
                 RUN_ID + "-evidence-" + enforcementId, command(List.of(withdraw(enforcementId)), List.of(fileId))))
@@ -536,6 +632,27 @@ class EnforcementIT {
         return entry.fileId();
     }
 
+    private static void pendingDecision() {
+        db.sql("""
+                UPDATE enforcement_case_thread_fixture
+                SET state = 'pending', decision_kind = NULL
+                WHERE run_id = ? AND case_id = ?
+                """).param(RUN_ID).param(CASE_ID).update();
+    }
+
+    private static String decisionState() {
+        return db.sql("SELECT state FROM enforcement_case_thread_fixture WHERE run_id = ? AND case_id = ?")
+                .param(RUN_ID).param(CASE_ID).query(String.class).single();
+    }
+
+    private static long decisionOperationCount(String key) {
+        return db.sql("""
+                SELECT count(*) FROM operation_record
+                WHERE actor_id = ? AND operation_name = ? AND idempotency_key = ?
+                """).param(Long.toString(MANAGER_ID)).param(FixtureDecision.OPERATION).param(key)
+                .query(Long.class).single();
+    }
+
     private static String state(String subject, long id) {
         return db.sql("SELECT state FROM enforcement_subject_fixture WHERE run_id = ? AND subject = ? AND subject_id = ?")
                 .param(RUN_ID).param(subject).param(id).query(String.class).single();
@@ -597,6 +714,8 @@ class EnforcementIT {
     private record ExecutionSnapshot(String action, String targetType, long targetId, String resultType,
                                      long resultId, String previousState, String currentState,
                                      Instant occurredAt, String status) {}
+
+    private record DecisionSnapshot(String state, String decisionKind) {}
 
     static final class LockTrace {
         private final List<LockPlan.Key> keys = new CopyOnWriteArrayList<>();
@@ -663,6 +782,15 @@ class EnforcementIT {
                     .param(RUN_ID).param(CASE_ID).query(Boolean.class).single();
             if (archived) {
                 throw new BusinessError("CASE_CLOSED", 409, "case closed");
+            }
+            var decision = db.sql("""
+                    SELECT state, decision_kind FROM enforcement_case_thread_fixture
+                    WHERE run_id = ? AND case_id = ?
+                    """).param(RUN_ID).param(CASE_ID).query((row, index) ->
+                    new DecisionSnapshot(row.getString("state"), row.getString("decision_kind"))).single();
+            if (!"decided".equals(decision.state()) || decision.decisionKind() == null
+                    || decision.decisionKind().isBlank()) {
+                throw new BusinessError("CASE_NOT_DECIDED", 409, "case not decided");
             }
             if (!command.basisRefs().equals(access.basis().stream().map(ResourceRef::id).toList())) {
                 throw new BusinessError("EVIDENCE_OUT_OF_SCOPE", 422, "basis is outside this case");
@@ -1118,6 +1246,113 @@ class EnforcementIT {
 
     private record Scope(long productId, long tradeId, long requestId) {}
 
+    /**
+     * Test-only outer use case: one S1 transaction owns the decision and the enforcement batch.
+     * Its caller step writes the decision after the locks and before the decided-case check.
+     */
+    static final class FixtureDecision {
+        static final String OPERATION = "case.decision";
+        private final WriteExecutor writes;
+        private final EnforcementApplication enforcement;
+        private final FixtureCases cases;
+        private final JdbcClient db;
+        private final LockTrace trace;
+        private final JsonMapper json;
+        private final AtomicInteger callerSteps = new AtomicInteger();
+
+        FixtureDecision(WriteExecutor writes, EnforcementApplication enforcement, FixtureCases cases,
+                        JdbcClient db, LockTrace trace, JsonMapper json) {
+            this.writes = writes;
+            this.enforcement = enforcement;
+            this.cases = cases;
+            this.db = db;
+            this.trace = trace;
+            this.json = json;
+        }
+
+        WriteResult<JsonNode> decide(ExecutionContext context, String key, EnforcementCommand command) {
+            return writes.run(context, OPERATION, key, new DecisionRequest(command),
+                    new WriteExecutor.UseCase<DecisionRequest, Boolean>() {
+                @Override
+                public JsonNode digestInput(DecisionRequest request) {
+                    return json.valueToTree(request.command());
+                }
+
+                @Override
+                public LockPlan prepare(ExecutionContext context, DecisionRequest request) {
+                    return enforcement.preparePlan(context, request.command())
+                            .merge(caseThreadPlan(request.command().caseId())).lockPlan();
+                }
+
+                @Override
+                public Boolean qualify(ExecutionContext context, DecisionRequest request, LockPlan plan) {
+                    return Boolean.TRUE;
+                }
+
+                @Override
+                public void requireReplayAccess(ExecutionContext context, Boolean qualifications,
+                                                ResourceRef resource) {
+                    if (!"case".equals(resource.type())) {
+                        throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "not visible");
+                    }
+                    cases.requireReplayAccess(context, resource.id());
+                }
+
+                @Override
+                public WriteResult.Response<?> write(WriteTransaction transaction, DecisionRequest request,
+                                                     Boolean qualifications, LockPlan plan) {
+                    var command = request.command();
+                    var batch = enforcement.executeInTransaction(transaction, command, plan,
+                            caseThreadPlan(command.caseId()), (locked, access) -> {
+                                callerSteps.incrementAndGet();
+                                if (access.claimedManagerId()
+                                        != Long.parseLong(transaction.context().actorId())) {
+                                    throw new BusinessError("NOT_CASE_MANAGER", 404, "not case manager");
+                                }
+                                if (!List.of(new ResourceRef("evidence", BASIS_ID)).equals(access.basis())) {
+                                    throw new BusinessError("EVIDENCE_OUT_OF_SCOPE", 422,
+                                            "basis is outside this case");
+                                }
+                                int changed = db.sql("""
+                                        UPDATE enforcement_case_thread_fixture
+                                        SET state = 'decided', decision_kind = 'violation'
+                                        WHERE run_id = ? AND case_id = ?
+                                            AND state = 'pending' AND decision_kind IS NULL
+                                        """).param(RUN_ID).param(command.caseId()).update();
+                                if (changed != 1) {
+                                    throw new BusinessError("CASE_STATE_CONFLICT", 409, "case is not pending");
+                                }
+                            });
+                    return new WriteResult.Response<>(201, batch, batch.caseRef());
+                }
+            });
+        }
+
+        int callerSteps() {
+            return callerSteps.get();
+        }
+
+        void reset() {
+            callerSteps.set(0);
+        }
+
+        private SubjectPlan caseThreadPlan(long caseId) {
+            var key = new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION, List.of(caseId));
+            return SubjectPlan.resource(key, transaction -> {
+                trace.add(key);
+                var found = db.sql("""
+                        SELECT state FROM enforcement_case_thread_fixture
+                        WHERE run_id = ? AND case_id = ? FOR UPDATE
+                        """).param(RUN_ID).param(caseId).query(String.class).optional();
+                if (found.isEmpty()) {
+                    throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "case thread not visible");
+                }
+            });
+        }
+
+        record DecisionRequest(EnforcementCommand command) {}
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     static class Fixtures {
         @Bean
@@ -1133,6 +1368,12 @@ class EnforcementIT {
         @Bean
         FixtureCases fixtureCases(JdbcClient db, LockTrace trace) {
             return new FixtureCases(db, trace);
+        }
+
+        @Bean
+        FixtureDecision fixtureDecision(WriteExecutor writes, EnforcementApplication enforcement,
+                                        FixtureCases cases, JdbcClient db, LockTrace trace, JsonMapper json) {
+            return new FixtureDecision(writes, enforcement, cases, db, trace, json);
         }
 
         @Bean

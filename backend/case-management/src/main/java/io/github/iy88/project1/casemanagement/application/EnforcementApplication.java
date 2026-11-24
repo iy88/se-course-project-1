@@ -96,9 +96,17 @@ public final class EnforcementApplication implements WriteExecutor.UseCase<Enfor
         return root;
     }
 
+    /**
+     * Read-only candidate lock plan for the batch. Transaction owners merge their own
+     * {@link SubjectPlan} before returning a {@link LockPlan} from their S1 prepare phase.
+     */
+    public SubjectPlan preparePlan(ExecutionContext context, EnforcementCommand request) {
+        return plan(request, cases.prepare(context, request));
+    }
+
     @Override
     public LockPlan prepare(ExecutionContext context, EnforcementCommand request) {
-        return plan(request, cases.prepare(context, request)).lockPlan();
+        return preparePlan(context, request).lockPlan();
     }
 
     @Override
@@ -114,26 +122,53 @@ public final class EnforcementApplication implements WriteExecutor.UseCase<Enfor
         cases.requireReplayAccess(context, resource.id());
     }
 
+    /**
+     * Runs the batch inside the caller's S1 write transaction. The caller's operation
+     * owns idempotency and the HTTP response; this method contributes the case/subject locks,
+     * the optional post-lock step and the per-action audit/notification side effects.
+     *
+     * <p>Pass the lock plan received by the caller's write callback as {@code prepared}.
+     * {@code additional} is merged into the same de-duplicated plan before locking. The
+     * {@code afterLocks} step runs after every planned resource is locked but before the decided
+     * case is required, so a decision can be written in the same transaction. It must not call
+     * {@code transaction.lock} for the CASE key again; that key is already locked by this batch.
+     * The step is skipped when every enforcement ID already has a persisted outcome.</p>
+     */
+    public EnforcementBatch executeInTransaction(WriteTransaction transaction, EnforcementCommand command,
+                                                 LockPlan prepared, SubjectPlan additional, AfterLocks afterLocks) {
+        var access = cases.requireManager(transaction.context(), command);
+        return executeBatch(transaction, command, access, prepared, additional, afterLocks);
+    }
+
     @Override
     public WriteResult.Response<?> write(WriteTransaction transaction, EnforcementCommand command,
                                          CaseAccess qualifications, LockPlan prepared) {
-        var access = qualifications;
-        var plan = plan(command, access);
-        var missing = plan.missingFrom(prepared);
-        if (!missing.accounts().isEmpty() || !missing.resources().isEmpty()) {
-            throw new LockPlan.Changed(missing);
-        }
+        var batch = executeBatch(transaction, command, qualifications, prepared, SubjectPlan.empty(), null);
+        return new WriteResult.Response<>(201, batch, batch.caseRef());
+    }
+
+    private EnforcementBatch executeBatch(WriteTransaction transaction, EnforcementCommand command,
+                                          CaseAccess qualifications, LockPlan prepared,
+                                          SubjectPlan additional, AfterLocks afterLocks) {
+        var context = transaction.context();
+        var plan = plan(command, qualifications).merge(additional);
+        requirePrepared(plan, prepared);
         plan.acquire(transaction);
 
-        access = cases.revalidate(transaction, transaction.context(), command, access);
+        var access = cases.revalidate(transaction, context, command, qualifications);
         var locked = new LockPlan(prepared.accounts(), plan.lockPlan().resources());
-        var afterRevalidation = plan(command, access).missingFrom(locked);
-        if (!afterRevalidation.accounts().isEmpty() || !afterRevalidation.resources().isEmpty()) {
-            throw new LockPlan.Changed(afterRevalidation);
-        }
+        requirePrepared(plan(command, access).merge(additional), locked);
+
         boolean allPrior = allPrior(command, access);
         if (!allPrior) {
-            cases.requireExecutable(transaction, transaction.context(), command, access);
+            if (afterLocks != null) {
+                afterLocks.run(transaction, access);
+                // The caller may have written the decision. Re-read the case facts under the
+                // locks before checking the decided basis or deriving any resource plan.
+                access = cases.revalidate(transaction, context, command, access);
+                requirePrepared(plan(command, access).merge(additional), locked);
+            }
+            cases.requireExecutable(transaction, context, command, access);
         }
 
         var references = allPrior ? List.<FileReferences.Reference>of() : attachEvidence(command, access);
@@ -165,7 +200,7 @@ public final class EnforcementApplication implements WriteExecutor.UseCase<Enfor
         }
 
         if (!newOutcomes.isEmpty()) {
-            cases.recordExecution(transaction, transaction.context(), command, newOutcomes, references);
+            cases.recordExecution(transaction, context, command, newOutcomes, references);
         }
         for (var pending : pendingNotifications) {
             var outcome = pending.outcome();
@@ -175,8 +210,20 @@ public final class EnforcementApplication implements WriteExecutor.UseCase<Enfor
             notifications.create(transaction, notification.eventType(), intentKey, access.caseRef(),
                     pending.recipients(), command.reason(), outcome.occurredAt());
         }
-        return new WriteResult.Response<>(201, new EnforcementBatch(command.caseId(), outcomes, List.copyOf(notified)),
-                access.caseRef());
+        return new EnforcementBatch(command.caseId(), outcomes, List.copyOf(notified));
+    }
+
+    private static void requirePrepared(SubjectPlan plan, LockPlan prepared) {
+        var missing = plan.missingFrom(prepared);
+        if (!missing.accounts().isEmpty() || !missing.resources().isEmpty()) {
+            throw new LockPlan.Changed(missing);
+        }
+    }
+
+    /** Caller-owned step that runs after all planned resources are locked. */
+    @FunctionalInterface
+    public interface AfterLocks {
+        void run(WriteTransaction transaction, CaseAccess access);
     }
 
     /**
