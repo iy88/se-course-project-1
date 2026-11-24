@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm run typecheck && rsbuild build",
+    "build": "pnpm run typecheck && rsbuild build && node tools/build-pwa.mjs",
     "dev": "rsbuild",
     "preview": "rsbuild preview",
     "test": "node --import ./tools/register-ts.mjs --test src",
