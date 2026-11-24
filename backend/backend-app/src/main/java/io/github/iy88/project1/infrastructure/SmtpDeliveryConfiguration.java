@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 
 @Configuration(proxyBeanMethods = false)
-@Profile("mail-delivery & infrastructure & !dependency-probe")
+@Profile("infrastructure & !delivery-scheduler & !dependency-probe")
 public class SmtpDeliveryConfiguration {
     @Bean
     public SmtpDelivery smtpDelivery(Environment env, DeliverySettings settings) {
