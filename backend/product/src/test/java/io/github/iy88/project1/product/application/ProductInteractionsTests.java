@@ -223,7 +223,7 @@ class ProductInteractionsTests {
     void favoriteStatusKeepsInvalidFavouritesVisibleWithoutContent() {
         when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.OFF_SHELF)));
         when(store.favorite(VIEWER, PRODUCT))
-                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(PRODUCT, NOW)));
+                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(100L, PRODUCT, NOW)));
 
         var status = interactions.favoriteStatus(VIEWER, PRODUCT);
 
@@ -244,7 +244,7 @@ class ProductInteractionsTests {
     void repeatedFavouriteKeepsTheFirstTime() {
         when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
         when(store.favorite(VIEWER, PRODUCT))
-                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(PRODUCT, NOW)));
+                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(100L, PRODUCT, NOW)));
 
         var status = interactions.addFavorite(VIEWER, PRODUCT);
 
@@ -254,10 +254,10 @@ class ProductInteractionsTests {
 
     @Test
     void favouriteListHidesInvalidProductContent() {
-        when(store.favorites(VIEWER, 20, 0L)).thenReturn(List.of(
-                new ProductInteractionStore.FavoriteRow(PRODUCT, NOW),
-                new ProductInteractionStore.FavoriteRow(OTHER_PRODUCT, NOW.minusSeconds(60))));
-        when(store.countFavorites(VIEWER)).thenReturn(2L);
+        when(store.favorites(VIEWER, null, 20, 0L)).thenReturn(List.of(
+                new ProductInteractionStore.FavoriteRow(100L, PRODUCT, NOW),
+                new ProductInteractionStore.FavoriteRow(101L, OTHER_PRODUCT, NOW.minusSeconds(60))));
+        when(store.countFavorites(VIEWER, null)).thenReturn(2L);
         Product valid = product(Product.PUBLIC);
         Product invalid = product(OTHER_PRODUCT, Product.OFF_SHELF);
         when(products.findByIdIn(List.of(PRODUCT, OTHER_PRODUCT))).thenReturn(List.of(valid, invalid));
@@ -323,7 +323,7 @@ class ProductInteractionsTests {
     void favouriteStatusOfADeletedProductStaysInvalidInsteadOfMissing() {
         when(products.findById(PRODUCT)).thenReturn(Optional.of(deletedProduct()));
         when(store.favorite(VIEWER, PRODUCT))
-                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(PRODUCT, NOW)));
+                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(100L, PRODUCT, NOW)));
 
         var status = interactions.favoriteStatus(VIEWER, PRODUCT);
 
@@ -335,7 +335,7 @@ class ProductInteractionsTests {
     void pagingBoundsAreRejectedBeforeReading() {
         assertFailure(() -> interactions.listFavorites(VIEWER, 0, 20), "INPUT_INVALID");
         assertFailure(() -> interactions.listFavorites(VIEWER, 1, 101), "INPUT_INVALID");
-        verify(store, never()).favorites(anyLong(), any(Integer.class).intValue(), anyLong());
+        verify(store, never()).favorites(anyLong(), any(), any(Integer.class).intValue(), anyLong());
     }
 
     private static void assertFailure(Runnable action, String code) {

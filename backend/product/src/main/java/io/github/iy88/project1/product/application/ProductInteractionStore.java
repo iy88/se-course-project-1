@@ -18,7 +18,7 @@ public interface ProductInteractionStore {
         CASE
     }
 
-    record FavoriteRow(long productId, Instant favoritedAt) {
+    record FavoriteRow(long favoriteId, long productId, Instant favoritedAt) {
     }
 
     long insertComment(long productId, long authorAccountId, Long parentCommentId, String body, Instant now);
@@ -45,9 +45,9 @@ public interface ProductInteractionStore {
 
     Optional<FavoriteRow> favorite(long accountId, long productId);
 
-    List<FavoriteRow> favorites(long accountId, int limit, long offset);
+    List<FavoriteRow> favorites(long accountId, String state, int limit, long offset);
 
-    long countFavorites(long accountId);
+    long countFavorites(long accountId, String state);
 
     /** Returns false when the account already favourites the product. */
     boolean insertFavorite(long accountId, long productId, Instant now);
