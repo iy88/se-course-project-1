@@ -72,11 +72,18 @@ public final class TradePorts {
         Map<Long, AccountProfile> profiles(Set<Long> accountIds);
     }
 
+    /**
+     * Trade conversation boundary. The implementation records conversation row locks in the caller's
+     * {@link WriteTransaction}; callers plan the conversation keys and must not wrap the lock call in
+     * another {@code transaction.lock}. Append and archive use the row already locked in this
+     * transaction or the row created by {@link #ensure} and never take a second lock.
+     */
     public interface Conversation {
         long ensure(WriteTransaction transaction, long tradeId, long productId, long buyerId, long sellerId);
 
         OptionalLong find(long tradeId);
 
+        /** Locks the conversation row and records that lock in the current write transaction. */
         void lockConversation(WriteTransaction transaction, long conversationId);
 
         void append(WriteTransaction transaction, long conversationId, UUID businessEventId, String eventType,
@@ -99,9 +106,15 @@ public final class TradePorts {
 
     /** Read projection used by the conversation module. */
     public interface Participation {
+        /** Returns the trade participants and status, or empty when the trade does not exist. */
+        Optional<TradeModels.ConversationAccess> findConversationAccess(long tradeId);
+
         TradeModels.ConversationAccess conversationAccess(long tradeId);
 
         boolean pairFrozen(long firstAccountId, long secondAccountId);
+
+        /** Ids of all trades where the account is buyer or seller, including terminal trades. */
+        List<Long> tradeIdsOf(long accountId);
     }
 
     /** Read projection used by the evaluation module (API-TRD-012/015 owner). */

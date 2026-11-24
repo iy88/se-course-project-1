@@ -102,6 +102,12 @@ public class TradeRepository {
                 """).param("account", accountId).query(Long.class).list();
     }
 
+    public List<Long> tradeIdsForAccount(long accountId) {
+        return jdbc.sql("""
+                SELECT id FROM trade WHERE buyer_id = :account OR seller_id = :account ORDER BY id
+                """).param("account", accountId).query(Long.class).list();
+    }
+
     public AccountPage pageForAccount(long accountId, String role, List<TradeStatus> statuses, int limit,
                                       long offset) {
         var matchingStatuses = statuses.isEmpty() ? EnumSet.allOf(TradeStatus.class) : statuses;

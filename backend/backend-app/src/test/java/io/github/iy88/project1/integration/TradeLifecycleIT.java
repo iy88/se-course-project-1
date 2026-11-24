@@ -353,7 +353,7 @@ class TradeLifecycleIT {
         long originalTransition = prior.transitionId();
         assertThat(prior.alreadyEffective()).isTrue();
         assertThat(prior.frozenBefore()).isFalse();
-        assertThat(messageCount(tradeId, "trade_frozen")).isEqualTo(2);
+        assertThat(ports.messageCount(tradeId, "trade_frozen")).isEqualTo(2);
 
         var lifted = caseWrite("lift-case-freeze", caseId, tradeId, false,
                 tx -> trades.liftFreezeLocked(tx, caseId, tradeId, originalTransition, basis, "released"));
@@ -375,7 +375,7 @@ class TradeLifecycleIT {
         assertThat(db.sql("""
                 SELECT source_ref FROM trade_freeze WHERE trade_id = ? AND ended_at IS NULL
                 """).param(tradeId).query(Long.class).list()).containsExactlyInAnyOrder(caseId, otherCase);
-        assertThat(messageCount(tradeId, "trade_unfrozen")).isZero();
+        assertThat(ports.messageCount(tradeId, "trade_unfrozen")).isZero();
     }
 
     @Test
@@ -976,8 +976,15 @@ class TradeLifecycleIT {
 
         @Override
         public void lockConversation(WriteTransaction transaction, long conversationId) {
-            db.sql("SELECT true FROM pg_advisory_xact_lock(?)").param(0x5000_0000_0000_0000L + conversationId)
-                    .query(Boolean.class).single();
+            transaction.lock(new LockPlan.Key(LockPlan.Domain.TRADE_CONVERSATION, List.of(conversationId)),
+                    () -> db.sql("SELECT true FROM pg_advisory_xact_lock(?)")
+                            .param(0x5000_0000_0000_0000L + conversationId).query(Boolean.class).single());
+        }
+
+        long messageCount(long tradeId, String type) {
+            long conversationId = find(tradeId).orElseThrow();
+            return messages.stream().filter(message ->
+                    message.conversationId() == conversationId && type.equals(message.type())).count();
         }
 
         @Override

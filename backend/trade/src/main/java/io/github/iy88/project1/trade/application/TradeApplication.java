@@ -1168,7 +1168,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
             branches.put(trade.id(), requireConversationId(trade.id()));
         }
         for (long branch : new TreeSet<>(branches.values())) {
-            transaction.lock(conversationKey(branch), () -> conversations.lockConversation(transaction, branch));
+            conversations.lockConversation(transaction, branch);
         }
         return branches;
     }
@@ -1312,14 +1312,24 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     @Override
+    public Optional<TradeModels.ConversationAccess> findConversationAccess(long tradeId) {
+        return repository.find(tradeId)
+                .map(trade -> new TradeModels.ConversationAccess(trade.buyerId(), trade.sellerId(), trade.status()));
+    }
+
+    @Override
     public TradeModels.ConversationAccess conversationAccess(long tradeId) {
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        return new TradeModels.ConversationAccess(trade.buyerId(), trade.sellerId(), trade.status());
+        return findConversationAccess(tradeId).orElseThrow(Trade::notVisible);
     }
 
     @Override
     public boolean pairFrozen(long firstAccountId, long secondAccountId) {
         return repository.pairFrozen(firstAccountId, secondAccountId);
+    }
+
+    @Override
+    public List<Long> tradeIdsOf(long accountId) {
+        return repository.tradeIdsForAccount(accountId);
     }
 
     public TradeModels.ReviewEligibility reviewEligibility(long tradeId, long reviewerId) {
@@ -1592,8 +1602,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
 
     private long requireConversation(WriteTransaction transaction, long tradeId) {
         long conversationId = requireConversationId(tradeId);
-        transaction.lock(conversationKey(conversationId),
-                () -> conversations.lockConversation(transaction, conversationId));
+        conversations.lockConversation(transaction, conversationId);
         return conversationId;
     }
 
