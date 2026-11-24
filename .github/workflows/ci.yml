@@ -151,5 +151,7 @@ jobs:
         run: |
           pnpm run lint
           pnpm run format:check
+      - name: Run unit tests
+        run: pnpm run test
       - name: Type-check and build both apps
         run: pnpm run build
