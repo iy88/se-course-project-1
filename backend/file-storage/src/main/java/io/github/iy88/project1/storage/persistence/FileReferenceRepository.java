@@ -23,6 +23,8 @@ interface FileReferenceRepository extends Repository<FileReference, Long> {
     List<FileReference> findByTargetTypeAndTargetIdAndIdInOrderById(
             String targetType, long targetId, Collection<Long> ids);
 
+    List<FileReference> findByTargetTypeAndTargetIdAndSlotOrderById(String targetType, long targetId, String slot);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select r from FileReference r

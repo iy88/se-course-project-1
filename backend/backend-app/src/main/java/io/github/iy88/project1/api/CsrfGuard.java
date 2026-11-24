@@ -27,8 +27,14 @@ public class CsrfGuard implements HandlerInterceptor {
             return true;
         }
         String origin = singleHeader(request, "Origin");
+        if (origin == null || !origins.allowedOrigins().contains(origin)) {
+            throw rejected();
+        }
+        if (isLogout(request)) {
+            return true;
+        }
         String token = singleHeader(request, "X-CSRF-Token");
-        if (origin == null || !origins.allowedOrigins().contains(origin) || token == null) {
+        if (token == null) {
             throw rejected();
         }
         var binding = verifier.getIfAvailable();
@@ -36,6 +42,11 @@ public class CsrfGuard implements HandlerInterceptor {
             throw rejected();
         }
         return true;
+    }
+
+    private static boolean isLogout(HttpServletRequest request) {
+        return "DELETE".equals(request.getMethod())
+                && request.getRequestURI().endsWith("/api/v1/account/session");
     }
 
     private static String singleHeader(HttpServletRequest request, String name) {
