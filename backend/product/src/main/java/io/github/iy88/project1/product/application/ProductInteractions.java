@@ -142,6 +142,8 @@ public class ProductInteractions {
     public void deleteComment(long viewerId, long productId, long commentId) {
         transaction.executeWithoutResult(status -> {
             requireAccountWritable(viewerId);
+            // Documented lock order: product row first, then the comment row.
+            lockProduct(productId);
             ProductComment comment = store.lockComment(commentId)
                     .filter(found -> found.productId() == productId)
                     .orElseThrow(ProductInteractions::notVisible);
@@ -168,7 +170,14 @@ public class ProductInteractions {
                                         String reason) {
         String text = requiredReason(reason);
         return transaction.execute(status -> {
+            // Resolve the product without a lock so the row lock order stays product -> comment.
+            long productId = store.comment(commentId).map(ProductComment::productId)
+                    .orElseThrow(() -> new BusinessError("CONTENT_NOT_FOUND", 404, "评论不存在"));
+            products.lockById(productId)
+                    .filter(product -> !product.deleted())
+                    .orElseThrow(() -> new BusinessError("CONTENT_NOT_FOUND", 404, "评论不存在"));
             ProductComment comment = store.lockComment(commentId)
+                    .filter(found -> found.productId() == productId)
                     .orElseThrow(() -> new BusinessError("CONTENT_NOT_FOUND", 404, "评论不存在"));
             if (!cases.claimedForProduct(managerId, caseId, comment.productId())) {
                 throw new BusinessError("ACTION_NOT_ALLOWED", 403, "只能移除本人认领事项范围内的评论");
@@ -215,9 +224,11 @@ public class ProductInteractions {
     }
 
     public FavoriteStatus favoriteStatus(long accountId, long productId) {
-        Product product = requireProduct(productId);
+        // A favourite keeps its own fact when the product becomes invisible or is deleted, so the
+        // state is resolved before the product row decides whether the caller may learn about it.
         Optional<ProductInteractionStore.FavoriteRow> favorite = store.favorite(accountId, productId);
-        boolean valid = visible(product);
+        Product product = products.findById(productId).orElse(null);
+        boolean valid = product != null && visible(product);
         if (favorite.isEmpty() && !valid) {
             throw notVisible();
         }
@@ -254,14 +265,16 @@ public class ProductInteractions {
     // ------------------------------------------------------------------ helpers
 
     private ProductInteractionStore.Scope readScope(Product product, long viewerId, Long caseId) {
+        // A claimed manager reads the case's necessary scope, including removal facts, even while
+        // the product is still publicly listed.
+        if (caseId != null && cases.claimedForProduct(viewerId, caseId, product.id())) {
+            return ProductInteractionStore.Scope.CASE;
+        }
         if (visible(product)) {
             return ProductInteractionStore.Scope.PUBLIC;
         }
         if (product.sellerAccountId() == viewerId) {
             return ProductInteractionStore.Scope.AUTHOR;
-        }
-        if (caseId != null && cases.claimedForProduct(viewerId, caseId, product.id())) {
-            return ProductInteractionStore.Scope.CASE;
         }
         if (store.hasCommentBy(product.id(), viewerId)) {
             return ProductInteractionStore.Scope.AUTHOR;
