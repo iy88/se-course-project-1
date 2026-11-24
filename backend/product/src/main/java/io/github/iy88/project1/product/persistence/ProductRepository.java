@@ -15,6 +15,8 @@ public interface ProductRepository extends Repository<Product, Long> {
 
     Optional<Product> findById(long id);
 
+    List<Product> findByIdIn(List<Long> ids);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Product p where p.id = :id")
     Optional<Product> lockById(@Param("id") long id);
