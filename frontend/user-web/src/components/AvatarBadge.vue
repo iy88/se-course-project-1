@@ -15,7 +15,7 @@ const initial = computed(() => initialOf(props.displayName));
 </script>
 
 <template>
-  <span class="avatar" :class="`avatar--${size}`" :title="displayName">
+  <span class="avatar" :class="`avatar--${size}`">
     <img v-if="url" :src="url" :alt="`${displayName}的头像`" class="avatar__image" />
     <span v-else class="avatar__initial" aria-hidden="true">{{ initial }}</span>
     <span class="visually-hidden">{{ displayName }}</span>

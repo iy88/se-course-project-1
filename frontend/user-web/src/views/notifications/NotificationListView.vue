@@ -11,7 +11,7 @@ import { useRouter } from "vue-router";
 import { listNotifications } from "../../api/notifications";
 import type { NotificationReadFilter, NotificationSummary } from "../../api/contracts";
 import { usePagedList } from "../../app/async";
-import { formatDateTime, formatRelative } from "../../app/format";
+import { formatDateTime } from "../../app/format";
 import { notificationReadLabels, notificationTypeLabel } from "../../app/labels";
 import { refreshBadges } from "../../app/badges";
 import EmptyState from "../../components/EmptyState.vue";
@@ -59,24 +59,19 @@ async function reload(): Promise<void> {
 
 <template>
   <div class="stack stack--loose">
-    <PageHeader
-      eyebrow="消息"
-      title="通知"
-      description="审核结果、交易进展与事项提醒都会在这里留下记录。"
-    >
+    <PageHeader title="通知" description="查看商品审核结果。">
       <template #actions>
         <span v-if="unreadCount > 0" class="chip chip--active">{{ unreadCount }} 条未读</span>
-        <RouterLink to="/conversations" class="btn btn--ghost">去消息列表</RouterLink>
       </template>
     </PageHeader>
 
-    <div class="inline">
+    <div class="status-filter notification-filters" role="group" aria-label="按已读状态筛选">
       <button
         v-for="option in filters"
         :key="option"
         type="button"
-        class="chip chip--action"
-        :class="{ 'chip--active': filter === option }"
+        class="status-filter__option"
+        :aria-pressed="filter === option"
         @click="selectFilter(option)"
       >
         {{ notificationReadLabels[option] }}
@@ -88,7 +83,7 @@ async function reload(): Promise<void> {
     <EmptyState
       v-else-if="list.isEmpty.value"
       :title="filter === 'unread' ? '没有未读通知' : '暂无通知'"
-      description="有新的审核结果或交易进展时会在这里显示。"
+      :description="filter === 'all' ? '商品审核完成后，结果会在这里显示。' : undefined"
     />
     <template v-else>
       <ul class="rows">
@@ -105,9 +100,9 @@ async function reload(): Promise<void> {
                 <span v-if="!item.read_at" class="dot" aria-label="未读" />
               </span>
               <span class="row__summary">{{ item.summary }}</span>
-              <span class="muted" :title="formatDateTime(item.occurred_at)">
-                {{ formatRelative(item.occurred_at) }}
-              </span>
+              <time class="muted" :datetime="item.occurred_at">
+                {{ formatDateTime(item.occurred_at) }}
+              </time>
             </span>
             <span class="row__go" aria-hidden="true">›</span>
           </button>
@@ -124,6 +119,10 @@ async function reload(): Promise<void> {
 </template>
 
 <style scoped>
+.notification-filters {
+  max-inline-size: 28rem;
+}
+
 .rows {
   display: flex;
   flex-direction: column;

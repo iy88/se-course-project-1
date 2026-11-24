@@ -1,69 +1,54 @@
 <script setup lang="ts">
-/*
- * "My" aggregation page (US-12) plus the personal to-do list (US-11).
- *
- * Counts and to-dos come from the shared aggregation endpoints so this page never
- * invents a second definition of "pending"; each entry links into the business
- * screen that owns the action.
- */
-import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { listMyTodos, readOverview } from "../../api/aggregation";
+import { ref } from "vue";
+import UiIcon from "../../../../shared/UiIcon.vue";
 import { logout } from "../../api/account";
-import type { MyOverview, TodoItem } from "../../api/contracts";
-import { useAsyncData } from "../../app/async";
-import { formatRelative } from "../../app/format";
-import { todoKindLabels } from "../../app/labels";
 import { notify } from "../../app/toast";
+import { problemMessage } from "../../app/problems";
 import { clearSession, session } from "../../app/session";
-import { resetBadges, refreshBadges } from "../../app/badges";
+import { resetBadges } from "../../app/badges";
 import AvatarBadge from "../../components/AvatarBadge.vue";
-import EmptyState from "../../components/EmptyState.vue";
-import ErrorNotice from "../../components/ErrorNotice.vue";
-import LoadingBlock from "../../components/LoadingBlock.vue";
 
 const router = useRouter();
+const signOutDialog = ref<HTMLDialogElement | null>(null);
+const signingOut = ref(false);
+const signOutError = ref("");
 
-const overview = useAsyncData<MyOverview>((signal) => readOverview(signal));
-const todos = useAsyncData<{ items: TodoItem[]; total: number }>((signal) =>
-  listMyTodos({ page: 1, page_size: 10 }, signal),
-);
+const links = [
+  { to: "/me/products", title: "我的商品", description: "管理发布内容与审核状态", icon: "box" },
+  { to: "/me/favorites", title: "我的收藏", description: "查看已收藏的商品", icon: "bookmark" },
+] as const;
 
-const productTotal = computed(() => overview.data.value?.products.total ?? 0);
-const tradeTotal = computed(() => overview.data.value?.trades.total ?? 0);
-
-onMounted(() => {
-  void overview.run();
-  void todos.run();
-});
+const rules = [
+  {
+    to: "/me/banned-items",
+    title: "禁发范围",
+    description: "发布前查阅不可交易的内容",
+    icon: "file",
+  },
+] as const;
 
 async function signOut(): Promise<void> {
+  if (signingOut.value) return;
+  signingOut.value = true;
+  signOutError.value = "";
   try {
     await logout();
-  } catch {
-    // A failed logout must still clear the local view; the session endpoint is
-    // naturally idempotent, so the user can retry from the login screen.
+    signOutDialog.value?.close();
+    clearSession();
+    resetBadges();
+    notify.info("已退出登录。");
+    await router.replace({ name: "login" });
+  } catch (error) {
+    signOutError.value = problemMessage(error);
+  } finally {
+    signingOut.value = false;
   }
-  clearSession();
-  resetBadges();
-  notify.info("已退出登录。");
-  await router.replace({ name: "login" });
 }
 
-/** Route each to-do kind to the screen that can actually resolve it. */
-function todoLink(item: TodoItem): { name: string; params?: Record<string, string> } {
-  if (item.kind === "inquiry_response") {
-    const caseId = String(item.source.case_id ?? "");
-    return { name: "case-detail", params: { caseId } };
-  }
-  const tradeId = String(item.source.trade_id ?? "");
-  return { name: "trade-detail", params: { tradeId } };
-}
-
-function refresh(): void {
-  void overview.run();
-  void todos.run();
-  void refreshBadges();
+function requestSignOut(): void {
+  signOutError.value = "";
+  signOutDialog.value?.showModal();
 }
 </script>
 
@@ -77,89 +62,64 @@ function refresh(): void {
       />
       <div class="me-head__info">
         <h1>{{ session.displayName.value || "未登录" }}</h1>
-        <p class="muted">{{ session.account.value?.email ?? "" }}</p>
+        <p class="muted break-anywhere">{{ session.account.value?.email ?? "" }}</p>
       </div>
       <div class="me-head__actions">
-        <RouterLink to="/me/settings" class="btn btn--small">账户设置</RouterLink>
-        <button type="button" class="btn btn--small btn--ghost" @click="signOut">退出登录</button>
+        <RouterLink to="/me/settings" class="btn"><UiIcon name="settings" />账户设置</RouterLink>
+        <button type="button" class="btn btn--danger" @click="requestSignOut">
+          <UiIcon name="logout" />退出登录
+        </button>
       </div>
     </header>
 
-    <LoadingBlock v-if="overview.isLoading.value" label="正在加载我的业务…" />
-    <ErrorNotice
-      v-else-if="overview.problem.value"
-      :error="overview.error.value"
-      @retry="refresh"
-    />
-    <template v-else-if="overview.data.value">
-      <ul class="stat-grid">
-        <li class="stat">
-          <span class="stat__value">{{ productTotal }}</span>
-          <span class="stat__label">我的商品</span>
-          <RouterLink to="/me/products" class="stat__link">查看</RouterLink>
-        </li>
-        <li class="stat">
-          <span class="stat__value">{{ tradeTotal }}</span>
-          <span class="stat__label">我的交易</span>
-          <RouterLink to="/me/trades" class="stat__link">查看</RouterLink>
-        </li>
-        <li class="stat">
-          <span class="stat__value">{{ overview.data.value.reports.submitted }}</span>
-          <span class="stat__label">我提交的事项</span>
-          <RouterLink to="/me/cases" class="stat__link">查看</RouterLink>
-        </li>
-        <li class="stat">
-          <span class="stat__value">{{ overview.data.value.evaluations.written }}</span>
-          <span class="stat__label">我发表的评价</span>
-          <span class="muted">收到 {{ overview.data.value.evaluations.received }} 条</span>
-        </li>
-      </ul>
-    </template>
+    <div class="me-sections">
+      <section class="card me-section" aria-labelledby="my-market-title">
+        <h2 id="my-market-title">商品</h2>
+        <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="me-section__link">
+          <span class="me-section__icon" aria-hidden="true">
+            <UiIcon :name="link.icon" />
+          </span>
+          <span class="me-section__copy">
+            <span class="me-section__label">{{ link.title }}</span>
+            <span class="me-section__description">{{ link.description }}</span>
+          </span>
+          <span class="me-section__chevron" aria-hidden="true">
+            <UiIcon name="chevron-right" />
+          </span>
+        </RouterLink>
+      </section>
+      <section class="card me-section" aria-labelledby="listing-rules-title">
+        <h2 id="listing-rules-title">发布规则</h2>
+        <RouterLink v-for="link in rules" :key="link.to" :to="link.to" class="me-section__link">
+          <span class="me-section__icon" aria-hidden="true">
+            <UiIcon :name="link.icon" />
+          </span>
+          <span class="me-section__copy">
+            <span class="me-section__label">{{ link.title }}</span>
+            <span class="me-section__description">{{ link.description }}</span>
+          </span>
+          <span class="me-section__chevron" aria-hidden="true">
+            <UiIcon name="chevron-right" />
+          </span>
+        </RouterLink>
+      </section>
+    </div>
 
-    <section class="card">
-      <div class="card__head">
-        <h2>待办</h2>
-        <span class="chip">{{ overview.data.value?.todo_count ?? 0 }} 项待处理</span>
-      </div>
-      <LoadingBlock v-if="todos.isLoading.value" label="正在加载待办…" />
-      <ErrorNotice v-else-if="todos.problem.value" :error="todos.error.value" @retry="todos.run" />
-      <EmptyState
-        v-else-if="!todos.data.value?.items.length"
-        title="没有待处理的事项"
-        description="新的请求、约定或问询会出现在这里。"
-      />
-      <ul v-else class="todo-list">
-        <li v-for="item in todos.data.value.items" :key="item.todo_key">
-          <RouterLink :to="todoLink(item)" class="todo">
-            <span class="todo__kind">{{ todoKindLabels[item.kind] ?? item.kind }}</span>
-            <span class="todo__summary">{{ item.summary }}</span>
-            <span class="muted">{{ formatRelative(item.updated_at) }}</span>
-          </RouterLink>
-        </li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <div class="card__head"><h2>更多</h2></div>
-      <div class="link-grid">
-        <RouterLink to="/me/notifications" class="link-tile">
-          <span>通知</span>
-          <span class="muted">审核结果、交易与事项提醒</span>
-        </RouterLink>
-        <RouterLink to="/conversations" class="link-tile">
-          <span>消息</span>
-          <span class="muted">私聊与逐笔交易会话</span>
-        </RouterLink>
-        <RouterLink to="/me/cases" class="link-tile">
-          <span>我的事项</span>
-          <span class="muted">举报进度、问询与申辩</span>
-        </RouterLink>
-        <RouterLink to="/me/banned-items" class="link-tile">
-          <span>禁发范围</span>
-          <span class="muted">发布前确认</span>
-        </RouterLink>
-      </div>
-    </section>
+    <dialog
+      ref="signOutDialog"
+      class="signout-dialog"
+      aria-labelledby="signout-title"
+      @cancel="signingOut && $event.preventDefault()"
+    >
+      <h2 id="signout-title">退出登录？</h2>
+      <p v-if="signOutError" class="field__error" role="alert">{{ signOutError }}</p>
+      <form method="dialog" class="signout-dialog__actions">
+        <button class="btn" autofocus :disabled="signingOut">取消</button>
+        <button type="button" class="btn btn--danger" :disabled="signingOut" @click="signOut">
+          {{ signingOut ? "正在退出…" : "确认退出" }}
+        </button>
+      </form>
+    </dialog>
   </div>
 </template>
 
@@ -186,90 +146,180 @@ function refresh(): void {
   flex-wrap: wrap;
 }
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  gap: var(--space-3);
+.me-head__actions .btn {
+  padding-inline: var(--space-4);
 }
 
-.stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  padding: var(--space-3) var(--space-4);
-  background: var(--panel);
+.signout-dialog {
+  inline-size: min(24rem, calc(100% - 2rem));
+  max-block-size: calc(100dvh - 2rem);
+  padding: var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  overscroll-behavior: contain;
 }
 
-.stat__value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+.signout-dialog::backdrop {
+  background: rgb(24 39 32 / 36%);
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
-.stat__label {
-  font-size: 0.8125rem;
-  color: var(--ink-soft);
+.signout-dialog h2 {
+  font-size: 1.125rem;
 }
 
-.stat__link {
-  font-size: 0.75rem;
+.signout-dialog .field__error {
+  margin-block-start: var(--space-3);
 }
 
-.todo-list {
+.signout-dialog__actions {
   display: flex;
-  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-block-start: var(--space-5);
+}
+
+.me-sections {
+  display: grid;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.me-section h2 {
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.me-section {
+  display: grid;
   gap: var(--space-2);
 }
 
-.todo {
+.me-section__link {
   display: grid;
-  gap: 0.125rem;
-  padding: var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-}
-
-.todo:hover {
-  border-color: var(--brand);
-  text-decoration: none;
-}
-
-.todo__kind {
-  font-size: 0.75rem;
-  color: var(--brand-ink);
-  font-weight: 600;
-}
-
-.todo__summary {
-  font-size: 0.875rem;
-}
-
-.link-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   gap: var(--space-3);
-}
-
-.link-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  padding: var(--space-3);
-  border: 1px solid var(--line);
+  min-block-size: 4rem;
+  padding: var(--space-2);
   border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px transparent;
   color: var(--ink);
-  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    scale 150ms ease-out;
 }
 
-.link-tile:hover {
-  border-color: var(--brand);
-  text-decoration: none;
+.me-section__link:active {
+  background: var(--brand-soft);
+  scale: 0.985;
 }
 
-.signout {
-  margin-block-start: var(--space-4);
+.me-section__icon {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  transition:
+    background-color 150ms ease-out,
+    scale 150ms ease-out;
+}
+
+.me-section__link[href="/me/favorites"] .me-section__icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.me-section__link[href="/me/banned-items"] .me-section__icon {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.me-section__icon svg {
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+}
+
+.me-section__copy {
+  display: grid;
+  gap: 0.0625rem;
+  min-inline-size: 0;
+}
+
+.me-section__label {
+  font-weight: 650;
+}
+
+.me-section__description {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.me-section__chevron {
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+  transition:
+    color 150ms ease-out,
+    translate 150ms ease-out;
+}
+
+.me-section__chevron svg {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+@media (width >= 48rem) {
+  .me-sections {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+
+@media (hover: hover) {
+  .me-section__link:hover {
+    background: var(--brand-soft);
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .me-section__link:hover .me-section__icon {
+    background: var(--panel);
+    scale: 1.04;
+  }
+
+  .me-section__link:hover .me-section__chevron {
+    color: var(--brand);
+    translate: 2px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .me-section__link,
+  .me-section__icon,
+  .me-section__chevron {
+    transition: none;
+  }
+
+  .me-section__link:active {
+    scale: 1;
+  }
+
+  .me-section__link:hover .me-section__icon {
+    scale: 1;
+  }
+
+  .me-section__link:hover .me-section__chevron {
+    translate: none;
+  }
 }
 </style>

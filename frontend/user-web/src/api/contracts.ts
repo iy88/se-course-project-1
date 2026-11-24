@@ -282,6 +282,12 @@ export interface DisplayRestriction {
   released_at?: string | null;
 }
 
+export interface CategoryApplicationRef {
+  id: string;
+  proposed_name: string;
+  status: "pending";
+}
+
 export interface ProductPermissions {
   can_edit: boolean;
   can_off_shelf: boolean;
@@ -307,6 +313,7 @@ export interface ProductDetail {
   latest_review?: LatestReviewRef | null;
   display_restrictions?: DisplayRestriction[] | null;
   permissions?: ProductPermissions | null;
+  category_application?: CategoryApplicationRef | null;
 }
 
 export interface CategoryApplicationInput {
@@ -349,6 +356,46 @@ export interface ProductEditSnapshot {
   before_content: Record<string, unknown>;
   after_content: Record<string, unknown>;
   reason?: string | null;
+}
+
+export type CommentStatus = "published" | "deleted_by_author" | "removed_by_admin";
+
+export interface CommentAuthor {
+  id: string;
+  display_name: string;
+}
+
+/** One product comment or seller reply; replies only appear on top-level comments. */
+export interface CommentView {
+  id: string;
+  product_id: string;
+  author: CommentAuthor;
+  body?: string | null;
+  status: CommentStatus;
+  reply_to_comment_id?: string | null;
+  created_at: string;
+  replies?: CommentView[];
+}
+
+export interface CommentPage extends Page<CommentView> {}
+
+export type FavoriteItemStatus = "valid" | "invalid";
+
+/** A favourite in the personal list; an invalid item never carries product content. */
+export interface FavoriteItem {
+  product_id: string;
+  status: FavoriteItemStatus;
+  favorited_at: string;
+  product?: ProductSummary | null;
+  message?: string | null;
+}
+
+export interface FavoritePage extends Page<FavoriteItem> {}
+
+export interface FavoriteStatus {
+  favorited: boolean;
+  valid: boolean;
+  favorited_at?: string | null;
 }
 
 export type BannedGroup =

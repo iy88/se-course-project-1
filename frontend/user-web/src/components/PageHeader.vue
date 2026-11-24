@@ -32,7 +32,8 @@ defineProps<{
 
 .page-header__eyebrow {
   font-size: 0.75rem;
-  color: var(--ink-faint);
+  font-weight: 650;
+  color: var(--info);
 }
 
 .page-header__row {

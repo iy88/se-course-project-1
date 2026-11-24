@@ -2,6 +2,7 @@ package io.github.iy88.project1.storage.application;
 
 import io.github.iy88.project1.storage.OssFileObjects;
 import io.github.iy88.project1.storage.persistence.FileReferences;
+import io.github.iy88.project1.storage.persistence.FileRegistry;
 import io.github.iy88.project1.storage.persistence.FileRulesProperties;
 import io.github.iy88.project1.storage.persistence.UploadRegistration.Target;
 import java.net.URI;
@@ -32,6 +33,17 @@ public class FileRead {
             requireAccess.run();
             return references.readReferenced(target, fileId);
         });
+        return sign(fileId, objects, entry);
+    }
+
+    /** Signs a reference already authorized by the caller within its consistent read snapshot. */
+    @Transactional(propagation = Propagation.MANDATORY, readOnly = true)
+    public AuthorizedRead signInReadSnapshot(Target target, long fileId, OssFileObjects objects) {
+        return sign(fileId, objects, references.readReferenced(target, fileId));
+    }
+
+    private AuthorizedRead sign(long fileId, OssFileObjects objects,
+                                FileRegistry.Entry entry) {
         if (entry == null) {
             throw new IllegalStateException("File read transaction returned no result");
         }

@@ -7,6 +7,7 @@
     "build": "pnpm run typecheck && rsbuild build",
     "dev": "rsbuild",
     "preview": "rsbuild preview",
+    "test": "node --import ./tools/register-ts.mjs --test --test-isolation=none src",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {

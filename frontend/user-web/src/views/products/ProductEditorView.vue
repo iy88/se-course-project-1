@@ -9,6 +9,7 @@
  */
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import UiIcon from "../../../../shared/UiIcon.vue";
 import {
   createProduct,
   getProduct,
@@ -16,7 +17,12 @@ import {
   readBannedScope,
   updateProduct,
 } from "../../api/products";
-import type { BannedScopeView, CategoryView, ProductDetail } from "../../api/contracts";
+import type {
+  BannedScopeView,
+  CategoryApplicationRef,
+  CategoryView,
+  ProductDetail,
+} from "../../api/contracts";
 import { formatCentsAsYuanInput, parseYuanToCents } from "../../app/format";
 import { IdempotencyKeys } from "../../app/keys";
 import { bannedGroupLabels } from "../../app/labels";
@@ -42,6 +48,8 @@ const priceInput = ref("");
 const selectedCategoryIds = ref<string[]>([]);
 const newCategoryName = ref("");
 const imageFileIds = ref<string[]>([]);
+const existingImagePreviews = ref<Record<string, string>>({});
+const pendingCategoryApplication = ref<CategoryApplicationRef | null>(null);
 
 const categories = ref<CategoryView[]>([]);
 const bannedScope = ref<BannedScopeView | null>(null);
@@ -62,6 +70,7 @@ const selectableCategories = computed(() =>
 
 const canApplyNewCategory = computed(() => {
   if (!isEditing.value) return true;
+  if (pendingCategoryApplication.value !== null) return false;
   const state = editing.value?.lifecycle_state;
   return state === "pending_review" || state === "review_rejected";
 });
@@ -73,6 +82,15 @@ const bannedItemCount = computed(
 async function load(): Promise<void> {
   loading.value = true;
   loadError.value = null;
+  editing.value = null;
+  title.value = "";
+  description.value = "";
+  priceInput.value = "";
+  existingImagePreviews.value = {};
+  pendingCategoryApplication.value = null;
+  imageFileIds.value = [];
+  selectedCategoryIds.value = [];
+  newCategoryName.value = "";
   try {
     const [categoryResult, scope] = await Promise.all([
       listCategories(),
@@ -88,6 +106,10 @@ async function load(): Promise<void> {
       priceInput.value = formatCentsAsYuanInput(detail.price_cents);
       selectedCategoryIds.value = detail.categories.map((category) => category.id);
       imageFileIds.value = detail.images.map((image) => image.file_id);
+      existingImagePreviews.value = Object.fromEntries(
+        detail.images.map((image) => [image.file_id, image.url]),
+      );
+      pendingCategoryApplication.value = detail.category_application ?? null;
     }
     loaded.value = true;
   } catch (caught) {
@@ -117,7 +139,11 @@ function validate(): boolean {
   if (!description.value.trim()) errors.description = "请填写商品描述。";
   const cents = parseYuanToCents(priceInput.value);
   if (cents === null) errors.price = "请填写有效的价格，例如 45 或 45.50。";
-  if (!selectedCategoryIds.value.length && !newCategoryName.value.trim()) {
+  if (
+    !selectedCategoryIds.value.length &&
+    !newCategoryName.value.trim() &&
+    pendingCategoryApplication.value === null
+  ) {
     errors.categories = "请至少选择一个分类，或填写新分类名称。";
   }
   if (isEditing.value && editing.value?.lifecycle_state === "in_trade") {
@@ -147,7 +173,7 @@ async function submit(): Promise<void> {
           title: title.value.trim(),
           description: description.value.trim(),
           price_cents: priceCents,
-          category_ids: selectedCategoryIds.value,
+          category_ids: selectedCategoryIds.value.length ? selectedCategoryIds.value : undefined,
           image_file_ids: imageFileIds.value,
           category_application: canApplyNewCategory.value ? application : undefined,
           expected_version: editing.value.content_version,
@@ -251,12 +277,19 @@ async function submit(): Promise<void> {
           hint="支持 JPG、PNG"
           :max-count="6"
           :target="productId ? { resource_type: 'product', resource_id: productId } : null"
+          :existing-previews="existingImagePreviews"
         />
       </section>
 
       <section class="card stack">
         <div>
-          <span class="field__label">分类（至少选择一个，或申请新分类）</span>
+          <span class="field__label">
+            {{
+              pendingCategoryApplication
+                ? "分类（新分类申请审核中）"
+                : "分类（至少选择一个，或申请新分类）"
+            }}
+          </span>
           <p class="field__hint">已停用的分类不能用于新发布。</p>
         </div>
         <div class="inline">
@@ -274,6 +307,11 @@ async function submit(): Promise<void> {
         </div>
         <span v-if="fieldErrors.categories" class="field__error">{{ fieldErrors.categories }}</span>
 
+        <p v-if="pendingCategoryApplication" class="banner banner--info">
+          新分类“{{
+            pendingCategoryApplication.proposed_name
+          }}”正在审核；审核完成前不能重复提交分类申请。
+        </p>
         <div v-if="canApplyNewCategory" class="field">
           <label class="field__label" for="new-category">申请新分类（可选）</label>
           <input
@@ -284,7 +322,7 @@ async function submit(): Promise<void> {
             placeholder="没有合适的分类时填写，将随本次审核一并处理"
           />
         </div>
-        <p v-else class="banner banner--info">
+        <p v-else-if="!pendingCategoryApplication" class="banner banner--info">
           当前状态不再接受新的分类申请；如需更换分类，请在上方重新选择。
         </p>
       </section>
@@ -310,6 +348,7 @@ async function submit(): Promise<void> {
 
       <div class="inline">
         <button type="submit" class="btn btn--primary" :disabled="submitting">
+          <UiIcon name="check" />
           {{ submitting ? "正在提交…" : isEditing ? "保存并重新提交审核" : "提交审核" }}
         </button>
         <RouterLink to="/me/products" class="btn btn--ghost">取消</RouterLink>

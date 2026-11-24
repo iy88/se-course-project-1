@@ -7,6 +7,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import UiIcon from "../../../../shared/UiIcon.vue";
 import { listMyResources } from "../../api/aggregation";
 import type { ProductLifecycle } from "../../api/contracts";
 import { usePagedList } from "../../app/async";
@@ -81,17 +82,19 @@ function open(row: OwnedProductRow): void {
       description="查看审核结果、当前状态与可执行的操作。"
     >
       <template #actions>
-        <RouterLink to="/products/new" class="btn btn--primary">发布商品</RouterLink>
+        <RouterLink to="/products/new" class="btn btn--primary"
+          ><UiIcon name="plus" />发布商品</RouterLink
+        >
       </template>
     </PageHeader>
 
-    <div class="inline">
+    <div class="status-filter status-filter--six" role="group" aria-label="按商品状态筛选">
       <button
         v-for="tab in tabs"
         :key="tab.value || 'all'"
         type="button"
-        class="chip chip--action"
-        :class="{ 'chip--active': activeState === tab.value }"
+        class="status-filter__option"
+        :aria-pressed="activeState === tab.value"
         @click="selectState(tab.value)"
       >
         {{ tab.label }}
@@ -108,9 +111,7 @@ function open(row: OwnedProductRow): void {
       v-else-if="list.isEmpty.value"
       :title="activeState ? '该状态下没有商品' : '还没有发布过商品'"
       :description="activeState ? '切换到其他状态查看。' : '发布第一件商品，通过审核后即可被找到。'"
-    >
-      <RouterLink to="/products/new" class="btn btn--primary">发布商品</RouterLink>
-    </EmptyState>
+    />
     <template v-else>
       <ul class="rows">
         <li v-for="row in rows" :key="row.product_id">

@@ -63,6 +63,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
@@ -1060,6 +1061,7 @@ class TradeLifecycleIT {
         }
 
         @Bean
+        @Primary
         public CsrfGuard.Verifier csrfVerifier() {
             return (request, token) -> "it-csrf".equals(token);
         }

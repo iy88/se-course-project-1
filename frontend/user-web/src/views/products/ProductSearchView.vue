@@ -1,185 +1,211 @@
 <script setup lang="ts">
-/*
- * Product discovery: keyword, category and price filters over the public catalogue.
- *
- * US-03 requires combined filters with an explicit empty result state, so the
- * filter panel stays visible when nothing matches and the reset action clears all
- * three criteria at once.
- */
-import { computed, onMounted, reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { useRoute, useRouter, type LocationQueryRaw } from "vue-router";
+import UiIcon from "../../../../shared/UiIcon.vue";
 import { listCategories, searchProducts } from "../../api/products";
-import type { CategoryView, ProductSummary } from "../../api/contracts";
-import { usePagedList } from "../../app/async";
+import type { ProductSummary } from "../../api/contracts";
+import { useAsyncData, usePagedList } from "../../app/async";
 import { formatCents, formatRelative, parseYuanToCents } from "../../app/format";
-import { notify } from "../../app/toast";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
-import PageHeader from "../../components/PageHeader.vue";
 import PaginationBar from "../../components/PaginationBar.vue";
 
+const route = useRoute();
 const router = useRouter();
+
+const searching = computed(() => route.name === "product-search");
+const appliedKeyword = computed(() =>
+  searching.value && typeof route.query.q === "string" ? route.query.q.trim() : "",
+);
+const appliedCategories = computed(() => {
+  if (!searching.value) return [];
+  return [route.query.category]
+    .flat()
+    .filter((value): value is string => typeof value === "string" && value !== "");
+});
+const appliedMinPrice = computed(() =>
+  searching.value && typeof route.query.min === "string" ? route.query.min : "",
+);
+const appliedMaxPrice = computed(() =>
+  searching.value && typeof route.query.max === "string" ? route.query.max : "",
+);
 
 const keyword = ref("");
 const minPrice = ref("");
 const maxPrice = ref("");
 const selectedCategories = ref<string[]>([]);
-const categories = ref<CategoryView[]>([]);
-const filterError = ref<string | null>(null);
+const filterError = ref("");
 
-const filters = reactive({
-  keyword: "",
-  categoryIds: [] as string[],
-  minCents: null as number | null,
-  maxCents: null as number | null,
-});
+const categories = useAsyncData(listCategories);
+const filterableCategories = computed(() =>
+  (categories.data.value?.items ?? []).filter(
+    (category) => category.has_public_products || category.selectable,
+  ),
+);
+const hasAdvancedFilters = computed(
+  () => selectedCategories.value.length > 0 || minPrice.value !== "" || maxPrice.value !== "",
+);
 
-const list = usePagedList<ProductSummary>((page, pageSize, signal) =>
-  searchProducts(
+const list = usePagedList<ProductSummary>((page, pageSize, signal) => {
+  const minimum = parseYuanToCents(appliedMinPrice.value);
+  const maximum = parseYuanToCents(appliedMaxPrice.value);
+  return searchProducts(
     {
-      keyword: filters.keyword || undefined,
-      category_ids: filters.categoryIds.length ? filters.categoryIds : undefined,
-      min_price_cents: filters.minCents ?? undefined,
-      max_price_cents: filters.maxCents ?? undefined,
+      keyword: appliedKeyword.value || undefined,
+      category_ids: appliedCategories.value.length ? appliedCategories.value : undefined,
+      min_price_cents: minimum ?? undefined,
+      max_price_cents: maximum ?? undefined,
       page,
       page_size: pageSize,
     },
     signal,
-  ),
-);
-
-const hasActiveFilters = computed(
-  () =>
-    filters.keyword !== "" ||
-    filters.categoryIds.length > 0 ||
-    filters.minCents !== null ||
-    filters.maxCents !== null,
-);
-
-const filterableCategories = computed(() =>
-  categories.value.filter((category) => category.has_public_products || category.selectable),
-);
-
-onMounted(async () => {
-  void list.load(1);
-  try {
-    const result = await listCategories();
-    categories.value = result.items;
-  } catch (caught) {
-    filterError.value = caught instanceof Error ? caught.message : "分类未能加载。";
-  }
+  );
 });
 
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.name !== "home" && route.name !== "product-search") return;
+    keyword.value = appliedKeyword.value;
+    selectedCategories.value = [...appliedCategories.value];
+    minPrice.value = appliedMinPrice.value;
+    maxPrice.value = appliedMaxPrice.value;
+    filterError.value = "";
+    void list.load(1);
+    if (searching.value && categories.state.value === "idle") void categories.run();
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  list.cancel();
+  categories.cancel();
+});
+
+function openSearch(query: LocationQueryRaw): void {
+  void router.push({ name: "product-search", query });
+}
+
+function submitSearch(): void {
+  openSearch({
+    q: keyword.value.trim() || undefined,
+    category: appliedCategories.value,
+    min: appliedMinPrice.value || undefined,
+    max: appliedMaxPrice.value || undefined,
+  });
+}
+
 function applyFilters(): void {
-  const min = minPrice.value.trim() ? parseYuanToCents(minPrice.value) : null;
-  const max = maxPrice.value.trim() ? parseYuanToCents(maxPrice.value) : null;
-  if (minPrice.value.trim() && min === null) {
-    notify.warn("最低价需填写为数字，例如 20 或 20.50。");
+  filterError.value = "";
+  const min = minPrice.value.trim();
+  const max = maxPrice.value.trim();
+  const minimum = parseYuanToCents(min);
+  const maximum = parseYuanToCents(max);
+  if (min && minimum === null) {
+    filterError.value = "最低价需填写为数字，例如 20 或 20.50。";
     return;
   }
-  if (maxPrice.value.trim() && max === null) {
-    notify.warn("最高价需填写为数字，例如 200 或 200.50。");
+  if (max && maximum === null) {
+    filterError.value = "最高价需填写为数字，例如 200 或 200.50。";
     return;
   }
-  if (min !== null && max !== null && min > max) {
-    notify.warn("最低价不能高于最高价。");
+  if (minimum !== null && maximum !== null && minimum > maximum) {
+    filterError.value = "最低价不能高于最高价。";
     return;
   }
-  filters.keyword = keyword.value.trim();
-  filters.categoryIds = [...selectedCategories.value];
-  filters.minCents = min;
-  filters.maxCents = max;
-  void list.load(1);
+  openSearch({
+    q: appliedKeyword.value || undefined,
+    category: [...selectedCategories.value],
+    min: min || undefined,
+    max: max || undefined,
+  });
 }
 
 function resetFilters(): void {
-  keyword.value = "";
+  filterError.value = "";
+  selectedCategories.value = [];
   minPrice.value = "";
   maxPrice.value = "";
-  selectedCategories.value = [];
-  filters.keyword = "";
-  filters.categoryIds = [];
-  filters.minCents = null;
-  filters.maxCents = null;
-  void list.load(1);
+  openSearch({ q: appliedKeyword.value || undefined });
 }
 
 function toggleCategory(id: string): void {
-  const index = selectedCategories.value.indexOf(id);
-  if (index >= 0) {
-    selectedCategories.value = selectedCategories.value.filter((value) => value !== id);
-    return;
-  }
-  selectedCategories.value = [...selectedCategories.value, id];
-}
-
-function openProduct(productId: string): void {
-  void router.push({ name: "product-detail", params: { productId } });
+  selectedCategories.value = selectedCategories.value.includes(id)
+    ? selectedCategories.value.filter((value) => value !== id)
+    : [...selectedCategories.value, id];
 }
 </script>
 
 <template>
   <div class="stack stack--loose">
-    <PageHeader
-      eyebrow="逛逛"
-      title="校园二手"
-      description="按关键词、分类和价格区间查找在售商品。"
-    >
-      <template #actions>
-        <RouterLink to="/products/new" class="btn btn--primary">发布商品</RouterLink>
-      </template>
-    </PageHeader>
+    <h1 class="visually-hidden">{{ searching ? "搜索结果" : "校园二手" }}</h1>
+    <form class="catalogue-search" role="search" @submit.prevent="submitSearch">
+      <label for="keyword" class="catalogue-search__field">
+        <span class="visually-hidden">搜索商品</span>
+        <input
+          id="keyword"
+          v-model="keyword"
+          name="q"
+          type="search"
+          enterkeyhint="search"
+          placeholder="搜索商品标题或描述"
+        />
+      </label>
+      <button type="submit" class="btn btn--primary">
+        <UiIcon name="search" />
+        搜索
+      </button>
+    </form>
 
-    <section class="card filters">
-      <form class="filters__row" @submit.prevent="applyFilters">
-        <div class="field filters__keyword">
-          <label class="field__label" for="keyword">关键词</label>
-          <input
-            id="keyword"
-            v-model="keyword"
-            class="input"
-            type="search"
-            placeholder="标题或描述中的词"
-          />
+    <section v-if="searching" class="filters card" aria-labelledby="search-filter-title">
+      <h2 id="search-filter-title">筛选</h2>
+      <form class="stack" @submit.prevent="applyFilters">
+        <div class="filters__prices">
+          <div class="field">
+            <label class="field__label" for="min-price">最低价（元）</label>
+            <input id="min-price" v-model="minPrice" class="input" inputmode="decimal" />
+          </div>
+          <div class="field">
+            <label class="field__label" for="max-price">最高价（元）</label>
+            <input id="max-price" v-model="maxPrice" class="input" inputmode="decimal" />
+          </div>
         </div>
-        <div class="field">
-          <label class="field__label" for="min-price">最低价（元）</label>
-          <input id="min-price" v-model="minPrice" class="input" inputmode="decimal" />
-        </div>
-        <div class="field">
-          <label class="field__label" for="max-price">最高价（元）</label>
-          <input id="max-price" v-model="maxPrice" class="input" inputmode="decimal" />
-        </div>
-        <div class="filters__actions">
-          <button type="submit" class="btn btn--primary">搜索</button>
+
+        <ErrorNotice
+          v-if="categories.problem.value"
+          :error="categories.error.value"
+          @retry="categories.run"
+        />
+        <fieldset v-else-if="filterableCategories.length" class="filters__categories">
+          <legend class="field__label">分类</legend>
+          <div class="inline">
+            <button
+              v-for="category in filterableCategories"
+              :key="category.id"
+              type="button"
+              class="chip chip--action"
+              :class="{ 'chip--active': selectedCategories.includes(category.id) }"
+              :aria-pressed="selectedCategories.includes(category.id)"
+              @click="toggleCategory(category.id)"
+            >
+              {{ category.main_name }}
+            </button>
+          </div>
+        </fieldset>
+        <p v-if="filterError" class="field__error" role="alert">{{ filterError }}</p>
+        <div class="inline">
+          <button type="submit" class="btn btn--primary"><UiIcon name="filter" />应用筛选</button>
           <button
             type="button"
             class="btn btn--ghost"
-            :disabled="!hasActiveFilters"
+            :disabled="!hasAdvancedFilters"
             @click="resetFilters"
           >
-            清除条件
+            <UiIcon name="reset" />清除筛选
           </button>
         </div>
       </form>
-
-      <div v-if="filterableCategories.length" class="filters__categories">
-        <span class="field__label">分类</span>
-        <div class="inline">
-          <button
-            v-for="category in filterableCategories"
-            :key="category.id"
-            type="button"
-            class="chip chip--action"
-            :class="{ 'chip--active': selectedCategories.includes(category.id) }"
-            @click="toggleCategory(category.id)"
-          >
-            {{ category.main_name }}
-          </button>
-        </div>
-      </div>
-      <p v-if="filterError" class="field__error">{{ filterError }}</p>
     </section>
 
     <LoadingBlock v-if="list.isLoading.value" label="正在加载商品…" />
@@ -190,41 +216,38 @@ function openProduct(productId: string): void {
     />
     <EmptyState
       v-else-if="list.isEmpty.value"
-      :title="hasActiveFilters ? '没有符合条件的商品' : '暂时没有在售商品'"
-      :description="
-        hasActiveFilters ? '尝试减少分类条件或放宽价格区间。' : '成为第一个在这里发布商品的卖家。'
-      "
-    >
-      <button v-if="hasActiveFilters" type="button" class="btn" @click="resetFilters">
-        清除条件
-      </button>
-    </EmptyState>
+      :title="searching ? '没有符合条件的商品' : '暂时没有在售商品'"
+      :description="searching ? '可以换个关键词，或调整筛选条件。' : undefined"
+    />
     <template v-else>
-      <ul class="product-grid">
+      <ul class="product-grid" aria-label="在售商品">
         <li v-for="product in list.items.value" :key="product.id">
-          <article class="product-card" @click="openProduct(product.id)">
+          <RouterLink
+            :to="{ name: 'product-detail', params: { productId: product.id } }"
+            class="product-card"
+          >
             <div class="product-card__media">
-              <img
-                v-if="product.thumbnail"
-                :src="product.thumbnail.url"
-                :alt="product.title"
-                loading="lazy"
-              />
-              <span v-else class="product-card__placeholder">暂无图片</span>
-            </div>
-            <h2 class="product-card__title clamp-2">{{ product.title }}</h2>
-            <p class="product-card__price amount">{{ formatCents(product.price_cents) }}</p>
-            <p class="product-card__meta muted">
-              <span>{{ product.seller.display_name }}</span>
-              <span>·</span>
-              <span>{{ formatRelative(product.created_at) }}</span>
-            </p>
-            <p class="inline product-card__tags">
-              <span v-for="category in product.categories" :key="category.id" class="tag">
-                {{ category.name }}
+              <img v-if="product.thumbnail" :src="product.thumbnail.url" alt="" loading="lazy" />
+              <span v-else class="product-card__placeholder">
+                <UiIcon name="box" />
+                暂无图片
               </span>
-            </p>
-          </article>
+            </div>
+            <div class="product-card__body">
+              <h2 class="product-card__title clamp-2">{{ product.title }}</h2>
+              <p class="product-card__price amount">{{ formatCents(product.price_cents) }}</p>
+              <p class="product-card__meta muted">
+                <span>{{ product.seller.display_name }}</span>
+                <span aria-hidden="true">·</span>
+                <span>{{ formatRelative(product.created_at) }}</span>
+              </p>
+              <p v-if="product.categories.length" class="inline product-card__tags">
+                <span v-for="category in product.categories" :key="category.id" class="tag">{{
+                  category.name
+                }}</span>
+              </p>
+            </div>
+          </RouterLink>
         </li>
       </ul>
       <PaginationBar
@@ -238,73 +261,116 @@ function openProduct(productId: string): void {
 </template>
 
 <style scoped>
-.filters {
+.catalogue-search {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  align-items: center;
+  gap: var(--space-1);
+  inline-size: 100%;
+  padding: var(--space-1);
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius);
+  background: var(--panel);
 }
 
-.filters__row {
-  display: flex;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  align-items: flex-end;
+.catalogue-search:focus-within {
+  border-color: var(--brand);
 }
 
-.filters__keyword {
-  flex: 2 1 16rem;
+.catalogue-search__field {
+  flex: 1;
+  min-inline-size: 0;
+  padding-inline: var(--space-3);
+  cursor: text;
 }
 
-.filters__row > .field {
-  flex: 0 1 8rem;
+.catalogue-search input {
+  display: block;
+  inline-size: 100%;
+  min-block-size: var(--control-min-block);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
 }
 
-.filters__actions {
-  display: flex;
-  gap: var(--space-2);
+.catalogue-search:has(input:focus-visible) {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.catalogue-search input:focus-visible {
+  outline: none;
+}
+
+.catalogue-search button {
   flex: 0 0 auto;
+  padding-inline: var(--space-3);
+}
+
+.filters h2 {
+  margin-block-end: var(--space-3);
+  font-size: 1rem;
+}
+
+.filters__prices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  max-inline-size: 24rem;
 }
 
 .filters__categories {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  border-block-start: 1px solid var(--line);
-  padding-block-start: var(--space-3);
+  min-inline-size: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.filters__categories legend {
+  margin-block-end: var(--space-1);
+  padding: 0;
+}
+
+.filters__categories .chip {
+  min-block-size: var(--control-min-block);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
 }
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
 }
 
 .product-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  display: grid;
+  grid-template-rows: auto 1fr;
   block-size: 100%;
-  padding: var(--space-3);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-soft);
-  cursor: pointer;
-  transition: border-color 120ms ease;
+  overflow: hidden;
+  color: var(--ink);
 }
 
 .product-card:hover {
   border-color: var(--brand);
+  text-decoration: none;
+}
+
+.product-card:hover .product-card__title {
+  text-decoration: underline;
 }
 
 .product-card__media {
   display: grid;
   place-items: center;
   aspect-ratio: 4 / 3;
-  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: #f4f8f5;
-  margin-block-end: var(--space-2);
+  background: var(--panel-soft);
 }
 
 .product-card__media img {
@@ -314,13 +380,24 @@ function openProduct(productId: string): void {
 }
 
 .product-card__placeholder {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
   font-size: 0.75rem;
   color: var(--ink-faint);
 }
 
+.product-card__body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  padding: var(--space-3);
+}
+
 .product-card__title {
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
 }
 
 .product-card__price {
@@ -329,10 +406,24 @@ function openProduct(productId: string): void {
 
 .product-card__meta {
   display: flex;
-  gap: var(--space-1);
+  flex-wrap: wrap;
+  gap: 0 var(--space-1);
+  overflow-wrap: anywhere;
 }
 
 .product-card__tags {
   margin-block-start: var(--space-1);
+}
+
+@media (width >= 40rem) {
+  .product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (width >= 62rem) {
+  .product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 </style>

@@ -2,27 +2,58 @@
 /*
  * Application shell: brand row, primary navigation and the route outlet.
  *
- * Mobile uses a fixed bottom tab bar (thumb reach), wide screens use a left
- * navigation column so the content column keeps a comfortable measure.
+ * Primary navigation sits at the bottom on mobile and in the header on desktop.
  */
 import { computed, watch } from "vue";
-import { RouterLink, RouterView, useRoute } from "vue-router";
+import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
+import MobileBackButton from "../../shared/MobileBackButton.vue";
+import PageFeedback from "../../shared/PageFeedback.vue";
+import UiIcon from "../../shared/UiIcon.vue";
 import { session } from "./app/session";
 import { badges, refreshBadges } from "./app/badges";
+import { backFallbackFor, hasBackEntry } from "./app/navigation";
 
-import ToastHost from "./components/ToastHost.vue";
+import { dismiss, toasts } from "./app/toast";
 import AvatarBadge from "./components/AvatarBadge.vue";
+import OfflineNotice from "./components/OfflineNotice.vue";
 
 const route = useRoute();
+const router = useRouter();
 
 const primaryNav = [
-  { name: "home", label: "逛逛", badge: () => 0 },
-  { name: "conversations", label: "消息", badge: () => badges.conversationUnread.value },
-  { name: "notifications", label: "通知", badge: () => badges.notificationUnread.value },
-  { name: "me", label: "我的", badge: () => 0 },
-];
+  { name: "home", label: "逛逛", icon: "grid" },
+  { name: "notifications", label: "通知", icon: "bell" },
+  { name: "me", label: "我的", icon: "user" },
+] as const;
 
 const isAuthScreen = computed(() => route.meta.anonymous === true);
+const hasSplitAuthLayout = computed(() => route.name === "login" || route.name === "register");
+const activeSection = computed(() => {
+  if (route.path.startsWith("/me/notifications")) return "notifications";
+  if (route.path === "/me" || route.path.startsWith("/me/")) return "me";
+  if (route.path === "/" || route.path === "/search" || route.path.startsWith("/products/"))
+    return "home";
+  return null;
+});
+const backFallback = computed(() => backFallbackFor(route.meta, route.params));
+const hasHistoryBack = computed(() => {
+  // Reading fullPath refreshes the computed when navigation changes history state.
+  void route.fullPath;
+  return typeof window !== "undefined" && hasBackEntry(window.history.state);
+});
+const canGoBack = computed(() => backFallback.value !== null);
+const backLabel = computed(() =>
+  route.meta.backLabel ? `返回${route.meta.backLabel}` : "返回上一页",
+);
+
+function goBack(): void {
+  if (hasHistoryBack.value) {
+    router.back();
+    return;
+  }
+  const fallback = backFallback.value;
+  if (fallback) void router.push(fallback);
+}
 
 watch(
   () => route.fullPath,
@@ -36,221 +67,417 @@ watch(
 <template>
   <a class="skip-link" href="#main">跳到主要内容</a>
   <div class="shell" :class="{ 'shell--auth': isAuthScreen }">
+    <MobileBackButton
+      v-if="isAuthScreen && canGoBack"
+      class="shell__auth-back"
+      :label="backLabel"
+      @back="goBack"
+    />
     <header v-if="!isAuthScreen" class="shell__header">
-      <RouterLink to="/" class="shell__brand">
-        <span class="shell__logo" aria-hidden="true">二</span>
-        <span class="shell__brand-text">校园二手交易</span>
-      </RouterLink>
-      <nav class="shell__nav" aria-label="主导航">
+      <div class="shell__header-inner">
+        <div class="shell__header-leading">
+          <MobileBackButton
+            v-if="canGoBack"
+            class="shell__header-back"
+            :label="backLabel"
+            @back="goBack"
+          />
+          <RouterLink to="/" class="shell__brand" :class="{ 'shell__brand--with-back': canGoBack }">
+            <span class="shell__logo" aria-hidden="true">二</span>
+            <span class="shell__brand-text">校园二手交易</span>
+          </RouterLink>
+        </div>
+        <nav class="shell__nav" aria-label="主导航">
+          <RouterLink
+            v-for="item in primaryNav"
+            :key="item.name"
+            :to="{ name: item.name }"
+            class="shell__nav-link"
+            :data-section="item.name"
+            :aria-current="
+              item.name === activeSection
+                ? item.name === route.name
+                  ? 'page'
+                  : 'location'
+                : undefined
+            "
+          >
+            <span class="shell__nav-icon" aria-hidden="true">
+              <UiIcon :name="item.icon" />
+            </span>
+            <span>{{ item.label }}</span>
+            <span
+              v-if="item.name === 'notifications' && badges.notificationUnread.value > 0"
+              class="shell__badge"
+            >
+              <span class="visually-hidden">未读</span>{{ badges.notificationUnread.value }}
+            </span>
+          </RouterLink>
+        </nav>
         <RouterLink
-          v-for="item in primaryNav"
-          :key="item.name"
-          :to="{ name: item.name }"
-          class="shell__nav-link"
+          v-if="session.isAuthenticated.value"
+          to="/me"
+          class="shell__account"
+          aria-label="我的"
         >
-          {{ item.label }}
-          <span v-if="item.badge() > 0" class="shell__badge">{{ item.badge() }}</span>
+          <AvatarBadge
+            :display-name="session.displayName.value"
+            :url="session.avatarUrl.value"
+            size="sm"
+          />
+          <span class="shell__account-name">{{ session.displayName.value }}</span>
         </RouterLink>
-      </nav>
-      <RouterLink v-if="session.isAuthenticated.value" to="/me/settings" class="shell__account">
-        <AvatarBadge
-          :display-name="session.displayName.value"
-          :url="session.avatarUrl.value"
-          size="sm"
-        />
-        <span class="shell__account-name">{{ session.displayName.value }}</span>
-      </RouterLink>
+      </div>
     </header>
 
-    <main id="main" class="shell__main" :class="{ 'shell__main--auth': isAuthScreen }">
+    <OfflineNotice />
+    <PageFeedback :messages="toasts" @dismiss="dismiss" />
+    <main
+      id="main"
+      class="shell__main"
+      :class="{ 'shell__main--auth': isAuthScreen, 'shell__main--split': hasSplitAuthLayout }"
+    >
       <RouterView />
     </main>
-
-    <nav v-if="!isAuthScreen" class="shell__tabbar" aria-label="底部导航">
-      <RouterLink
-        v-for="item in primaryNav"
-        :key="item.name"
-        :to="{ name: item.name }"
-        class="shell__tab"
-      >
-        <span class="shell__tab-label">{{ item.label }}</span>
-        <span v-if="item.badge() > 0" class="shell__badge">{{ item.badge() }}</span>
-      </RouterLink>
-    </nav>
   </div>
-  <ToastHost />
 </template>
 
 <style scoped>
 .shell {
+  --shell-gutter: 1rem;
+  --tabbar-height: 4rem;
   display: flex;
   flex-direction: column;
   min-block-size: 100dvh;
-  max-inline-size: var(--shell-max);
-  margin-inline: auto;
-  padding-block-end: 4.25rem;
+  padding-block-end: calc(var(--tabbar-height) + env(safe-area-inset-bottom));
 }
 
 .shell--auth {
+  position: relative;
   padding-block-end: 0;
 }
 
+.shell__auth-back {
+  position: absolute;
+  inset-block-start: max(var(--space-3), env(safe-area-inset-top));
+  inset-inline-start: var(--shell-gutter);
+  z-index: 12;
+  box-shadow: var(--shadow-soft);
+}
+
 .shell__header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--panel);
-  border-block-end: 1px solid var(--line);
   position: sticky;
   inset-block-start: 0;
   z-index: 10;
+  background: var(--panel);
+  border-block-end: 1px solid var(--line);
+}
+
+.shell__header-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  max-inline-size: var(--shell-max);
+  min-block-size: 3.5rem;
+  margin-inline: auto;
+  padding-inline: var(--shell-gutter);
+}
+
+.shell__header-leading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
 }
 
 .shell__brand {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-2);
+  justify-self: start;
+  margin-inline-start: calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
   color: var(--ink);
+  font-weight: 700;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out,
+    scale 150ms ease-out;
 }
 
-.shell__brand:hover {
-  text-decoration: none;
+.shell__brand:active {
+  scale: 0.97;
 }
 
 .shell__logo {
   display: grid;
   place-items: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
+  flex: 0 0 1.875rem;
+  block-size: 1.875rem;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, #7fb79b, #2f6b4f);
-  color: #0f221a;
-  font-weight: 700;
-  font-size: 0.75rem;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 0.875rem;
 }
 
 .shell__brand-text {
-  font-weight: 650;
   font-size: 0.9375rem;
 }
 
 .shell__nav {
-  display: none;
-  gap: var(--space-1);
-  margin-inline-start: var(--space-4);
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-block-size: var(--tabbar-height);
+  border-block-start: 1px solid var(--line);
+  padding-block-end: env(safe-area-inset-bottom);
+  background: var(--panel);
 }
 
 .shell__nav-link {
+  --nav-icon-ink: var(--brand);
+  --nav-icon-bg: var(--brand-soft);
   position: relative;
-  padding: 0.3125rem 0.625rem;
-  border-radius: var(--radius-sm);
-  color: var(--ink-soft);
-  font-size: 0.875rem;
-}
-
-.shell__nav-link.router-link-active {
-  background: var(--brand-soft);
-  color: var(--brand-ink);
-  font-weight: 600;
-}
-
-.shell__nav-link:hover {
-  text-decoration: none;
-  background: #f4f8f5;
-}
-
-.shell__account {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  margin-inline-start: auto;
-  color: var(--ink-soft);
-  font-size: 0.8125rem;
+  justify-content: center;
+  gap: 0.125rem;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out,
+    scale 150ms ease-out;
 }
 
-.shell__account-name {
-  display: none;
+.shell__nav-link[data-section="notifications"] {
+  --nav-icon-ink: var(--info);
+  --nav-icon-bg: var(--info-soft);
+}
+
+.shell__nav-link[data-section="me"] {
+  --nav-icon-ink: var(--accent);
+  --nav-icon-bg: var(--accent-soft);
+}
+
+.shell__nav-link:focus-visible {
+  outline-offset: -3px;
+}
+
+.shell__nav-icon {
+  display: grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 1.75rem;
+  border-radius: 0.625rem;
+  color: var(--nav-icon-ink);
+}
+
+.shell__nav-icon svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+.shell__nav-link:hover,
+.shell__nav-link[aria-current] {
+  color: var(--brand-ink);
+}
+
+.shell__nav-link[aria-current] {
+  font-weight: 700;
+}
+
+.shell__nav-link[aria-current] .shell__nav-icon {
+  background: var(--nav-icon-bg);
 }
 
 .shell__badge {
   display: inline-grid;
   place-items: center;
-  min-inline-size: 1.125rem;
-  block-size: 1.125rem;
+  min-inline-size: 1rem;
+  block-size: 1rem;
   padding-inline: 0.25rem;
   border-radius: 999px;
   background: var(--danger);
   color: #fff;
   font-size: 0.625rem;
   font-weight: 700;
-  margin-inline-start: 0.25rem;
+}
+
+@media (width < 48rem) {
+  .shell__brand--with-back {
+    display: none;
+  }
+
+  .shell__badge {
+    position: absolute;
+    inset-block-start: 0.25rem;
+    inset-inline-start: calc(50% + 0.55rem);
+  }
+}
+
+.shell__account {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: var(--space-2);
+  min-block-size: var(--control-min-block);
+  min-inline-size: var(--control-min-block);
+  justify-content: center;
+  margin-inline-end: calc(-1 * var(--space-2));
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  transition:
+    background-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    color 150ms ease-out,
+    scale 150ms ease-out;
+}
+
+.shell__nav-link:active,
+.shell__account:active {
+  scale: 0.97;
+}
+
+.shell__account-name {
+  display: none;
 }
 
 .shell__main {
   flex: 1;
-  padding: var(--space-4);
+  inline-size: 100%;
+  max-inline-size: var(--shell-max);
+  margin-inline: auto;
+  padding: var(--space-5) var(--shell-gutter);
 }
 
 .shell__main--auth {
   display: grid;
   place-items: center;
+  max-inline-size: none;
 }
 
-.shell__tabbar {
-  position: fixed;
-  inset-block-end: 0;
-  inset-inline: 0;
-  z-index: 10;
+.shell__main.shell__main--split {
   display: flex;
-  justify-content: space-around;
-  background: var(--panel);
-  border-block-start: 1px solid var(--line);
-  padding-block: 0.375rem;
-  padding-block-end: max(0.375rem, env(safe-area-inset-bottom));
-}
-
-.shell__tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.125rem;
-  flex: 1;
-  padding: 0.375rem 0;
-  color: var(--ink-faint);
-  font-size: 0.75rem;
-  min-block-size: var(--control-min-block);
-  justify-content: center;
-}
-
-.shell__tab.router-link-active {
-  color: var(--brand);
-  font-weight: 600;
-}
-
-.shell__tab:hover {
-  text-decoration: none;
+  align-items: stretch;
+  padding: 0;
 }
 
 @media (width >= 48rem) {
   .shell {
+    --shell-gutter: 1.5rem;
     padding-block-end: 0;
   }
 
+  .shell__header-inner {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    min-block-size: 4rem;
+  }
+
   .shell__nav {
+    position: static;
+    align-self: stretch;
     display: flex;
+    gap: var(--space-5);
+    border: 0;
+    padding: 0;
+  }
+
+  .shell__nav-link {
+    flex-direction: row;
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+    font-size: 0.875rem;
+  }
+
+  .shell__nav-link[aria-current]::after {
+    content: "";
+    position: absolute;
+    inset-inline: var(--space-2);
+    inset-block-end: 0;
+    block-size: 2px;
+    background: var(--nav-icon-ink);
+  }
+
+  .shell__nav-icon {
+    inline-size: 1.625rem;
+    block-size: 1.625rem;
+    border-radius: 0.375rem;
+  }
+
+  .shell__nav-icon svg {
+    inline-size: 1rem;
+    block-size: 1rem;
   }
 
   .shell__account-name {
     display: inline;
-  }
-
-  .shell__tabbar {
-    display: none;
+    max-inline-size: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .shell__main {
-    padding: var(--space-6) var(--space-5);
+    padding-block-start: var(--space-6);
+  }
+}
+
+@media (hover: hover) {
+  .shell__brand:hover {
+    background: var(--panel-soft);
+    color: var(--brand-ink);
+    text-decoration: none;
+  }
+
+  .shell__nav-link:hover {
+    background: var(--panel-soft);
+    color: var(--brand-ink);
+    text-decoration: none;
+  }
+
+  .shell__nav-link:hover .shell__nav-icon {
+    background: var(--nav-icon-bg);
+  }
+
+  .shell__account:hover {
+    background: var(--panel-soft);
+    box-shadow: inset 0 0 0 1px var(--line);
+    color: var(--brand-ink);
+    text-decoration: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell__brand,
+  .shell__nav-link,
+  .shell__account {
+    transition: none;
+  }
+
+  .shell__brand:active,
+  .shell__nav-link:active,
+  .shell__account:active {
+    scale: 1;
+  }
+}
+
+@media (forced-colors: active) {
+  .shell__nav-link[aria-current] .shell__nav-icon {
+    outline: 1px solid Highlight;
+  }
+
+  .shell__nav-link[aria-current]::after {
+    background: Highlight;
   }
 }
 </style>

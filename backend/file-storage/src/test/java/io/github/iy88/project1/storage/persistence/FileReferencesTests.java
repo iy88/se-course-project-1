@@ -99,4 +99,25 @@ class FileReferencesTests {
                 .isEqualTo(new FileReferences.Released(PRODUCT, ids, List.of(4L)));
         verify(references).delete(reference);
     }
+
+    @Test
+    void returnsOnlyTheFirstReferenceForEachTargetInOneQuery() {
+        var first = new FileReference(4L, PRODUCT, "image", "1", CREATED);
+        var second = new FileReference(5L, PRODUCT, "image", "1", CREATED);
+        var evidence = new FileReference(6L, EVIDENCE, "image", "1", CREATED);
+        ReflectionTestUtils.setField(first, "id", 1L);
+        ReflectionTestUtils.setField(second, "id", 2L);
+        ReflectionTestUtils.setField(evidence, "id", 3L);
+        var targetIds = List.of(PRODUCT.id(), EVIDENCE.id());
+        when(references.findByTargetTypeAndTargetIdInAndSlotOrderByTargetIdAscIdAsc(
+                "product", targetIds, "image")).thenReturn(List.of(first, second, evidence));
+
+        var result = service.firstCurrent("product", targetIds, "image");
+
+        assertThat(result).containsOnlyKeys(PRODUCT.id(), EVIDENCE.id());
+        assertThat(result.get(PRODUCT.id()).fileId()).isEqualTo(4L);
+        assertThat(result.get(EVIDENCE.id()).fileId()).isEqualTo(6L);
+        verify(references).findByTargetTypeAndTargetIdInAndSlotOrderByTargetIdAscIdAsc(
+                "product", targetIds, "image");
+    }
 }

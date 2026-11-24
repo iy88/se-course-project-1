@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.59
-Version-Datetime: 2026-11-22T00:16:57+08:00
+Version: 0.1.60
+Version-Datetime: 2026-11-25T03:25:12+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -19,13 +19,13 @@ macOS 或 Linux：
 
 ```bash
 umask 077
-cp -n backend/.env.example backend/.env.dev
+cp -n backend/.env.dev.example backend/.env.dev
 ```
 
 Windows PowerShell 5.1 或更高版本：
 
 ```powershell
-Copy-Item backend/.env.example backend/.env.dev -ErrorAction SilentlyContinue
+Copy-Item backend/.env.dev.example backend/.env.dev -ErrorAction SilentlyContinue
 ```
 
 按[开发配置](#开发配置)填写数据库、Redis 和所需的外部服务凭据。
@@ -77,7 +77,7 @@ Windows PowerShell 5.1 或更高版本：
 
 ## 开发配置
 
-`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.example`](backend/.env.example) 后替换示例值，不要把实际凭据提交到仓库。
+`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.dev.example`](backend/.env.dev.example) 后替换示例值，不要把实际凭据提交到仓库。
 
 | 资源 | 必需配置 |
 |---|---|
@@ -138,6 +138,18 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 - 仅当旧数据库仍由 app 角色持有时，confirmed `db reset` 才需要额外传入 `--admin-user` 完成角色迁移。
 - `oss reset` 清空 `OSS_BUCKET` 内的全部对象，每批最多删除 1,000 个。开发和联调时，维护配置应指向开发桶。
 - 重置中途失败时保持写入停止，修复后重新预览并执行完整命令。数据库重置会按当前 Flyway 迁移重建结构。
+
+### 创建管理端账号
+
+数据库迁移完成后，在仓库根目录打开终端执行以下命令，并替换邮箱和显示名称。
+
+```bash
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  account create-manager --env-file=backend/.env.dev \
+  --email=manager@example.com --display-name="测试管理员"
+```
+
+核对输出的目标数据库，按提示输入两次登录密码。密码输入无回显。命令使用配置的数据库 owner 创建 `manager` 账户并记录审计，密码采用和普通账户相同的长度规则与哈希算法。创建完成后，使用该邮箱和密码登录管理端。邮箱已注册时，命令报错并保留该账户原有角色和密码。
 
 ## 后端开发
 

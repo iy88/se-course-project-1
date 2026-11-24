@@ -7,6 +7,7 @@
  * is safe to reference from a product or profile write.
  */
 import { computed, onBeforeUnmount, ref } from "vue";
+import UiIcon from "../../../shared/UiIcon.vue";
 import { newIdempotencyKey } from "../app/keys";
 import { problemMessage } from "../app/problems";
 import { uploadVerifiedFile } from "../api/files";
@@ -22,6 +23,7 @@ const props = withDefaults(
     maxCount?: number;
     maxBytes?: number;
     disabled?: boolean;
+    existingPreviews?: Record<string, string>;
   }>(),
   {
     target: null,
@@ -30,17 +32,28 @@ const props = withDefaults(
     maxCount: 6,
     maxBytes: 104_857_600,
     disabled: false,
+    existingPreviews: () => ({}),
   },
 );
 
 const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
 
 const previews = ref<Record<string, string>>({});
+const failedPreviews = ref<Record<string, true>>({});
 const uploading = ref(false);
 const error = ref<string | null>(null);
 const input = ref<HTMLInputElement | null>(null);
 
 const fileIds = computed(() => props.modelValue);
+const items = computed(() =>
+  fileIds.value.map((fileId) => ({
+    fileId,
+    previewUrl:
+      failedPreviews.value[fileId] === true
+        ? ""
+        : (previews.value[fileId] ?? props.existingPreviews[fileId] ?? ""),
+  })),
+);
 const canAdd = computed(
   () => !props.disabled && !uploading.value && fileIds.value.length < props.maxCount,
 );
@@ -67,6 +80,9 @@ async function onFilesSelected(event: Event): Promise<void> {
         newIdempotencyKey(),
       );
       previews.value = { ...previews.value, [fileId]: URL.createObjectURL(file) };
+      const nextFailures = { ...failedPreviews.value };
+      delete nextFailures[fileId];
+      failedPreviews.value = nextFailures;
       accepted.push(fileId);
     }
     if (accepted.length) sync([...fileIds.value, ...accepted].slice(0, props.maxCount));
@@ -86,6 +102,10 @@ function remove(fileId: string): void {
   sync(fileIds.value.filter((id) => id !== fileId));
 }
 
+function markPreviewFailed(fileId: string): void {
+  failedPreviews.value = { ...failedPreviews.value, [fileId]: true };
+}
+
 // Local previews are object URLs; release them when the component goes away.
 onBeforeUnmount(() => {
   for (const url of Object.values(previews.value)) URL.revokeObjectURL(url);
@@ -99,20 +119,24 @@ onBeforeUnmount(() => {
       <span class="field__hint">{{ hint }} · 最多 {{ maxCount }} 张</span>
     </div>
     <ul class="uploader__grid">
-      <li v-for="fileId in fileIds" :key="fileId" class="uploader__item">
+      <li v-for="item in items" :key="item.fileId" class="uploader__item">
         <img
-          v-if="previews[fileId]"
-          :src="previews[fileId]"
+          v-if="item.previewUrl"
+          :src="item.previewUrl"
           :alt="`已选择的${label}`"
           class="uploader__image"
+          @error="markPreviewFailed(item.fileId)"
         />
-        <span v-else class="uploader__placeholder mono">{{ fileId }}</span>
+        <span v-else class="uploader__placeholder">
+          <UiIcon name="box" />
+          <span>预览不可用</span>
+        </span>
         <button
           type="button"
           class="uploader__remove"
           :aria-label="`移除${label}`"
           :disabled="disabled"
-          @click="remove(fileId)"
+          @click="remove(item.fileId)"
         >
           ×
         </button>
@@ -174,10 +198,19 @@ onBeforeUnmount(() => {
 .uploader__placeholder {
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: var(--space-1);
   inline-size: 100%;
   block-size: 100%;
-  font-size: 0.6875rem;
+  padding: var(--space-2);
   color: var(--ink-faint);
+  font-size: 0.6875rem;
+  text-align: center;
+}
+
+.uploader__placeholder svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
 }
 
 .uploader__remove {
