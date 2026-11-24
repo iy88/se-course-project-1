@@ -51,7 +51,7 @@ async function sendCode(): Promise<void> {
       newIdempotencyKey(),
     );
     ticket.value = accepted.requests[0] ?? null;
-    notice.value = "验证码已发送到该邮箱，请在有效期內填写。";
+    notice.value = "验证码申请已受理，邮件正在发送，请在有效期内填写。";
   } catch (caught) {
     error.value = problemMessage(caught);
   } finally {

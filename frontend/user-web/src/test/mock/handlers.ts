@@ -310,7 +310,7 @@ const routes: Route[] = [
       limits: {
         password_min_length: 10,
         password_max_length: 128,
-        display_name_max_length: 24,
+        display_name_max_length: 64,
       },
     }),
   },
@@ -411,7 +411,7 @@ const routes: Route[] = [
         resend_interval_seconds: 60,
         password_min_length: 10,
         password_max_length: 128,
-        display_name_max_length: 24,
+        display_name_max_length: 64,
       },
     }),
   },
@@ -422,15 +422,18 @@ const routes: Route[] = [
     handler: ({ body }) => {
       const purpose = requireString(body, "purpose");
       const email = requireString(body, "email");
+      const expiresAt = new Date(Date.now() + 600_000).toISOString();
+      // An email change sends one code to the current mailbox and one to the new one,
+      // and the two tickets are distinguished by purpose rather than by order.
+      const purposes =
+        purpose === "email_change" ? ["email_change_old", "email_change_new"] : [purpose];
       return {
         purpose,
-        requests: [
-          {
-            verification_id: `V-${Date.now()}`,
-            purpose,
-            expires_at: new Date(Date.now() + 600_000).toISOString(),
-          },
-        ],
+        requests: purposes.map((ticketPurpose, index) => ({
+          verification_id: `V-${Date.now()}-${index}`,
+          purpose: ticketPurpose,
+          expires_at: expiresAt,
+        })),
         retry_after_seconds: 60,
         email,
       };
@@ -479,6 +482,9 @@ const routes: Route[] = [
       if (hasAvatar) {
         const fileId = body.avatar_file_id;
         if (fileId === null) {
+          // The endpoint cannot tell an explicit null from an omitted field, so a
+          // null keeps the current avatar; removal is the "0" sentinel.
+        } else if (fileId === "" || fileId === "0") {
           account.avatar_file_id = null;
         } else {
           const id = typeof fileId === "string" ? fileId : "";
@@ -552,8 +558,9 @@ const routes: Route[] = [
       if (!["product_image", "case_evidence", "account_avatar"].includes(purpose)) {
         fail(422, "FILE_PURPOSE_MISMATCH", "不支持的文件用途。");
       }
+      const fileId = nextId(state, "files");
       const file = {
-        file_id: nextId(state, "files"),
+        file_id: fileId,
         owner_account_id: accountId,
         purpose,
         state: "uploading" as const,
@@ -562,7 +569,9 @@ const routes: Route[] = [
         object_key: `dev/${purpose}/${Date.now()}`,
         expires_at: new Date(Date.now() + 900_000).toISOString(),
         verified_at: null,
-        url: `https://oss.example.invalid/dev/${purpose}/${Date.now()}?x-oss-signature=mock`,
+        // Same-origin preview: the dev server proxies this to the mock service,
+        // which answers with a generated placeholder image for the file.
+        url: `/api/v1/files/${fileId}/content`,
       };
       state.files.push(file);
       const result: CreateUploadResult = {
@@ -570,19 +579,23 @@ const routes: Route[] = [
         state: "uploading",
         expires_at: file.expires_at,
         upload: {
+          // Same-origin so the browser can actually post the bytes; the dev server
+          // proxies this path to the mock service, which accepts the transfer.
           method: "POST",
-          url: "https://oss.example.invalid/",
-          fields: {
-            key: file.object_key,
-            policy: "mock-policy",
-            "x-oss-signature-version": "OSS4-HMAC-SHA256",
-            success_action_status: "204",
-          },
+          url: "/api/v1/files/mock-upload",
+          fields: { key: file.object_key },
         },
         limits: { max_bytes: 104_857_600, allowed_content_types: [declaredType] },
       };
       return result;
     },
+  },
+  {
+    // Stands in for the bucket entry point: the browser posts the signed form and
+    // the bytes here, and the dev server forwards it to this service.
+    method: "POST",
+    pattern: ["files", "mock-upload"],
+    handler: () => undefined,
   },
   {
     method: "POST",

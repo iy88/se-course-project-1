@@ -18,6 +18,20 @@ import type {
   UpdateProfileResult,
 } from "./contracts";
 
+/**
+ * CSRF token of the current anonymous entry context.
+ *
+ * Anonymous writes (registration, login, verification request, password reset) are
+ * guarded by the entry cookie and this token, so it is captured when the context is
+ * read and replayed on those calls.
+ */
+let entryCsrfToken: string | null = null;
+
+/** The captured entry token, exposed for tests and diagnostics. */
+export function currentEntryCsrfToken(): string | null {
+  return entryCsrfToken;
+}
+
 export function readCurrentIdentity(signal?: AbortSignal): Promise<CurrentIdentity> {
   return request<CurrentIdentity>("GET", "/account/session", { signal });
 }
@@ -26,6 +40,7 @@ export function login(payload: LoginRequest, idempotencyKey: string): Promise<Cu
   return request<CurrentIdentity>("POST", "/account/session", {
     body: payload,
     idempotencyKey,
+    csrfToken: entryCsrfToken ?? undefined,
   });
 }
 
@@ -34,7 +49,10 @@ export function logout(): Promise<void> {
 }
 
 export function readEntryContext(signal?: AbortSignal): Promise<EntryContext> {
-  return request<EntryContext>("GET", "/account/entry-context", { signal });
+  return request<EntryContext>("GET", "/account/entry-context", { signal }).then((context) => {
+    entryCsrfToken = context.csrf_token;
+    return context;
+  });
 }
 
 export function requestEmailVerification(
@@ -44,6 +62,7 @@ export function requestEmailVerification(
   return request<EmailVerificationAccepted>("POST", "/account/email-verifications", {
     body: payload,
     idempotencyKey,
+    csrfToken: entryCsrfToken ?? undefined,
   });
 }
 
@@ -51,7 +70,11 @@ export function register(
   payload: RegisterRequest,
   idempotencyKey: string,
 ): Promise<RegisterResult> {
-  return request<RegisterResult>("POST", "/accounts", { body: payload, idempotencyKey });
+  return request<RegisterResult>("POST", "/accounts", {
+    body: payload,
+    idempotencyKey,
+    csrfToken: entryCsrfToken ?? undefined,
+  });
 }
 
 export function updateProfile(
@@ -78,6 +101,7 @@ export function resetPassword(
   return request<void>("POST", "/account/password-resets", {
     body: payload,
     idempotencyKey,
+    csrfToken: entryCsrfToken ?? undefined,
   });
 }
 
@@ -96,7 +120,13 @@ export function setAvatar(fileId: string, idempotencyKey: string): Promise<Updat
   return updateProfile({ avatar_file_id: fileId }, idempotencyKey);
 }
 
-/** Remove the current avatar; the interface then shows the default. */
+/**
+ * Remove the current avatar; the interface then shows the default.
+ *
+ * The profile endpoint binds `avatar_file_id` to a plain string, so an explicit
+ * `null` is indistinguishable from an omitted field and keeps the avatar; removal
+ * is the `"0"` sentinel (see the S2-02 handoff). `null` therefore means "keep".
+ */
 export function removeAvatar(idempotencyKey: string): Promise<UpdateProfileResult> {
-  return updateProfile({ avatar_file_id: null }, idempotencyKey);
+  return updateProfile({ avatar_file_id: "0" }, idempotencyKey);
 }

@@ -38,6 +38,14 @@ export interface RequestOptions {
   idempotencyKey?: string;
   /** Verified connection id used by the realtime server to suppress self-echo. */
   originConnectionId?: string;
+  /**
+   * Explicit CSRF token.
+   *
+   * Anonymous account-entry writes are guarded by the entry cookie and by the
+   * token delivered in the entry context, not by the session CSRF cookie, so those
+   * calls must carry it in the header themselves.
+   */
+  csrfToken?: string;
   signal?: AbortSignal;
 }
 
@@ -110,6 +118,7 @@ export async function request<T>(
 
   const headers = new AxiosHeaders();
   if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
+  if (options.csrfToken) headers.set("X-CSRF-Token", options.csrfToken);
   if (options.originConnectionId) {
     headers.set("X-Origin-Connection-Id", options.originConnectionId);
   }
