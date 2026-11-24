@@ -1,6 +1,5 @@
 package io.github.iy88.project1.product.application;
 
-import io.github.iy88.project1.account.application.AccountQueries;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.domain.ProductComment;
@@ -40,7 +39,7 @@ public class ProductInteractions {
     private final ProductService productDetails;
     private final ProductInteractionStore store;
     private final CaseCommentAccess cases;
-    private final AccountQueries accounts;
+    private final CommentAccountAccess accounts;
     private final ProductSettings settings;
     private final Clock clock;
     private final TransactionTemplate transaction;
@@ -48,14 +47,14 @@ public class ProductInteractions {
     @Autowired
     public ProductInteractions(ProductRepository products, ProductService productDetails,
                                ProductInteractionStore store, CaseCommentAccess cases,
-                               AccountQueries accounts, ProductSettings settings,
+                               CommentAccountAccess accounts, ProductSettings settings,
                                PlatformTransactionManager transactionManager, ObjectProvider<Clock> clocks) {
         this(products, productDetails, store, cases, accounts, settings, transactionManager,
                 clocks.getIfAvailable(Clock::systemUTC));
     }
 
     ProductInteractions(ProductRepository products, ProductService productDetails,
-                        ProductInteractionStore store, CaseCommentAccess cases, AccountQueries accounts,
+                        ProductInteractionStore store, CaseCommentAccess cases, CommentAccountAccess accounts,
                         ProductSettings settings, PlatformTransactionManager transactionManager, Clock clock) {
         this.products = products;
         this.productDetails = productDetails;
@@ -83,7 +82,7 @@ public class ProductInteractions {
         Set<Long> authorIds = new java.util.LinkedHashSet<>();
         topLevel.forEach(comment -> authorIds.add(comment.authorAccountId()));
         replies.values().forEach(list -> list.forEach(reply -> authorIds.add(reply.authorAccountId())));
-        Map<Long, AccountQueries.Profile> profiles = accounts.profiles(authorIds);
+        Map<Long, String> profiles = accounts.displayNames(authorIds);
         List<CommentView> items = new ArrayList<>();
         for (ProductComment comment : topLevel) {
             List<CommentView> thread = replies.getOrDefault(comment.commentId(), List.of()).stream()
@@ -111,7 +110,7 @@ public class ProductInteractions {
             long commentId = store.insertComment(productId, viewerId, null, text, now);
             ProductComment comment = store.comment(commentId)
                     .orElseThrow(() -> new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "评论写入失败"));
-            return view(comment, accounts.profiles(Set.of(viewerId)), List.of());
+            return view(comment, accounts.displayNames(Set.of(viewerId)), List.of());
         });
     }
 
@@ -135,7 +134,7 @@ public class ProductInteractions {
             long replyId = store.insertComment(productId, viewerId, parent.commentId(), text, now);
             ProductComment reply = store.comment(replyId)
                     .orElseThrow(() -> new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "回复写入失败"));
-            return view(reply, accounts.profiles(Set.of(viewerId)), List.of());
+            return view(reply, accounts.displayNames(Set.of(viewerId)), List.of());
         });
     }
 
@@ -343,11 +342,11 @@ public class ProductInteractions {
         return new int[]{current, size};
     }
 
-    private static CommentView view(ProductComment comment, Map<Long, AccountQueries.Profile> profiles,
+    private static CommentView view(ProductComment comment, Map<Long, String> profiles,
                                     List<CommentView> replies) {
-        AccountQueries.Profile author = profiles.get(comment.authorAccountId());
+        String authorName = profiles.getOrDefault(comment.authorAccountId(), "");
         return new CommentView(Long.toString(comment.commentId()), Long.toString(comment.productId()),
-                new AuthorRef(Long.toString(comment.authorAccountId()), author == null ? "" : author.displayName()),
+                new AuthorRef(Long.toString(comment.authorAccountId()), authorName),
                 comment.body(), comment.state(),
                 comment.parentCommentId() == null ? null : Long.toString(comment.parentCommentId()),
                 comment.createdAt(), replies);
