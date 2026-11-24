@@ -1,7 +1,7 @@
 /* Transient operation feedback shared by every administrative screen. */
 import { readonly, ref } from "vue";
 
-export type ToastTone = "info" | "success" | "error";
+export type ToastTone = "info" | "ok" | "danger";
 
 export interface ToastMessage {
   id: number;
@@ -26,6 +26,6 @@ export const toasts = readonly(items);
 
 export const notify = {
   info: (message: string) => push("info", message),
-  success: (message: string) => push("success", message),
-  error: (message: string) => push("error", message),
+  success: (message: string) => push("ok", message),
+  error: (message: string) => push("danger", message),
 };

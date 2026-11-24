@@ -4,14 +4,14 @@
  * returned verification id. The code sent to the mailbox is never displayed by
  * the application; the development fixture accepts any six characters.
  */
+import AuthLayout from "../../../../shared/AuthLayout.vue";
+import UiIcon from "../../../../shared/UiIcon.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { register, requestEmailVerification } from "../../api/account";
 import type { EmailVerificationTicket } from "../../api/contracts";
 import { newIdempotencyKey } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
-import { setAccount } from "../../app/session";
-import { refreshBadges } from "../../app/badges";
 import { ensureEntryContext, entryLimits, passwordRuleText } from "../../app/entry";
 
 const router = useRouter();
@@ -74,15 +74,10 @@ async function submit(): Promise<void> {
       },
       newIdempotencyKey(),
     );
-    setAccount({
-      account_id: created.account_id,
-      display_name: created.display_name,
-      email: created.email,
-      roles: ["user"],
-      avatar_url: null,
+    await router.replace({
+      name: "login",
+      state: { registrationEmail: created.email },
     });
-    await refreshBadges();
-    await router.replace("/");
   } catch (caught) {
     error.value = problemMessage(caught);
   } finally {
@@ -92,16 +87,23 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <section class="auth">
-    <header class="auth__head">
-      <h1>注册</h1>
-      <p class="muted">先验证邮箱，再用验证码创建账户。</p>
-    </header>
-
-    <form class="auth__form" @submit.prevent="submit">
+  <AuthLayout
+    flat
+    brand="校园二手交易"
+    intro-title="开通校园交易账号"
+    intro-description="注册后可以收藏商品，也可以发布自己的闲置。"
+    :intro-features="[
+      { title: '收取验证码', description: '收不到邮件时，核对邮箱地址并检查垃圾邮件。' },
+      { title: '填写昵称', description: '其他同学可以在商品页面看到你的昵称。' },
+      { title: '发布闲置', description: '注册后填写商品信息，在「我的商品」查看审核结果。' },
+    ]"
+    title="注册"
+    description="先验证邮箱，再用验证码创建账户。"
+  >
+    <form class="auth-form" @submit.prevent="submit">
       <div class="field">
-        <label class="field__label" for="reg-email">校园邮箱</label>
-        <div class="inline">
+        <label class="field__label" for="reg-email">邮箱</label>
+        <div class="auth__verification">
           <input
             id="reg-email"
             v-model="email"
@@ -111,6 +113,7 @@ async function submit(): Promise<void> {
             required
           />
           <button type="button" class="btn" :disabled="!canSendCode" @click="sendCode">
+            <UiIcon name="mail" />
             {{ sending ? "发送中…" : ticket ? "重新发送" : "获取验证码" }}
           </button>
         </div>
@@ -134,7 +137,7 @@ async function submit(): Promise<void> {
       </div>
 
       <div class="field">
-        <label class="field__label" for="reg-name">显示名称</label>
+        <label class="field__label" for="reg-name">昵称</label>
         <input
           id="reg-name"
           v-model="displayName"
@@ -163,43 +166,21 @@ async function submit(): Promise<void> {
       <p v-if="error" class="field__error" role="alert">{{ error }}</p>
 
       <button class="btn btn--primary btn--block" type="submit" :disabled="!canSubmit">
+        <UiIcon name="check" />
         {{ submitting ? "正在创建账户…" : "创建账户" }}
       </button>
     </form>
 
-    <div class="auth__links">
-      <RouterLink to="/login">已有账户，去登录</RouterLink>
-    </div>
-  </section>
+    <template #footer>
+      <p>已有账户？ <RouterLink to="/login">登录</RouterLink></p>
+    </template>
+  </AuthLayout>
 </template>
 
 <style scoped>
-.auth {
-  inline-size: min(26rem, 100%);
-  padding: var(--space-5);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-soft);
-}
-
-.auth__head {
-  margin-block-end: var(--space-4);
-}
-
-.auth__head h1 {
-  font-size: 1.375rem;
-  margin-block-end: var(--space-1);
-}
-
-.auth__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.auth__links {
-  margin-block-start: var(--space-4);
-  font-size: 0.8125rem;
+.auth__verification {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
 }
 </style>

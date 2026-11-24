@@ -19,30 +19,34 @@ const message = computed(() => {
 </script>
 
 <template>
-  <div v-if="message" class="network-notice" role="status" aria-live="polite">
-    <span class="network-notice__text">{{ message }}</span>
-    <button
-      type="button"
-      class="network-notice__retry"
-      :disabled="network.retrying.value"
-      @click="network.retry"
-    >
-      {{ network.retrying.value ? "重试中…" : "重试" }}
-    </button>
+  <div v-if="message" class="network-notice">
+    <div class="network-notice__content banner banner--warn" role="status">
+      <span class="network-notice__text">{{ message }}</span>
+      <button
+        type="button"
+        class="network-notice__retry"
+        :disabled="network.retrying.value"
+        @click="network.retry"
+      >
+        {{ network.retrying.value ? "重试中…" : "重试" }}
+      </button>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .network-notice {
+  inline-size: min(100%, var(--shell-max));
+  margin-inline: auto;
+  padding-inline: var(--shell-gutter);
+  padding-block-start: var(--space-2);
+}
+
+.network-notice__content {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  background: var(--warn-soft);
-  border-block-end: 1px solid #ecd6ae;
-  color: var(--warn);
-  font-size: 0.8125rem;
 }
 
 .network-notice__text {

@@ -1,9 +1,7 @@
 /*
  * Transient result messages.
  *
- * Views report the outcome of an action through a toast so the affected panel
- * does not have to own a banner; failures stay inline next to the control that
- * produced them.
+ * The page-level feedback region displays these operation results in the layout.
  */
 import { readonly, ref } from "vue";
 

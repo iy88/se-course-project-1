@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /* Shared review pool and the current manager's claimed reviews. */
 import { computed, onMounted, ref, watch } from "vue";
+import UiIcon from "../../../shared/UiIcon.vue";
 import type { ManagementTodoItem } from "../api/contracts";
 import { AbortedError } from "../api/errors";
 import { claimCase, listReviewQueue } from "../api/reviews";
@@ -162,9 +163,11 @@ async function claim(item: ManagementTodoItem): Promise<void> {
                     :disabled="claiming !== null"
                     @click="claim(item)"
                   >
+                    <UiIcon name="plus" />
                     {{ claiming === item.summary.audit_id ? "认领中…" : "认领" }}
                   </button>
                   <button v-else type="button" class="btn btn--small" @click="open(item)">
+                    <UiIcon name="check" />
                     审核
                   </button>
                 </td>

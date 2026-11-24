@@ -344,7 +344,7 @@ async function submit(): Promise<void> {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: #f4f8f5;
+  background: var(--panel-soft);
 }
 
 .review-image img {
