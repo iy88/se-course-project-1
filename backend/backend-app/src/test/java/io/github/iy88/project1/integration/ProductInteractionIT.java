@@ -143,6 +143,17 @@ class ProductInteractionIT {
             assertThat(item.message()).isEqualTo("该商品已失效");
         });
 
+        var invalid = interactions.listFavoriteResources(buyer, "invalid", 1, 1);
+        assertThat(invalid.total()).isEqualTo(1);
+        assertThat(invalid.items()).singleElement().satisfies(item -> {
+            assertThat(item.favoriteId()).isNotBlank();
+            assertThat(item.updatedAt()).isEqualTo(added.favoritedAt());
+            assertThat(item.state()).isEqualTo("invalid");
+            assertThat(item.productSummary()).isNull();
+        });
+        assertThat(interactions.listFavoriteResources(buyer, "valid", 1, 1).total()).isZero();
+        assertFailure(() -> interactions.listFavoriteResources(buyer, "public", 1, 1), "INPUT_INVALID");
+
         interactions.removeFavorite(buyer, publicProduct);
         assertThat(count("product_favorite")).isZero();
         assertFailure(() -> interactions.favoriteStatus(buyer, publicProduct), "RESOURCE_NOT_VISIBLE");

@@ -19,6 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -194,14 +196,33 @@ public class ProductInteractions {
 
     // ------------------------------------------------------------------ favourites
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public FavoritePage listFavorites(long accountId, Integer page, Integer pageSize) {
+        var result = readFavorites(accountId, null, page, pageSize);
+        var items = result.items().stream().map(OwnedFavorite::item).toList();
+        return new FavoritePage(items, result.page(), result.pageSize(), result.total());
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public FavoriteResources listFavoriteResources(long accountId, String state, Integer page, Integer pageSize) {
+        if (state != null && !Set.of("valid", "invalid").contains(state)) {
+            throw new BusinessError(INVALID_INPUT, 422, "收藏状态无效");
+        }
+        var result = readFavorites(accountId, state, page, pageSize);
+        var items = result.items().stream().map(row -> new FavoriteResourceItem(Long.toString(row.favoriteId()),
+                row.item().favoritedAt(), row.item().status(), row.item().product())).toList();
+        return new FavoriteResources("favorite", items, result.page(), result.pageSize(), result.total(),
+                clock.instant());
+    }
+
+    private FavoriteSelection readFavorites(long accountId, String state, Integer page, Integer pageSize) {
         int[] paging = paging(page, pageSize);
         long offset = (long) (paging[0] - 1) * paging[1];
-        List<ProductInteractionStore.FavoriteRow> rows = store.favorites(accountId, paging[1], offset);
-        long total = store.countFavorites(accountId);
+        List<ProductInteractionStore.FavoriteRow> rows = store.favorites(accountId, state, paging[1], offset);
+        long total = store.countFavorites(accountId, state);
         List<Long> productIds = rows.stream().map(ProductInteractionStore.FavoriteRow::productId).toList();
         if (productIds.isEmpty()) {
-            return new FavoritePage(List.of(), paging[0], paging[1], total);
+            return new FavoriteSelection(List.of(), paging[0], paging[1], total);
         }
         Map<Long, Product> productsById = products.findByIdIn(productIds).stream()
                 .collect(Collectors.toMap(Product::id, product -> product));
@@ -211,15 +232,15 @@ public class ProductInteractions {
                 .toList();
         Map<Long, ProductService.ProductSummary> summaries = productDetails.summaries(validProducts).stream()
                 .collect(Collectors.toMap(summary -> Long.parseLong(summary.id()), summary -> summary));
-        List<FavoriteItem> items = new ArrayList<>();
+        List<OwnedFavorite> items = new ArrayList<>();
         for (ProductInteractionStore.FavoriteRow row : rows) {
             ProductService.ProductSummary summary = summaries.get(row.productId());
-            items.add(summary == null
-                    ? new FavoriteItem(Long.toString(row.productId()), "invalid", row.favoritedAt(), null,
-                    "该商品已失效")
-                    : new FavoriteItem(Long.toString(row.productId()), "valid", row.favoritedAt(), summary, null));
+            var item = summary == null
+                    ? new FavoriteItem(Long.toString(row.productId()), "invalid", row.favoritedAt(), null, "该商品已失效")
+                    : new FavoriteItem(Long.toString(row.productId()), "valid", row.favoritedAt(), summary, null);
+            items.add(new OwnedFavorite(row.favoriteId(), item));
         }
-        return new FavoritePage(items, paging[0], paging[1], total);
+        return new FavoriteSelection(items, paging[0], paging[1], total);
     }
 
     public FavoriteStatus favoriteStatus(long accountId, long productId) {
@@ -371,6 +392,20 @@ public class ProductInteractions {
     }
 
     public record FavoritePage(List<FavoriteItem> items, int page, int pageSize, long total) {
+    }
+
+    public record FavoriteResourceItem(String favoriteId, Instant updatedAt, String state,
+                                       ProductService.ProductSummary productSummary) {
+    }
+
+    public record FavoriteResources(String kind, List<FavoriteResourceItem> items, int page, int pageSize,
+                                    long total, Instant asOf) {
+    }
+
+    private record OwnedFavorite(long favoriteId, FavoriteItem item) {
+    }
+
+    private record FavoriteSelection(List<OwnedFavorite> items, int page, int pageSize, long total) {
     }
 
     public record FavoriteStatus(boolean favorited, boolean valid, Instant favoritedAt) {

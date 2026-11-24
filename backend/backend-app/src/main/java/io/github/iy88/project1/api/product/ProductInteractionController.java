@@ -81,6 +81,22 @@ class ProductInteractionController {
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 
+    @GetMapping(path = "/api/v1/account/resources", params = "kind=favorite")
+    ResponseEntity<ProductInteractions.FavoriteResources> listFavoriteResources(
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(name = "page_size", required = false) Integer pageSize,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String direction,
+            HttpServletRequest request) {
+        var identity = current.require(request);
+        if (role != null || direction != null) {
+            throw new BusinessError("INPUT_INVALID", 422, "收藏资源不接受 role 或 direction");
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(interactions.listFavoriteResources(identity.account().id(), state, page, pageSize));
+    }
+
     @GetMapping("/api/v1/me/favorites")
     ResponseEntity<ProductInteractions.FavoritePage> listFavorites(
             @RequestParam(required = false) Integer page,

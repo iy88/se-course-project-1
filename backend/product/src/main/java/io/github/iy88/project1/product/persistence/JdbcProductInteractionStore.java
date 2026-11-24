@@ -152,29 +152,43 @@ public class JdbcProductInteractionStore implements ProductInteractionStore {
 
     @Override
     public Optional<FavoriteRow> favorite(long accountId, long productId) {
-        return jdbc.sql("select product_id, created_at from product_favorite where account_id = ? and product_id = ?")
+        return jdbc.sql("""
+                        select favorite_id, product_id, created_at from product_favorite
+                        where account_id = ? and product_id = ?
+                        """)
                 .param(accountId).param(productId)
-                .query((rs, row) -> new FavoriteRow(rs.getLong("product_id"), instant(rs, "created_at")))
+                .query((row, index) -> favoriteRow(row))
                 .optional();
     }
 
+    private static final String OWNED_FAVORITES = """
+                  from product_favorite f
+                  join product p on p.product_id = f.product_id
+                 where f.account_id = :account
+                   and (cast(:state as text) is null or :state = case
+                       when p.deleted_at is null and p.lifecycle_state in ('public', 'in_trade')
+                       then 'valid' else 'invalid' end)
+                """;
+
     @Override
-    public List<FavoriteRow> favorites(long accountId, int limit, long offset) {
-        return jdbc.sql("""
-                        select product_id, created_at from product_favorite
-                         where account_id = ?
-                         order by created_at desc, favorite_id desc
-                         limit ? offset ?
-                        """)
-                .param(accountId).param(limit).param(offset)
-                .query((rs, row) -> new FavoriteRow(rs.getLong("product_id"), instant(rs, "created_at")))
+    public List<FavoriteRow> favorites(long accountId, String state, int limit, long offset) {
+        return jdbc.sql("select f.favorite_id, f.product_id, f.created_at" + OWNED_FAVORITES
+                        + " order by f.created_at desc, f.favorite_id desc limit :limit offset :offset")
+                .param("account", accountId).param("state", state, java.sql.Types.VARCHAR)
+                .param("limit", limit).param("offset", offset)
+                .query((row, index) -> favoriteRow(row))
                 .list();
     }
 
     @Override
-    public long countFavorites(long accountId) {
-        return jdbc.sql("select count(*) from product_favorite where account_id = ?")
-                .param(accountId).query(Long.class).single();
+    public long countFavorites(long accountId, String state) {
+        return jdbc.sql("select count(*)" + OWNED_FAVORITES)
+                .param("account", accountId).param("state", state, java.sql.Types.VARCHAR)
+                .query(Long.class).single();
+    }
+
+    private static FavoriteRow favoriteRow(java.sql.ResultSet row) throws java.sql.SQLException {
+        return new FavoriteRow(row.getLong("favorite_id"), row.getLong("product_id"), instant(row, "created_at"));
     }
 
     @Override
