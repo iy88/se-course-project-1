@@ -193,6 +193,7 @@ class ProductInteractionsTests {
 
     @Test
     void onlyTheAuthorDeletesAndRemovalWins() {
+        when(products.lockById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
         when(store.lockComment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, null)));
         assertFailure(() -> interactions.deleteComment(SELLER, PRODUCT, 500), "ACTION_NOT_ALLOWED");
 
@@ -202,6 +203,7 @@ class ProductInteractionsTests {
 
     @Test
     void deletingAnAlreadyDeletedCommentIsIdempotent() {
+        when(products.lockById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
         when(store.lockComment(500L)).thenReturn(Optional.of(new ProductComment(500, PRODUCT, VIEWER, null,
                 "Hello", NOW.minusSeconds(5), NOW.minusSeconds(1), null, null, null)));
 
@@ -277,6 +279,8 @@ class ProductInteractionsTests {
     @Test
     void removalRequiresAClaimOnTheCase() {
         var comment = comment(500, VIEWER, null, NOW, null);
+        when(products.lockById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(store.comment(500L)).thenReturn(Optional.of(comment));
         when(store.lockComment(500L)).thenReturn(Optional.of(comment));
         when(cases.claimedForProduct(MANAGER, CASE, PRODUCT)).thenReturn(false);
 
@@ -286,6 +290,8 @@ class ProductInteractionsTests {
 
     @Test
     void removalKeepsTheAuthorForTheResultNotification() {
+        when(products.lockById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(store.comment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, null)));
         when(store.lockComment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, null)));
         when(cases.claimedForProduct(MANAGER, CASE, PRODUCT)).thenReturn(true);
         when(store.markRemovedByAdmin(eq(500L), eq(MANAGER), eq("spam"), eq("case:100:enforcement:E-1"), any()))
@@ -295,6 +301,35 @@ class ProductInteractionsTests {
 
         assertThat(removed.authorAccountId()).isEqualTo(VIEWER);
         assertThat(removed.status()).isEqualTo(ProductComment.REMOVED_BY_ADMIN);
+    }
+
+    @Test
+    void claimedManagerReadsTheCaseScopeOnAPublicProduct() {
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(cases.claimedForProduct(MANAGER, CASE, PRODUCT)).thenReturn(true);
+        var removed = comment(600, VIEWER, null, NOW.minusSeconds(60), NOW);
+        when(store.topLevelComments(PRODUCT, ProductInteractionStore.Scope.CASE, MANAGER, 20, 0L))
+                .thenReturn(List.of(removed));
+        when(store.countTopLevelComments(PRODUCT, ProductInteractionStore.Scope.CASE, MANAGER)).thenReturn(1L);
+        when(store.replies(eq(PRODUCT), eq(List.of(600L)), eq(ProductInteractionStore.Scope.CASE), eq(MANAGER)))
+                .thenReturn(List.of());
+
+        var page = interactions.listComments(MANAGER, PRODUCT, 1, 20, CASE);
+
+        assertThat(page.items()).singleElement()
+                .satisfies(item -> assertThat(item.status()).isEqualTo(ProductComment.REMOVED_BY_ADMIN));
+    }
+
+    @Test
+    void favouriteStatusOfADeletedProductStaysInvalidInsteadOfMissing() {
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(deletedProduct()));
+        when(store.favorite(VIEWER, PRODUCT))
+                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(PRODUCT, NOW)));
+
+        var status = interactions.favoriteStatus(VIEWER, PRODUCT);
+
+        assertThat(status.favorited()).isTrue();
+        assertThat(status.valid()).isFalse();
     }
 
     @Test
@@ -318,6 +353,12 @@ class ProductInteractionsTests {
         Product product = new Product(SELLER, "Book", "Used book", 1_000, NOW);
         ReflectionTestUtils.setField(product, "id", id);
         product.transition(state, NOW);
+        return product;
+    }
+
+    private static Product deletedProduct() {
+        Product product = product(PRODUCT, Product.PUBLIC);
+        ReflectionTestUtils.setField(product, "deletedAt", NOW);
         return product;
     }
 
