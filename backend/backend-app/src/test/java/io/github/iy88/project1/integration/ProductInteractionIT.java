@@ -4,19 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.iy88.project1.BackendAppApplication;
-import io.github.iy88.project1.api.trade.TradeActorResolver;
 import io.github.iy88.project1.core.BusinessError;
-import io.github.iy88.project1.core.ExecutionContext;
-import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.application.ProductInteractions;
-import io.github.iy88.project1.trade.application.TradePorts;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
@@ -27,9 +20,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -83,7 +74,7 @@ class ProductInteractionIT {
         properties.setProperty("DB_LOCK_TIMEOUT_SECONDS", "10");
         properties.setProperty("ACCOUNT_ENTRY_SIGNING_KEY", "product-interaction-it-signing-key-0123456789");
 
-        var application = new SpringApplication(BackendAppApplication.class, Fixtures.class);
+        var application = new SpringApplication(BackendAppApplication.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("product-interaction-it", properties)));
         app = application.run("--spring.profiles.active=infrastructure", "--server.port=0",
@@ -122,9 +113,10 @@ class ProductInteractionIT {
                 .param(EMAIL_LIKE).update();
         db.sql("delete from product_comment where product_id in (" + MY_PRODUCTS + ")")
                 .param(EMAIL_LIKE).update();
-        db.sql("delete from moderation_case where reporter_account_id in (" + MY_ACCOUNTS + ")"
-                        + " or claimed_manager_id in (" + MY_ACCOUNTS + ")")
-                .param(EMAIL_LIKE).param(EMAIL_LIKE).update();
+        db.sql("delete from product_audit where product_id in (" + MY_PRODUCTS + ")")
+                .param(EMAIL_LIKE).update();
+        db.sql("delete from moderation_case where claimed_manager_id in (" + MY_ACCOUNTS + ")")
+                .param(EMAIL_LIKE).update();
         db.sql("delete from product where seller_account_id in (" + MY_ACCOUNTS + ")")
                 .param(EMAIL_LIKE).update();
         db.sql("delete from account where email like ?").param(EMAIL_LIKE).update();
@@ -203,7 +195,7 @@ class ProductInteractionIT {
         assertThat(interactions.listComments(buyer, publicProduct, 1, 20, null).items())
                 .singleElement().satisfies(item -> assertThat(item.body()).isEqualTo("Please answer"));
 
-        long caseId = reportCase(publicProduct, other, manager);
+        long caseId = reviewCase(publicProduct, manager);
         assertThat(interactions.listComments(manager, publicProduct, 1, 20, caseId).items()).hasSize(1);
 
         var removed = interactions.removeComment(manager, caseId, commentId, "E-1", "spam");
@@ -249,92 +241,6 @@ class ProductInteractionIT {
         assertThat(count("product_favorite")).isEqualTo(1);
     }
 
-    /**
-     * The trade adapters are not part of this work package; the product interaction use cases never
-     * call them, so the fixtures only keep the shared application context assemblable.
-     */
-    @TestConfiguration(proxyBeanMethods = false)
-    static class Fixtures {
-        @Bean
-        TradePorts.Product tradeProduct() {
-            return new TradePorts.Product() {
-                @Override
-                public Optional<TradePorts.ProductState> read(long productId) {
-                    return Optional.empty();
-                }
-
-                @Override
-                public Optional<TradePorts.ProductSummary> visibleSummary(long productId, long viewerId) {
-                    return Optional.empty();
-                }
-
-                @Override
-                public TradePorts.ProductState lock(WriteTransaction transaction, long productId) {
-                    throw unavailable();
-                }
-
-                @Override
-                public void requireTradable(TradePorts.ProductState state, long buyerId) {
-                    throw unavailable();
-                }
-
-                @Override
-                public void requireNoOccupancy(TradePorts.ProductState state, long tradeId) {
-                    throw unavailable();
-                }
-
-                @Override
-                public void acquire(WriteTransaction transaction, TradePorts.ProductState state, long tradeId) {
-                    throw unavailable();
-                }
-
-                @Override
-                public void release(WriteTransaction transaction, TradePorts.ProductState state, long tradeId,
-                                    String reason) {
-                    throw unavailable();
-                }
-            };
-        }
-
-        @Bean
-        TradePorts.Accounts tradeAccounts() {
-            return new TradePorts.Accounts() {
-                @Override
-                public void requireCurrentSession(ExecutionContext context) {
-                    throw unavailable();
-                }
-
-                @Override
-                public TradePorts.AccountQualification qualification(long accountId) {
-                    return new TradePorts.AccountQualification(accountId, true, false);
-                }
-
-                @Override
-                public Map<Long, TradePorts.AccountProfile> profiles(Set<Long> accountIds) {
-                    return Map.of();
-                }
-            };
-        }
-
-        @Bean
-        TradePorts.Notifications tradeNotifications() {
-            return (transaction, businessEventId, eventType, tradeId, recipients) -> {
-                throw unavailable();
-            };
-        }
-
-        @Bean
-        TradeActorResolver tradeActorResolver() {
-            return request -> {
-                throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "交易接口不在本测试范围");
-            };
-        }
-    }
-
-    private static BusinessError unavailable() {
-        return new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "交易适配器未参与本测试");
-    }
-
     private static long account(String email, String displayName, String role) {
         return db.sql("""
                         insert into account (email, display_name, password_hash, credential_version, role, created_at)
@@ -353,15 +259,19 @@ class ProductInteractionIT {
                 .param(sellerId).param(title).param(state).query(Long.class).single();
     }
 
-    private static long reportCase(long productId, long reporter, long claimedManager) {
-        return db.sql("""
-                        insert into moderation_case
-                            (case_type, created_at, target_type, target_id, reporter_account_id, reported_reason,
-                             case_status, claimed_manager_id, claimed_at)
-                        values ('report', now(), 'product', ?, ?, 'spam', 'claimed', ?, now())
+    private static long reviewCase(long productId, long claimedManager) {
+        long caseId = db.sql("""
+                        insert into moderation_case (case_type, created_at, claimed_manager_id, claimed_at)
+                        values ('product_review', now(), ?, now())
                         returning id
                         """)
-                .param(productId).param(reporter).param(claimedManager).query(Long.class).single();
+                .param(claimedManager).query(Long.class).single();
+        db.sql("""
+                        insert into product_audit (product_id, sequence_no, case_id, status, submitted_at)
+                        values (?, 1, ?, 'pending', now())
+                        """)
+                .param(productId).param(caseId).update();
+        return caseId;
     }
 
     private static long count(String table) {
