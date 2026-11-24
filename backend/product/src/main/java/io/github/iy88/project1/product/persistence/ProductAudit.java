@@ -77,8 +77,46 @@ public class ProductAudit {
     public long caseId() { return caseId; }
     public String status() { return status; }
     public Instant submittedAt() { return submittedAt; }
+    public Long decidedByAdminId() { return decidedByAdminId; }
     public String decisionReason() { return decisionReason; }
     public Instant decidedAt() { return decidedAt; }
+    public Map<String, Object> reviewedContent() { return reviewedContent; }
+    public Map<String, Object> reviewedApplication() { return reviewedApplication; }
+    public List<Long> reviewedBannedItemIds() { return reviewedBannedItemIds; }
+    public Instant withdrawnAt() { return withdrawnAt; }
+
+    /** Content version covered by the latest decision snapshot; null before a decision is saved. */
+    public Integer reviewedContentVersion() {
+        Object value = reviewedContent == null ? null : reviewedContent.get("content_version");
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Integer.valueOf(text);
+            } catch (NumberFormatException invalid) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    public void decide(long adminId, boolean approved, String reason, Map<String, Object> content,
+                       Map<String, Object> application, List<Long> bannedItemIds, Instant now) {
+        if (!"pending".equals(status)) {
+            throw new IllegalStateException("Only a pending product audit can be decided");
+        }
+        if (adminId <= 0 || now == null) {
+            throw new IllegalArgumentException("Invalid product review decision");
+        }
+        status = approved ? "passed" : "rejected";
+        decidedByAdminId = adminId;
+        decidedAt = now;
+        decisionReason = reason;
+        reviewedContent = content;
+        reviewedApplication = application;
+        reviewedBannedItemIds = bannedItemIds == null ? List.of() : List.copyOf(bannedItemIds);
+    }
 
     public void withdraw(Instant now) {
         if ("pending".equals(status)) {

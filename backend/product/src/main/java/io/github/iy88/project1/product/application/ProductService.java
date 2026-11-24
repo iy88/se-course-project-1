@@ -31,6 +31,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -47,6 +48,7 @@ public class ProductService {
     private final ProductEditHistoryRepository edits;
     private final ProductAuditRepository audits;
     private final CategoryApplicationRepository applications;
+    private final ObjectProvider<ProductReviewCaseLifecycle> reviewCases;
     private final AccountRepository accounts;
     private final CategoryDirectory directory;
     private final ProductSettings settings;
@@ -59,7 +61,8 @@ public class ProductService {
 
     public ProductService(ProductRepository products, ProductCategoryRepository links,
                           ProductEditHistoryRepository edits, ProductAuditRepository audits,
-                          CategoryApplicationRepository applications, AccountRepository accounts,
+                          CategoryApplicationRepository applications,
+                          ObjectProvider<ProductReviewCaseLifecycle> reviewCases, AccountRepository accounts,
                           CategoryDirectory directory, ProductSettings settings, CategorySettings categorySettings,
                           FileReferences fileReferences, FileRead fileReads, org.springframework.core.env.Environment environment,
                           JdbcClient jdbc, PlatformTransactionManager manager) {
@@ -68,6 +71,7 @@ public class ProductService {
         this.edits = edits;
         this.audits = audits;
         this.applications = applications;
+        this.reviewCases = reviewCases;
         this.accounts = accounts;
         this.directory = directory;
         this.settings = settings;
@@ -96,7 +100,7 @@ public class ProductService {
             Instant now = Instant.now();
             Product product = products.save(new Product(sellerId, title, description, price, now));
             saveLinks(product.id(), sellerId, categoryIds, now);
-            long caseId = nextCaseId();
+            long caseId = openCase(now);
             ProductAudit audit = audits.save(new ProductAudit(product.id(), 1, caseId, now));
             if (proposed != null) {
                 applications.save(new CategoryApplication(product.id(), sellerId, proposed, now));
@@ -171,12 +175,14 @@ public class ProductService {
             if (!rejected) {
                 throw new BusinessError("PRODUCT_NOT_RESUBMITTABLE", 409, "当前商品不能重新提交审核");
             }
-            if (links.activeCategoryIds(productId).isEmpty()) {
-                throw new BusinessError("CATEGORY_REQUIRED", 422, "商品至少需要一个分类");
+            boolean hasSelectableCategory = links.activeCategoryIds(productId).stream()
+                    .anyMatch(id -> directory.find(id).map(CategoryDirectory.Info::selectable).orElse(false));
+            if (!hasSelectableCategory && applications.lockPending(productId).isEmpty()) {
+                throw new BusinessError("CATEGORY_REQUIRED", 422, "请至少选择一个分类或提交新分类申请");
             }
             Instant now = Instant.now();
             int sequence = audits.maxSequence(productId) + 1;
-            ProductAudit audit = audits.save(new ProductAudit(productId, sequence, nextCaseId(), now));
+            ProductAudit audit = audits.save(new ProductAudit(productId, sequence, openCase(now), now));
             product.transition(Product.PENDING_REVIEW, now);
             products.save(product);
             return new Resubmitted(Long.toString(audit.id()), Long.toString(audit.caseId()),
@@ -193,6 +199,10 @@ public class ProductService {
             }
             ProductAudit audit = audits.lockPending(productId)
                     .orElseThrow(() -> new BusinessError("REVIEW_NOT_PENDING", 409, "没有待处理审核"));
+            ProductReviewCaseLifecycle lifecycle = reviewCases.getIfAvailable();
+            if (lifecycle != null) {
+                lifecycle.requireUnclaimed(audit.caseId());
+            }
             Instant now = Instant.now();
             audit.withdraw(now);
             audits.save(audit);
@@ -309,6 +319,14 @@ public class ProductService {
         return products.findById(productId)
                 .filter(product -> !product.deleted() && product.sellerAccountId() == accountId)
                 .isPresent();
+    }
+
+    /**
+     * Content projection for a review reader whose manager authorization was already checked by the
+     * integration layer. It intentionally carries neither seller permissions nor review state.
+     */
+    public ProductDetail reviewProjection(Product product) {
+        return detail(product, 0, null);
     }
 
     public MyResources myResources(long accountId, String state, Integer page, Integer pageSize) {
@@ -454,15 +472,21 @@ public class ProductService {
     }
 
     private List<ImageRef> images(long productId) {
-        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+        boolean transactional = org.springframework.transaction.support.TransactionSynchronizationManager
+                .isActualTransactionActive();
+        if (transactional && !org.springframework.transaction.support.TransactionSynchronizationManager
+                .isCurrentTransactionReadOnly()) {
             return List.of();
         }
         var target = new UploadRegistration.Target("product", productId);
         List<ImageRef> images = new ArrayList<>();
         for (FileReferences.Reference reference : fileReferences.current(target, "image")) {
             var read = OssClients.use(oss.endpoint(), oss.region(), oss.accessKeyId(), oss.accessKeySecret(),
-                    client -> fileReads.prepare(target, reference.fileId(),
-                            new OssFileObjects(client, oss.bucket(), oss.prefix()), () -> { }));
+                    client -> {
+                        var objects = new OssFileObjects(client, oss.bucket(), oss.prefix());
+                        return transactional ? fileReads.signInReadSnapshot(target, reference.fileId(), objects)
+                                : fileReads.prepare(target, reference.fileId(), objects, () -> { });
+                    });
             images.add(new ImageRef(Long.toString(reference.fileId()), read.url().toString(), read.expiresAt()));
         }
         return images;
@@ -533,6 +557,11 @@ public class ProductService {
 
     private ProductAudit latestAudit(long productId) {
         return audits.findTopByProductIdOrderBySequenceNoDesc(productId).orElse(null);
+    }
+
+    private long openCase(Instant submittedAt) {
+        ProductReviewCaseLifecycle lifecycle = reviewCases.getIfAvailable();
+        return lifecycle == null ? nextCaseId() : lifecycle.open(submittedAt);
     }
 
     private long nextCaseId() {

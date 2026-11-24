@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.Ordered;
@@ -46,6 +47,9 @@ import tools.jackson.databind.json.JsonMapper;
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class IdempotencyFilter extends OncePerRequestFilter {
     private static final Set<String> SAFE = Set.of("GET", "HEAD", "OPTIONS", "TRACE");
+    private static final Pattern REVIEW_WRITES = Pattern.compile(
+            "/api/v1/admin/(cases/[^/]+/claim|product-reviews/[^/]+/decision)");
+    private static final Pattern NOTIFICATION_READ = Pattern.compile("/api/v1/account/notifications/[^/]+/read");
     private static final String DIGEST_VERSION = "s2-v1";
 
     private final JdbcClient jdbc;
@@ -70,8 +74,13 @@ public class IdempotencyFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith(request.getContextPath() + "/api/v1/")
-                || SAFE.contains(request.getMethod());
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        String method = request.getMethod();
+        // Review and notification commands authorize replays inside their own write transaction.
+        return !path.startsWith("/api/v1/")
+                || SAFE.contains(method)
+                || ("POST".equals(method) && REVIEW_WRITES.matcher(path).matches())
+                || ("PUT".equals(method) && NOTIFICATION_READ.matcher(path).matches());
     }
 
     @Override

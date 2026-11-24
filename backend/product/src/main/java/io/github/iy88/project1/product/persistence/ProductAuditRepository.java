@@ -12,6 +12,12 @@ public interface ProductAuditRepository extends Repository<ProductAudit, Long> {
 
     Optional<ProductAudit> findById(long id);
 
+    Optional<ProductAudit> findByCaseId(long caseId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from ProductAudit a where a.id = :id")
+    Optional<ProductAudit> lockById(@Param("id") long id);
+
     Optional<ProductAudit> findTopByProductIdOrderBySequenceNoDesc(long productId);
 
     Optional<ProductAudit> findTopByProductIdAndStatusOrderBySequenceNoDesc(long productId, String status);
