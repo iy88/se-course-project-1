@@ -12,6 +12,7 @@ import { badges, refreshBadges } from "./app/badges";
 
 import ToastHost from "./components/ToastHost.vue";
 import AvatarBadge from "./components/AvatarBadge.vue";
+import OfflineNotice from "./components/OfflineNotice.vue";
 
 const route = useRoute();
 
@@ -34,6 +35,7 @@ watch(
 </script>
 
 <template>
+  <OfflineNotice />
   <a class="skip-link" href="#main">跳到主要内容</a>
   <div class="shell" :class="{ 'shell--auth': isAuthScreen }">
     <header v-if="!isAuthScreen" class="shell__header">

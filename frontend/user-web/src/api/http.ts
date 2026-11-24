@@ -9,6 +9,7 @@
  * the browser code free of test data.
  */
 import axios, { AxiosError, AxiosHeaders } from "axios";
+import { NETWORK_UNAVAILABLE_EVENT } from "../app/network";
 import type { ErrorEnvelope } from "./contracts";
 import { AbortedError, ApiError } from "./errors";
 
@@ -134,6 +135,13 @@ export async function request<T>(
     return response.data;
   } catch (error) {
     if (isAbort(error)) throw new AbortedError();
+    if (
+      error instanceof AxiosError &&
+      error.code === AxiosError.ERR_NETWORK &&
+      typeof window !== "undefined"
+    ) {
+      window.dispatchEvent(new Event(NETWORK_UNAVAILABLE_EVENT));
+    }
     throw toApiError(error);
   }
 }
