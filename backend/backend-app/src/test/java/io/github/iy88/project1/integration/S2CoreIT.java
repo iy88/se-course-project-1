@@ -49,7 +49,8 @@ class S2CoreIT {
         properties.setProperty("ALLOWED_ORIGINS", "http://127.0.0.1:3000");
         properties.setProperty("DB_TRANSACTION_TIMEOUT_SECONDS", "20");
         properties.setProperty("DB_LOCK_TIMEOUT_SECONDS", "10");
-        var application = new SpringApplication(BackendAppApplication.class);
+        var application = new SpringApplication(BackendAppApplication.class,
+                InfrastructureIT.Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("integration", properties)));
         app = application.run("--spring.profiles.active=infrastructure",

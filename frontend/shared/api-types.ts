@@ -176,6 +176,275 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/products/{product_id}/purchase-requests": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 提交购买请求 */
+    post: operations["createPurchaseRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/accept": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 接受请求 */
+    post: operations["acceptPurchaseRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/withdraw": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 撤回请求 */
+    post: operations["withdrawPurchaseRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 拒绝请求 */
+    post: operations["rejectPurchaseRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/agreements": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 提出首次约定或变更 */
+    post: operations["proposeAgreement"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/agreements/{agreement_id}/decisions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 同意、拒绝或撤回约定 */
+    post: operations["decideAgreement"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/completion-confirmations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 提交完成确认 */
+    post: operations["submitCompletionConfirmation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/cancellation-proposals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 提出取消或直接取消 */
+    post: operations["proposeCancellation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/cancellation-proposals/{proposal_id}/decisions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 同意、拒绝或撤回取消 */
+    post: operations["decideCancellation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/disputes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 发起争议 */
+    post: operations["openDispute"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}/disputes/{dispute_id}/resolution-confirmations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 确认争议已解决 */
+    post: operations["confirmDisputeResolution"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/trades/{trade_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 交易详情 */
+    get: operations["getTrade"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/trades": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 本人交易列表 */
+    get: operations["listMyTrades"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/capabilities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getCapabilities"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/account/events/head": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getEventHead"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/account/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["replayEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -383,6 +652,312 @@ export interface components {
       valid: boolean;
       /** Format: date-time */
       favorited_at?: string | null;
+    };
+    ErrorEnvelope: {
+      error: {
+        code: string;
+        message: string;
+        details?: {
+          [key: string]: unknown;
+        };
+      };
+      /** Format: uuid */
+      request_id: string;
+      /** Format: uuid */
+      operation_id?: string | null;
+    };
+    AccountRef: {
+      id: string;
+      display_name: string;
+      avatar_url?: string | null;
+    };
+    ProductRef: {
+      id: string;
+      title?: string;
+      price_cents?: number;
+    };
+    Agreement: {
+      id: string;
+      base_agreement_id?: string | null;
+      version_no: number;
+      /** @enum {string} */
+      status: "proposed" | "effective" | "rejected" | "withdrawn" | "superseded";
+      proposed_by: string;
+      /** Format: date-time */
+      delivery_at: string;
+      delivery_place_text: string;
+      delivery_method: string;
+      amount_cents: number;
+      payment_method: string;
+      payment_timing: string;
+      /** Format: date-time */
+      proposed_at: string;
+    };
+    Confirmation: {
+      id: string;
+      agreement_id: string;
+      confirmer_id: string;
+      note?: string | null;
+      /** Format: date-time */
+      submitted_at: string;
+    };
+    Cancellation: {
+      id: string;
+      proposed_by: string;
+      /** @enum {string} */
+      mode: "direct" | "approval";
+      reason?: string | null;
+      /** @enum {string} */
+      status: "pending" | "accepted" | "rejected" | "withdrawn";
+      /** Format: date-time */
+      proposed_at: string;
+    };
+    Dispute: {
+      id: string;
+      initiator_id: string;
+      statement: string;
+      /** @enum {string} */
+      status: "open" | "resolved" | "terminated";
+      /** Format: date-time */
+      opened_at: string;
+      /** Format: date-time */
+      resolved_at?: string | null;
+    };
+    TradeView: {
+      id: string;
+      product: components["schemas"]["ProductRef"];
+      buyer: components["schemas"]["AccountRef"];
+      seller: components["schemas"]["AccountRef"];
+      /** @enum {string} */
+      status:
+        | "pending_acceptance"
+        | "rejected"
+        | "withdrawn"
+        | "closed"
+        | "in_progress"
+        | "disputed"
+        | "abnormal"
+        | "terminated"
+        | "completed";
+      /** @enum {string|null} */
+      phase?: "first_agreement_pending" | "awaiting_completion" | null;
+      /** @enum {string|null} */
+      terminal_reason?: "completed" | "cancelled" | "admin_terminated" | null;
+      request: {
+        note?: string | null;
+        /** Format: date-time */
+        requested_at?: string;
+        /** Format: date-time */
+        responded_at?: string | null;
+        close_reason?: string | null;
+      };
+      agreement: {
+        current?: components["schemas"]["Agreement"] | null;
+        pending?: components["schemas"]["Agreement"] | null;
+      };
+      confirmations: {
+        current?: components["schemas"]["Confirmation"][];
+        both_current?: boolean;
+      };
+      wait: {
+        active?: boolean;
+        /** Format: date-time */
+        started_at?: string | null;
+        /** Format: date-time */
+        deadline_at?: string | null;
+        remaining_seconds?: number;
+        paused?: boolean;
+        /** Format: date-time */
+        ended_at?: string | null;
+        end_reason?: string | null;
+      };
+      freeze: {
+        active?: boolean;
+        items?: {
+          id?: string;
+          source?: string;
+          source_ref?: string | null;
+          reason?: string;
+          /** Format: date-time */
+          started_at?: string;
+        }[];
+      };
+      cancellation: {
+        pending?: components["schemas"]["Cancellation"] | null;
+      };
+      dispute: {
+        open?: components["schemas"]["Dispute"] | null;
+      };
+      trade_conversation_id?: string | null;
+      version: number;
+      permissions: {
+        allowed_actions?: string[];
+      };
+      /** Format: date-time */
+      created_at: string;
+      /** Format: date-time */
+      updated_at: string;
+      agreement_history?: components["schemas"]["Agreement"][];
+      confirmation_history?: {
+        [key: string]: unknown;
+      }[];
+      state_history?: {
+        [key: string]: unknown;
+      }[];
+    };
+    TradePage: {
+      items: components["schemas"]["TradeView"][];
+      page: number;
+      page_size: number;
+      total: number;
+    };
+    AgreementRequest: {
+      /** Format: date-time */
+      delivery_at: string;
+      delivery_place_text: string;
+      delivery_method: string;
+      amount_cents: number;
+      payment_method: string;
+      payment_timing: string;
+      base_agreement_id?: string | null;
+      expected_version: number;
+    };
+    AgreementEnvelope: {
+      agreement: components["schemas"]["Agreement"];
+      trade: components["schemas"]["TradeView"];
+    };
+    ConfirmationEnvelope: {
+      confirmation: components["schemas"]["Confirmation"];
+      trade: components["schemas"]["TradeView"];
+    };
+    CancellationEnvelope: {
+      /** @enum {string} */
+      mode: "direct" | "approval";
+      proposal?: components["schemas"]["Cancellation"] | null;
+      trade: components["schemas"]["TradeView"];
+    };
+    CancellationDecisionEnvelope: {
+      proposal: components["schemas"]["Cancellation"];
+      trade: components["schemas"]["TradeView"];
+    };
+    DisputeEnvelope: {
+      dispute: components["schemas"]["Dispute"];
+      trade: components["schemas"]["TradeView"];
+    };
+    Capabilities: {
+      config_version: string;
+      limits: {
+        password_min_length: number;
+        password_max_length: number;
+        display_name_max_length: number;
+      };
+    };
+    EventHead: {
+      /** Format: uuid */
+      epoch: string;
+      /** Format: int64 */
+      head_seq: number;
+      /** Format: int64 */
+      replay_floor: number;
+    };
+    RealtimeEvent: {
+      /** @constant */
+      type: "event";
+      /** Format: uuid */
+      epoch: string;
+      /** Format: uuid */
+      event_id: string;
+      /** Format: int64 */
+      account_seq: number;
+      /** @constant */
+      schema_version: 1;
+      /** Format: date-time */
+      occurred_at: string;
+    } & (
+      | {
+          /** @constant */
+          event_type: "message_created";
+          data: {
+            /** @enum {string} */
+            conversation_kind: "chat" | "trade" | "case";
+            conversation_id: string;
+            message_id: string;
+            message_seq: number;
+            /** Format: uuid */
+            business_event_id?: string;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "message_read";
+          data: {
+            /** @enum {string} */
+            conversation_kind: "chat" | "trade" | "case";
+            conversation_id: string;
+            last_read_seq: number;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "conversation_archived";
+          data: {
+            /** @enum {string} */
+            conversation_kind: "chat" | "trade" | "case";
+            conversation_id: string;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "notification_created";
+          data: {
+            notification_id: string;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "notification_read";
+          data: {
+            notification_id: string;
+            /** Format: date-time */
+            read_at: string;
+          };
+        }
+      | {
+          /** @constant */
+          event_type: "source_changed";
+          data: {
+            source_type: string;
+            source_id: string;
+          };
+        }
+    );
+    CursorAdvance: {
+      /** @constant */
+      type: "cursor_advance";
+      /** Format: uuid */
+      epoch: string;
+      /** Format: int64 */
+      from_seq: number;
+      /** Format: int64 */
+      through_seq: number;
+    };
+    RealtimeFrame: components["schemas"]["RealtimeEvent"] | components["schemas"]["CursorAdvance"];
+    EventPage: {
+      items: components["schemas"]["RealtimeFrame"][];
+      next_cursor: {
+        /** Format: uuid */
+        epoch: string;
+        /** Format: int64 */
+        after_seq: number;
+      };
+      /** Format: int64 */
+      head_seq: number;
+      has_more: boolean;
+    };
+    TradeDecisionRequest: {
+      /** @enum {string} */
+      decision: "accept" | "reject" | "withdraw";
+      expected_version: number;
     };
   };
   responses: never;
@@ -1175,6 +1750,909 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  createPurchaseRequest: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 商品 ID */
+        product_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          note?: string;
+          expected_product_version: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          Location?: string;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TradeView"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  acceptPurchaseRequest: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          expected_version: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TradeView"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  withdrawPurchaseRequest: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          expected_version: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TradeView"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  rejectPurchaseRequest: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          reason?: string;
+          expected_version: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TradeView"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  proposeAgreement: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgreementRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgreementEnvelope"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  decideAgreement: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+        /** @description 约定 ID */
+        agreement_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TradeDecisionRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgreementEnvelope"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  submitCompletionConfirmation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          note?: string;
+          expected_version: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConfirmationEnvelope"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  proposeCancellation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          reason?: string;
+          expected_version: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CancellationEnvelope"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  decideCancellation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+        /** @description 取消申请 ID */
+        proposal_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TradeDecisionRequest"];
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CancellationDecisionEnvelope"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  openDispute: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          statement: string;
+          expected_version: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DisputeEnvelope"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  confirmDisputeResolution: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+        /** @description 争议 ID */
+        dispute_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          expected_version: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DisputeEnvelope"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description Conflict (STATE_CONFLICT / VERSION_CONFLICT / domain conflict) */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getTrade: {
+    parameters: {
+      query?: {
+        include?: ("agreement_history" | "confirmation_history" | "state_history")[];
+      };
+      header?: never;
+      path: {
+        /** @description 交易 ID */
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Trade view */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TradeView"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  listMyTrades: {
+    parameters: {
+      query?: {
+        role?: "all" | "buyer" | "seller";
+        status?: (
+          | "pending_acceptance"
+          | "rejected"
+          | "withdrawn"
+          | "closed"
+          | "in_progress"
+          | "disputed"
+          | "abnormal"
+          | "terminated"
+          | "completed"
+        )[];
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Trade page */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TradePage"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getCapabilities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current public configuration version and limits */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Capabilities"];
+        };
+      };
+    };
+  };
+  getEventHead: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current account event recovery boundary */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EventHead"];
+        };
+      };
+    };
+  };
+  replayEvents: {
+    parameters: {
+      query: {
+        epoch: string;
+        after_seq: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One page of projected account events */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EventPage"];
         };
       };
     };

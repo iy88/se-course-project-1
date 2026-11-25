@@ -70,7 +70,8 @@ class S2ProductionReviewIT {
         properties.setProperty("OSS_ENDPOINT", "https://oss-s2-test.invalid");
         properties.setProperty("OSS_BUCKET", OSS_BUCKET);
         properties.setProperty("OSS_PREFIX", OSS_PREFIX);
-        var application = new SpringApplication(BackendAppApplication.class);
+        var application = new SpringApplication(BackendAppApplication.class,
+                InfrastructureIT.Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("s2-production-review-it", properties)));
         app = application.run("--spring.profiles.active=infrastructure", "--server.port=0",

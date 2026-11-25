@@ -74,7 +74,8 @@ class ProductInteractionIT {
         properties.setProperty("DB_LOCK_TIMEOUT_SECONDS", "10");
         properties.setProperty("ACCOUNT_ENTRY_SIGNING_KEY", "product-interaction-it-signing-key-0123456789");
 
-        var application = new SpringApplication(BackendAppApplication.class);
+        var application = new SpringApplication(BackendAppApplication.class,
+                InfrastructureIT.Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("product-interaction-it", properties)));
         app = application.run("--spring.profiles.active=infrastructure", "--server.port=0",

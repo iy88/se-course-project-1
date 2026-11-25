@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,7 +33,8 @@ import tools.jackson.databind.json.JsonMapper;
 @EnableWebSocket
 @EnableScheduling
 @EnableConfigurationProperties(RealtimeSettings.class)
-@Profile("realtime-api & infrastructure & !dependency-probe")
+@Profile("infrastructure & !dependency-probe & !file-probe")
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class RealtimeConfiguration implements WebSocketConfigurer {
     private final RealtimeSocket socket;
     private final ConnectionQuota quota;
