@@ -8,6 +8,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.postgresql.util.PasswordUtil;
@@ -36,6 +37,44 @@ final class PostgresMaintenance {
 
     String scope() {
         return "PostgreSQL " + target.target() + " (owner " + owner + ", app " + appUser + ")";
+    }
+
+    long createManager(String email, String displayName, String passwordHash, String configVersion)
+            throws SQLException {
+        try (Connection connection = connect(target.jdbcUrl(), target.database(), owner, ownerPassword)) {
+            if (!owner.equals(databaseOwner(connection))) {
+                throw new IllegalStateException("The configured owner does not own the target database.");
+            }
+            // A single statement makes account creation and its audit entry atomic.
+            try (var statement = connection.prepareStatement("""
+                    WITH created AS (
+                        INSERT INTO public.account (email, display_name, password_hash, role, created_at)
+                        VALUES (?, ?, ?, 'manager', statement_timestamp())
+                        ON CONFLICT (public.normalize_email(email)) DO NOTHING
+                        RETURNING account_id
+                    )
+                    INSERT INTO public.audit_record (request_id, operation_id, actor_kind, actor_id,
+                                                     action, target_type, target_id, facts, config_version)
+                    SELECT ?, ?, 'system', 'maintenance:' || current_user,
+                           'account.manager_created', 'account', account_id, '{"role":"manager"}'::jsonb, ?
+                    FROM created
+                    RETURNING target_id
+                    """)) {
+                statement.setString(1, email);
+                statement.setString(2, displayName);
+                statement.setString(3, passwordHash);
+                UUID operationId = UUID.randomUUID();
+                statement.setObject(4, operationId);
+                statement.setObject(5, operationId);
+                statement.setString(6, configVersion);
+                try (var rows = statement.executeQuery()) {
+                    if (!rows.next()) {
+                        throw new IllegalStateException("An account already exists for this email.");
+                    }
+                    return rows.getLong(1);
+                }
+            }
+        }
     }
 
     void provision(boolean reset, String adminUser, char[] adminPassword) throws SQLException {

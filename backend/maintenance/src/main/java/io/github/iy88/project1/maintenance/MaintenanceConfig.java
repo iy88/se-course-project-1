@@ -34,6 +34,18 @@ final class MaintenanceConfig {
         return value;
     }
 
+    String valueOrDefault(String key, String defaultValue) {
+        return properties.getProperty(key, defaultValue);
+    }
+
+    int integerOrDefault(String key, int defaultValue) {
+        try {
+            return Integer.parseInt(valueOrDefault(key, Integer.toString(defaultValue)).strip());
+        } catch (NumberFormatException invalid) {
+            throw new IllegalArgumentException("Invalid configuration: " + key);
+        }
+    }
+
     PostgresUrl postgresUrl(String key) {
         String value = required(key);
         try {

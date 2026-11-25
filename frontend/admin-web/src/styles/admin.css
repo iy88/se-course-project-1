@@ -1,0 +1,228 @@
+/*
+ * Administration layout on top of the shared visual language. The base file is a
+ * copy of the user app's reviewed tokens and class vocabulary so both front ends
+ * keep one palette and control style.
+ */
+@import "./base.css";
+
+.admin-shell {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100dvh;
+}
+
+.admin-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+  background: var(--panel);
+  border-block-end: 1px solid var(--line);
+}
+
+.admin-header__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  inline-size: 100%;
+  max-inline-size: var(--shell-max);
+  min-block-size: 4rem;
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+}
+
+.admin-header__leading {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.admin-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-self: start;
+  color: var(--ink);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.admin-brand:hover {
+  text-decoration: none;
+}
+
+.admin-brand small {
+  display: block;
+  color: var(--ink-faint);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.admin-brand__logo {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 0.875rem;
+}
+
+.admin-nav {
+  display: flex;
+  align-self: stretch;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.admin-nav a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-block-end: 2px solid transparent;
+  padding-inline: var(--space-2);
+  color: var(--ink-soft);
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.admin-nav .ui-icon {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+.admin-nav a:hover {
+  color: var(--brand-ink);
+  text-decoration: none;
+}
+
+.admin-nav a[aria-current="page"] {
+  border-block-end-color: currentColor;
+  color: var(--brand-ink);
+  font-weight: 700;
+}
+
+.admin-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-self: end;
+}
+
+.admin-account__name {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  max-inline-size: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-main {
+  flex: 1;
+  inline-size: 100%;
+  max-inline-size: var(--shell-max);
+  margin-inline: auto;
+  padding: var(--space-5) var(--space-4) var(--space-6);
+}
+
+.admin-main.admin-main--login {
+  display: flex;
+  max-inline-size: none;
+  padding: 0;
+}
+
+.forbidden {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-inline-size: 34rem;
+  margin-inline: auto;
+  margin-block-start: 10vh;
+}
+
+.forbidden h1 {
+  font-size: 1.25rem;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-block-end: 1px solid var(--line);
+}
+
+.tab {
+  border: 0;
+  border-block-end: 2px solid transparent;
+  background: none;
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab--active {
+  color: var(--info);
+  border-block-end-color: var(--info);
+  font-weight: 600;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table td,
+.table th {
+  vertical-align: top;
+}
+
+.table th {
+  background: var(--panel-soft);
+  color: var(--info);
+}
+
+.table tbody tr:hover {
+  background: var(--info-soft);
+}
+
+@media (width < 48rem) {
+  .admin-header__inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: var(--space-1);
+    padding-block-start: var(--space-3);
+  }
+
+  .admin-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+    min-block-size: var(--control-min-block);
+  }
+
+  .admin-brand--with-back {
+    display: none;
+  }
+
+  .admin-account__name {
+    display: none;
+  }
+
+  .admin-nav a {
+    gap: var(--space-1);
+    padding-inline: var(--space-1);
+  }
+
+  .admin-main {
+    padding-block-start: var(--space-4);
+  }
+}
