@@ -514,6 +514,109 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/trades/{trade_id}/reviews": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 查看本笔交易评价 */
+    get: operations["getTradeReviews"];
+    put?: never;
+    /** 提交成交评价 */
+    post: operations["submitTradeReview"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/reviews": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 查看本人评价 */
+    get: operations["listMyReviews"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/account/overview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 查看本人业务概览 */
+    get: operations["getMyOverview"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/account/todos": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 查看本人待办 */
+    get: operations["listMyTodos"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/account/resources": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 按类型查看本人业务记录 */
+    get: operations["listMyResources"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/products/{product_id}/edit-history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 查看商品编辑历史 */
+    get: operations["listProductEdits"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -523,6 +626,7 @@ export interface components {
         peer: {
           account_id: string;
           display_name: string;
+          avatar_url?: string | null;
         };
         branches: {
           /** @enum {string} */
@@ -541,6 +645,8 @@ export interface components {
       total: number;
     };
     ConversationMessagePage: {
+      /** @description 关联交易 ID，仅交易会话返回 */
+      trade_id?: string;
       items: {
         message_id: string;
         seq: number;
@@ -573,6 +679,7 @@ export interface components {
       peer: {
         account_id: string;
         display_name: string;
+        avatar_url?: string | null;
       };
       reused: boolean;
     };
@@ -743,6 +850,7 @@ export interface components {
     CommentAuthor: {
       id: string;
       display_name: string;
+      avatar_url?: string | null;
     };
     CommentView: {
       id: string;
@@ -780,6 +888,7 @@ export interface components {
         seller: {
           id: string;
           display_name: string;
+          avatar_url?: string | null;
         };
         /** Format: date-time */
         created_at: string;
@@ -867,6 +976,7 @@ export interface components {
       opened_at: string;
       /** Format: date-time */
       resolved_at?: string | null;
+      case_id?: string | null;
     };
     TradeView: {
       id: string;
@@ -1103,6 +1213,54 @@ export interface components {
       /** @enum {string} */
       decision: "accept" | "reject" | "withdraw";
       expected_version: number;
+    };
+    TradeReview: {
+      review_id: string;
+      trade_id: string;
+      reviewer: components["schemas"]["AccountRef"];
+      reviewee: components["schemas"]["AccountRef"];
+      rating: number;
+      content: string | null;
+      visible: boolean;
+      /** Format: date-time */
+      created_at: string;
+    };
+    TradeReviewStatus: {
+      can_review: boolean;
+      written: components["schemas"]["TradeReview"] | null;
+      received: components["schemas"]["TradeReview"] | null;
+    };
+    AccountOverview: {
+      /** Format: date-time */
+      as_of: string;
+      products: {
+        total: number;
+        by_state: {
+          [key: string]: number;
+        };
+      };
+      trades: {
+        total: number;
+        buying: number;
+        selling: number;
+        by_state: {
+          [key: string]: number;
+        };
+      };
+      favorites: {
+        total: number;
+        valid: number;
+        invalid: number;
+      };
+      evaluations: {
+        written: number;
+        received: number;
+      };
+      reports: {
+        submitted: number;
+        received: number;
+      };
+      todo_count: number;
     };
   };
   responses: never;
@@ -1425,6 +1583,8 @@ export interface operations {
         page_size?: number;
         /** @description 认领管理员读取事项必要范围时提供 */
         case_id?: string;
+        /** @description 评论或回复编号。可见时返回其顶级评论所在页，保留分页大小。 */
+        anchor_comment_id?: string;
       };
       header?: never;
       path: {
@@ -3166,6 +3326,464 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["EventPage"];
+        };
+      };
+    };
+  };
+  getTradeReviews: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 查看本笔交易评价 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TradeReviewStatus"];
+        };
+      };
+      /** @description 未登录 */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 资源不可见 */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 依赖不可用 */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  submitTradeReview: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+      };
+      path: {
+        trade_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          rating: number;
+          content: string;
+        };
+      };
+    };
+    responses: {
+      /** @description 提交成交评价 */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            review: components["schemas"]["TradeReview"];
+          };
+        };
+      };
+      /** @description 未登录 */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 没有操作权限 */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 资源不可见 */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 业务状态冲突 */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 输入无效 */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 依赖不可用 */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  listMyReviews: {
+    parameters: {
+      query: {
+        direction: "written" | "received";
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 查看本人评价 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items: components["schemas"]["TradeReview"][];
+            page: number;
+            page_size: number;
+            total: number;
+          };
+        };
+      };
+      /** @description 未登录 */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 输入无效 */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 依赖不可用 */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  getMyOverview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 查看本人业务概览 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AccountOverview"];
+        };
+      };
+      /** @description 未登录 */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 依赖不可用 */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  listMyTodos: {
+    parameters: {
+      query?: {
+        kind?:
+          | "request_response"
+          | "agreement_response"
+          | "completion_response"
+          | "cancellation_response"
+          | "inquiry_response";
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 查看本人待办 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items: {
+              todo_key: string;
+              /** @enum {string} */
+              kind:
+                | "request_response"
+                | "agreement_response"
+                | "completion_response"
+                | "cancellation_response"
+                | "inquiry_response";
+              source: {
+                [key: string]: unknown;
+              };
+              /** Format: date-time */
+              created_at: string;
+              /** Format: date-time */
+              updated_at: string;
+              summary: string;
+            }[];
+            page: number;
+            page_size: number;
+            total: number;
+            counts_by_kind: {
+              [key: string]: number;
+            };
+            /** Format: date-time */
+            as_of: string;
+          };
+        };
+      };
+      /** @description 未登录 */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 输入无效 */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 依赖不可用 */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  listMyResources: {
+    parameters: {
+      query: {
+        kind: "product" | "trade" | "favorite" | "evaluation" | "report";
+        state?: string;
+        role?: "all" | "buying" | "selling";
+        direction?: "written" | "received";
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 按类型查看本人业务记录 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items: {
+              [key: string]: unknown;
+            }[];
+            page: number;
+            page_size: number;
+            total: number;
+            /** @enum {string} */
+            kind: "product" | "trade" | "favorite" | "evaluation" | "report";
+            /** Format: date-time */
+            as_of: string;
+          };
+        };
+      };
+      /** @description 未登录 */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 输入无效 */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 依赖不可用 */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  listProductEdits: {
+    parameters: {
+      query?: {
+        trade_id?: string;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        product_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 查看商品编辑历史 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            items: {
+              edit_id: string;
+              /** Format: date-time */
+              edited_at: string;
+              operator_kind: string;
+              edit_kind: string;
+              before_content: {
+                [key: string]: unknown;
+              };
+              after_content: {
+                [key: string]: unknown;
+              };
+              reason?: string | null;
+            }[];
+            page: number;
+            page_size: number;
+            total: number;
+          };
+        };
+      };
+      /** @description 未登录 */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 资源不可见 */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 输入无效 */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description 依赖不可用 */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

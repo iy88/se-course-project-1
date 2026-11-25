@@ -479,6 +479,16 @@
               "type": "string",
               "pattern": "^[1-9][0-9]*$"
             }
+          },
+          {
+            "name": "anchor_comment_id",
+            "in": "query",
+            "required": false,
+            "description": "评论或回复编号。可见时返回其顶级评论所在页，保留分页大小。",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
           }
         ],
         "responses": {
@@ -3031,6 +3041,782 @@
           }
         }
       }
+    },
+    "/api/v1/trades/{trade_id}/reviews": {
+      "get": {
+        "operationId": "getTradeReviews",
+        "summary": "查看本笔交易评价",
+        "tags": ["trade"],
+        "parameters": [
+          {
+            "name": "trade_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看本笔交易评价",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradeReviewStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "submitTradeReview",
+        "summary": "提交成交评价",
+        "tags": ["trade"],
+        "parameters": [
+          {
+            "name": "trade_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["rating", "content"],
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "content": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "提交成交评价",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["review"],
+                  "properties": {
+                    "review": {
+                      "$ref": "#/components/schemas/TradeReview"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有操作权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "业务状态冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "输入无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me/reviews": {
+      "get": {
+        "operationId": "listMyReviews",
+        "summary": "查看本人评价",
+        "tags": ["trade"],
+        "parameters": [
+          {
+            "name": "direction",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["written", "received"]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看本人评价",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "page", "page_size", "total"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TradeReview"
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page_size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "输入无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/overview": {
+      "get": {
+        "operationId": "getMyOverview",
+        "summary": "查看本人业务概览",
+        "tags": ["account"],
+        "responses": {
+          "200": {
+            "description": "查看本人业务概览",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOverview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/todos": {
+      "get": {
+        "operationId": "listMyTodos",
+        "summary": "查看本人待办",
+        "tags": ["account"],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "request_response",
+                "agreement_response",
+                "completion_response",
+                "cancellation_response",
+                "inquiry_response"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看本人待办",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "page", "page_size", "total", "counts_by_kind", "as_of"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "todo_key",
+                          "kind",
+                          "source",
+                          "created_at",
+                          "updated_at",
+                          "summary"
+                        ],
+                        "properties": {
+                          "todo_key": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "request_response",
+                              "agreement_response",
+                              "completion_response",
+                              "cancellation_response",
+                              "inquiry_response"
+                            ]
+                          },
+                          "source": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "summary": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page_size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "counts_by_kind": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "as_of": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "输入无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/resources": {
+      "get": {
+        "operationId": "listMyResources",
+        "summary": "按类型查看本人业务记录",
+        "tags": ["account"],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["product", "trade", "favorite", "evaluation", "report"]
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["all", "buying", "selling"]
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["written", "received"]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "按类型查看本人业务记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "page", "page_size", "total", "kind", "as_of"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page_size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": ["product", "trade", "favorite", "evaluation", "report"]
+                    },
+                    "as_of": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "输入无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/products/{product_id}/edit-history": {
+      "get": {
+        "operationId": "listProductEdits",
+        "summary": "查看商品编辑历史",
+        "tags": ["product"],
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "trade_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "查看商品编辑历史",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "page", "page_size", "total"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "edit_id",
+                          "edited_at",
+                          "operator_kind",
+                          "edit_kind",
+                          "before_content",
+                          "after_content"
+                        ],
+                        "properties": {
+                          "edit_id": {
+                            "type": "string",
+                            "pattern": "^[0-9]+$"
+                          },
+                          "edited_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "operator_kind": {
+                            "type": "string"
+                          },
+                          "edit_kind": {
+                            "type": "string"
+                          },
+                          "before_content": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "after_content": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "reason": {
+                            "type": ["string", "null"]
+                          }
+                        }
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "page_size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不可见",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "输入无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "依赖不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3055,6 +3841,9 @@
                     },
                     "display_name": {
                       "type": "string"
+                    },
+                    "avatar_url": {
+                      "type": ["string", "null"]
                     }
                   }
                 },
@@ -3143,6 +3932,11 @@
         "type": "object",
         "required": ["items", "next_after_seq", "next_before_seq", "branch_status"],
         "properties": {
+          "trade_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "description": "关联交易 ID，仅交易会话返回"
+          },
           "items": {
             "type": "array",
             "items": {
@@ -3261,6 +4055,9 @@
               },
               "display_name": {
                 "type": "string"
+              },
+              "avatar_url": {
+                "type": ["string", "null"]
               }
             }
           },
@@ -3832,6 +4629,9 @@
           },
           "display_name": {
             "type": "string"
+          },
+          "avatar_url": {
+            "type": ["string", "null"]
           }
         }
       },
@@ -3953,6 +4753,9 @@
                       },
                       "display_name": {
                         "type": "string"
+                      },
+                      "avatar_url": {
+                        "type": ["string", "null"]
                       }
                     }
                   },
@@ -4205,6 +5008,17 @@
           "resolved_at": {
             "type": ["string", "null"],
             "format": "date-time"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -4930,6 +5744,189 @@
           "expected_version": {
             "type": "integer",
             "minimum": 1
+          }
+        }
+      },
+      "TradeReview": {
+        "type": "object",
+        "required": [
+          "review_id",
+          "trade_id",
+          "reviewer",
+          "reviewee",
+          "rating",
+          "content",
+          "visible",
+          "created_at"
+        ],
+        "properties": {
+          "review_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "trade_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "reviewer": {
+            "$ref": "#/components/schemas/AccountRef"
+          },
+          "reviewee": {
+            "$ref": "#/components/schemas/AccountRef"
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "content": {
+            "type": ["string", "null"]
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TradeReviewStatus": {
+        "type": "object",
+        "required": ["can_review", "written", "received"],
+        "properties": {
+          "can_review": {
+            "type": "boolean"
+          },
+          "written": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TradeReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "received": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TradeReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AccountOverview": {
+        "type": "object",
+        "required": [
+          "as_of",
+          "products",
+          "trades",
+          "favorites",
+          "evaluations",
+          "reports",
+          "todo_count"
+        ],
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "products": {
+            "type": "object",
+            "required": ["total", "by_state"],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "by_state": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "trades": {
+            "type": "object",
+            "required": ["total", "buying", "selling", "by_state"],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "buying": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "selling": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "by_state": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "favorites": {
+            "type": "object",
+            "required": ["total", "valid", "invalid"],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "valid": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "invalid": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "evaluations": {
+            "type": "object",
+            "required": ["written", "received"],
+            "properties": {
+              "written": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "received": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "reports": {
+            "type": "object",
+            "required": ["submitted", "received"],
+            "properties": {
+              "submitted": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "received": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "todo_count": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }
