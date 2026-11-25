@@ -23,6 +23,7 @@ public class EventDispatch {
     private final DeliverySettings settings;
     private final StringRedisTemplate redis;
     private final String stream;
+    private final String wakeChannel;
 
     public EventDispatch(JdbcClient jdbc, TransactionTemplate transaction, DeliverySettings settings,
                          StringRedisTemplate redis, @Value("${project1.redis.namespace}") String namespace) {
@@ -31,6 +32,7 @@ public class EventDispatch {
         this.settings = settings;
         this.redis = redis;
         this.stream = namespace + ":events";
+        this.wakeChannel = EventSignals.wakeChannel(namespace);
     }
 
     @Transactional(propagation = Propagation.NEVER)
@@ -51,12 +53,23 @@ public class EventDispatch {
                 continue;
             }
 
-            published += jdbc.sql("""
+            int updated = jdbc.sql("""
                     UPDATE user_event SET published_at = statement_timestamp(), lease_token = NULL, lease_until = NULL
                     WHERE event_id = :id AND lease_token = :token AND lease_until > statement_timestamp()
                     """).param("id", event.id()).param("token", token).update();
+            published += updated;
+            if (updated != 0) wakeSubscribers(event.account());
         }
         return published;
+    }
+
+    private void wakeSubscribers(long account) {
+        try {
+            redis.convertAndSend(wakeChannel, Long.toString(account));
+        } catch (RuntimeException failure) {
+            // The stream and database cursor still let receivers recover this event.
+            LOG.debug("account_id={} result=event_wake_failed", account, failure);
+        }
     }
 
     private Claimed claim(UUID token) {

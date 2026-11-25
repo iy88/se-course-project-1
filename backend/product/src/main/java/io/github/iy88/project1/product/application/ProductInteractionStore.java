@@ -31,6 +31,8 @@ public interface ProductInteractionStore {
 
     long countTopLevelComments(long productId, Scope scope, long viewerId);
 
+    long countNewerTopLevelComments(ProductComment anchor, Scope scope, long viewerId);
+
     boolean hasCommentBy(long productId, long authorId);
 
     List<ProductComment> replies(long productId, List<Long> parentIds, Scope scope, long viewerId);

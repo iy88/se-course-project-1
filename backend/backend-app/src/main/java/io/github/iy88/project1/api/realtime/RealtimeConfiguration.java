@@ -5,9 +5,12 @@ import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.messaging.DeliverySettings;
 import io.github.iy88.project1.messaging.EventReplay;
 import io.github.iy88.project1.messaging.EventSignals;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ThreadPoolExecutor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -15,12 +18,16 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -80,6 +87,37 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
         var scheduler = new ThreadPoolTaskScheduler();
         scheduler.setThreadNamePrefix("realtime-");
         return scheduler;
+    }
+
+    @Bean(defaultCandidate = false)
+    public ThreadPoolTaskExecutor realtimeSignalExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(128);
+        // The stream and periodic cursor checks recover if this queue fills.
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        executor.setThreadNamePrefix("realtime-signal-");
+        return executor;
+    }
+
+    @Bean
+    public RedisMessageListenerContainer realtimeSignalListener(RedisConnectionFactory redis,
+            @Qualifier("realtimeSignalExecutor") ThreadPoolTaskExecutor executor,
+            @Value("${project1.redis.namespace}") String namespace) {
+        var listener = new RedisMessageListenerContainer();
+        listener.setConnectionFactory(redis);
+        listener.setTaskExecutor(executor);
+        listener.addMessageListener((message, pattern) -> {
+            long accountId;
+            try {
+                accountId = Long.parseLong(new String(message.getBody(), StandardCharsets.UTF_8));
+            } catch (NumberFormatException invalid) {
+                return;
+            }
+            if (accountId > 0) socket.wakeAccount(accountId);
+        }, new ChannelTopic(EventSignals.wakeChannel(namespace)));
+        return listener;
     }
 
     @Override

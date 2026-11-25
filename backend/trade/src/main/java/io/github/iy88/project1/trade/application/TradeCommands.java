@@ -36,6 +36,9 @@ public final class TradeCommands {
     public record OpenDispute(long tradeId, String statement, int expectedVersion) {
     }
 
+    public record SubmitReview(long tradeId, Integer rating, String content) {
+    }
+
     public record ConfirmResolution(long tradeId, long disputeId, int expectedVersion) {
     }
 

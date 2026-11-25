@@ -86,6 +86,23 @@ final class TradeViews {
         return node;
     }
 
+    ObjectNode reviewView(TradeModels.Review review, Map<Long, TradePorts.AccountProfile> profiles) {
+        var node = json.createObjectNode();
+        node.put("review_id", Long.toString(review.id()));
+        node.put("trade_id", Long.toString(review.tradeId()));
+        node.set("reviewer", account(review.reviewerId(), profiles));
+        node.set("reviewee", account(review.revieweeId(), profiles));
+        node.put("rating", review.rating());
+        if (review.visible()) {
+            node.put("content", review.content());
+        } else {
+            node.putNull("content");
+        }
+        node.put("visible", review.visible());
+        node.put("created_at", instant(review.createdAt()));
+        return node;
+    }
+
     private ObjectNode request(Trade trade) {
         var node = json.createObjectNode();
         node.put("note", trade.requestNote());
@@ -214,12 +231,7 @@ final class TradeViews {
             node.putNull("open");
             return node;
         }
-        var open = json.createObjectNode();
-        open.put("id", Long.toString(dispute.id()));
-        open.put("initiator_id", Long.toString(dispute.initiatorId()));
-        open.put("statement", dispute.statement());
-        open.put("opened_at", instant(dispute.openedAt()));
-        node.set("open", open);
+        node.set("open", disputeRecord(dispute));
         return node;
     }
 
@@ -262,6 +274,9 @@ final class TradeViews {
         item.put("initiator_id", Long.toString(dispute.initiatorId()));
         item.put("statement", dispute.statement());
         item.put("status", dispute.status().value());
+        if (dispute.caseId() != null) {
+            item.put("case_id", Long.toString(dispute.caseId()));
+        }
         item.put("opened_at", instant(dispute.openedAt()));
         if (dispute.resolvedAt() == null) {
             item.putNull("resolved_at");

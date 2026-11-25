@@ -194,14 +194,25 @@ public class RealtimeSocket extends TextWebSocketHandler {
             return;
         }
         for (var conn : connections.values()) {
-            synchronized (conn) {
-                try {
-                    maintain(conn, now, fullPoll || changed.contains(conn.session.accountId()));
-                } catch (BusinessError error) {
-                    closeBusiness(conn, error);
-                } catch (IOException | RuntimeException failure) {
-                    unavailable(conn, failure);
-                }
+            updateConnection(conn, now, fullPoll || changed.contains(conn.session.accountId()));
+        }
+    }
+
+    void wakeAccount(long accountId) {
+        long now = System.nanoTime();
+        for (var conn : connections.values()) {
+            if (conn.session.accountId() == accountId) updateConnection(conn, now, true);
+        }
+    }
+
+    private void updateConnection(Connection conn, long now, boolean poll) {
+        synchronized (conn) {
+            try {
+                maintain(conn, now, poll);
+            } catch (BusinessError error) {
+                closeBusiness(conn, error);
+            } catch (IOException | RuntimeException failure) {
+                unavailable(conn, failure);
             }
         }
     }

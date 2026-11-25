@@ -83,6 +83,22 @@ class RealtimeSocketTests {
     }
 
     @Test
+    void redisWakeImmediatelyPumpsOnlyTheMatchingAccount() {
+        when(events.replay(any(ExecutionContext.class), eq(epoch), eq(0L), eq(2), eq(access)))
+                .thenReturn(new EventReplay.Page(List.of(), 0, 0, false))
+                .thenReturn(new EventReplay.Page(List.of(new EventReplay.CursorAdvance(epoch, 1, 1)), 1, 1, false));
+        send(hello(epoch, 0));
+
+        handler.wakeAccount(15);
+        assertThat(types()).containsExactly("hello_ok");
+
+        handler.wakeAccount(14);
+        assertThat(types()).containsExactly("hello_ok", "cursor_advance");
+        assertThat(frames.getLast().path("through_seq").asLong()).isEqualTo(1);
+        verifyNoInteractions(signals);
+    }
+
+    @Test
     void staleCursorRequestsResetAndAcceptsResumeAfterSnapshots() {
         UUID staleEpoch = UUID.randomUUID();
         when(events.replay(any(ExecutionContext.class), eq(staleEpoch), eq(0L), eq(2), eq(access)))

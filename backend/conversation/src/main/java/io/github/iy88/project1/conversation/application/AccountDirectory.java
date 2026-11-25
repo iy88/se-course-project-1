@@ -15,11 +15,15 @@ public interface AccountDirectory {
 
     Map<Long, Profile> profiles(Set<Long> accountIds);
 
-    record Profile(long accountId, String displayName) {
+    record Profile(long accountId, String displayName, String avatarUrl) {
         public Profile {
             if (accountId <= 0 || displayName == null || displayName.isBlank()) {
                 throw new IllegalArgumentException("Invalid account profile");
             }
+        }
+
+        public Profile(long accountId, String displayName) {
+            this(accountId, displayName, null);
         }
     }
 }

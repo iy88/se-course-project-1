@@ -82,6 +82,18 @@ public class JdbcProductInteractionStore implements ProductInteractionStore {
     }
 
     @Override
+    public long countNewerTopLevelComments(ProductComment anchor, Scope scope, long viewerId) {
+        var sql = new StringBuilder("""
+                select count(*) from product_comment where product_id = ? and parent_comment_id is null
+                  and (created_at, comment_id) > (?, ?)
+                """);
+        var args = new java.util.ArrayList<Object>(List.of(anchor.productId(),
+                OffsetDateTime.ofInstant(anchor.createdAt(), java.time.ZoneOffset.UTC), anchor.commentId()));
+        appendScope(sql, args, scope, viewerId);
+        return jdbc.sql(sql.toString()).params(args.toArray()).query(Long.class).single();
+    }
+
+    @Override
     public boolean hasCommentBy(long productId, long authorId) {
         return jdbc.sql("select exists (select 1 from product_comment where product_id = ? and author_account_id = ?)")
                 .param(productId).param(authorId).query(Boolean.class).single();

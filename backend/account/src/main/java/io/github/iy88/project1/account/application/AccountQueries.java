@@ -1,5 +1,6 @@
 package io.github.iy88.project1.account.application;
 
+import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -17,22 +18,30 @@ import org.springframework.stereotype.Service;
 @Profile("infrastructure")
 public class AccountQueries {
     private final AccountRepository accounts;
+    private final AccountAvatarService avatars;
 
-    public AccountQueries(AccountRepository accounts) {
+    public AccountQueries(AccountRepository accounts, AccountAvatarService avatars) {
         this.accounts = accounts;
+        this.avatars = avatars;
     }
 
     public Optional<Profile> profile(long accountId) {
-        return accounts.findById(accountId).map(AccountQueries::profile);
+        return accounts.findById(accountId)
+                .map(account -> new Profile(account.id(), account.displayName(),
+                        avatars.currentUrl(account.id())));
     }
 
     public Map<Long, Profile> profiles(Collection<Long> accountIds) {
         if (accountIds.isEmpty()) {
             return Map.of();
         }
+        var foundAccounts = accounts.findByIdIn(accountIds);
+        Map<Long, String> avatarUrls = avatars.currentUrls(
+                foundAccounts.stream().map(Account::id).toList());
         var found = new LinkedHashMap<Long, Profile>();
-        for (var account : accounts.findByIdIn(accountIds)) {
-            found.put(account.id(), profile(account));
+        for (var account : foundAccounts) {
+            found.put(account.id(), new Profile(account.id(), account.displayName(),
+                    avatarUrls.get(account.id())));
         }
         return found;
     }
@@ -41,10 +50,9 @@ public class AccountQueries {
         return false;
     }
 
-    private static Profile profile(io.github.iy88.project1.account.persistence.Account account) {
-        return new Profile(account.id(), account.displayName());
-    }
-
-    public record Profile(long accountId, String displayName) {
+    public record Profile(long accountId, String displayName, String avatarUrl) {
+        public Profile(long accountId, String displayName) {
+            this(accountId, displayName, null);
+        }
     }
 }

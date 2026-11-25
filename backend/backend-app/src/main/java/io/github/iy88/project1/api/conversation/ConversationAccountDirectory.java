@@ -21,7 +21,7 @@ final class ConversationAccountDirectory implements AccountDirectory {
     @Override
     public Optional<Profile> profile(long accountId) {
         return accounts.profile(accountId)
-                .map(profile -> new Profile(profile.accountId(), profile.displayName()));
+                .map(profile -> new Profile(profile.accountId(), profile.displayName(), profile.avatarUrl()));
     }
 
     @Override
@@ -33,7 +33,8 @@ final class ConversationAccountDirectory implements AccountDirectory {
     public Map<Long, Profile> profiles(Set<Long> accountIds) {
         var profiles = new LinkedHashMap<Long, Profile>();
         accounts.profiles(accountIds).forEach((accountId, profile) ->
-                profiles.put(accountId, new Profile(profile.accountId(), profile.displayName())));
+                profiles.put(accountId,
+                        new Profile(profile.accountId(), profile.displayName(), profile.avatarUrl())));
         return profiles;
     }
 }

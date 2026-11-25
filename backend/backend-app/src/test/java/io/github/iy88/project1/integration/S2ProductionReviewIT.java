@@ -174,8 +174,12 @@ class S2ProductionReviewIT {
         var rejectedNotice = get(seller, "/account/notifications?event_type=product_audit.rejected", 200);
         assertThat(rejectedNotice.path("total").asLong()).isEqualTo(1);
         var notice = rejectedNotice.path("items").get(0);
-        assertThat(text(notice, "summary")).contains("Please update the description");
+        assertThat(text(notice, "summary")).isEqualTo("商品审核未通过");
+        assertThat(text(notice, "subject")).isEqualTo(text(product, "title"));
+        assertThat(notice.has("body")).isFalse();
         assertThat(text(notice.path("source"), "resource_id")).isEqualTo(productId);
+        var noticeDetail = get(seller, "/account/notifications/" + text(notice, "notification_id"), 200);
+        assertThat(text(noticeDetail, "body")).contains("Please update the description");
         assertThat(get(buyer, "/account/notifications", 200).path("total").asLong()).isZero();
 
         var edited = write(seller, "PATCH", "/products/" + productId,

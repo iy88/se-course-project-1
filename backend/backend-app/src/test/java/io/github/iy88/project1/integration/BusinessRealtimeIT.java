@@ -13,7 +13,6 @@ import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.core.WriteTransaction;
-import io.github.iy88.project1.messaging.EventDispatch;
 import io.github.iy88.project1.messaging.RealtimeEventSources;
 import io.github.iy88.project1.messaging.RealtimeEventSources.ConversationKind;
 import io.github.iy88.project1.messaging.RealtimeEventSources.ConversationRef;
@@ -160,7 +159,6 @@ class BusinessRealtimeIT {
             long secondNotification = created.path(Long.toString(ACCOUNT_B)).asLong();
             assertThat(firstNotification).isPositive().isNotEqualTo(secondNotification);
             assertThat(secondNotification).isPositive();
-            dispatch(first);
 
             var one = a1.receiveEvent();
             var two = a2.receiveEvent();
@@ -190,7 +188,6 @@ class BusinessRealtimeIT {
             long isolatedSequence = other.path("account_seq").asLong();
             persist(first, context(ACCOUNT_B, SESSION_B), List.of(
                     notificationCreated(ACCOUNT_B, firstNotification, "isolated:b:" + RUN_ID)));
-            dispatch(first);
             var advance = b.receiveEvent();
             assertThat(advance.path("type").stringValue()).isEqualTo("cursor_advance");
             assertThat(advance.path("from_seq").asLong()).isEqualTo(isolatedSequence + 1);
@@ -258,7 +255,6 @@ class BusinessRealtimeIT {
 
             persist(first, context(ACCOUNT_A, SESSION_A1), List.of(
                     messageCreated(ACCOUNT_A, conversation, firstMessage, "visible:" + RUN_ID)));
-            dispatch(first);
 
             var visible = origin.receiveEvent();
             assertThat(visible.path("event_type").stringValue()).isEqualTo("message_created");
@@ -273,7 +269,6 @@ class BusinessRealtimeIT {
             conversation.readable(false);
             persist(first, context(ACCOUNT_A, SESSION_A1), List.of(
                     messageCreated(ACCOUNT_A, conversation, secondMessage, "hidden:" + RUN_ID)));
-            dispatch(first);
             var hidden = origin.receiveEvent();
             assertThat(hidden.path("type").stringValue()).isEqualTo("cursor_advance");
             assertThat(hidden.path("from_seq").asLong()).isEqualTo(hidden.path("through_seq").asLong());
@@ -294,7 +289,6 @@ class BusinessRealtimeIT {
             assertThat(verifiedConnection).contains(UUID.fromString(suppliedConnection));
             persist(second, context(ACCOUNT_A, SESSION_A1, verifiedConnection.orElseThrow()), List.of(
                     notificationRead(ACCOUNT_A, notification, "notification-read:" + RUN_ID)));
-            dispatch(first);
 
             var originAdvance = origin.receiveEvent();
             assertThat(originAdvance.path("type").stringValue()).isEqualTo("cursor_advance");
@@ -415,7 +409,6 @@ class BusinessRealtimeIT {
             persist(first, context(ACCOUNT_A, SESSION_A1), List.of(
                     messageCreated(ACCOUNT_A, conversation, message, "normal-message:" + RUN_ID),
                     notificationCreated(ACCOUNT_A, notification, "normal-notification:" + RUN_ID)));
-            dispatch(first);
 
             var messageFrame = connection.receiveEvent();
             assertThat(messageFrame.path("event_type").stringValue()).isEqualTo("message_created");
@@ -546,10 +539,6 @@ class BusinessRealtimeIT {
                 .query(Timestamp.class)
                 .single()
                 .toInstant();
-    }
-
-    private static void dispatch(ConfigurableApplicationContext app) {
-        assertThat(app.getBean(EventDispatch.class).publishDue()).isPositive();
     }
 
     private static ExecutionContext context(long account, UUID session) {

@@ -37,12 +37,14 @@ class ProductInteractionController {
             @RequestParam(required = false) Integer page,
             @RequestParam(name = "page_size", required = false) Integer pageSize,
             @RequestParam(name = "case_id", required = false) String caseId,
+            @RequestParam(name = "anchor_comment_id", required = false) String anchorCommentId,
             HttpServletRequest request) {
         var identity = current.require(request);
         Long claimedCase = caseId == null || caseId.isBlank() ? null : id(caseId, "case_id");
+        Long anchor = anchorCommentId == null ? null : id(anchorCommentId, "anchor_comment_id");
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(interactions.listComments(identity.account().id(), id(productId, "product_id"),
-                        page, pageSize, claimedCase));
+                        page, pageSize, claimedCase, anchor));
     }
 
     @PostMapping("/api/v1/products/{productId}/comments")

@@ -20,7 +20,7 @@ final class ConversationWire {
         var body = new LinkedHashMap<String, Object>();
         body.put("conversation_kind", ConversationKind.CHAT.wireValue());
         body.put("conversation_id", Long.toString(started.conversationId()));
-        body.put("peer", peer(started.peerAccountId(), started.peerDisplayName()));
+        body.put("peer", peer(started.peerAccountId(), started.peerDisplayName(), started.peerAvatarUrl()));
         body.put("reused", started.reused());
         return body;
     }
@@ -40,6 +40,9 @@ final class ConversationWire {
         body.put("next_after_seq", page.nextAfterSeq());
         body.put("next_before_seq", page.nextBeforeSeq());
         body.put("branch_status", page.branchStatus());
+        if (kind == ConversationKind.TRADE && page.tradeId() != null) {
+            body.put("trade_id", Long.toString(page.tradeId()));
+        }
         return body;
     }
 
@@ -63,7 +66,8 @@ final class ConversationWire {
 
     private static Map<String, Object> summary(ConversationViews.Summary summary) {
         var body = new LinkedHashMap<String, Object>();
-        body.put("peer", peer(summary.peer().accountId(), summary.peer().displayName()));
+        body.put("peer", peer(summary.peer().accountId(), summary.peer().displayName(),
+                summary.peer().avatarUrl()));
         body.put("branches", summary.branches().stream().map(ConversationWire::branch).toList());
         return body;
     }
@@ -99,10 +103,11 @@ final class ConversationWire {
         return body;
     }
 
-    private static Map<String, Object> peer(long accountId, String displayName) {
+    private static Map<String, Object> peer(long accountId, String displayName, String avatarUrl) {
         var peer = new LinkedHashMap<String, Object>();
         peer.put("account_id", Long.toString(accountId));
         peer.put("display_name", displayName);
+        peer.put("avatar_url", avatarUrl);
         return peer;
     }
 

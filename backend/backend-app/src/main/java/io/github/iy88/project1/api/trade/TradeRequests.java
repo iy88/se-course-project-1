@@ -1,6 +1,7 @@
 package io.github.iy88.project1.api.trade;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import tools.jackson.databind.JsonNode;
 import java.time.Instant;
 
 /** HTTP request bodies. Trade JSON names follow the public contract. */
@@ -38,5 +39,8 @@ public final class TradeRequests {
     }
 
     public record Dispute(String statement, @JsonProperty("expected_version") Integer expectedVersion) {
+    }
+
+    public record Review(JsonNode rating, String content) {
     }
 }

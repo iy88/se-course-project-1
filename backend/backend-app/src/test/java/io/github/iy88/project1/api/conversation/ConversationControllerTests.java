@@ -61,14 +61,14 @@ class ConversationControllerTests {
             var queries = mock(ConversationQueries.class);
             when(queries.list(any(), anyInt(), anyInt())).thenReturn(new ConversationViews.Page<>(
                     List.of(new ConversationViews.Summary(
-                            new ConversationViews.Peer(42L, "李四"),
+                            new ConversationViews.Peer(42L, "李四", "https://img.example/peer.png"),
                             List.of(new ConversationViews.Branch("trade", 2L, null, null, 1L, NOW, "在吗")))),
                     1, 20, 1));
             when(queries.pageTrade(any(), eq(2L), any(), any(), anyInt())).thenReturn(
                     new ConversationViews.MessagePage(List.of(
                             new ConversationViews.Message(21L, 2L,
                                     new ConversationViews.Sender(7L, "张新悦", "account"),
-                                    "text", "在吗", NOW, null, null)), 2L, 2L, "active"));
+                                    "text", "在吗", NOW, null, null)), 2L, 2L, "active", 19L));
             when(queries.pageChat(any(), anyLong(), any(), any(), anyInt()))
                     .thenThrow(new BusinessError("PARTICIPANT_REQUIRED", 404, "会话不存在或无权访问"));
             return queries;
@@ -142,6 +142,7 @@ class ConversationControllerTests {
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.items[0].peer.account_id").value("42"))
                 .andExpect(jsonPath("$.items[0].peer.display_name").value("李四"))
+                .andExpect(jsonPath("$.items[0].peer.avatar_url").value("https://img.example/peer.png"))
                 .andExpect(jsonPath("$.items[0].branches[0].conversation_kind").value("trade"))
                 .andExpect(jsonPath("$.items[0].branches[0].conversation_id").value("2"))
                 .andExpect(jsonPath("$.items[0].branches[0].source_ref").value(nullValue()))
@@ -152,7 +153,7 @@ class ConversationControllerTests {
     }
 
     @Test
-    void returnsTradeMessagesWithCursorsAndBranchStatus() throws Exception {
+    void returnsTradeMessagesWithTradeIdCursorsAndBranchStatus() throws Exception {
         mvc.perform(get("/api/v1/conversations/trade/2/messages").param("after_seq", "0").param("limit", "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].message_id").value("21"))
@@ -161,7 +162,8 @@ class ConversationControllerTests {
                 .andExpect(jsonPath("$.items[0].seq").value(2))
                 .andExpect(jsonPath("$.next_after_seq").value(2))
                 .andExpect(jsonPath("$.next_before_seq").value(2))
-                .andExpect(jsonPath("$.branch_status").value("active"));
+                .andExpect(jsonPath("$.branch_status").value("active"))
+                .andExpect(jsonPath("$.trade_id").value("19"));
     }
 
     @Test

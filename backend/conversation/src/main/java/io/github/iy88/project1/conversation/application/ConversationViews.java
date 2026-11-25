@@ -8,7 +8,11 @@ public final class ConversationViews {
     private ConversationViews() {
     }
 
-    public record StartedChat(long conversationId, long peerAccountId, String peerDisplayName, boolean reused) {
+    public record StartedChat(long conversationId, long peerAccountId, String peerDisplayName,
+                              String peerAvatarUrl, boolean reused) {
+        public StartedChat(long conversationId, long peerAccountId, String peerDisplayName, boolean reused) {
+            this(conversationId, peerAccountId, peerDisplayName, null, reused);
+        }
     }
 
     public record ChatMessage(long messageId, long seq, long senderAccountId, String senderDisplayName,
@@ -18,7 +22,10 @@ public final class ConversationViews {
     public record ReadProgress(long lastReadSeq, long unreadCount, Instant updatedAt) {
     }
 
-    public record Peer(long accountId, String displayName) {
+    public record Peer(long accountId, String displayName, String avatarUrl) {
+        public Peer(long accountId, String displayName) {
+            this(accountId, displayName, null);
+        }
     }
 
     public record Branch(String conversationKind, long conversationId, String sourceRef, Instant archivedAt,
@@ -38,7 +45,8 @@ public final class ConversationViews {
                           Instant createdAt, String eventType, String sourceRef) {
     }
 
-    public record MessagePage(List<Message> items, Long nextAfterSeq, Long nextBeforeSeq, String branchStatus) {
+    public record MessagePage(List<Message> items, Long nextAfterSeq, Long nextBeforeSeq, String branchStatus,
+                              Long tradeId) {
         public MessagePage {
             items = List.copyOf(items);
         }

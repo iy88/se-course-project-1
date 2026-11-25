@@ -119,6 +119,36 @@ public class TradeRepository {
 
     public record AccountPage(List<Long> ids, long total) {}
 
+    public record ReviewPage(List<TradeModels.Review> reviews, long total) {}
+
+    public Optional<TradeModels.Review> review(long tradeId, long reviewerId) {
+        return jdbc.sql("SELECT * FROM trade_review WHERE trade_id = :trade AND reviewer_id = :reviewer")
+                .param("trade", tradeId).param("reviewer", reviewerId)
+                .query((row, index) -> reviewRow(row)).optional();
+    }
+
+    public long insertReview(TradeModels.Review review) {
+        return jdbc.sql("""
+                INSERT INTO trade_review (trade_id, reviewer_id, reviewee_id, rating, content, visible, created_at)
+                VALUES (:trade, :reviewer, :reviewee, :rating, :content, :visible, :created)
+                RETURNING id
+                """).param("trade", review.tradeId()).param("reviewer", review.reviewerId())
+                .param("reviewee", review.revieweeId()).param("rating", review.rating())
+                .param("content", review.content()).param("visible", review.visible())
+                .param("created", time(review.createdAt())).query(Long.class).single();
+    }
+
+    public ReviewPage pageReviews(long accountId, String direction, int limit, long offset) {
+        String ownership = "written".equals(direction) ? "reviewer_id = :account" : "reviewee_id = :account";
+        var reviews = jdbc.sql("SELECT * FROM trade_review WHERE " + ownership
+                        + " ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset")
+                .param("account", accountId).param("limit", limit).param("offset", offset)
+                .query((row, index) -> reviewRow(row)).list();
+        long total = jdbc.sql("SELECT count(*) FROM trade_review WHERE " + ownership)
+                .param("account", accountId).query(Long.class).single();
+        return new ReviewPage(reviews, total);
+    }
+
     public Optional<TradeModels.Snapshot> snapshot(long tradeId) {
         return jdbc.sql("SELECT * FROM trade_item_snapshot WHERE trade_id = :trade").param("trade", tradeId)
                 .query((row, index) -> new TradeModels.Snapshot(row.getLong("trade_id"), row.getLong("product_id"),
@@ -258,11 +288,20 @@ public class TradeRepository {
                 .param("now", time(now)).query(Long.class).single();
     }
 
+    public void attachDisputeCase(long disputeId, long caseId) {
+        int updated = jdbc.sql("""
+                UPDATE trade_dispute SET case_id = :case WHERE id = :dispute AND case_id IS NULL
+                """).param("case", caseId).param("dispute", disputeId).update();
+        if (updated != 1) {
+            throw new IllegalStateException("Dispute case link is missing or already set");
+        }
+    }
+
     public void resolveDispute(long disputeId, TradeVocabulary.ResolutionMode mode, long resolvedBy, Long caseId,
                                Instant now) {
         jdbc.sql("""
                 UPDATE trade_dispute SET status = 'resolved', resolution_mode = :mode, resolved_by = :by,
-                    case_id = :case, resolved_at = :now WHERE id = :id
+                    case_id = coalesce(:case, case_id), resolved_at = :now WHERE id = :id
                 """).param("mode", mode.value()).param("by", resolvedBy).param("case", caseId).param("now", time(now))
                 .param("id", disputeId).update();
     }
@@ -455,6 +494,12 @@ public class TradeRepository {
                 instant(row, "invalidated_at"),
                 enumValue(row, "invalidation_reason", TradeVocabulary.InvalidationReason::from),
                 row.getObject("business_event_id", UUID.class));
+    }
+
+    private TradeModels.Review reviewRow(ResultSet row) throws SQLException {
+        return new TradeModels.Review(row.getLong("id"), row.getLong("trade_id"), row.getLong("reviewer_id"),
+                row.getLong("reviewee_id"), row.getInt("rating"), row.getString("content"),
+                row.getBoolean("visible"), instant(row, "created_at"));
     }
 
     private TradeModels.Freeze freezeRow(ResultSet row) throws SQLException {

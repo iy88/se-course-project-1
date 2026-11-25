@@ -55,7 +55,7 @@ public class ConversationQueries {
         messages.forEach(message -> senderIds.add(message.senderAccountId()));
         var profiles = accounts.profiles(senderIds);
         var items = messages.stream().map(message -> chatMessage(message, profiles)).toList();
-        return new ConversationViews.MessagePage(items, lastSeq(items), firstSeq(items), "active");
+        return new ConversationViews.MessagePage(items, lastSeq(items), firstSeq(items), "active", null);
     }
 
     public ConversationViews.MessagePage pageTrade(ExecutionContext context, long conversationId, Long beforeSeq,
@@ -79,7 +79,7 @@ public class ConversationQueries {
         var profiles = accounts.profiles(senderIds);
         var items = messages.stream().map(message -> tradeMessage(message, profiles)).toList();
         return new ConversationViews.MessagePage(items, lastSeq(items), firstSeq(items),
-                conversation.archived() ? "archived" : "active");
+                conversation.archived() ? "archived" : "active", conversation.tradeId());
     }
 
     public ConversationViews.Page<ConversationViews.Summary> list(ExecutionContext context, int page, int pageSize) {
@@ -110,7 +110,7 @@ public class ConversationQueries {
         }
         var summaries = grouped.entrySet().stream()
                 .map(entry -> new ConversationViews.Summary(
-                        new ConversationViews.Peer(entry.getKey(), displayName(entry.getKey(), profiles)),
+                        peer(entry.getKey(), profiles),
                         sortedBranches(entry.getValue())))
                 .sorted(Comparator.comparing((ConversationViews.Summary summary) -> latest(summary.branches()))
                         .reversed())
@@ -190,6 +190,13 @@ public class ConversationQueries {
     private static String displayName(long accountId, Map<Long, AccountDirectory.Profile> profiles) {
         var profile = profiles.get(accountId);
         return profile == null ? "账户" + accountId : profile.displayName();
+    }
+
+    private static ConversationViews.Peer peer(long accountId,
+                                               Map<Long, AccountDirectory.Profile> profiles) {
+        var profile = profiles.get(accountId);
+        return new ConversationViews.Peer(accountId, displayName(accountId, profiles),
+                profile == null ? null : profile.avatarUrl());
     }
 
     private int pageSize(int limit) {

@@ -101,7 +101,7 @@ class ConversationQueriesTests {
         when(reader.tradeLastMessage(2L)).thenReturn(Optional.of(tradeLast));
 
         when(accounts.profiles(java.util.Set.of(42L))).thenReturn(Map.of(
-                42L, new AccountDirectory.Profile(42L, "李四")));
+                42L, new AccountDirectory.Profile(42L, "李四", "https://img.example/peer.png")));
 
         var page = queries.list(actor(7L), 1, 20);
 
@@ -109,6 +109,7 @@ class ConversationQueriesTests {
         assertThat(page.total()).isEqualTo(1L);
         var summary = page.items().getFirst();
         assertThat(summary.peer().displayName()).isEqualTo("李四");
+        assertThat(summary.peer().avatarUrl()).isEqualTo("https://img.example/peer.png");
         assertThat(summary.branches()).hasSize(2);
         assertThat(summary.branches().getFirst().conversationKind()).isEqualTo("trade");
         assertThat(summary.branches()).extracting(ConversationViews.Branch::unreadCount)

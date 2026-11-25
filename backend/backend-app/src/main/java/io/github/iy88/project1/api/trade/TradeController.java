@@ -11,6 +11,7 @@ import java.net.URI;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -149,6 +150,37 @@ public class TradeController {
         return respond(trades.confirmResolution(context(request), key,
                 new TradeCommands.ConfirmResolution(tradeId, disputeId,
                         required(body.expectedVersion(), "expected_version"))));
+    }
+
+    @PostMapping("/trades/{trade_id}/reviews")
+    public ResponseEntity<JsonNode> submitReview(@PathVariable("trade_id") long tradeId,
+                                                 @RequestHeader("Idempotency-Key") String key,
+                                                 @RequestBody TradeRequests.Review body,
+                                                 HttpServletRequest request) {
+        var actor = context(request);
+        var rating = body.rating();
+        if (rating == null || !rating.isIntegralNumber() || !rating.canConvertToInt()) {
+            throw new BusinessError("INPUT_INVALID", 422, "评分须为 1 到 5 的整数");
+        }
+        var result = trades.submitReview(actor, key,
+                new TradeCommands.SubmitReview(tradeId, rating.intValue(), body.content()));
+        return ResponseEntity.status(result.status()).cacheControl(CacheControl.noStore()).body(result.data());
+    }
+
+    @GetMapping("/trades/{trade_id}/reviews")
+    public ResponseEntity<JsonNode> getTradeReviews(@PathVariable("trade_id") long tradeId,
+                                                    HttpServletRequest request) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(trades.getTradeReviews(context(request), tradeId));
+    }
+
+    @GetMapping("/me/reviews")
+    public ResponseEntity<JsonNode> listMyReviews(@RequestParam(value = "direction", required = false) String direction,
+                                                  @RequestParam(value = "page", required = false) Integer page,
+                                                  @RequestParam(value = "page_size", required = false) Integer pageSize,
+                                                  HttpServletRequest request) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(trades.listMyReviews(context(request), direction, page, pageSize));
     }
 
     @GetMapping("/trades/{trade_id}")

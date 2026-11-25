@@ -29,5 +29,11 @@ class TradeCaseConfiguration {
                                     String reason) {
             return cases.open(tradeId, reason, clock.instant());
         }
+
+        @Override
+        public long openDisputeCase(WriteTransaction transaction, ExecutionContext context, long tradeId,
+                                    long disputeId, java.time.Instant at) {
+            return cases.openDispute(tradeId, disputeId, at);
+        }
     }
 }

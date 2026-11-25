@@ -121,6 +121,10 @@ public final class TradeModels {
                           Long disputeResolutionConfirmationId, UUID businessEventId, Instant createdAt) {
     }
 
+    public record Review(long id, long tradeId, long reviewerId, long revieweeId, int rating,
+                         String content, boolean visible, Instant createdAt) {
+    }
+
     public record ConversationAccess(long buyerId, long sellerId, TradeStatus status) {
         public boolean contains(long accountId) { return buyerId == accountId || sellerId == accountId; }
     }

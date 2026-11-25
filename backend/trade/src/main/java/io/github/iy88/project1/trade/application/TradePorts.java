@@ -97,6 +97,10 @@ public final class TradePorts {
                              long tradeId, String basisRef);
 
         long openTimeoutCase(WriteTransaction transaction, ExecutionContext context, long tradeId, String reason);
+
+        /** Creates the shared exception case and its dispute link in the caller's transaction. */
+        long openDisputeCase(WriteTransaction transaction, ExecutionContext context, long tradeId, long disputeId,
+                             java.time.Instant at);
     }
 
     public interface Notifications {

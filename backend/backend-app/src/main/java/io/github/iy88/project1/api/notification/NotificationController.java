@@ -68,7 +68,7 @@ public class NotificationController {
     public ResponseEntity<Map<String, Object>> get(HttpServletRequest request,
                                                     @PathVariable("notification_id") String notificationId) {
         var context = context(request);
-        var body = NotificationWire.view(queries().get(context, identifier(notificationId)));
+        var body = NotificationWire.detail(queries().get(context, identifier(notificationId)));
         return ok(body);
     }
 

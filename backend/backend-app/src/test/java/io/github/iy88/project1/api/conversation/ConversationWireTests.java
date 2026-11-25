@@ -16,9 +16,10 @@ class ConversationWireTests {
         var page = new ConversationViews.MessagePage(List.of(
                 new ConversationViews.Message(21L, 2L,
                         new ConversationViews.Sender(7L, "张新悦", "account"),
-                        "text", "在吗", NOW, null, null)), 2L, 2L, "active");
+                        "text", "在吗", NOW, null, null)), 2L, 2L, "active", 19L);
 
         var body = ConversationWire.messagePage(page, ConversationKind.TRADE);
+        assertThat(body).containsEntry("trade_id", "19");
 
         @SuppressWarnings("unchecked")
         var item = (java.util.Map<String, Object>) ((List<?>) body.get("items")).getFirst();
@@ -31,7 +32,7 @@ class ConversationWireTests {
         var page = new ConversationViews.MessagePage(List.of(
                 new ConversationViews.Message(31L, 1L,
                         new ConversationViews.Sender(7L, "张新悦", "account"),
-                        "statement", "说明", NOW, null, null)), 1L, 1L, "archived");
+                        "statement", "说明", NOW, null, null)), 1L, 1L, "archived", null);
 
         var body = ConversationWire.messagePage(page, ConversationKind.CASE);
 
@@ -39,14 +40,19 @@ class ConversationWireTests {
         var item = (java.util.Map<String, Object>) ((List<?>) body.get("items")).getFirst();
         assertThat(item).containsEntry("case_message_id", "31").containsEntry("message_kind", "statement")
                 .doesNotContainKey("message_id");
-        assertThat(body).containsEntry("branch_status", "archived");
+        assertThat(body).containsEntry("branch_status", "archived").doesNotContainKey("trade_id");
     }
 
     @Test
     void startedChatMarksTheKindAndPeer() {
-        var body = ConversationWire.started(new ConversationViews.StartedChat(5L, 42L, "李四", true));
+        var body = ConversationWire.started(new ConversationViews.StartedChat(
+                5L, 42L, "李四", "https://img.example/peer.png", true));
 
         assertThat(body).containsEntry("conversation_kind", "chat").containsEntry("conversation_id", "5")
                 .containsEntry("reused", true);
+        assertThat(body.get("peer")).isEqualTo(java.util.Map.of(
+                "account_id", "42",
+                "display_name", "李四",
+                "avatar_url", "https://img.example/peer.png"));
     }
 }

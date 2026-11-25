@@ -41,7 +41,8 @@ public class Conversations {
         }
         boolean reused = store.findChat(actor, targetAccountId).isPresent();
         ChatConversation conversation = store.ensureChat(transaction, actor, targetAccountId);
-        return new ConversationViews.StartedChat(conversation.id(), peer.accountId(), peer.displayName(), reused);
+        return new ConversationViews.StartedChat(conversation.id(), peer.accountId(), peer.displayName(),
+                peer.avatarUrl(), reused);
     }
 
     public ConversationViews.ChatMessage sendChat(WriteTransaction transaction, ExecutionContext context,

@@ -75,7 +75,8 @@ class ReviewStageConfiguration {
                 return Optional.empty();
             }
             return jdbc.sql("""
-                            SELECT p.product_id, a.status, a.decision_reason
+                            SELECT p.product_id, a.status, a.decision_reason,
+                                   COALESCE(a.reviewed_content ->> 'title', p.title) AS title
                             FROM product_audit a JOIN product p ON p.product_id = a.product_id
                             WHERE a.audit_id = ? AND p.seller_account_id = ?
                               AND p.deleted_at IS NULL AND a.status IN ('passed', 'rejected')
@@ -83,10 +84,15 @@ class ReviewStageConfiguration {
                     .param(facts.source().id()).param(Long.parseLong(context.actorId()))
                     .query((row, index) -> {
                         var reason = row.getString("decision_reason");
-                        var summary = "passed".equals(row.getString("status")) ? "商品审核通过"
-                                : reason == null || reason.isBlank() ? "商品审核未通过" : "商品审核未通过：" + reason;
+                        boolean passed = "passed".equals(row.getString("status"));
+                        var summary = passed ? "商品审核通过" : "商品审核未通过";
+                        var body = passed ? "该商品已通过审核。你可以前往商品详情查看当前展示状态。"
+                                : "你可以根据审核意见修改商品内容，再提交审核。";
+                        if (!passed && reason != null && !reason.isBlank()) {
+                            body = "审核意见\n" + reason + "\n\n" + body;
+                        }
                         return new NotificationSourcePort.NotificationSourceView(summary,
-                                new ResourceRef("product", row.getLong("product_id")));
+                                new ResourceRef("product", row.getLong("product_id")), row.getString("title"), body);
                     }).optional();
         };
     }

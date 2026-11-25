@@ -52,7 +52,7 @@ public class CaseConversationQueries {
         return new ConversationViews.MessagePage(items,
                 items.isEmpty() ? null : items.getLast().seq(),
                 items.isEmpty() ? null : items.getFirst().seq(),
-                conversation.archived() ? "archived" : "active");
+                conversation.archived() ? "archived" : "active", null);
     }
 
     private ConversationViews.Message caseMessage(CaseMessage message,

@@ -13,8 +13,12 @@ import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteTransaction;
+import io.github.iy88.project1.casemanagement.persistence.TradeTimeoutCases;
 import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.messaging.TaskWorker;
+import io.github.iy88.project1.notification.application.NotificationQueries;
+import io.github.iy88.project1.notification.application.NotificationQuery;
+import io.github.iy88.project1.notification.application.NotificationView;
 import io.github.iy88.project1.trade.application.TradeApplication;
 import io.github.iy88.project1.trade.application.TradeCommands;
 import io.github.iy88.project1.trade.application.TradePorts;
@@ -201,6 +205,39 @@ class TradeLifecycleIT {
     }
 
     @Test
+    void tradeNoticesKeepTheirOwnEventAfterTheTradeAdvances() {
+        ports.notifications = app.getBean("tradeNotifications", TradePorts.Notifications.class);
+        long product = product(SELLER);
+        var created = trades.createPurchaseRequest(account(BUYER_ONE), "notice-create-" + RUN,
+                new TradeCommands.CreatePurchaseRequest(product, "可以在图书馆取吗？", 7));
+        long tradeId = Long.parseLong(created.data().path("id").stringValue());
+        var accepted = trades.accept(account(SELLER), "notice-accept-" + RUN,
+                new TradeCommands.Versioned(tradeId, 1));
+        trades.proposeAgreement(account(SELLER), "notice-agreement-" + RUN,
+                agreement(tradeId, null, accepted.data().path("version").asInt(), 9000));
+
+        var queries = app.getBean(NotificationQueries.class);
+        var sellerNotice = queries.list(account(SELLER), NotificationQuery.firstPage()).items().getFirst();
+        assertThat(sellerNotice.summary()).isEqualTo("收到购买请求");
+        assertThat(queries.get(account(SELLER), sellerNotice.notificationId()).body())
+                .contains("可以在图书馆取吗？");
+
+        var buyerNotices = queries.list(account(BUYER_ONE), NotificationQuery.firstPage()).items();
+        assertThat(buyerNotices).extracting(NotificationView::summary)
+                .containsExactlyInAnyOrder("购买请求已接受", "收到交易约定");
+        assertThat(buyerNotices).allSatisfy(notice -> {
+            assertThat(notice.subject()).isEqualTo(accepted.data().at("/product/title").stringValue());
+            assertThat(notice.source()).isEqualTo(new ResourceRef("trade", tradeId));
+            assertThat(notice.readAt()).isNull();
+        });
+        assertThat(buyerNotices).anySatisfy(notice ->
+                assertThat(notice.body()).contains("时间、地点、交付和付款方式"));
+        assertThatThrownBy(() -> queries.get(account(BUYER_TWO), sellerNotice.notificationId()))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+    }
+
+    @Test
     void myTradesUsesTheSameRoleAndStatusFiltersForPageAndTotal() {
         long withdrawn = create(product(SELLER), BUYER_ONE);
         trades.withdraw(account(BUYER_ONE), "list-withdraw-" + RUN, new TradeCommands.Versioned(withdrawn, 1));
@@ -298,6 +335,72 @@ class TradeLifecycleIT {
         assertThat(trades.reviewEligibility(tradeId, MANAGER).eligible()).isFalse();
         assertThat(trades.conversationAccess(tradeId).buyerId()).isEqualTo(BUYER_ONE);
         assertThat(trades.conversationAccess(tradeId).contains(SELLER)).isTrue();
+
+        int completedVersion = completed.data().path("trade").path("version").asInt();
+        var reviewCommand = new TradeCommands.SubmitReview(tradeId, 5, "  很满意  ");
+        String buyerReviewKey = "review-buyer-" + RUN;
+        var buyerReview = trades.submitReview(account(BUYER_ONE), buyerReviewKey, reviewCommand);
+        assertThat(buyerReview.status()).isEqualTo(201);
+        assertThat(buyerReview.replayed()).isFalse();
+        var reviewNode = buyerReview.data().path("review");
+        String reviewId = reviewNode.path("review_id").stringValue();
+        assertThat(reviewId).isNotBlank();
+        assertThat(reviewNode.path("trade_id").stringValue()).isEqualTo(Long.toString(tradeId));
+        assertThat(reviewNode.path("reviewer").path("id").stringValue()).isEqualTo(Long.toString(BUYER_ONE));
+        assertThat(reviewNode.path("reviewer").path("display_name").stringValue())
+                .isEqualTo("account-" + BUYER_ONE);
+        assertThat(reviewNode.path("reviewee").path("id").stringValue()).isEqualTo(Long.toString(SELLER));
+        assertThat(reviewNode.path("rating").asInt()).isEqualTo(5);
+        assertThat(reviewNode.path("content").stringValue()).isEqualTo("很满意");
+        assertThat(reviewNode.path("visible").asBoolean()).isTrue();
+        assertThat(reviewNode.path("created_at").stringValue()).isNotBlank();
+
+        var replay = trades.submitReview(account(BUYER_ONE), buyerReviewKey, reviewCommand);
+        assertThat(replay.status()).isEqualTo(201);
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.data().path("review").path("review_id").stringValue()).isEqualTo(reviewId);
+        assertThatThrownBy(() -> trades.submitReview(account(BUYER_ONE), "review-buyer-other-" + RUN,
+                reviewCommand))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("REVIEW_ALREADY_SUBMITTED"));
+
+        var sellerView = trades.getTradeReviews(account(SELLER), tradeId);
+        assertThat(sellerView.path("can_review").asBoolean()).isTrue();
+        assertThat(sellerView.path("written").isNull()).isTrue();
+        assertThat(sellerView.path("received").path("review_id").stringValue()).isEqualTo(reviewId);
+
+        var sellerReview = trades.submitReview(account(SELLER), "review-seller-" + RUN,
+                new TradeCommands.SubmitReview(tradeId, 4, "交易顺利"));
+        assertThat(sellerReview.status()).isEqualTo(201);
+        String sellerReviewId = sellerReview.data().path("review").path("review_id").stringValue();
+        var buyerView = trades.getTradeReviews(account(BUYER_ONE), tradeId);
+        assertThat(buyerView.path("can_review").asBoolean()).isFalse();
+        assertThat(buyerView.path("written").path("review_id").stringValue()).isEqualTo(reviewId);
+        assertThat(buyerView.path("received").path("review_id").stringValue()).isEqualTo(sellerReviewId);
+
+        var buyerWritten = trades.listMyReviews(account(BUYER_ONE), "written", 1, 20);
+        assertThat(buyerWritten.path("total").asLong()).isEqualTo(1);
+        assertThat(buyerWritten.at("/items/0/review_id").stringValue()).isEqualTo(reviewId);
+        var buyerReceived = trades.listMyReviews(account(BUYER_ONE), "received", 1, 20);
+        assertThat(buyerReceived.path("total").asLong()).isEqualTo(1);
+        assertThat(buyerReceived.at("/items/0/review_id").stringValue()).isEqualTo(sellerReviewId);
+        var sellerWritten = trades.listMyReviews(account(SELLER), "written", 1, 20);
+        assertThat(sellerWritten.path("total").asLong()).isEqualTo(1);
+        assertThat(sellerWritten.at("/items/0/review_id").stringValue()).isEqualTo(sellerReviewId);
+        assertThat(trades.listMyReviews(account(MANAGER), "written", 1, 20).path("total").asLong()).isZero();
+        assertThatThrownBy(() -> trades.getTradeReviews(account(MANAGER), tradeId))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+
+        db.sql("UPDATE trade_review SET visible = FALSE WHERE id = ?").param(Long.parseLong(reviewId)).update();
+        var hidden = trades.getTradeReviews(account(SELLER), tradeId).path("received");
+        assertThat(hidden.path("visible").asBoolean()).isFalse();
+        assertThat(hidden.path("content").isNull()).isTrue();
+        assertThat(hidden.path("rating").asInt()).isEqualTo(5);
+        assertThat(db.sql("SELECT count(*) FROM trade_review WHERE trade_id = ?").param(tradeId)
+                .query(Long.class).single()).isEqualTo(2);
+        assertThat(db.sql("SELECT status || ':' || version FROM trade WHERE id = ?").param(tradeId)
+                .query(String.class).single()).isEqualTo("completed:" + completedVersion);
     }
 
     @Test
@@ -484,6 +587,54 @@ class TradeLifecycleIT {
                         + "WHERE trade_id = ?").param(tradeId).query(Boolean.class).single()).isTrue();
         assertThat(db.sql("SELECT wait_seconds FROM confirmation_wait WHERE trade_id = ?")
                 .param(tradeId).query(Integer.class).single()).isEqualTo(604800);
+    }
+
+    @Test
+    void disputeCreatesOneLinkedDisputeCaseAndReplaysTheSameOperation() {
+        long tradeId = create(product(SELLER), BUYER_ONE);
+        var accepted = trades.accept(account(SELLER), "accept-dispute-case-" + RUN,
+                new TradeCommands.Versioned(tradeId, 1));
+        int version = accepted.data().path("version").asInt();
+        var command = new TradeCommands.OpenDispute(tradeId, "private delivery detail", version);
+        String key = "dispute-case-" + RUN;
+
+        var opened = trades.openDispute(account(BUYER_ONE), key, command);
+        assertThat(opened.status()).isEqualTo(201);
+        assertThat(opened.replayed()).isFalse();
+        assertThat(opened.data().path("trade").path("status").stringValue()).isEqualTo("disputed");
+        long disputeId = Long.parseLong(opened.data().path("dispute").path("id").stringValue());
+        long caseId = db.sql("SELECT case_id FROM trade_dispute WHERE id = ?").param(disputeId)
+                .query(Long.class).single();
+        assertThat(caseId).isPositive();
+        assertThat(opened.data().path("dispute").path("case_id").stringValue()).isEqualTo(Long.toString(caseId));
+        assertThat(trades.getTrade(account(SELLER), tradeId, List.of()).at("/dispute/open/case_id").stringValue())
+                .isEqualTo(Long.toString(caseId));
+        assertThat(ports.disputeCases.get(disputeId)).isEqualTo(caseId);
+        assertThat(db.sql("SELECT case_type FROM moderation_case WHERE id = ?").param(caseId)
+                .query(String.class).single()).isEqualTo("dispute");
+        assertThat(db.sql("""
+                SELECT count(*) FROM trade_dispute_case
+                WHERE case_id = ? AND dispute_id = ? AND trade_id = ?
+                """).param(caseId).param(disputeId).param(tradeId).query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("SELECT count(*) FROM trade_state_history WHERE dispute_id = ? AND case_id = ?")
+                .param(disputeId).param(caseId).query(Long.class).single()).isEqualTo(1);
+
+        var replay = trades.openDispute(account(BUYER_ONE), key, command);
+        assertThat(replay.status()).isEqualTo(201);
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.data().path("dispute").path("id").stringValue()).isEqualTo(Long.toString(disputeId));
+        assertThat(ports.disputeCases).hasSize(1);
+
+        int currentVersion = db.sql("SELECT version FROM trade WHERE id = ?").param(tradeId)
+                .query(Integer.class).single();
+        assertThatThrownBy(() -> trades.openDispute(account(SELLER), "dispute-case-other-" + RUN,
+                new TradeCommands.OpenDispute(tradeId, "another statement", currentVersion)))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("DISPUTE_ALREADY_OPEN"));
+        assertThat(db.sql("SELECT count(*) FROM trade_dispute WHERE trade_id = ?").param(tradeId)
+                .query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("SELECT count(*) FROM trade_dispute_case WHERE trade_id = ?").param(tradeId)
+                .query(Long.class).single()).isEqualTo(1);
     }
 
     @Test
@@ -785,11 +936,21 @@ class TradeLifecycleIT {
         String in = String.join(",", tradeIds.stream().map(String::valueOf).toList());
         db.sql("DELETE FROM user_event WHERE recipient_account_id IN (?, ?, ?)")
                 .param(BUYER_ONE).param(BUYER_TWO).param(SELLER).update();
+        db.sql("DELETE FROM notification WHERE recipient_account_id IN (?, ?, ?)")
+                .param(BUYER_ONE).param(BUYER_TWO).param(SELLER).update();
         db.sql("DELETE FROM account_event_head WHERE account_id IN (?, ?, ?)")
                 .param(BUYER_ONE).param(BUYER_TWO).param(SELLER).update();
         db.sql("DELETE FROM task_schedule WHERE source_type = 'trade' AND source_id IN (" + in + ")").update();
         db.sql("DELETE FROM audit_record WHERE target_type = 'trade' AND target_id IN (" + in + ")").update();
         db.sql("DELETE FROM trade_state_history WHERE trade_id IN (" + in + ")").update();
+        db.sql("DELETE FROM trade_review WHERE trade_id IN (" + in + ")").update();
+        var disputeCaseIds = db.sql("SELECT case_id FROM trade_dispute_case WHERE trade_id IN (" + in + ")")
+                .query(Long.class).list();
+        db.sql("DELETE FROM trade_dispute_case WHERE trade_id IN (" + in + ")").update();
+        if (!disputeCaseIds.isEmpty()) {
+            String caseIds = String.join(",", disputeCaseIds.stream().map(String::valueOf).toList());
+            db.sql("DELETE FROM moderation_case WHERE id IN (" + caseIds + ")").update();
+        }
         db.sql("DELETE FROM dispute_resolution_confirmation WHERE dispute_id IN "
                 + "(SELECT id FROM trade_dispute WHERE trade_id IN (" + in + "))").update();
         db.sql("DELETE FROM trade_dispute WHERE trade_id IN (" + in + ")").update();
@@ -844,9 +1005,16 @@ class TradeLifecycleIT {
         final Map<Long, Long> conversationTrades = new ConcurrentHashMap<>();
         final List<Message> messages = new CopyOnWriteArrayList<>();
         final Set<Long> archived = ConcurrentHashMap.newKeySet();
+        final Map<Long, Long> disputeCases = new ConcurrentHashMap<>();
         final AtomicLong conversationIds = new AtomicLong(800_000);
         final AtomicInteger timeoutCases = new AtomicInteger(900_000);
+        final TradeTimeoutCases caseStore;
         volatile boolean failAppend;
+        TradePorts.Notifications notifications;
+
+        FixturePorts(TradeTimeoutCases caseStore) {
+            this.caseStore = caseStore;
+        }
 
         void reset() {
             products.clear();
@@ -855,7 +1023,9 @@ class TradeLifecycleIT {
             conversationTrades.clear();
             messages.clear();
             archived.clear();
+            disputeCases.clear();
             failAppend = false;
+            notifications = null;
         }
 
         boolean archived(long tradeId) {
@@ -1023,8 +1193,20 @@ class TradeLifecycleIT {
         }
 
         @Override
+        public long openDisputeCase(WriteTransaction transaction, ExecutionContext context, long tradeId,
+                                    long disputeId, Instant at) {
+            long caseId = caseStore.openDispute(tradeId, disputeId, at);
+            disputeCases.put(disputeId, caseId);
+            return caseId;
+        }
+
+        @Override
         public void register(WriteTransaction transaction, UUID businessEventId, String eventType,
                              long tradeId, Set<Long> recipients) {
+            if (notifications != null) {
+                notifications.register(transaction, businessEventId, eventType, tradeId, recipients);
+                return;
+            }
             transaction.addEventIntent(recipients, eventType.replace('.', '_'), 1,
                     new ResourceRef("trade", tradeId), eventType + ":" + businessEventId, null, null);
         }
@@ -1043,8 +1225,8 @@ class TradeLifecycleIT {
 
         @Bean
         @Primary
-        public FixturePorts fixturePorts() {
-            return new FixturePorts();
+        public FixturePorts fixturePorts(TradeTimeoutCases caseStore) {
+            return new FixturePorts(caseStore);
         }
 
         @Bean

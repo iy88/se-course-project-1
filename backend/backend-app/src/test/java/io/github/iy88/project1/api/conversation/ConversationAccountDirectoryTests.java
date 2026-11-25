@@ -17,14 +17,16 @@ class ConversationAccountDirectoryTests {
 
     @Test
     void mapsProfilesOntoTheConversationPort() {
-        when(accounts.profile(7L)).thenReturn(Optional.of(new AccountQueries.Profile(7L, "张新悦")));
+        when(accounts.profile(7L)).thenReturn(Optional.of(
+                new AccountQueries.Profile(7L, "张新悦", "https://img.example/seven.png")));
         when(accounts.profiles(Set.of(7L, 42L))).thenReturn(Map.of(
-                7L, new AccountQueries.Profile(7L, "张新悦"),
-                42L, new AccountQueries.Profile(42L, "李四")));
+                7L, new AccountQueries.Profile(7L, "张新悦", "https://img.example/seven.png"),
+                42L, new AccountQueries.Profile(42L, "李四", "https://img.example/forty-two.png")));
 
-        assertThat(directory.profile(7L)).contains(new AccountDirectory.Profile(7L, "张新悦"));
+        assertThat(directory.profile(7L)).contains(
+                new AccountDirectory.Profile(7L, "张新悦", "https://img.example/seven.png"));
         assertThat(directory.profiles(Set.of(7L, 42L))).containsEntry(42L,
-                new AccountDirectory.Profile(42L, "李四"));
+                new AccountDirectory.Profile(42L, "李四", "https://img.example/forty-two.png"));
     }
 
     @Test

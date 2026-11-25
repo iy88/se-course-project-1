@@ -53,6 +53,7 @@ class ConversationTradePageTests {
         assertThat(page.items().getFirst().sourceRef()).isNull();
         assertThat(page.items().getLast().sender().displayName()).isEqualTo("张新悦");
         assertThat(page.branchStatus()).isEqualTo("active");
+        assertThat(page.tradeId()).isEqualTo(9L);
         assertThat(page.nextBeforeSeq()).isEqualTo(1L);
         assertThat(page.nextAfterSeq()).isEqualTo(2L);
     }
@@ -70,6 +71,7 @@ class ConversationTradePageTests {
         var page = queries.pageTrade(actor(7L), 2L, null, null, 20);
 
         assertThat(page.branchStatus()).isEqualTo("archived");
+        assertThat(page.tradeId()).isEqualTo(9L);
         assertThat(page.items()).isEmpty();
         assertThat(page.nextAfterSeq()).isNull();
         assertThat(page.nextBeforeSeq()).isNull();
