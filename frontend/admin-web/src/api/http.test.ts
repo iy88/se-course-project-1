@@ -39,21 +39,38 @@ describe("admin HTTP seam", () => {
     assert.equal(cleared, true);
   });
 
-  it("primes the entry token before the first login", async () => {
+  it("uses the entry token and refreshes it even with a stale session cookie", async (t) => {
+    const document = Object.getOwnPropertyDescriptor(globalThis, "document");
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: { cookie: "__Host-se_csrf=stale" },
+    });
+    t.after(() => {
+      if (document) Object.defineProperty(globalThis, "document", document);
+      else Reflect.deleteProperty(globalThis, "document");
+    });
+    let entryCount = 0;
     const calls: string[] = [];
     globalThis.fetch = (async (input, init) => {
       const url = String(input);
       calls.push(`${init?.method ?? "GET"} ${url}`);
       if (url === "/api/v1/account/entry-context") {
+        entryCount += 1;
         return new Response(
           JSON.stringify({
-            csrfToken: "entry",
-            expiresAt: new Date(Date.now() + 600_000).toISOString(),
+            csrf_token: `entry-${entryCount}`,
+            expires_at: new Date(Date.now() + 600_000).toISOString(),
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
-      assert.equal(new Headers(init?.headers).get("X-CSRF-Token"), "entry");
+      assert.equal(new Headers(init?.headers).get("X-CSRF-Token"), `entry-${entryCount}`);
+      if (entryCount === 1) {
+        return Response.json(
+          { error: { code: "CSRF_INVALID", message: "请求校验失败" } },
+          { status: 403 },
+        );
+      }
       return new Response(
         JSON.stringify({ account: { id: "1", display_name: "Manager", roles: ["manager"] } }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -62,6 +79,11 @@ describe("admin HTTP seam", () => {
 
     await login("manager@example.com", "secret", "login-key");
 
-    assert.deepEqual(calls, ["GET /api/v1/account/entry-context", "POST /api/v1/account/session"]);
+    assert.deepEqual(calls, [
+      "GET /api/v1/account/entry-context",
+      "POST /api/v1/account/session",
+      "GET /api/v1/account/entry-context",
+      "POST /api/v1/account/session",
+    ]);
   });
 });

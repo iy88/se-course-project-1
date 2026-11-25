@@ -4,8 +4,8 @@ import { request, setEntryCsrfToken } from "./http";
 import type { Identity } from "./contracts";
 
 interface EntryContext {
-  csrfToken: string;
-  expiresAt: string;
+  csrf_token: string;
+  expires_at: string;
 }
 
 /** Refreshes the token a little before the server expiry so a slow form still posts. */
@@ -18,7 +18,7 @@ async function ensureEntryTicket(force = false): Promise<string> {
     return entryTicket.token;
   }
   const context = await request<EntryContext>("GET", "/account/entry-context");
-  entryTicket = { token: context.csrfToken, expiresAt: Date.parse(context.expiresAt) };
+  entryTicket = { token: context.csrf_token, expiresAt: Date.parse(context.expires_at) };
   setEntryCsrfToken(entryTicket.token);
   return entryTicket.token;
 }
@@ -37,18 +37,20 @@ export async function login(
   password: string,
   idempotencyKey: string,
 ): Promise<Identity> {
-  await ensureEntryTicket();
+  const csrfToken = await ensureEntryTicket();
   try {
     return await request<Identity>("POST", "/account/session", {
       body: { email, password },
       idempotencyKey,
+      csrfToken,
     });
   } catch (caught) {
     if (!(caught instanceof ApiError) || caught.code !== "CSRF_INVALID") throw caught;
-    await ensureEntryTicket(true);
+    const refreshedToken = await ensureEntryTicket(true);
     return request<Identity>("POST", "/account/session", {
       body: { email, password },
       idempotencyKey,
+      csrfToken: refreshedToken,
     });
   }
 }
