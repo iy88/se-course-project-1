@@ -47,6 +47,8 @@ import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
 import StateBadge from "../../components/StateBadge.vue";
+import StartChatButton from "../../components/interaction/StartChatButton.vue";
+import TradeProductHistory from "../../components/interaction/TradeProductHistory.vue";
 import TradeReviewSection from "../../components/interaction/TradeReviewSection.vue";
 
 const route = useRoute();
@@ -296,6 +298,12 @@ function openConversation(): void {
           >
             进入交易会话
           </button>
+          <StartChatButton
+            v-if="counterparty"
+            :target-account-id="counterparty.id"
+            :target-name="counterparty.display_name"
+            variant="ghost"
+          />
         </template>
       </PageHeader>
 
@@ -592,7 +600,12 @@ function openConversation(): void {
             </button>
           </div>
         </div>
-        <p v-else-if="selfConfirmed" class="banner banner--info">
+        <p
+          v-else-if="
+            selfConfirmed && confirmations.length === 1 && trade.data.value.status === 'in_progress'
+          "
+          class="banner banner--info"
+        >
           你已提交完成确认，等待对方确认。
         </p>
       </section>
@@ -681,6 +694,11 @@ function openConversation(): void {
             </span>
           </p>
           <p class="quote pre-line break-anywhere">{{ dispute.statement }}</p>
+          <p v-if="dispute.case_id" class="banner banner--info">
+            已提交管理处理，事项编号 #{{
+              dispute.case_id
+            }}。可继续与对方协商；双方确认处理结果后交易恢复进行。
+          </p>
           <div v-if="allowed.has('confirm_dispute_resolution')" class="inline">
             <button type="button" class="btn btn--primary" @click="confirmResolution">
               确认争议已解决
@@ -713,8 +731,12 @@ function openConversation(): void {
       <TradeReviewSection
         v-if="trade.data.value.status === 'completed'"
         :trade-id="trade.data.value.id"
-        :can-review="trade.data.value.status === 'completed'"
         :reviewee-name="counterparty?.display_name ?? '对方'"
+      />
+
+      <TradeProductHistory
+        :product-id="trade.data.value.product.id"
+        :trade-id="trade.data.value.id"
       />
 
       <details class="card history">

@@ -5,6 +5,7 @@
 import { request } from "./http";
 import type {
   ConversationEntry,
+  ConversationPeer,
   ConversationMessage,
   ConversationKind,
   ConversationMessagesPage,
@@ -32,7 +33,7 @@ export function ensurePrivateConversation(
 ): Promise<{
   conversation_kind: ConversationKind;
   conversation_id: string;
-  peer: { account_id: string; display_name: string };
+  peer: ConversationPeer;
   reused: boolean;
 }> {
   return request("POST", "/conversations/private", {
@@ -62,6 +63,7 @@ interface RawMessage {
 
 interface RawMessagesPage {
   items: RawMessage[];
+  trade_id?: ConversationMessagesPage["trade_id"];
   next_after_seq?: number | null;
   next_before_seq?: number | null;
   branch_status: "active" | "archived";
@@ -83,6 +85,7 @@ function normalizeMessage(raw: RawMessage): ConversationMessage {
 export function normalizeMessagesPage(page: RawMessagesPage): ConversationMessagesPage {
   return {
     items: page.items.map(normalizeMessage),
+    trade_id: page.trade_id,
     next_after_seq: page.next_after_seq ?? null,
     next_before_seq: page.next_before_seq ?? null,
     branch_status: page.branch_status,

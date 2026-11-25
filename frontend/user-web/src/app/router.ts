@@ -121,6 +121,18 @@ export const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, backTo: "me", backLabel: "我的" },
   },
   {
+    path: "/me/reviews",
+    name: "my-reviews",
+    component: () => import("../views/me/MyReviewsView.vue"),
+    meta: { requiresAuth: true, backTo: "me", backLabel: "我的" },
+  },
+  {
+    path: "/me/todos",
+    name: "my-todos",
+    component: () => import("../views/me/MyTodosView.vue"),
+    meta: { requiresAuth: true, backTo: "me", backLabel: "我的" },
+  },
+  {
     path: "/me/cases",
     name: "my-cases",
     component: () => import("../views/cases/CaseListView.vue"),
@@ -147,7 +159,6 @@ export const routes: RouteRecordRaw[] = [
         path: "",
         name: "conversations",
         component: () => import("../views/conversations/ConversationIndex.vue"),
-        meta: { backTo: "me", backLabel: "我的" },
       },
       {
         path: ":kind/:conversationId",
@@ -179,7 +190,10 @@ export const routes: RouteRecordRaw[] = [
 export const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
+  scrollBehavior: (to, _from, savedPosition) => {
+    if (to.name === "product-detail" && /^#comment-[1-9][0-9]*$/.test(to.hash)) return false;
+    return savedPosition ?? { top: 0 };
+  },
 });
 
 router.beforeEach(async (to) => {

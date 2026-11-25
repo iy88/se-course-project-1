@@ -24,12 +24,14 @@ describe("message normalisation", () => {
           created_at: "2026-11-23T10:00:00Z",
         },
       ],
+      trade_id: "19",
       next_before_seq: 11,
       branch_status: "active",
     });
 
     assert.equal(page.items[0].message_id, "42");
     assert.equal(page.items[0].message_type, "text");
+    assert.equal(page.trade_id, "19");
     assert.equal(page.next_before_seq, 11);
     assert.equal(page.next_after_seq, null);
   });
@@ -52,6 +54,7 @@ describe("message normalisation", () => {
     assert.equal(page.items[0].message_id, "88");
     assert.equal(page.items[0].message_type, "statement");
     assert.equal(page.branch_status, "archived");
+    assert.equal(page.trade_id, undefined);
   });
 
   it("prefers the trade fields when a server sends both", () => {

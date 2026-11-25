@@ -21,7 +21,6 @@ const hasThread = computed(() => Boolean(route.params.conversationId));
         <h1>消息</h1>
         <p class="muted">私聊与每笔交易各自保留独立会话，已读进度按会话分别记录。</p>
       </div>
-      <RouterLink to="/me/notifications" class="btn btn--ghost">查看通知</RouterLink>
     </header>
 
     <div class="conversations__body">
@@ -29,7 +28,7 @@ const hasThread = computed(() => Boolean(route.params.conversationId));
         <ConversationListPane />
       </div>
       <div class="conversations__detail">
-        <RouterView />
+        <RouterView :key="route.path" />
       </div>
     </div>
   </div>
@@ -39,7 +38,10 @@ const hasThread = computed(() => Boolean(route.params.conversationId));
 .conversations {
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: var(--space-4);
+  min-block-size: 0;
+  min-inline-size: 0;
 }
 
 .conversations__head {
@@ -58,16 +60,30 @@ const hasThread = computed(() => Boolean(route.params.conversationId));
 .conversations__body {
   display: grid;
   gap: var(--space-4);
-  align-items: start;
+  flex: 1;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  min-block-size: 0;
 }
 
 .conversations__detail {
+  display: none;
+  min-block-size: 0;
   min-inline-size: 0;
 }
 
-/* Narrow screens: the thread replaces the list instead of stacking below it. */
-.conversations--thread .conversations__list {
-  display: none;
+.conversations--thread .conversations__detail {
+  display: flex;
+}
+
+.conversations__list {
+  overflow-y: auto;
+}
+
+@media (width < 60rem) {
+  .conversations--thread .conversations__head,
+  .conversations--thread .conversations__list {
+    display: none;
+  }
 }
 
 @media (width >= 60rem) {
@@ -75,8 +91,9 @@ const hasThread = computed(() => Boolean(route.params.conversationId));
     grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
   }
 
-  .conversations--thread .conversations__list {
+  .conversations__detail {
     display: block;
+    overflow-y: auto;
   }
 }
 </style>

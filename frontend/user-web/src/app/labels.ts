@@ -162,6 +162,7 @@ export function notificationTypeLabel(eventType: string): string {
   const groups: Record<string, string> = {
     trade: "交易",
     product_audit: "商品审核",
+    product_comment: "商品评论",
     case: "事项",
     account: "账户",
     conversation: "会话",

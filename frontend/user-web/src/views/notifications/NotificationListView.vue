@@ -6,60 +6,100 @@
  * first read, which matches the contract rule that only opening a concrete
  * notification advances the read state.
  */
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 import { listNotifications } from "../../api/notifications";
 import type { NotificationReadFilter, NotificationSummary } from "../../api/contracts";
 import { usePagedList } from "../../app/async";
 import { formatDateTime } from "../../app/format";
 import { notificationReadLabels, notificationTypeLabel } from "../../app/labels";
-import { refreshBadges } from "../../app/badges";
+import { refreshesNotificationList } from "../../app/notification-events";
+import { registerSnapshotReloader, subscribeRealtime } from "../../app/realtime";
 import EmptyState from "../../components/EmptyState.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
 import PaginationBar from "../../components/PaginationBar.vue";
 
-const router = useRouter();
 const filter = ref<NotificationReadFilter>("all");
+const unreadCount = ref(0);
 
-const list = usePagedList<NotificationSummary>((page, pageSize, signal) =>
-  listNotifications({ page, page_size: pageSize, read: filter.value }, signal),
-);
-
-const unreadCount = computed(() => {
-  const data = list.items.value;
-  const locallyUnread = data.filter((item) => !item.read_at).length;
-  return filter.value === "unread" ? list.paging.total : locallyUnread;
+const list = usePagedList<NotificationSummary>(async (page, pageSize, signal) => {
+  const result = await listNotifications({ page, page_size: pageSize, read: filter.value }, signal);
+  if (!signal.aborted) unreadCount.value = result.unread_count;
+  return result;
 });
 
 const filters: NotificationReadFilter[] = ["all", "unread", "read"];
+let requestedPage = 1;
+let loading = false;
+let pending = false;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+let unsubscribe: (() => void) | undefined;
+let unregisterReloader: (() => void) | undefined;
+
+/**
+ * Serialise refreshes for the current filter/page.
+ *
+ * A notification event may arrive while the user is also paging; both intents
+ * collapse into the newest requested page instead of aborting each other. The
+ * list keeps its existing rows until the replacement page arrives.
+ */
+async function refreshPage(page = list.paging.page): Promise<void> {
+  requestedPage = page;
+  if (loading) {
+    pending = true;
+    return;
+  }
+  loading = true;
+  try {
+    do {
+      pending = false;
+      await list.load(requestedPage);
+    } while (pending);
+  } finally {
+    loading = false;
+  }
+}
+
+function scheduleRefresh(): void {
+  if (refreshTimer !== undefined) return;
+  refreshTimer = setTimeout(() => {
+    refreshTimer = undefined;
+    void refreshPage();
+  }, 80);
+}
 
 onMounted(() => {
-  void list.load(1);
+  void refreshPage(1);
+  unregisterReloader = registerSnapshotReloader(() => refreshPage());
+  unsubscribe = subscribeRealtime((frame) => {
+    if (refreshesNotificationList(frame)) scheduleRefresh();
+  });
+});
+
+onBeforeUnmount(() => {
+  unsubscribe?.();
+  unregisterReloader?.();
+  clearTimeout(refreshTimer);
+  refreshTimer = undefined;
+  pending = false;
+  list.cancel();
 });
 
 function selectFilter(next: NotificationReadFilter): void {
+  if (filter.value === next) return;
   filter.value = next;
-  void list.load(1);
-}
-
-function open(item: NotificationSummary): void {
-  void router.push({
-    name: "notification-detail",
-    params: { notificationId: item.notification_id },
-  });
+  void refreshPage(1);
 }
 
 async function reload(): Promise<void> {
-  await list.load(list.paging.page);
-  void refreshBadges();
+  await refreshPage(list.paging.page);
 }
 </script>
 
 <template>
   <div class="stack stack--loose">
-    <PageHeader title="通知" description="查看商品审核结果。">
+    <PageHeader title="通知">
       <template #actions>
         <span v-if="unreadCount > 0" class="chip chip--active">{{ unreadCount }} 条未读</span>
       </template>
@@ -78,41 +118,61 @@ async function reload(): Promise<void> {
       </button>
     </div>
 
-    <LoadingBlock v-if="list.isLoading.value" label="正在加载通知…" />
-    <ErrorNotice v-else-if="list.problem.value" :error="list.error.value" @retry="reload" />
+    <LoadingBlock v-if="list.isLoading.value && !list.items.value.length" label="正在加载通知…" />
+    <ErrorNotice
+      v-else-if="list.problem.value && !list.items.value.length"
+      :error="list.error.value"
+      @retry="reload"
+    />
     <EmptyState
-      v-else-if="list.isEmpty.value"
+      v-else-if="list.isEmpty.value && !list.problem.value"
       :title="filter === 'unread' ? '没有未读通知' : '暂无通知'"
-      :description="filter === 'all' ? '商品审核完成后，结果会在这里显示。' : undefined"
     />
     <template v-else>
-      <ul class="rows">
+      <p v-if="list.problem.value" class="banner banner--warn" role="alert">
+        刷新通知失败：{{ list.problem.value.message }}
+        <button type="button" class="btn btn--small" @click="reload">重试</button>
+      </p>
+      <ul class="rows" :aria-busy="list.isLoading.value">
         <li v-for="item in list.items.value" :key="item.notification_id">
-          <button
-            type="button"
+          <RouterLink
+            :to="{ name: 'notification-detail', params: { notificationId: item.notification_id } }"
             class="row"
             :class="{ 'row--unread': !item.read_at }"
-            @click="open(item)"
           >
             <span class="row__main">
-              <span class="inline">
-                <span class="chip">{{ notificationTypeLabel(item.event_type) }}</span>
-                <span v-if="!item.read_at" class="dot" aria-label="未读" />
+              <span class="row__meta">
+                <span class="row__type">{{ notificationTypeLabel(item.event_type) }}</span>
+                <strong class="row__summary break-anywhere">{{ item.summary }}</strong>
+                <span v-if="!item.read_at" class="row__unread">未读</span>
+                <time class="row__time muted" :datetime="item.occurred_at">
+                  {{ formatDateTime(item.occurred_at) }}
+                </time>
               </span>
-              <span class="row__summary">{{ item.summary }}</span>
-              <time class="muted" :datetime="item.occurred_at">
-                {{ formatDateTime(item.occurred_at) }}
-              </time>
+              <span
+                v-if="item.subject || item.source?.resource_type === 'trade'"
+                class="row__details muted"
+              >
+                <span v-if="item.subject" class="break-anywhere">
+                  <template v-if="['product', 'trade'].includes(item.source?.resource_type ?? '')">
+                    商品名称
+                  </template>
+                  {{ item.subject }}
+                </span>
+                <span v-if="item.source?.resource_type === 'trade'" class="row__trade">
+                  交易编号 #{{ item.source.resource_id }}
+                </span>
+              </span>
             </span>
             <span class="row__go" aria-hidden="true">›</span>
-          </button>
+          </RouterLink>
         </li>
       </ul>
       <PaginationBar
         :page="list.paging.page"
         :page-size="list.paging.pageSize"
         :total="list.paging.total"
-        @change="list.load"
+        @change="refreshPage"
       />
     </template>
   </div>
@@ -126,7 +186,7 @@ async function reload(): Promise<void> {
 .rows {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
 .row {
@@ -134,16 +194,22 @@ async function reload(): Promise<void> {
   align-items: center;
   gap: var(--space-3);
   inline-size: 100%;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   text-align: start;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  cursor: pointer;
+  color: var(--ink);
+  text-decoration: none;
 }
 
 .row:hover {
   border-color: var(--brand);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
 }
 
 .row--unread {
@@ -154,23 +220,45 @@ async function reload(): Promise<void> {
 .row__main {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--space-1);
   min-inline-size: 0;
   flex: 1;
 }
 
-.row__summary {
-  font-size: 0.875rem;
+.row__meta,
+.row__details {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+.row__type {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.row__time {
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.row__time,
+.row__details {
+  font-size: 0.8125rem;
+}
+
+.row__trade {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.row__unread {
+  font-size: 0.75rem;
+  color: var(--brand);
 }
 
 .row__go {
   color: var(--ink-faint);
-}
-
-.dot {
-  inline-size: 0.4375rem;
-  block-size: 0.4375rem;
-  border-radius: 50%;
-  background: var(--danger);
 }
 </style>

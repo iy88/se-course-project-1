@@ -62,7 +62,8 @@ let socket: RealtimeSocket | null = null;
 let epoch: string | null = null;
 let cursor = 0;
 let attempt = 0;
-let closedByCaller = false;
+let running = false;
+let connectionGeneration = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -138,17 +139,20 @@ function dispatchEvent(frame: RealtimeEventFrame): void {
   acknowledge();
 }
 
-async function open(): Promise<void> {
+async function open(generation: number): Promise<void> {
+  if (!running || generation !== connectionGeneration) return;
   const csrfToken = deps.csrfToken();
   if (csrfToken === null) {
     // Without the session CSRF credential the server rejects the handshake with
     // 4400, so report the state instead of opening a connection that cannot work.
+    running = false;
     state.value = "unauthenticated";
     return;
   }
   state.value = attempt === 0 ? "connecting" : "reconnecting";
   if (!epoch) {
     const head = await deps.fetchHead();
+    if (!running || generation !== connectionGeneration) return;
     epoch = head.epoch;
     cursor = Math.max(head.replay_floor, cursor);
   }
@@ -156,6 +160,7 @@ async function open(): Promise<void> {
   socket = connection;
 
   connection.addEventListener("open", () => {
+    if (socket !== connection) return;
     const hello: Record<string, unknown> = {
       type: "hello",
       protocol_version: PROTOCOL_VERSION,
@@ -166,6 +171,7 @@ async function open(): Promise<void> {
   });
 
   connection.addEventListener("message", (event) => {
+    if (socket !== connection) return;
     let payload: unknown;
     try {
       payload = JSON.parse(String((event as { data: unknown }).data));
@@ -203,8 +209,8 @@ async function open(): Promise<void> {
         void handleSyncReset(payload as SyncResetFrame, connection);
         return;
       case "auth_required":
-        state.value = "unauthenticated";
         stopRealtime();
+        state.value = "unauthenticated";
         return;
       case "cursor_advance": {
         const advance = payload as { through_seq?: unknown };
@@ -223,23 +229,22 @@ async function open(): Promise<void> {
   });
 
   connection.addEventListener("close", (event) => {
-    if (socket === connection) socket = null;
+    if (socket !== connection) return;
+    socket = null;
     clearHeartbeat();
-    if (closedByCaller) {
-      state.value = "idle";
-      return;
-    }
     const code = (event as { code?: number }).code ?? 1006;
     if (code === CLOSE_UNAUTHORIZED || code === CLOSE_FORBIDDEN) {
+      running = false;
       state.value = "unauthenticated";
       return;
     }
     if (code === CLOSE_PROTOCOL) {
       // Retrying the same frames cannot fix a protocol mismatch.
+      running = false;
       state.value = "protocol_error";
       return;
     }
-    scheduleReconnect(code === CLOSE_QUOTA ? 4 : 1);
+    scheduleReconnect(generation, code === CLOSE_QUOTA ? 4 : 1);
   });
 
   connection.addEventListener("error", () => {
@@ -281,33 +286,37 @@ async function handleSyncReset(frame: SyncResetFrame, connection: RealtimeSocket
   send({ type: "resume", epoch, after_seq: cursor });
 }
 
-function scheduleReconnect(multiplier: number): void {
+function scheduleReconnect(generation: number, multiplier: number): void {
+  if (!running || generation !== connectionGeneration) return;
   state.value = "reconnecting";
   attempt += 1;
   const delay = Math.min(MAX_BACKOFF_MS, multiplier * 1_000 * 2 ** Math.min(attempt, 5));
   if (retryTimer !== null) clearTimeout(retryTimer);
   retryTimer = setTimeout(() => {
     retryTimer = null;
-    void open().catch(() => scheduleReconnect(1));
+    void open(generation).catch(() => scheduleReconnect(generation, 1));
   }, delay);
 }
 
 export function startRealtime(): void {
-  if (socket) return;
-  closedByCaller = false;
+  if (running) return;
+  running = true;
+  const generation = ++connectionGeneration;
   attempt = 0;
-  void open().catch(() => scheduleReconnect(1));
+  void open(generation).catch(() => scheduleReconnect(generation, 1));
 }
 
 export function stopRealtime(): void {
-  closedByCaller = true;
+  running = false;
+  connectionGeneration++;
   if (retryTimer !== null) {
     clearTimeout(retryTimer);
     retryTimer = null;
   }
   clearHeartbeat();
-  socket?.close();
+  const connection = socket;
   socket = null;
+  connection?.close();
   state.value = "idle";
 }
 
@@ -333,6 +342,12 @@ export function registerSnapshotReloader(reload: () => Promise<void> | void): ()
 export function resetRealtimeCursor(): void {
   epoch = null;
   cursor = 0;
+}
+
+export function restartRealtime(): void {
+  stopRealtime();
+  resetRealtimeCursor();
+  if (handlers.size > 0) startRealtime();
 }
 
 /** Connection state for a subtle "reconnecting" hint in the business screens. */

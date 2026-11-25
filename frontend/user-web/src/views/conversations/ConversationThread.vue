@@ -3,9 +3,8 @@
  * One conversation branch.
  *
  * History loads backwards with the sequence cursor and the read position advances
- * to the newest message the user can actually see once the page settles. Realtime
- * frames trigger a refetch of the tail instead of a local append, so sequence gaps
- * after a reconnect heal themselves.
+ * to the newest visible message. Realtime frames load messages after the current
+ * sequence, including gaps left by a reconnect.
  *
  * Layout follows the message-screen rules: my messages sit on the right, the peer's
  * on the left, system events are centred, consecutive messages from the same sender
@@ -16,10 +15,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { advanceReadProgress, listMessages, sendMessage } from "../../api/conversations";
+import { getTrade } from "../../api/trades";
 import type { ConversationKind, ConversationMessage } from "../../api/contracts";
-import { refreshBadges } from "../../app/badges";
 import { shouldSendOnEnter } from "../../app/composer";
-import { peerName } from "../../app/conversation-directory";
+import { peerAccountId, peerName, rememberPeer } from "../../app/conversation-directory";
 import { buildConversationRows, type ConversationRow } from "../../app/conversation-rows";
 import { formatDateTime, formatRelative } from "../../app/format";
 import { newIdempotencyKey } from "../../app/keys";
@@ -29,6 +28,7 @@ import { session } from "../../app/session";
 import { notify } from "../../app/toast";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
+import StartChatButton from "../../components/interaction/StartChatButton.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -42,13 +42,19 @@ const error = ref<unknown>(null);
 const draft = ref("");
 const sending = ref(false);
 const archived = ref(false);
+const tradeId = ref<string>();
+const tradePeerId = ref<string | null>(peerAccountId(kind.value, conversationId.value));
 const hasOlder = ref(false);
 const oldestSeq = ref<number | null>(null);
 const scroller = ref<HTMLElement | null>(null);
 const composer = ref<HTMLTextAreaElement | null>(null);
-const readSeq = ref(0);
-
-let pageSize = 30;
+const loaded = ref(false);
+const abort = new AbortController();
+const pageSize = 30;
+let refreshPending = false;
+let refreshInFlight: Promise<void> | undefined;
+let acknowledgedSeq = 0;
+let updatingRead = false;
 let unsubscribe: (() => void) | null = null;
 let unregisterReloader: (() => void) | null = null;
 /** True while an IME composition session owns the Enter key. */
@@ -62,27 +68,99 @@ const title = computed(() => {
 
 const heading = computed(() => peerName(kind.value, conversationId.value) ?? title.value);
 
+const latestSeq = computed(() => messages.value[messages.value.length - 1]?.seq);
+
 const rows = computed<ConversationRow[]>(() =>
   buildConversationRows(messages.value, { viewerAccountId: session.accountId.value }),
 );
 
-async function loadTail(): Promise<void> {
-  loading.value = true;
-  error.value = null;
+let peerRequestFor: string | null = null;
+let peerLookupDone = false;
+
+/**
+ * Resolve the counterparty of a trade branch through the trade detail.
+ *
+ * The conversation list carries only the peer name, so a deep link needs the
+ * participant projection to learn the account id. A failure only hides the chat
+ * entry point and never affects reading the archived history.
+ */
+async function resolveTradePeer(): Promise<void> {
+  const id = tradeId.value;
+  if (
+    kind.value !== "trade" ||
+    !id ||
+    tradePeerId.value ||
+    peerLookupDone ||
+    peerRequestFor === id
+  ) {
+    return;
+  }
+  peerRequestFor = id;
   try {
-    const page = await listMessages(kind.value, conversationId.value, { limit: pageSize });
-    messages.value = page.items;
-    archived.value = page.branch_status === "archived";
-    oldestSeq.value = page.next_before_seq ?? null;
-    hasOlder.value = page.items.length >= pageSize;
-    readSeq.value = page.items.length ? page.items[page.items.length - 1].seq : 0;
-    await nextTick();
-    scrollToBottom();
-    await markRead();
+    const trade = await getTrade(id);
+    if (kind.value !== "trade" || tradeId.value !== id) return;
+    const peer = trade.buyer.id === session.accountId.value ? trade.seller : trade.buyer;
+    tradePeerId.value = peer.id;
+    rememberPeer("trade", conversationId.value, peer.display_name, peer.id);
+  } catch {
+    // Reading history stays available even when the trade projection is unavailable.
+  } finally {
+    peerLookupDone = true;
+    if (peerRequestFor === id) peerRequestFor = null;
+  }
+}
+
+function loadTail(): Promise<void> {
+  refreshPending = true;
+  refreshInFlight ??= Promise.resolve().then(refreshTail);
+  return refreshInFlight;
+}
+
+async function refreshTail(): Promise<void> {
+  try {
+    while (refreshPending && !abort.signal.aborted) {
+      refreshPending = false;
+      const firstLoad = !loaded.value;
+      loading.value = firstLoad;
+      error.value = null;
+      let afterSeq = latestSeq.value;
+      let more: boolean;
+      do {
+        const page = await listMessages(
+          kind.value,
+          conversationId.value,
+          { limit: pageSize, after_seq: afterSeq },
+          abort.signal,
+        );
+        if (abort.signal.aborted) return;
+        const followTail = !loaded.value || isAtBottom();
+        archived.value = page.branch_status === "archived";
+        if (kind.value === "trade") {
+          tradeId.value = page.trade_id;
+          void resolveTradePeer();
+        }
+        if (!loaded.value) {
+          oldestSeq.value = page.next_before_seq ?? null;
+          hasOlder.value = page.items.length >= pageSize;
+        }
+        messages.value = [...messages.value, ...page.items];
+        loaded.value = true;
+        loading.value = false;
+        afterSeq = page.next_after_seq ?? afterSeq;
+        more = !firstLoad && page.items.length === pageSize && page.next_after_seq != null;
+        await nextTick();
+        if (followTail && !abort.signal.aborted) scrollToBottom();
+      } while (more && !abort.signal.aborted);
+      void markRead();
+    }
   } catch (caught) {
-    error.value = caught;
+    if (!abort.signal.aborted) {
+      if (loaded.value) notify.error(problemMessage(caught));
+      else error.value = caught;
+    }
   } finally {
     loading.value = false;
+    refreshInFlight = undefined;
   }
 }
 
@@ -92,10 +170,13 @@ async function loadOlder(): Promise<void> {
   const element = scroller.value;
   const previousHeight = element?.scrollHeight ?? 0;
   try {
-    const page = await listMessages(kind.value, conversationId.value, {
-      before_seq: oldestSeq.value,
-      limit: pageSize,
-    });
+    const page = await listMessages(
+      kind.value,
+      conversationId.value,
+      { before_seq: oldestSeq.value, limit: pageSize },
+      abort.signal,
+    );
+    if (abort.signal.aborted) return;
     messages.value = [...page.items, ...messages.value];
     oldestSeq.value = page.next_before_seq ?? null;
     hasOlder.value = page.items.length >= pageSize;
@@ -103,25 +184,37 @@ async function loadOlder(): Promise<void> {
     // Keep the reading position when older messages are prepended.
     if (element) element.scrollTop = element.scrollHeight - previousHeight;
   } catch (caught) {
-    notify.error(problemMessage(caught));
+    if (!abort.signal.aborted) notify.error(problemMessage(caught));
   } finally {
     loadingOlder.value = false;
   }
 }
 
+function isAtBottom(): boolean {
+  const element = scroller.value;
+  return !!element && element.scrollHeight - element.scrollTop - element.clientHeight <= 24;
+}
+
 async function markRead(): Promise<void> {
-  if (!readSeq.value) return;
+  if (updatingRead || abort.signal.aborted) return;
+  updatingRead = true;
   try {
-    const result = await advanceReadProgress(
-      kind.value,
-      conversationId.value,
-      readSeq.value,
-      newIdempotencyKey(),
-    );
-    readSeq.value = result.last_read_seq;
-    void refreshBadges();
+    while (!abort.signal.aborted && isAtBottom()) {
+      const displayedSeq = latestSeq.value ?? 0;
+      if (displayedSeq <= acknowledgedSeq) break;
+      const result = await advanceReadProgress(
+        kind.value,
+        conversationId.value,
+        displayedSeq,
+        newIdempotencyKey(),
+      );
+      if (result.last_read_seq < displayedSeq) break;
+      acknowledgedSeq = result.last_read_seq;
+    }
   } catch {
-    // Read progress is monotonic and idempotent; the next visit retries it.
+    // A subsequent visit or new message can retry the read update.
+  } finally {
+    updatingRead = false;
   }
 }
 
@@ -131,11 +224,15 @@ async function send(): Promise<void> {
   sending.value = true;
   try {
     await sendMessage(kind.value, conversationId.value, { body }, newIdempotencyKey());
-    draft.value = "";
+    if (abort.signal.aborted) return;
+    if (draft.value.trim() === body) draft.value = "";
     await loadTail();
+    if (abort.signal.aborted) return;
     resizeComposer();
+    scrollToBottom();
+    void markRead();
   } catch (caught) {
-    notify.error(problemMessage(caught));
+    if (!abort.signal.aborted) notify.error(problemMessage(caught));
   } finally {
     sending.value = false;
   }
@@ -178,16 +275,15 @@ function onRealtimeFrame(frame: { event_type: string; data: Record<string, unkno
   }
   if (String(frame.data.conversation_kind) !== kind.value) return;
   if (String(frame.data.conversation_id) !== conversationId.value) return;
+  if (
+    frame.event_type === "message_created" &&
+    typeof frame.data.message_seq === "number" &&
+    frame.data.message_seq <= (latestSeq.value ?? 0)
+  ) {
+    return;
+  }
   void loadTail();
 }
-
-watch(
-  () => route.fullPath,
-  () => {
-    if (String(route.params.conversationId ?? "") === "") return;
-    void loadTail();
-  },
-);
 
 watch(draft, () => {
   void nextTick(resizeComposer);
@@ -201,6 +297,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  abort.abort();
   unsubscribe?.();
   unregisterReloader?.();
 });
@@ -220,12 +317,25 @@ onBeforeUnmount(() => {
           <template v-else-if="realtimeState === 'unauthenticated'"> · 登录状态已失效</template>
         </span>
       </div>
+      <RouterLink
+        v-if="kind === 'trade' && tradeId"
+        :to="{ name: 'trade-detail', params: { tradeId } }"
+        class="btn btn--ghost thread__trade-link"
+      >
+        查看交易
+      </RouterLink>
+      <StartChatButton
+        v-if="kind === 'trade' && tradePeerId"
+        :target-account-id="tradePeerId"
+        :target-name="peerName(kind, conversationId) ?? ''"
+        variant="ghost"
+      />
     </header>
 
     <LoadingBlock v-if="loading" label="正在加载消息…" />
     <ErrorNotice v-else-if="error" :error="error" @retry="loadTail" />
     <template v-else>
-      <div ref="scroller" class="thread__scroll">
+      <div ref="scroller" class="thread__scroll" @scroll.passive="markRead">
         <div v-if="hasOlder" class="thread__older">
           <button type="button" class="btn btn--small" :disabled="loadingOlder" @click="loadOlder">
             {{ loadingOlder ? "加载中…" : "加载更早的消息" }}
@@ -299,6 +409,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  flex: 1;
+  min-block-size: 0;
   min-inline-size: 0;
 }
 
@@ -328,6 +440,11 @@ onBeforeUnmount(() => {
   min-inline-size: 0;
 }
 
+.thread__trade-link {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
 .thread__title h2 {
   margin: 0;
   font-size: 1rem;
@@ -344,7 +461,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  max-block-size: min(62vh, 34rem);
+  flex: 1;
+  min-block-size: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   padding-inline-end: var(--space-1);
 }
@@ -446,6 +565,7 @@ onBeforeUnmount(() => {
 
 .composer {
   display: flex;
+  flex: 0 0 auto;
   gap: var(--space-2);
   align-items: flex-end;
   border-block-start: 1px solid var(--line);
@@ -454,6 +574,7 @@ onBeforeUnmount(() => {
 
 .composer__input {
   flex: 1;
+  min-inline-size: 0;
   min-block-size: 2.5rem;
   max-block-size: 10rem;
   resize: none;

@@ -117,17 +117,18 @@ export function listEditHistory(
   productId: string,
   page: number,
   pageSize: number,
+  tradeId?: string,
   signal?: AbortSignal,
 ): Promise<Page<ProductEditSnapshot>> {
   return request<Page<ProductEditSnapshot>>("GET", `/products/${productId}/edit-history`, {
-    query: { page, page_size: pageSize },
+    query: { page, page_size: pageSize, trade_id: tradeId },
     signal,
   });
 }
 
 export function listProductComments(
   productId: string,
-  query: { page?: number; page_size?: number; case_id?: string },
+  query: { page?: number; page_size?: number; case_id?: string; anchor_comment_id?: string },
   signal?: AbortSignal,
 ): Promise<CommentPage> {
   return request<CommentPage>("GET", `/products/${productId}/comments`, { query, signal });

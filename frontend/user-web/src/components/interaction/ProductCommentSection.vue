@@ -7,7 +7,8 @@
  * reader's own comments, so the component shows the server result unchanged
  * instead of inventing an empty state.
  */
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import {
   createProductComment,
   deleteProductComment,
@@ -34,8 +35,16 @@ const props = defineProps<{
   sellerId: string;
 }>();
 
+const route = useRoute();
+const section = ref<HTMLElement | null>(null);
+const anchorId = computed(() => /^#comment-([1-9][0-9]*)$/.exec(route.hash)?.[1]);
+let pendingAnchor: string | undefined;
 const comments = usePagedList<CommentView>((page, pageSize, signal) =>
-  listProductComments(props.productId, { page, page_size: pageSize }, signal),
+  listProductComments(
+    props.productId,
+    { page, page_size: pageSize, anchor_comment_id: pendingAnchor },
+    signal,
+  ),
 );
 const keys = new IdempotencyKeys();
 
@@ -49,18 +58,31 @@ const commentToDelete = ref<CommentView | null>(null);
 
 const isSeller = computed(() => session.accountId.value === props.sellerId);
 
-function load(): void {
-  void comments.load(1);
+async function load(): Promise<void> {
+  const targetId = anchorId.value;
+  const productId = props.productId;
+  pendingAnchor = targetId;
+  const loading = comments.load(1);
+  pendingAnchor = undefined;
+  await loading;
+  if (
+    !targetId ||
+    targetId !== anchorId.value ||
+    productId !== props.productId ||
+    comments.state.value !== "ready"
+  )
+    return;
+  await nextTick();
+  (document.getElementById(`comment-${targetId}`) ?? section.value)?.scrollIntoView({
+    block: "start",
+  });
 }
 
 onMounted(load);
-watch(
-  () => props.productId,
-  () => {
-    replyTarget.value = null;
-    load();
-  },
-);
+watch([() => props.productId, anchorId], () => {
+  replyTarget.value = null;
+  void load();
+});
 
 function statusLabel(comment: CommentView): string {
   if (comment.status === "deleted_by_author") return "作者已删除";
@@ -138,7 +160,7 @@ async function confirmDelete(): Promise<void> {
 </script>
 
 <template>
-  <section class="card">
+  <section ref="section" class="card comment-section">
     <div class="card__head">
       <h2>商品评论</h2>
       <span class="chip">{{ comments.paging.total }} 条</span>
@@ -173,9 +195,18 @@ async function confirmDelete(): Promise<void> {
       description="买家的评论和你的回复会显示在这里。"
     />
     <ul v-else class="comment-list">
-      <li v-for="comment in comments.items.value" :key="comment.id" class="comment">
+      <li
+        v-for="comment in comments.items.value"
+        :id="`comment-${comment.id}`"
+        :key="comment.id"
+        class="comment"
+      >
         <header class="comment__head">
-          <AvatarBadge :display-name="comment.author.display_name" size="sm" />
+          <AvatarBadge
+            :display-name="comment.author.display_name"
+            :url="comment.author.avatar_url"
+            size="sm"
+          />
           <span class="comment__author">{{ comment.author.display_name }}</span>
           <span class="muted">{{ formatRelative(comment.created_at) }}</span>
           <span v-if="statusLabel(comment)" class="chip chip--warn">{{
@@ -231,9 +262,18 @@ async function confirmDelete(): Promise<void> {
         </form>
 
         <ul v-if="comment.replies?.length" class="reply-list">
-          <li v-for="reply in comment.replies" :key="reply.id" class="reply">
+          <li
+            v-for="reply in comment.replies"
+            :id="`comment-${reply.id}`"
+            :key="reply.id"
+            class="reply"
+          >
             <header class="comment__head">
-              <AvatarBadge :display-name="reply.author.display_name" size="sm" />
+              <AvatarBadge
+                :display-name="reply.author.display_name"
+                :url="reply.author.avatar_url"
+                size="sm"
+              />
               <span class="comment__author">{{ reply.author.display_name }}</span>
               <span class="chip">卖方回复</span>
               <span class="muted">{{ formatRelative(reply.created_at) }}</span>
@@ -276,6 +316,12 @@ async function confirmDelete(): Promise<void> {
 </template>
 
 <style scoped>
+.comment-section,
+.comment,
+.reply {
+  scroll-margin-block-start: 5rem;
+}
+
 .comment-form {
   display: flex;
   flex-direction: column;

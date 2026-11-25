@@ -1,28 +1,44 @@
 /*
  * Peer directory shared by the conversation list and the thread.
  *
- * The list endpoint is the only place that returns the counterparty name for a
- * branch, so the thread reads it from here instead of showing a bare kind label.
- * The map is filled by the list pane and treated as a cache: an unknown id simply
- * falls back to the kind label.
+ * The list endpoint returns both the counterparty name and account id for each
+ * branch, so the thread can show the name and, for a trade branch, offer the
+ * private-chat entry point without re-reading the conversation list. The map is
+ * a cache: a missing entry falls back to the kind label or a trade lookup.
  */
 import { ref } from "vue";
 
-const names = ref<Map<string, string>>(new Map());
+interface PeerRecord {
+  accountId: string | null;
+  displayName: string;
+}
+
+const peers = ref<Map<string, PeerRecord>>(new Map());
 
 /** Stable key for one conversation branch. */
 export function conversationKey(kind: string, conversationId: string): string {
   return `${kind}:${conversationId}`;
 }
 
-export function rememberPeer(kind: string, conversationId: string, displayName: string): void {
+export function rememberPeer(
+  kind: string,
+  conversationId: string,
+  displayName: string,
+  accountId?: string,
+): void {
   const key = conversationKey(kind, conversationId);
-  if (names.value.get(key) === displayName) return;
-  const next = new Map(names.value);
-  next.set(key, displayName);
-  names.value = next;
+  const existing = peers.value.get(key);
+  const nextId = accountId ?? existing?.accountId ?? null;
+  if (existing?.displayName === displayName && existing.accountId === nextId) return;
+  const next = new Map(peers.value);
+  next.set(key, { accountId: nextId, displayName });
+  peers.value = next;
 }
 
 export function peerName(kind: string, conversationId: string): string | null {
-  return names.value.get(conversationKey(kind, conversationId)) ?? null;
+  return peers.value.get(conversationKey(kind, conversationId))?.displayName ?? null;
+}
+
+export function peerAccountId(kind: string, conversationId: string): string | null {
+  return peers.value.get(conversationKey(kind, conversationId))?.accountId ?? null;
 }

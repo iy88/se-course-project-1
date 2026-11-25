@@ -183,7 +183,7 @@ function productSummary(product: MockProduct): ProductSummary {
     categories: categoryRefs(state, product.category_ids),
     seller: (() => {
       const ref = accountRef(state, product.seller_id);
-      return { id: ref.id, display_name: ref.display_name };
+      return { id: ref.id, display_name: ref.display_name, avatar_url: ref.avatar_url };
     })(),
     created_at: product.created_at,
   };
@@ -194,7 +194,11 @@ function commentView(comment: MockComment): CommentView {
   return {
     id: comment.id,
     product_id: comment.product_id,
-    author: { id: author.id, display_name: author.display_name },
+    author: {
+      id: author.id,
+      display_name: author.display_name,
+      avatar_url: author.avatar_url,
+    },
     body: comment.body,
     status: comment.removed_at
       ? "removed_by_admin"
@@ -1738,6 +1742,21 @@ const routes: Route[] = [
     },
   },
   {
+    method: "GET",
+    pattern: ["trades", ":tradeId", "reviews"],
+    handler: ({ accountId, params }) => {
+      const trade = tradeById(params.tradeId);
+      requireParticipant(trade, accountId);
+      const written = trade.reviews.find((item) => item.reviewer_id === accountId) ?? null;
+      const received = trade.reviews.find((item) => item.reviewer_id !== accountId) ?? null;
+      return {
+        can_review: trade.status === "completed" && written === null,
+        written: written ? reviewResponse(trade, written) : null,
+        received: received ? reviewResponse(trade, received) : null,
+      };
+    },
+  },
+  {
     method: "POST",
     pattern: ["trades", ":tradeId", "reviews"],
     handler: ({ accountId, params, body }) => {
@@ -1751,11 +1770,13 @@ const routes: Route[] = [
       }
       const rating = requireNumber(body, "rating");
       if (rating < 1 || rating > 5) fail(422, "INPUT_INVALID", "评分需在 1—5 之间。");
+      const content = requireString(body, "content").trim();
+      if (content.length > 2000) fail(422, "INPUT_INVALID", "评价内容过长。");
       const review = {
         review_id: nextId(state, "reviews"),
         reviewer_id: accountId,
         rating,
-        content: requireString(body, "content"),
+        content,
         created_at: nowIso(),
         visible: true,
       };
@@ -1800,7 +1821,14 @@ const routes: Route[] = [
       }
       const items = [...entries.entries()]
         .map(([peerId, branches]) => ({
-          peer: { account_id: peerId, display_name: accountRef(state, peerId).display_name },
+          peer: (() => {
+            const peer = accountRef(state, peerId);
+            return {
+              account_id: peerId,
+              display_name: peer.display_name,
+              avatar_url: peer.avatar_url,
+            };
+          })(),
           branches: branches.sort((left, right) =>
             (right.last_message_at ?? "").localeCompare(left.last_message_at ?? ""),
           ),
@@ -1843,7 +1871,14 @@ const routes: Route[] = [
       return {
         conversation_kind: "chat",
         conversation_id: conversation.conversation_id,
-        peer: { account_id: target, display_name: accountRef(state, target).display_name },
+        peer: (() => {
+          const peer = accountRef(state, target);
+          return {
+            account_id: target,
+            display_name: peer.display_name,
+            avatar_url: peer.avatar_url,
+          };
+        })(),
         reused: Boolean(existing),
       };
     },
@@ -1885,6 +1920,7 @@ const routes: Route[] = [
         next_after_seq: pageItems.length ? pageItems[pageItems.length - 1].seq : null,
         next_before_seq: pageItems.length ? pageItems[0].seq : null,
         branch_status: conversation.archived_at ? "archived" : "active",
+        trade_id: kind === "trade" ? conversation.source_ref?.resource_id : undefined,
       };
     },
   },
@@ -2036,7 +2072,7 @@ const routes: Route[] = [
           candidate.recipient_id === accountId,
       );
       if (!item) fail(404, "RESOURCE_NOT_VISIBLE", "通知不存在。");
-      return notificationSummary(item);
+      return { ...notificationSummary(item), body: item.body };
     },
   },
   {
@@ -2385,6 +2421,7 @@ function notificationSummary(item: MockState["notifications"][number]): Notifica
     occurred_at: item.occurred_at,
     read_at: item.read_at,
     summary: item.summary,
+    subject: item.subject,
     source: item.source,
   };
 }

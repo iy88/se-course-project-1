@@ -465,6 +465,46 @@ describe("trade lifecycle", () => {
   });
 });
 
+describe("trade reviews", () => {
+  beforeEach(() => {
+    resetMockState();
+  });
+
+  it("projects the viewer's received review and eligibility from the server", async () => {
+    const reviews = await call<{
+      can_review: boolean;
+      written: { review_id: string } | null;
+      received: { rating: number; content: string | null } | null;
+    }>("GET", "/trades/3/reviews");
+    assert.equal(reviews.can_review, true);
+    assert.equal(reviews.written, null);
+    assert.equal(reviews.received?.rating, 5);
+    assert.ok(reviews.received?.content);
+  });
+
+  it("turns off further reviews after the second side submits", async () => {
+    const submitted = await call<{ review: { review_id: string } }>("POST", "/trades/3/reviews", {
+      body: { rating: 4, content: " 包装仔细，交易顺利。 " },
+      idempotencyKey: "review-1",
+    });
+    assert.ok(submitted.review.review_id);
+    const reviews = await call<{
+      can_review: boolean;
+      written: { review_id: string; content: string | null } | null;
+      received: { review_id: string } | null;
+    }>("GET", "/trades/3/reviews");
+    assert.equal(reviews.can_review, false);
+    assert.equal(reviews.written?.review_id, submitted.review.review_id);
+    assert.equal(reviews.written?.content, "包装仔细，交易顺利。");
+    assert.ok(reviews.received);
+  });
+
+  it("does not expose the review projection to an account outside the trade", async () => {
+    await loginAs("qian@campus.example.edu");
+    await expectFailure("GET", "/trades/3/reviews", {}, "RESOURCE_NOT_VISIBLE");
+  });
+});
+
 describe("conversations and notifications", () => {
   beforeEach(() => {
     resetMockState();

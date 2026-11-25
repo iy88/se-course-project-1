@@ -7,7 +7,7 @@
  * through the case screen and are not listed here. The pane works both as the
  * narrow-screen page body and as the left column of the wide layout.
  */
-import { onBeforeUnmount, onMounted, watch } from "vue";
+import { onBeforeUnmount, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { listConversations } from "../../api/conversations";
 import type { ConversationBranch, ConversationEntry, ConversationKind } from "../../api/contracts";
@@ -34,23 +34,49 @@ const activeKey = () => {
   return kind && id ? conversationKey(kind, id) : "";
 };
 
-function reload(): void {
-  void list.load(list.paging.page || 1);
+let requestedPage = 1;
+let pendingPage: number | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+let loading: Promise<void> | undefined;
+let unsubscribe: (() => void) | undefined;
+let unregisterReloader: (() => void) | undefined;
+
+async function loadPendingPages(): Promise<void> {
+  try {
+    while (pendingPage !== null) {
+      const page = pendingPage;
+      pendingPage = null;
+      await list.load(page);
+    }
+  } finally {
+    loading = undefined;
+  }
 }
 
-let unsubscribe: (() => void) | null = null;
-let unregisterReloader: (() => void) | null = null;
+function reload(page = requestedPage): Promise<void> {
+  clearTimeout(refreshTimer);
+  refreshTimer = undefined;
+  requestedPage = page;
+  pendingPage = page;
+  loading ??= loadPendingPages();
+  return loading;
+}
+
+function scheduleRefresh(): void {
+  // Replay may deliver several changes before the next list query.
+  refreshTimer ??= setTimeout(() => void reload(), 50);
+}
 
 onMounted(() => {
-  reload();
-  unregisterReloader = registerSnapshotReloader(() => reload());
+  void reload();
+  unregisterReloader = registerSnapshotReloader(reload);
   unsubscribe = subscribeRealtime((frame) => {
     if (
       frame.event_type === "message_created" ||
-      frame.event_type === "conversation_archived" ||
-      frame.event_type === "notification_created"
+      frame.event_type === "message_read" ||
+      frame.event_type === "conversation_archived"
     ) {
-      reload();
+      scheduleRefresh();
     }
   });
 });
@@ -58,13 +84,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   unsubscribe?.();
   unregisterReloader?.();
+  clearTimeout(refreshTimer);
+  pendingPage = null;
+  list.cancel();
 });
-
-// Reload when the user opens another branch so unread badges stay truthful.
-watch(
-  () => route.fullPath,
-  () => reload(),
-);
 
 function branchLabel(branch: ConversationBranch): string {
   if (branch.conversation_kind === "chat") return "私聊";
@@ -83,18 +106,19 @@ function open(branch: ConversationBranch): void {
 }
 
 function remember(entry: ConversationEntry, branch: ConversationBranch): void {
-  rememberPeer(branch.conversation_kind, branch.conversation_id, entry.peer.display_name);
+  rememberPeer(
+    branch.conversation_kind,
+    branch.conversation_id,
+    entry.peer.display_name,
+    entry.peer.account_id,
+  );
 }
 </script>
 
 <template>
   <section class="pane" aria-label="会话列表">
-    <LoadingBlock v-if="list.isLoading.value" label="正在加载会话…" />
-    <ErrorNotice
-      v-else-if="list.problem.value"
-      :error="list.error.value"
-      @retry="list.load(list.paging.page)"
-    />
+    <LoadingBlock v-if="list.isLoading.value && !list.items.value.length" label="正在加载会话…" />
+    <ErrorNotice v-else-if="list.problem.value" :error="list.error.value" @retry="reload()" />
     <EmptyState
       v-else-if="list.isEmpty.value"
       title="还没有会话"
@@ -106,7 +130,11 @@ function remember(entry: ConversationEntry, branch: ConversationBranch): void {
       <ul class="rows">
         <li v-for="entry in list.items.value" :key="entry.peer.account_id" class="entry">
           <header class="entry__head">
-            <AvatarBadge :display-name="entry.peer.display_name" size="md" />
+            <AvatarBadge
+              :display-name="entry.peer.display_name"
+              :url="entry.peer.avatar_url"
+              size="md"
+            />
             <span class="entry__name">{{ entry.peer.display_name }}</span>
           </header>
           <ul class="branches">
@@ -152,7 +180,7 @@ function remember(entry: ConversationEntry, branch: ConversationBranch): void {
         :page="list.paging.page"
         :page-size="list.paging.pageSize"
         :total="list.paging.total"
-        @change="list.load"
+        @change="reload"
       />
     </template>
   </section>

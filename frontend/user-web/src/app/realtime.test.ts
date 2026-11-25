@@ -350,4 +350,36 @@ describe("realtime client", () => {
     // A protocol mismatch must not be retried with a new socket either.
     assert.equal(harness.socket.sent.filter((frame) => frame.type === "hello").length, 1);
   });
+
+  it("ignores an earlier session's head lookup after signing in again", async () => {
+    let resolveFirst!: (head: EventHead) => void;
+    const first = new Promise<EventHead>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const socket = new FakeSocket();
+    let headRequests = 0;
+    let sockets = 0;
+    disposers.push(
+      useRealtimeDeps({
+        createSocket: () => {
+          sockets++;
+          return socket;
+        },
+        fetchHead: () => (++headRequests === 1 ? first : Promise.resolve(HEAD)),
+        csrfToken: () => "csrf-token",
+      }),
+    );
+
+    startRealtime();
+    stopRealtime();
+    resetRealtimeCursor();
+    startRealtime();
+    await tick();
+    resolveFirst({ epoch: "old-session", head_seq: 50, replay_floor: 49 });
+    await tick();
+    socket.emit("open", {});
+
+    assert.equal(sockets, 1);
+    assert.deepEqual(socket.last().cursor, { epoch: HEAD.epoch, after_seq: 0 });
+  });
 });
