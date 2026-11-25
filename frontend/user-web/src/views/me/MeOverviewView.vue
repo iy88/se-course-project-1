@@ -7,6 +7,7 @@ import { notify } from "../../app/toast";
 import { problemMessage } from "../../app/problems";
 import { clearSession, session } from "../../app/session";
 import { resetBadges } from "../../app/badges";
+import { resetRealtimeCursor } from "../../app/realtime";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 
 const router = useRouter();
@@ -17,6 +18,8 @@ const signOutError = ref("");
 const links = [
   { to: "/me/products", title: "我的商品", description: "管理发布内容与审核状态", icon: "box" },
   { to: "/me/favorites", title: "我的收藏", description: "查看已收藏的商品", icon: "bookmark" },
+  { to: "/me/trades", title: "我的交易", description: "查看购买与出售记录", icon: "file" },
+  { to: "/conversations", title: "我的会话", description: "查看私聊与交易消息", icon: "mail" },
 ] as const;
 
 const rules = [
@@ -36,6 +39,7 @@ async function signOut(): Promise<void> {
     await logout();
     signOutDialog.value?.close();
     clearSession();
+    resetRealtimeCursor();
     resetBadges();
     notify.info("已退出登录。");
     await router.replace({ name: "login" });

@@ -12,6 +12,7 @@ import UiIcon from "../../shared/UiIcon.vue";
 import { session } from "./app/session";
 import { badges, refreshBadges } from "./app/badges";
 import { backFallbackFor, hasBackEntry } from "./app/navigation";
+import { registerSnapshotReloader } from "./app/realtime";
 
 import { dismiss, toasts } from "./app/toast";
 import AvatarBadge from "./components/AvatarBadge.vue";
@@ -54,6 +55,10 @@ function goBack(): void {
   const fallback = backFallback.value;
   if (fallback) void router.push(fallback);
 }
+
+// Unread badges belong to the resync snapshot: after a `sync_reset` the client
+// reloads every registered snapshot before resuming from the recorded head.
+registerSnapshotReloader(() => refreshBadges());
 
 watch(
   () => route.fullPath,
