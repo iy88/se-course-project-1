@@ -176,6 +176,75 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/conversations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 会话列表 */
+    get: operations["listConversations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/private": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 建立或复用普通私聊 */
+    post: operations["startPrivateConversation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{conversation_kind}/{conversation_id}/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 会话消息分页 */
+    get: operations["listConversationMessages"];
+    put?: never;
+    /** 发送会话消息 */
+    post: operations["sendConversationMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{conversation_kind}/{conversation_id}/read-progress": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 推进会话已读进度 */
+    post: operations["advanceConversationReadProgress"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/products/{product_id}/purchase-requests": {
     parameters: {
       query?: never;
@@ -449,6 +518,82 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    ConversationList: {
+      items: {
+        peer: {
+          account_id: string;
+          display_name: string;
+        };
+        branches: {
+          /** @enum {string} */
+          conversation_kind: "chat" | "trade" | "case";
+          conversation_id: string;
+          source_ref: string | null;
+          archived_at: string | null;
+          unread_count: number;
+          /** Format: date-time */
+          last_message_at: string;
+          last_message_preview: string | null;
+        }[];
+      }[];
+      page: number;
+      page_size: number;
+      total: number;
+    };
+    ConversationMessagePage: {
+      items: {
+        message_id: string;
+        seq: number;
+        sender: {
+          account_id: string | null;
+          display_name: string;
+          /** @enum {string} */
+          sender_kind: "account" | "system";
+        };
+        /** @enum {string} */
+        message_type: "text" | "system_event";
+        body: string;
+        /** Format: date-time */
+        created_at: string;
+        event_type?: string;
+        source_ref?: {
+          resource_type: string;
+          resource_id: string;
+        };
+      }[];
+      next_after_seq: number | null;
+      next_before_seq: number | null;
+      /** @enum {string} */
+      branch_status: "active" | "archived";
+    };
+    PrivateConversation: {
+      /** @enum {string} */
+      conversation_kind: "chat";
+      conversation_id: string;
+      peer: {
+        account_id: string;
+        display_name: string;
+      };
+      reused: boolean;
+    };
+    SentConversationMessage: {
+      message_id: string;
+      seq: number;
+      /** Format: date-time */
+      created_at: string;
+      sender: {
+        account_id: string | null;
+        display_name: string;
+        /** @enum {string} */
+        sender_kind: "account" | "system";
+      };
+      unread_count: number;
+    };
+    ConversationReadProgress: {
+      last_read_seq: number;
+      unread_count: number;
+      updated_at: string | null;
+    };
     Error: {
       error: {
         code: string;
@@ -1745,6 +1890,374 @@ export interface operations {
       };
       /** @description INPUT_INVALID */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  listConversations: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationList"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description AUTHENTICATION_UNAVAILABLE / DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  startPrivateConversation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        "X-CSRF-Token": string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          target_account_id: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PrivateConversation"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description CSRF_INVALID / ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / MESSAGE_SEND_FORBIDDEN */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE / PARTICIPANT_REQUIRED */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description BRANCH_ARCHIVED / IDEMPOTENCY_PAYLOAD_CONFLICT */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description AUTHENTICATION_UNAVAILABLE / DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  listConversationMessages: {
+    parameters: {
+      query?: {
+        after_seq?: number;
+        before_seq?: number;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        conversation_kind: "chat" | "trade" | "case";
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationMessagePage"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE / PARTICIPANT_REQUIRED */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description AUTHENTICATION_UNAVAILABLE / DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  sendConversationMessage: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        "X-CSRF-Token": string;
+      };
+      path: {
+        conversation_kind: "chat" | "trade" | "case";
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          body: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SentConversationMessage"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description CSRF_INVALID / ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / MESSAGE_SEND_FORBIDDEN */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE / PARTICIPANT_REQUIRED */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description BRANCH_ARCHIVED / IDEMPOTENCY_PAYLOAD_CONFLICT */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description AUTHENTICATION_UNAVAILABLE / DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  advanceConversationReadProgress: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        "X-CSRF-Token": string;
+      };
+      path: {
+        conversation_kind: "chat" | "trade" | "case";
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          displayed_seq: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Success */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationReadProgress"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description CSRF_INVALID / ACTION_NOT_ALLOWED / ACCOUNT_WRITE_RESTRICTED / MESSAGE_SEND_FORBIDDEN */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE / PARTICIPANT_REQUIRED */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description BRANCH_ARCHIVED / IDEMPOTENCY_PAYLOAD_CONFLICT */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description INPUT_INVALID */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description AUTHENTICATION_UNAVAILABLE / DEPENDENCY_UNAVAILABLE */
+      503: {
         headers: {
           [name: string]: unknown;
         };
