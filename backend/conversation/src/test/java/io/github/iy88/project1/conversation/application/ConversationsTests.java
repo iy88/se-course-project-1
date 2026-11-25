@@ -149,6 +149,27 @@ class ConversationsTests {
         assertThat(view.lastReadSeq()).isEqualTo(4L);
     }
 
+    @Test
+    void sendsChatWithoutTradePort() {
+        var withoutTrades = new Conversations(store, accounts, null);
+        var conversation = chat(7L, 42L);
+        when(store.lockChat(transaction, 1L)).thenReturn(conversation);
+        when(accounts.writeRestricted(7L)).thenReturn(false);
+        when(accounts.writeRestricted(42L)).thenReturn(false);
+        var message = mock(ChatMessage.class);
+        when(message.id()).thenReturn(11L);
+        when(message.seq()).thenReturn(6L);
+        when(message.body()).thenReturn("hello");
+        when(message.createdAt()).thenReturn(NOW);
+        when(store.appendChatText(transaction, conversation, 7L, "hello")).thenReturn(message);
+        when(store.chatUnread(conversation, 42L)).thenReturn(0L);
+        when(accounts.profile(7L)).thenReturn(Optional.of(new AccountDirectory.Profile(7L, "sender")));
+
+        var view = withoutTrades.sendChat(transaction, actor(7L), 1L, "hello");
+
+        assertThat(view.seq()).isEqualTo(6L);
+    }
+
     private static ChatConversation chat(long actorId, long peerId) {
         var conversation = mock(ChatConversation.class);
         when(conversation.id()).thenReturn(1L);

@@ -7,6 +7,7 @@ import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.WriteTransaction;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,7 +21,8 @@ public class Conversations {
     private final AccountDirectory accounts;
     private final TradeParticipation trades;
 
-    public Conversations(ConversationStore store, AccountDirectory accounts, TradeParticipation trades) {
+    public Conversations(ConversationStore store, AccountDirectory accounts,
+                         @Nullable TradeParticipation trades) {
         this.store = store;
         this.accounts = accounts;
         this.trades = trades;
@@ -52,7 +54,8 @@ public class Conversations {
         if (accounts.writeRestricted(actor) || accounts.writeRestricted(peer)) {
             throw new BusinessError("MESSAGE_SEND_FORBIDDEN", 403, "账户当前不能发送消息");
         }
-        if (trades.pairFrozen(actor, peer)) {
+        // Freeze state lives in the trade module; without its port no trade exists, so no freeze.
+        if (trades != null && trades.pairFrozen(actor, peer)) {
             throw new BusinessError("MESSAGE_SEND_FORBIDDEN", 403, "账户之间存在交易冻结");
         }
         var message = store.appendChatText(transaction, conversation, actor, body);
