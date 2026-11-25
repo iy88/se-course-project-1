@@ -24,6 +24,7 @@ export function createWebConfig(port: number) {
           "/api/v1": {
             target: process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8080",
             changeOrigin: true,
+            ws: true,
           },
         },
       },
