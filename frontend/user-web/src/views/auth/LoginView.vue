@@ -67,6 +67,7 @@ async function submit(): Promise<void> {
         <label class="field__label" for="login-email">邮箱</label>
         <input
           id="login-email"
+          placeholder="请输入邮箱地址"
           v-model="email"
           class="input"
           type="email"
@@ -82,6 +83,7 @@ async function submit(): Promise<void> {
         </div>
         <input
           id="login-password"
+          placeholder="请输入密码"
           v-model="password"
           class="input"
           type="password"

@@ -106,6 +106,7 @@ async function submit(): Promise<void> {
         <div class="auth__verification">
           <input
             id="reg-email"
+            placeholder="请输入邮箱地址"
             v-model="email"
             class="input"
             type="email"
@@ -123,6 +124,7 @@ async function submit(): Promise<void> {
         <label class="field__label" for="reg-code">邮箱验证码</label>
         <input
           id="reg-code"
+          placeholder="请输入邮箱验证码"
           v-model="code"
           class="input"
           inputmode="numeric"
@@ -140,6 +142,7 @@ async function submit(): Promise<void> {
         <label class="field__label" for="reg-name">昵称</label>
         <input
           id="reg-name"
+          placeholder="请输入昵称"
           v-model="displayName"
           class="input"
           :maxlength="entryLimits?.display_name_max_length ?? 24"
@@ -151,6 +154,7 @@ async function submit(): Promise<void> {
         <label class="field__label" for="reg-password">密码</label>
         <input
           id="reg-password"
+          placeholder="请设置密码"
           v-model="password"
           class="input"
           type="password"
