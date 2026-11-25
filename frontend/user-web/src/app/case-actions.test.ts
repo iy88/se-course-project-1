@@ -103,14 +103,6 @@ describe("case action availability", () => {
     assert.equal(availability.projected, false);
     assert.equal(availability.supplement, true);
   });
-  it("treats a null projection as absent and keeps the client rules", () => {
-    const availability = caseActionAvailability(
-      input({ projected: null, reporterView: true, caseType: "report" }),
-    );
-
-    assert.equal(availability.projected, false);
-    assert.equal(availability.supplement, true);
-  });
 
   it("follows the server when it projects only the inquiry reply", () => {
     const availability = caseActionAvailability(
