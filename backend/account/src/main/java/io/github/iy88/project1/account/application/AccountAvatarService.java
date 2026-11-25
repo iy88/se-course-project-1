@@ -8,11 +8,15 @@ import io.github.iy88.project1.storage.application.FileRead;
 import io.github.iy88.project1.storage.persistence.FileReferences;
 import io.github.iy88.project1.storage.persistence.FileRegistry;
 import io.github.iy88.project1.storage.persistence.UploadRegistration;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @Profile("infrastructure")
@@ -40,6 +44,31 @@ public class AccountAvatarService {
                 client -> reads.prepare(target, current.getFirst().fileId(),
                         new OssFileObjects(client, oss.bucket(), oss.prefix()), () -> { }));
         return read.url().toString();
+    }
+
+    /** Signs the current avatar of every account that has one; missing avatars are omitted. */
+    public Map<Long, String> currentUrls(Collection<Long> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        boolean transactional = TransactionSynchronizationManager.isActualTransactionActive();
+        Map<Long, String> urls = new LinkedHashMap<>();
+        OssClients.use(oss.endpoint(), oss.region(), oss.accessKeyId(), oss.accessKeySecret(), client -> {
+            var objects = new OssFileObjects(client, oss.bucket(), oss.prefix());
+            for (long accountId : accountIds) {
+                var target = new UploadRegistration.Target("account", accountId);
+                var current = references.current(target, "avatar");
+                if (current.isEmpty()) {
+                    continue;
+                }
+                var read = transactional
+                        ? reads.signInReadSnapshot(target, current.getFirst().fileId(), objects)
+                        : reads.prepare(target, current.getFirst().fileId(), objects, () -> { });
+                urls.put(accountId, read.url().toString());
+            }
+            return null;
+        });
+        return Map.copyOf(urls);
     }
 
     /** Must run inside the account write transaction. */
