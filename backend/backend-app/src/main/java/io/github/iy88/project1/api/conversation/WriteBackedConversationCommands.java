@@ -13,6 +13,8 @@ import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.core.WriteTransaction;
+import io.github.iy88.project1.messaging.BusinessEventIntents;
+import io.github.iy88.project1.messaging.RealtimeEventSources;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -174,6 +176,12 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
                     ? conversations.sendChat(transaction, transaction.context(), request.conversationId(),
                     request.body())
                     : tradeChats.send(transaction, transaction.context(), request.conversationId(), request.body());
+            long actor = Long.parseLong(transaction.context().actorId());
+            long recipient = peer(request, actor);
+            var reference = realtimeReference(request.kind(), request.conversationId());
+            BusinessEventIntents.messageCreated(transaction, Set.of(actor, recipient), reference, message.messageId(),
+                    "message_created:" + reference.kind().wireName() + ":" + message.messageId());
+            BusinessEventIntents.messageRead(transaction, reference, message.seq(), "message_read:" + transaction.operationId());
             return new WriteResult.Response<>(201, ConversationWire.sent(message),
                     new ResourceRef(request.kind().wireValue(), request.conversationId()));
         }
@@ -235,9 +243,15 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
                     request.displayedSeq())
                     : tradeChats.advanceRead(transaction, transaction.context(), request.conversationId(),
                     request.displayedSeq());
+            BusinessEventIntents.messageRead(transaction, realtimeReference(request.kind(), request.conversationId()),
+                    progress.lastReadSeq(), "message_read:" + transaction.operationId());
             return new WriteResult.Response<>(200, ConversationWire.read(progress),
                     new ResourceRef(request.kind().wireValue(), request.conversationId()));
         }
+    }
+
+    private static RealtimeEventSources.ConversationRef realtimeReference(ConversationKind kind, long id) {
+        return new RealtimeEventSources.ConversationRef(RealtimeEventSources.ConversationKind.valueOf(kind.name()), id);
     }
 
     private static LockPlan.Key conversationKey(ConversationKind kind, long conversationId) {

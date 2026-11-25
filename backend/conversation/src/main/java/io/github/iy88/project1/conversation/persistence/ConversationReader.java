@@ -40,6 +40,22 @@ public class ConversationReader {
         return trades.findByTradeIdIn(tradeIds);
     }
 
+    public Optional<ChatConversation> findChat(long conversationId) {
+        return chats.findById(conversationId);
+    }
+
+    public Optional<TradeConversation> findTrade(long conversationId) {
+        return trades.findById(conversationId);
+    }
+
+    public Optional<ChatMessage> findChatMessage(long conversationId, long messageId) {
+        return chatMessages.findById(messageId).filter(message -> message.conversationId() == conversationId);
+    }
+
+    public Optional<TradeMessage> findTradeMessage(long conversationId, long messageId) {
+        return tradeMessages.findById(messageId).filter(message -> message.conversationId() == conversationId);
+    }
+
     public Optional<ChatMessage> chatLastMessage(long conversationId) {
         return chatMessages.findTopByChatConversationIdOrderBySeqDesc(conversationId);
     }

@@ -1036,17 +1036,20 @@ class TradeLifecycleIT {
     @TestConfiguration(proxyBeanMethods = false)
     public static class Fixtures {
         @Bean
+        @Primary
         public MutableClock mutableClock() {
             return new MutableClock();
         }
 
         @Bean
+        @Primary
         public FixturePorts fixturePorts() {
             return new FixturePorts();
         }
 
         @Bean
-        public TradeActorResolver tradeActorResolver() {
+        @Primary
+        public TradeActorResolver fixtureTradeActorResolver() {
             return request -> {
                 var cookies = request.getCookies();
                 if (cookies != null) {

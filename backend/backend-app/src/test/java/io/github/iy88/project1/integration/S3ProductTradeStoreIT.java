@@ -24,8 +24,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Focused PostgreSQL verification for the trade product store without the full application
- * assembly, which still lacks the case and notification port implementations.
+ * Focused PostgreSQL verification of concurrent occupancy using separate database connections.
  */
 class S3ProductTradeStoreIT {
     private static final UUID RUN = UUID.randomUUID();
