@@ -127,6 +127,19 @@ class ConversationQueriesTests {
         assertThat(page.total()).isZero();
     }
 
+    @Test
+    void reportsTradeReadsUnavailableWithoutTradeParticipation() {
+        var chatOnly = new ConversationQueries(store, reader, accounts, null, new ConversationSettings());
+        when(reader.chatConversations(7L)).thenReturn(List.of());
+
+        var page = chatOnly.list(actor(7L), 1, 20);
+
+        assertThat(page.items()).isEmpty();
+        assertThatThrownBy(() -> chatOnly.pageTrade(actor(7L), 2L, null, null, 20))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("DEPENDENCY_UNAVAILABLE"));
+    }
+
     private static ChatMessage chatMessage(long id, long seq, long sender, String body, Instant at) {
         var message = mock(ChatMessage.class);
         when(message.id()).thenReturn(id);

@@ -107,6 +107,15 @@ class TradeChatsTests {
         assertThat(view.lastReadSeq()).isEqualTo(4L);
     }
 
+    @Test
+    void reportsTradeChatsUnavailableWithoutTradeParticipation() {
+        var unavailable = new TradeChats(store, accounts, null);
+
+        assertThatThrownBy(() -> unavailable.send(transaction, actor(7L), 2L, "hello"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("DEPENDENCY_UNAVAILABLE"));
+    }
+
     private static TradeConversation tradeConversation() {
         var conversation = mock(TradeConversation.class);
         when(conversation.id()).thenReturn(2L);

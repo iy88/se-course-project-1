@@ -8,6 +8,7 @@ import io.github.iy88.project1.conversation.application.TradeChats;
 import io.github.iy88.project1.conversation.application.TradeParticipation;
 import io.github.iy88.project1.conversation.persistence.ConversationStore;
 import io.github.iy88.project1.core.WriteExecutor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -29,7 +30,7 @@ class ConversationHttpConfiguration {
     @Bean
     ConversationWriteCommands conversationWriteCommands(WriteExecutor writes, Conversations conversations,
                                                         TradeChats tradeChats, ConversationStore store,
-                                                        TradeParticipation trades) {
-        return new WriteBackedConversationCommands(writes, conversations, tradeChats, store, trades);
+                                                        ObjectProvider<TradeParticipation> trades) {
+        return new WriteBackedConversationCommands(writes, conversations, tradeChats, store, trades.getIfAvailable());
     }
 }

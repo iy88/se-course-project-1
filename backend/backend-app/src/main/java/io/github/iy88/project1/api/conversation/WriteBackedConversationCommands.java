@@ -51,6 +51,7 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
     @Override
     public WriteResult<JsonNode> send(ExecutionContext context, String idempotencyKey, ConversationKind kind,
                                       long conversationId, String body) {
+        requireTrade(kind);
         return writes.run(context, "conversation.send", idempotencyKey,
                 new SendRequest(kind, conversationId, body),
                 new SendUseCase(conversations, tradeChats, store, trades));
@@ -59,9 +60,18 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
     @Override
     public WriteResult<JsonNode> markRead(ExecutionContext context, String idempotencyKey, ConversationKind kind,
                                           long conversationId, long displayedSeq) {
+        requireTrade(kind);
         return writes.run(context, "conversation.mark_read", idempotencyKey,
                 new ReadRequest(kind, conversationId, displayedSeq),
                 new ReadUseCase(conversations, tradeChats));
+    }
+
+    private void requireTrade(ConversationKind kind) {
+        if (kind == ConversationKind.TRADE && trades == null) {
+            // Trade conversations are owned by the trade module; until its port is assembled the
+            // write answers 503 instead of failing inside the transaction.
+            throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "交易会话由交易模块提供");
+        }
     }
 
     private record StartRequest(long targetAccountId) {
@@ -174,6 +184,9 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
                 return conversation.involves(actor) ? conversation.otherAccount(actor) : 0L;
             }
             var conversation = store.trade(request.conversationId());
+            if (trades == null) {
+                return 0L;
+            }
             var participants = trades.participants(conversation.tradeId()).orElse(null);
             return participants != null && participants.involves(actor) ? participants.peerOf(actor) : 0L;
         }

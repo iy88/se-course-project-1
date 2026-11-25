@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 
 /** Read-only conversation queries; they never advance read progress. */
@@ -31,7 +32,7 @@ public class ConversationQueries {
     private final ConversationSettings settings;
 
     public ConversationQueries(ConversationStore store, ConversationReader reader, AccountDirectory accounts,
-                               TradeParticipation trades, ConversationSettings settings) {
+                               @Nullable TradeParticipation trades, ConversationSettings settings) {
         this.store = store;
         this.reader = reader;
         this.accounts = accounts;
@@ -61,7 +62,7 @@ public class ConversationQueries {
                                                    Long afterSeq, int limit) {
         long actor = accountId(context);
         var conversation = store.trade(conversationId);
-        var participants = trades.participants(conversation.tradeId()).orElse(null);
+        var participants = tradesOf().participants(conversation.tradeId()).orElse(null);
         if (participants == null || !participants.involves(actor)) {
             throw participantRequired();
         }
@@ -90,9 +91,9 @@ public class ConversationQueries {
         for (ChatConversation conversation : reader.chatConversations(actor)) {
             branches.add(new OwnedBranch(conversation.otherAccount(actor), chatBranch(conversation, actor)));
         }
-        var tradeIds = trades.tradeIdsOf(actor);
+        var tradeIds = trades == null ? Set.<Long>of() : trades.tradeIdsOf(actor);
         for (TradeConversation conversation : reader.tradeConversations(tradeIds)) {
-            var participants = trades.participants(conversation.tradeId()).orElse(null);
+            var participants = tradesOf().participants(conversation.tradeId()).orElse(null);
             if (participants == null || !participants.involves(actor)) {
                 continue;
             }
@@ -175,6 +176,15 @@ public class ConversationQueries {
         }
         int max = settings.getPreviewLength();
         return body.length() <= max ? body : body.substring(0, max) + "…";
+    }
+
+    private TradeParticipation tradesOf() {
+        if (trades == null) {
+            // Trade conversations are owned by the trade module; until its port is assembled the
+            // read answers 503 rather than an empty or fabricated history.
+            throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "交易会话由交易模块提供");
+        }
+        return trades;
     }
 
     private static String displayName(long accountId, Map<Long, AccountDirectory.Profile> profiles) {
