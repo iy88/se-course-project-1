@@ -81,7 +81,10 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** List the management product-review queue */
+    /**
+     * List the management workbench cases
+     * @description Active scopes sort by updated_at. Completed scopes sort by completed_at. Ties sort by the numeric case ID descending.
+     */
     get: operations["listManagementTodos"];
     put?: never;
     post?: never;
@@ -999,15 +1002,31 @@ export interface components {
         created_at: string;
         /** Format: date-time */
         updated_at: string;
+        /** @description Authorized fields only. Product-review rows always include audit_id and product_id. */
         summary: {
-          audit_id: string;
-          product_id: string;
+          audit_id?: string;
+          product_id?: string;
+          title: string;
         };
+        /** @enum {string} */
+        case_type: "product_review" | "report" | "dispute" | "exception";
+        /** @enum {string|null} */
+        decision_kind:
+          | "approved"
+          | "rejected"
+          | "no_action"
+          | "not_actionable"
+          | "violation"
+          | null;
+        manager_id: string | null;
+        /** Format: date-time */
+        completed_at: string | null;
       }[];
       page: number;
       page_size: number;
       /** Format: int64 */
       total: number;
+      /** @description Counts all four kinds for the authorized ownership and keyword filters before applying the selected kind. */
       counts_by_kind: {
         /** Format: int64 */
         product_review: number;
@@ -1857,8 +1876,10 @@ export interface operations {
       query?: {
         page?: number;
         page_size?: number;
-        ownership?: "unclaimed" | "mine";
-        kind?: "product_review" | "report" | "dispute" | "exception";
+        ownership?: "unclaimed" | "mine" | "completed_all" | "completed_mine";
+        kind?: "product_review" | "report" | "dispute" | "exception" | "all";
+        /** @description Match the case ID or the visible summary title. Blank values select all titles. */
+        keyword?: string;
       };
       header?: never;
       path?: never;
@@ -1903,7 +1924,7 @@ export interface operations {
           "application/json": components["schemas"]["Error"];
         };
       };
-      /** @description Review dependency unavailable */
+      /** @description Management workbench dependency unavailable */
       503: {
         headers: {
           [name: string]: unknown;

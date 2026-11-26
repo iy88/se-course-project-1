@@ -1,6 +1,10 @@
 package io.github.iy88.project1.integration;
 
 import io.github.iy88.project1.BackendAppApplication;
+import io.github.iy88.project1.account.application.AccountService;
+import io.github.iy88.project1.account.application.PasswordHasher;
+import io.github.iy88.project1.account.application.SessionService;
+import io.github.iy88.project1.api.account.AccountCookies;
 import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import io.github.iy88.project1.casemanagement.application.CaseApplication;
 import io.github.iy88.project1.casemanagement.application.CaseCommands;
@@ -13,6 +17,12 @@ import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.LockPlan;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteTransaction;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -33,12 +43,14 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,6 +66,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class CaseLifecycleIT {
     private static final UUID RUN_ID = UUID.randomUUID();
+    private static final String PASSWORD = "CaseIntegrationFixture1!";
     private static final String ORIGIN = "http://127.0.0.1:3000";
     private static final AtomicReference<Long> RELATED = new AtomicReference<>();
     private static final AtomicReference<Long> REPORTER = new AtomicReference<>();
@@ -293,6 +306,91 @@ class CaseLifecycleIT {
                 .isEqualTo(Long.toString(closedCase));
     }
 
+    @Test
+    void managementWorkbenchSeparatesPendingAndCompletedCasesAndProtectsOtherManagersDetails() throws Exception {
+        long firstManager = MANAGER_1.get();
+        long secondManager = MANAGER_2.get();
+        var first = app.getBean(AccountService.class).login("manager1-" + RUN_ID + "@example.invalid", PASSWORD);
+        var second = app.getBean(AccountService.class).login("manager2-" + RUN_ID + "@example.invalid", PASSWORD);
+        long pending = workbenchReport("pending", null, false);
+        long decided = workbenchReport("decided", firstManager, false);
+        long firstClosed = workbenchReport("first-closed", firstManager, true);
+        long secondClosed = workbenchReport("second-closed", secondManager, true);
+        try (var http = HttpClient.newHttpClient()) {
+            var shared = read(http, first, "/management/todos?ownership=unclaimed&kind=report", 200);
+            assertThat(shared.path("items")).anySatisfy(item -> {
+                assertThat(item.path("case_id").asString()).isEqualTo(Long.toString(pending));
+                assertThat(item.path("manager_id").isNull()).isTrue();
+                assertThat(item.path("completed_at").isNull()).isTrue();
+            });
+            var own = read(http, first, "/management/todos?ownership=mine&kind=all", 200);
+            assertThat(own.path("items")).anySatisfy(item -> {
+                assertThat(item.path("case_id").asString()).isEqualTo(Long.toString(decided));
+                assertThat(item.path("decision_kind").asString()).isEqualTo("no_action");
+                assertThat(item.path("completed_at").isNull()).isTrue();
+            });
+            String completed = "/management/todos?ownership=completed_all&kind=report&keyword="
+                    + URLEncoder.encode("账户举报", StandardCharsets.UTF_8);
+            var full = read(http, first, completed, 200);
+            var ids = new ArrayList<String>();
+            full.path("items").forEach(item -> ids.add(item.path("case_id").asString()));
+            assertThat(ids).containsSubsequence(Long.toString(secondClosed), Long.toString(firstClosed))
+                    .doesNotContain(Long.toString(decided), Long.toString(pending));
+            var next = read(http, first, completed + "&page=2&page_size=1", 200);
+            assertThat(next.path("total").asLong()).isEqualTo(full.path("total").asLong());
+            assertThat(next.path("items")).singleElement().satisfies(item ->
+                    assertThat(item.path("case_id").asString()).isEqualTo(ids.get(1)));
+            assertThat(next.path("counts_by_kind").path("report").asLong())
+                    .isEqualTo(next.path("total").asLong());
+            String mine = "/management/todos?ownership=completed_mine&kind=all&keyword=";
+            var mineFirst = read(http, first, mine + firstClosed, 200);
+            assertThat(mineFirst.path("items")).singleElement().satisfies(item -> {
+                assertThat(item.path("case_type").asString()).isEqualTo("report");
+                assertThat(item.path("manager_id").asString()).isEqualTo(Long.toString(firstManager));
+                assertThat(item.path("completed_at").isString()).isTrue();
+                assertThat(item.path("summary").propertyNames()).containsExactly("title");
+            });
+            assertThat(read(http, second, mine + firstClosed, 200).path("total").asLong()).isZero();
+            assertThat(read(http, first, mine + secondClosed, 200).path("total").asLong()).isZero();
+            assertThat(read(http, first, "/management/todos?ownership=completed_all&kind=all"
+                    + "&keyword=workbench-private-" + RUN_ID, 200).path("total").asLong()).isZero();
+            read(http, second, "/cases/" + firstClosed, 404);
+            read(http, first, "/cases/" + firstClosed, 200);
+            read(http, first, "/management/todos?ownership=invalid", 422);
+        } finally {
+            var sessions = app.getBean(SessionService.class);
+            for (var issued : List.of(first, second)) {
+                sessions.revoke(sessions.authenticate(issued.token()));
+            }
+        }
+    }
+
+    private static long workbenchReport(String label, Long manager, boolean close) {
+        long target = account("workbench-" + label + "-" + RUN_ID, label, "user");
+        var report = cases.submit(context(REPORTER.get()), "workbench-report-" + label, new CaseCommands.Report(
+                new CaseCommands.Target("account", target, null, null), "workbench-private-" + RUN_ID, null, List.of()));
+        long caseId = Long.parseLong(report.data().path("case_id").asString());
+        if (manager != null) {
+            var managerContext = context(manager);
+            cases.claim(managerContext, "workbench-claim-" + label, caseId);
+            cases.decide(managerContext, "workbench-decide-" + label, caseId, new CaseCommands.Decision(
+                    CaseVocabulary.NO_ACTION, "workbench-private-" + RUN_ID, List.of("case:" + caseId), List.of()));
+            if (close) {
+                cases.close(managerContext, "workbench-close-" + label, caseId);
+            }
+        }
+        return caseId;
+    }
+
+    private static JsonNode read(HttpClient http, SessionService.Issued session, String path, int code) throws Exception {
+        int port = ((ServletWebServerApplicationContext) app).getWebServer().getPort();
+        var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/v1" + path))
+                .header("Cookie", AccountCookies.SESSION + "=" + session.token()).GET().build();
+        var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).as("GET %s: %s", path, response.body()).isEqualTo(code);
+        return app.getBean(JsonMapper.class).readTree(response.body());
+    }
+
     private static long storeThread(long caseId, long related) {
         return db.sql("select case_conversation_id from case_conversation where case_id = ? and related_account_id = ?")
                 .param(caseId).param(related).query(Long.class).single();
@@ -302,10 +400,11 @@ class CaseLifecycleIT {
         String email = name + "@example.invalid";
         return db.sql("""
                         insert into account (email, display_name, password_hash, credential_version, role)
-                        values (?, ?, 'fixture-hash', 1, ?)
+                        values (?, ?, ?, 1, ?)
                         returning account_id
                         """)
-                .param(email).param(displayName).param(role).query(Long.class).single();
+                .param(email).param(displayName).param(app.getBean(PasswordHasher.class).hash(PASSWORD))
+                .param(role).query(Long.class).single();
     }
 
     private static ExecutionContext context(long accountId) {

@@ -27,6 +27,7 @@ class ManagementTodoController {
                    @RequestParam(value = "page_size", required = false) Integer pageSize,
                    @RequestParam(value = "ownership", required = false) String ownership,
                    @RequestParam(value = "kind", required = false) String kind,
+                   @RequestParam(value = "keyword", required = false) String keyword,
                    HttpServletRequest request) {
         var context = support.context(request);
         int resolvedPage = page == null ? 1 : page;
@@ -35,6 +36,6 @@ class ManagementTodoController {
             throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
         }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(support.reviews().todos(context, ownership, kind, resolvedPage, resolvedSize));
+                .body(support.reviews().todos(context, ownership, kind, keyword, resolvedPage, resolvedSize));
     }
 }
