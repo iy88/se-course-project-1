@@ -198,6 +198,7 @@ export const router = createRouter({
   routes,
   scrollBehavior: (to, _from, savedPosition) => {
     if (to.name === "product-detail" && /^#comment-[1-9][0-9]*$/.test(to.hash)) return false;
+    if (to.name === "case-detail" && /^#case-message-[1-9][0-9]*$/.test(to.hash)) return false;
     return savedPosition ?? { top: 0 };
   },
 });

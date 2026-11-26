@@ -46,7 +46,13 @@ const sourceLink = computed(() => {
     case "trade":
       return { name: "trade-detail", params: { tradeId: source.resource_id } };
     case "case":
-      return { name: "case-detail", params: { caseId: source.resource_id } };
+      return {
+        name: "case-detail",
+        params: { caseId: source.resource_id },
+        hash: notification.data.value?.case_message_id
+          ? `#case-message-${notification.data.value.case_message_id}`
+          : undefined,
+      };
     default:
       return null;
   }
@@ -61,7 +67,9 @@ const sourceLabel = computed(() => {
   const type = notification.data.value?.source?.resource_type;
   if (type === "product") return "查看商品";
   if (type === "trade") return "查看交易";
-  if (type === "case") return "查看事项";
+  if (type === "case") {
+    return notification.data.value?.case_message_id ? "查看问询" : "查看事项";
+  }
   return "";
 });
 

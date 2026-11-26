@@ -746,6 +746,7 @@ export interface NotificationSummary {
 export interface NotificationDetail extends NotificationSummary {
   body?: string;
   comment_id?: string;
+  case_message_id?: string;
 }
 
 export type NotificationReadFilter = "all" | "unread" | "read";

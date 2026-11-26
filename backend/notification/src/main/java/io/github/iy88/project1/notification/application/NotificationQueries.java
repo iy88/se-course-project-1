@@ -53,7 +53,8 @@ public class NotificationQueries {
         var projected = sources.flatMap(port -> port.project(context, facts(row, includeBody)));
         return projected
                 .map(view -> new NotificationView(row.notificationId(), row.eventType(), row.occurredAt(),
-                        row.readAt(), view.summary(), view.source(), view.subject(), view.body(), view.commentId()))
+                        row.readAt(), view.summary(), view.source(), view.subject(), view.body(), view.commentId(),
+                        view.caseMessageId()))
                 .orElseGet(() -> new NotificationView(row.notificationId(), row.eventType(), row.occurredAt(),
                         row.readAt(), HIDDEN_SOURCE_SUMMARY, null, null, null));
     }

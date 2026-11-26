@@ -34,6 +34,7 @@ final class NotificationWire {
         var body = summary(view);
         if (view.body() != null) body.put("body", view.body());
         if (view.commentId() != null) body.put("comment_id", Long.toString(view.commentId()));
+        if (view.caseMessageId() != null) body.put("case_message_id", Long.toString(view.caseMessageId()));
         return body;
     }
 

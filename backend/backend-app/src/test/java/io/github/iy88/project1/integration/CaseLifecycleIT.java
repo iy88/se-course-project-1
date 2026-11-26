@@ -169,7 +169,7 @@ class CaseLifecycleIT {
                 select notification_id from notification where recipient_account_id = ?
                     and source_type = 'case' and source_id = ? and event_type = 'case.inquiry_created'
                 """).param(related).param(caseId).query(Long.class).single();
-        assertInquiryNotification(caseId, noticeId);
+        assertInquiryNotification(caseId, noticeId, inquiry.data().path("case_message_id").asString());
 
         // The related account answers the inquiry in the same thread.
         var statement = cases.postMessage(context(related), "statement-1", caseId,
@@ -636,7 +636,7 @@ class CaseLifecycleIT {
         return new CaseCommands.Report(target, "请核实内容", null, List.of());
     }
 
-    private static void assertInquiryNotification(long caseId, long noticeId) throws Exception {
+    private static void assertInquiryNotification(long caseId, long noticeId, String messageId) throws Exception {
         var accounts = app.getBean(AccountService.class);
         var recipient = accounts.login("related-" + RUN_ID + "@example.invalid", PASSWORD);
         var reporter = accounts.login("reporter-" + RUN_ID + "@example.invalid", PASSWORD);
@@ -644,6 +644,10 @@ class CaseLifecycleIT {
         try (var http = HttpClient.newHttpClient()) {
             var detail = read(http, recipient, path, 200);
             assertThat(detail.path("summary").asString()).isEqualTo("收到事项问询");
+            assertThat(messageId).isNotBlank();
+            assertThat(detail.path("case_message_id").asString()).isEqualTo(messageId);
+            var page = read(http, recipient, "/account/notifications?page=1&page_size=20", 200);
+            assertThat(page.path("items").get(0).has("case_message_id")).isFalse();
             assertThat(detail.at("/source/resource_type").asString()).isEqualTo("case");
             assertThat(detail.at("/source/resource_id").asLong()).isEqualTo(caseId);
             assertThat(detail.path("body").asString()).doesNotContain("请说明商品问题");

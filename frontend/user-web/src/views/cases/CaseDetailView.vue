@@ -7,7 +7,7 @@
  * those capabilities from the case payload (`thread`, `appeal_deadline_at`,
  * archived state) instead of from the case status alone.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getCase, postCaseMessage, supplementReport } from "../../api/cases";
 import { listMyTodos } from "../../api/aggregation";
@@ -51,6 +51,8 @@ const detail = useAsyncData<CaseDetail>((signal) => getCase(caseId.value, signal
 const threadMessages = ref<CaseMessage[]>([]);
 const threadStatus = ref<"idle" | "loading" | "ready" | "failed">("idle");
 const threadError = ref<unknown>(null);
+const anchorMessageId = computed(() => /^#case-message-([1-9][0-9]*)$/.exec(route.hash)?.[1]);
+let threadRequest: AbortController | undefined;
 
 /* One open reply form at a time, keyed by the inquiry action it answers. */
 const replyingTo = ref<string | null>(null);
@@ -118,28 +120,57 @@ const canRespond = computed(() => availability.value.respond);
 const canAppeal = computed(() => availability.value.appeal);
 
 async function loadThread(): Promise<void> {
+  threadRequest?.abort();
   const thread = detail.data.value?.thread;
   if (!thread) {
     threadStatus.value = "ready";
     threadMessages.value = [];
     return;
   }
+  const request = new AbortController();
+  threadRequest = request;
+  const anchor = anchorMessageId.value;
   threadStatus.value = "loading";
   threadError.value = null;
   try {
-    const page = await listMessages(thread.conversation_kind, thread.conversation_id, {
-      limit: 100,
-    });
-    threadMessages.value = page.items.map((message) => ({
-      case_message_id: message.message_id,
-      seq: message.seq,
-      message_kind: (message.message_type as CaseMessageKind) ?? "statement",
-      body: message.body,
-      sender: message.sender,
-      created_at: message.created_at,
-    }));
+    const page = await listMessages(
+      thread.conversation_kind,
+      thread.conversation_id,
+      { limit: 100 },
+      request.signal,
+    );
+    const pages = [page.items];
+    let before = page.next_before_seq ?? null;
+    let found = page.items.some((message) => message.message_id === anchor);
+    while (anchor && !found && before !== null && before > 1) {
+      const older = await listMessages(
+        thread.conversation_kind,
+        thread.conversation_id,
+        { limit: 100, before_seq: before },
+        request.signal,
+      );
+      pages.push(older.items);
+      found = older.items.some((message) => message.message_id === anchor);
+      before =
+        older.next_before_seq != null && older.next_before_seq < before
+          ? older.next_before_seq
+          : null;
+    }
+    if (request.signal.aborted) return;
+    threadMessages.value = pages
+      .reverse()
+      .flat()
+      .map((message) => ({
+        case_message_id: message.message_id,
+        seq: message.seq,
+        message_kind: (message.message_type as CaseMessageKind) ?? "statement",
+        body: message.body,
+        sender: message.sender,
+        created_at: message.created_at,
+      }));
     threadStatus.value = "ready";
   } catch (caught) {
+    if (request.signal.aborted) return;
     threadError.value = caught;
     threadStatus.value = "failed";
   }
@@ -214,6 +245,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  threadRequest?.abort();
   if (clockTimer !== null) {
     clearInterval(clockTimer);
     clockTimer = null;
@@ -221,7 +253,26 @@ onUnmounted(() => {
 });
 
 watch(caseId, () => {
+  threadRequest?.abort();
   void load();
+});
+
+watch(anchorMessageId, (anchor) => {
+  if (
+    anchor &&
+    detail.data.value?.case_id === caseId.value &&
+    !threadMessages.value.some((message) => message.case_message_id === anchor)
+  ) {
+    void loadThread();
+  }
+});
+
+watch([anchorMessageId, threadStatus], async ([anchor, status]) => {
+  if (!anchor || status !== "ready") return;
+  await nextTick();
+  if (anchor === anchorMessageId.value && detail.data.value?.case_id === caseId.value) {
+    document.getElementById(`case-message-${anchor}`)?.scrollIntoView({ block: "start" });
+  }
 });
 
 function openInquiryReply(actionId: string): void {
@@ -418,6 +469,7 @@ async function submitSupplement(): Promise<void> {
           <li
             v-for="message in threadMessages"
             :key="message.case_message_id"
+            :id="`case-message-${message.case_message_id}`"
             class="thread__item"
             :class="{ 'thread__item--mine': message.sender.account_id === session.accountId.value }"
           >
@@ -621,6 +673,7 @@ async function submitSupplement(): Promise<void> {
 }
 
 .thread__item {
+  scroll-margin-block-start: 5rem;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
