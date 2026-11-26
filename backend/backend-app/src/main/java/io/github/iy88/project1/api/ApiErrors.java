@@ -11,6 +11,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.TransientDataAccessException;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.transaction.CannotCreateTransactionException;
@@ -29,7 +30,14 @@ public class ApiErrors {
 
     @ExceptionHandler(BusinessError.class)
     public ResponseEntity<Envelope> business(BusinessError failure, HttpServletRequest request) {
-        return respond(failure.status(), new Envelope(new Error(failure.code(), failure.getMessage(), failure.details()),
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(failure.status());
+        if ("RATE_LIMITED".equals(failure.code())) {
+            Object retryAfter = failure.details().get("retry_after_seconds");
+            if (retryAfter != null) {
+                response.header(HttpHeaders.RETRY_AFTER, retryAfter.toString());
+            }
+        }
+        return response.body(new Envelope(new Error(failure.code(), failure.getMessage(), failure.details()),
                 ApiRequestContext.requestId(request), failure.operationId()));
     }
 
