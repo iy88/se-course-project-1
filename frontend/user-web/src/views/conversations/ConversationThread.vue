@@ -368,6 +368,21 @@ onBeforeUnmount(() => {
                   </time>
                 </div>
                 <p class="bubble__body pre-line break-anywhere">{{ row.message.body }}</p>
+                <RouterLink
+                  v-if="!row.mine && kind !== 'case'"
+                  :to="{
+                    name: 'report',
+                    query: {
+                      target_type: 'message',
+                      target_id: row.message.message_id,
+                      conversation_kind: kind,
+                      conversation_id: conversationId,
+                    },
+                  }"
+                  class="btn btn--small btn--ghost"
+                >
+                  举报消息
+                </RouterLink>
               </div>
             </li>
           </template>

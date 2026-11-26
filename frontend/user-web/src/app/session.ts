@@ -9,6 +9,7 @@ import { computed, readonly, ref, shallowRef } from "vue";
 import { readCurrentIdentity } from "../api/account";
 import { AbortedError, ApiError } from "../api/errors";
 import type { AccountProfile } from "../api/contracts";
+import { clearCaseScopes } from "./case-directory";
 
 const account = shallowRef<AccountProfile | null>(null);
 const resolved = ref(false);
@@ -17,10 +18,12 @@ let pending: Promise<void> | null = null;
 async function load(): Promise<void> {
   try {
     const identity = await readCurrentIdentity();
+    if (account.value?.account_id !== identity.account.account_id) clearCaseScopes();
     account.value = identity.account;
   } catch (error) {
     if (error instanceof AbortedError) return;
     if (error instanceof ApiError && error.status === 401) {
+      clearCaseScopes();
       account.value = null;
     } else {
       // A dependency failure must not be reported as "signed out": keep the
@@ -50,12 +53,14 @@ export async function refreshSession(): Promise<void> {
 }
 
 export function setAccount(next: AccountProfile | null): void {
+  if (account.value?.account_id !== next?.account_id) clearCaseScopes();
   account.value = next;
   resolved.value = next !== null;
 }
 
 /** Drop the local identity after logout or an authentication failure. */
 export function clearSession(): void {
+  clearCaseScopes();
   account.value = null;
   resolved.value = true;
 }

@@ -381,6 +381,15 @@ async function confirmOffShelf(): Promise<void> {
                 发起购买请求
               </button>
               <ProductFavoriteControl :product-id="product.data.value.id" />
+              <RouterLink
+                :to="{
+                  name: 'report',
+                  query: { target_type: 'product', target_id: product.data.value.id },
+                }"
+                class="btn btn--ghost"
+              >
+                举报商品
+              </RouterLink>
             </div>
             <p
               v-if="!isOwner && product.data.value.lifecycle_state !== 'public'"

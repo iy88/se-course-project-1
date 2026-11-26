@@ -31,6 +31,7 @@ import {
   categoryRefs,
   categoryView,
   createSeedState,
+  inquiryActionIdOf,
   nextId,
   overview,
   signedImage,
@@ -316,6 +317,20 @@ function conversationByKey(kind: ConversationKind, conversationId: string) {
   );
   if (!conversation) fail(404, "PARTICIPANT_REQUIRED", "会话不存在或当前不可查看。");
   return conversation;
+}
+
+/** Inquiry-based todo entries: one pending id per inquiry that has no statement yet. */
+function pendingInquiryIdsOf(caseThreadId: string): string[] {
+  const thread = messagesOf("case", caseThreadId);
+  const answered = new Set(
+    thread
+      .filter((message) => message.case_message_kind === "statement" && message.inquiry_action_id)
+      .map((message) => message.inquiry_action_id as string),
+  );
+  return thread
+    .filter((message) => message.case_message_kind === "inquiry")
+    .map((message) => inquiryActionIdOf(message))
+    .filter((id) => !answered.has(id));
 }
 
 function messagesOf(kind: ConversationKind, conversationId: string): MockMessage[] {
@@ -2318,6 +2333,16 @@ const routes: Route[] = [
       const item = caseForParticipant(params.caseId, accountId);
       if (item.archived_at) fail(409, "CASE_CLOSED", "事项已结案，不能再发言。");
       const kind = requireString(body, "message_kind") as CaseMessage["message_kind"];
+      const inquiryActionId =
+        typeof body.inquiry_action_id === "string" && body.inquiry_action_id !== ""
+          ? body.inquiry_action_id
+          : undefined;
+      if (kind === "statement") {
+        const pending = item.thread_id ? pendingInquiryIdsOf(item.thread_id) : [];
+        if (!inquiryActionId || !pending.includes(inquiryActionId)) {
+          fail(409, "INQUIRY_NOT_PENDING", "该问询不存在或已经回复。");
+        }
+      }
       if (kind === "appeal" && item.appeal_deadline_at) {
         if (new Date(item.appeal_deadline_at).getTime() < Date.now()) {
           fail(409, "CASE_APPEAL_WINDOW_ENDED", "申辩期已结束。");
@@ -2340,6 +2365,7 @@ const routes: Route[] = [
         body: requireString(body, "body"),
         created_at: timestamp,
         case_message_kind: kind,
+        inquiry_action_id: inquiryActionId,
       });
       item.actions.push({ action_kind: kind, occurred_at: timestamp, actor_kind: "peer" });
       item.updated_at = timestamp;
@@ -2518,14 +2544,15 @@ function buildTodos(accountId: string): {
   for (const item of state.cases) {
     if (item.archived_at) continue;
     if (!item.related_ids.includes(accountId) && item.reporter_id !== accountId) continue;
-    if (
-      item.thread_id &&
-      messagesOf("case", item.thread_id).some((message) => message.message_type === "inquiry")
-    ) {
+    if (item.thread_id && pendingInquiryIdsOf(item.thread_id).length > 0) {
       items.push({
         todo_key: `inquiry_response:${accountId}:${item.case_id}`,
         kind: "inquiry_response",
-        source: { case_id: item.case_id, thread: item.thread_id },
+        source: {
+          case_id: item.case_id,
+          thread: item.thread_id,
+          inquiry_action_ids: pendingInquiryIdsOf(item.thread_id),
+        },
         created_at: item.created_at,
         updated_at: item.updated_at,
         summary: "有管理问询等待你回复",
