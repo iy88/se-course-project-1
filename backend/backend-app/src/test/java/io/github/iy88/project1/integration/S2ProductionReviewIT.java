@@ -252,6 +252,63 @@ class S2ProductionReviewIT {
         assertThat(avatarReferences(accountId)).isEmpty();
     }
 
+    @Test
+    void managementStatisticsUseTradeResultTimeAndKeepCurrentCountsIndependentOfRange() throws Exception {
+        var manager = login("statistics", true);
+        var buyer = login("statistics-buyer", false);
+        String path = "/management/statistics";
+        get(buyer, path + "?time_scope=all", 403);
+        get(manager, path, 422);
+        get(manager, path + "?time_scope=all&start_at=2026-10-01T00:00:00Z", 422);
+        get(manager, path + "?time_scope=range&start_at=2026-10-01T00:00:00Z", 422);
+        get(manager, path + "?time_scope=range&start_at=2026-10-02T00:00:00Z&end_at=2026-10-01T00:00:00Z", 422);
+
+        String range = path + "?time_scope=range&start_at=2026-10-03T00:00:00Z&end_at=2026-10-04T00:00:00Z";
+        var before = get(manager, range, 200);
+        long buyerId = buyer.account().id();
+        long sellerId = manager.account().id();
+        try {
+            db.sql("""
+                    insert into trade(product_id, buyer_id, seller_id, status, terminal_reason, close_reason,
+                                      requested_at, ended_at, created_at, updated_at)
+                    select 50000000 + n, :buyer, :seller, status, terminal_reason, close_reason,
+                           '2026-09-01T00:00:00Z', ended_at, '2026-09-01T00:00:00Z', '2026-11-05T00:00:00Z'
+                    from (values
+                        (1, 'completed', 'completed', null, timestamptz '2026-10-03T00:00:00Z'),
+                        (2, 'completed', 'completed', null, timestamptz '2026-10-04T00:00:00Z'),
+                        (3, 'terminated', 'cancelled', null, timestamptz '2026-10-03T02:00:00Z'),
+                        (4, 'disputed', null, null, null),
+                        (5, 'closed', null, 'other_user_locked', null),
+                        (6, 'rejected', null, null, null),
+                        (7, 'withdrawn', null, null, null)
+                    ) as facts(n, status, terminal_reason, close_reason, ended_at)
+                    """).param("buyer", buyerId).param("seller", sellerId).update();
+            var selected = get(manager, range, 200);
+            var all = get(manager, path + "?time_scope=all", 200);
+            assertThat(selected.path("completed_in_selection").asLong())
+                    .isEqualTo(before.path("completed_in_selection").asLong() + 1);
+            assertThat(all.path("completed_in_selection").asLong()).isEqualTo(all.path("trades").path("completed").asLong());
+            assertThat(all.path("selection").path("start_at").isNull()).isTrue();
+            assertThat(all.path("selection").path("end_at").isNull()).isTrue();
+            for (String group : List.of("accounts", "products_by_state", "pending", "trades")) {
+                assertThat(selected.path(group)).isEqualTo(all.path(group));
+            }
+            assertThat(selected.path("trades").path("completed").asLong())
+                    .isEqualTo(before.path("trades").path("completed").asLong() + 2);
+            assertThat(selected.path("trades").path("terminated").asLong())
+                    .isEqualTo(before.path("trades").path("terminated").asLong() + 1);
+            assertThat(selected.path("trades").path("disputed").asLong())
+                    .isEqualTo(before.path("trades").path("disputed").asLong() + 1);
+            assertThat(selected.path("as_of").isString()).isTrue();
+
+            db.sql("update account set role = 'user' where account_id = ?").param(sellerId).update();
+            get(manager, path + "?time_scope=all", 403);
+        } finally {
+            db.sql("delete from trade where buyer_id = ? and seller_id = ?")
+                    .param(buyerId).param(sellerId).update();
+        }
+    }
+
     private static long uploadedImage(long owner, FilePurpose purpose, boolean verified) {
         var now = Instant.now().minusSeconds(1);
         var registry = app.getBean(FileRegistry.class);

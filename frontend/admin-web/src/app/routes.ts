@@ -5,7 +5,8 @@ export type AdminRoute =
   | { name: "reviews"; ownership: Ownership }
   | { name: "review"; auditId: string }
   | { name: "categories" }
-  | { name: "banned" };
+  | { name: "banned" }
+  | { name: "statistics" };
 
 function parseOwnership(value: string | null): Ownership {
   return value === "mine" ? "mine" : "unclaimed";
@@ -25,6 +26,7 @@ export function parseHash(hash: string): AdminRoute {
   }
   if (segments[0] === "categories") return { name: "categories" };
   if (segments[0] === "banned") return { name: "banned" };
+  if (segments[0] === "statistics") return { name: "statistics" };
   return { name: "reviews", ownership: "unclaimed" };
 }
 
@@ -39,5 +41,7 @@ export function routeHref(route: AdminRoute): string {
       return "#/categories";
     case "banned":
       return "#/banned";
+    case "statistics":
+      return "#/statistics";
   }
 }

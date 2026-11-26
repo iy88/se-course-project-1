@@ -449,6 +449,105 @@
         "description": "Active scopes sort by updated_at. Completed scopes sort by completed_at. Ties sort by the numeric case ID descending."
       }
     },
+    "/api/v1/management/statistics": {
+      "get": {
+        "operationId": "getManagementStatistics",
+        "summary": "Get management statistics",
+        "description": "Requires a current manager session. Only completed_in_selection uses the selected time range.",
+        "parameters": [
+          {
+            "name": "time_scope",
+            "in": "query",
+            "required": true,
+            "description": "Choose all records or a half-open UTC interval.",
+            "schema": {
+              "type": "string",
+              "enum": ["all", "range"]
+            }
+          },
+          {
+            "name": "start_at",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive UTC start, required only for range.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end_at",
+            "in": "query",
+            "required": false,
+            "description": "Exclusive UTC end, required only for range.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Management statistics in one read snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagementStatistics"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Management qualification required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid time selection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Management statistics dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/products/{product_id}/comments": {
       "get": {
         "operationId": "listProductComments",
@@ -5905,6 +6004,131 @@
           "as_of": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ManagementStatistics": {
+        "type": "object",
+        "required": [
+          "as_of",
+          "selection",
+          "accounts",
+          "products_by_state",
+          "pending",
+          "trades",
+          "completed_in_selection"
+        ],
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "selection": {
+            "type": "object",
+            "required": ["time_scope", "start_at", "end_at"],
+            "properties": {
+              "time_scope": {
+                "type": "string",
+                "enum": ["all", "range"]
+              },
+              "start_at": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              },
+              "end_at": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              }
+            }
+          },
+          "accounts": {
+            "type": "object",
+            "required": ["total", "banned"],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "banned": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          "products_by_state": {
+            "type": "object",
+            "required": ["pending_review", "review_rejected", "public", "in_trade", "off_shelf"],
+            "properties": {
+              "pending_review": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "review_rejected": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "public": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "in_trade": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "off_shelf": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          "pending": {
+            "type": "object",
+            "required": ["reviews", "reports"],
+            "properties": {
+              "reviews": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "reports": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          "trades": {
+            "type": "object",
+            "required": ["completed", "terminated", "disputed"],
+            "properties": {
+              "completed": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "terminated": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "disputed": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          "completed_in_selection": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },

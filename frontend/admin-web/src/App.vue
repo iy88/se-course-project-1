@@ -10,6 +10,7 @@ import BannedScopeView from "./views/BannedScopeView.vue";
 import CategoriesView from "./views/CategoriesView.vue";
 import ReviewDetailView from "./views/ReviewDetailView.vue";
 import ReviewQueueView from "./views/ReviewQueueView.vue";
+import ManagementStatisticsView from "./views/ManagementStatisticsView.vue";
 import ErrorNotice from "./components/ErrorNotice.vue";
 import LoadingBlock from "./components/LoadingBlock.vue";
 import { dismiss, toasts } from "./app/toast";
@@ -36,6 +37,12 @@ const navItems = [
     label: "禁发范围",
     icon: "file",
     href: routeHref({ name: "banned" }),
+  },
+  {
+    key: "statistics",
+    label: "管理统计",
+    icon: "file",
+    href: routeHref({ name: "statistics" }),
   },
 ] as const;
 
@@ -130,6 +137,7 @@ function goBack(): void {
         <ReviewDetailView v-else-if="page === 'review'" :audit-id="reviewAuditId" />
         <CategoriesView v-else-if="page === 'categories'" />
         <BannedScopeView v-else-if="page === 'banned'" />
+        <ManagementStatisticsView v-else-if="page === 'statistics'" />
       </template>
     </main>
   </div>
