@@ -26,6 +26,10 @@ public class EventSignals {
         key = namespace + ":events";
     }
 
+    public static String wakeChannel(String namespace) {
+        return namespace + ":events:wake";
+    }
+
     public String tail() {
         var rows = redis.<String, String>opsForStream().reverseRange(key, Range.unbounded(), Limit.limit().count(1));
         return rows == null || rows.isEmpty() ? "0-0" : rows.getFirst().getId().getValue();

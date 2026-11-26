@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.56
-Version-Datetime: 2026-11-19T23:03:15+08:00
+Version: 0.1.60
+Version-Datetime: 2026-11-25T03:25:12+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -19,13 +19,13 @@ macOS 或 Linux：
 
 ```bash
 umask 077
-cp -n backend/.env.example backend/.env.dev
+cp -n backend/.env.dev.example backend/.env.dev
 ```
 
 Windows PowerShell 5.1 或更高版本：
 
 ```powershell
-Copy-Item backend/.env.example backend/.env.dev -ErrorAction SilentlyContinue
+Copy-Item backend/.env.dev.example backend/.env.dev -ErrorAction SilentlyContinue
 ```
 
 按[开发配置](#开发配置)填写数据库、Redis 和所需的外部服务凭据。
@@ -77,7 +77,7 @@ Windows PowerShell 5.1 或更高版本：
 
 ## 开发配置
 
-`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.example`](backend/.env.example) 后替换示例值，不要把实际凭据提交到仓库。
+`.env.dev` 已被 Git 忽略。文件使用 Java properties 语法：值不额外加引号，反斜杠写成两个反斜杠。复制 [`backend/.env.dev.example`](backend/.env.dev.example) 后替换示例值，不要把实际凭据提交到仓库。
 
 | 资源 | 必需配置 |
 |---|---|
@@ -138,6 +138,18 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 - 仅当旧数据库仍由 app 角色持有时，confirmed `db reset` 才需要额外传入 `--admin-user` 完成角色迁移。
 - `oss reset` 清空 `OSS_BUCKET` 内的全部对象，每批最多删除 1,000 个。开发和联调时，维护配置应指向开发桶。
 - 重置中途失败时保持写入停止，修复后重新预览并执行完整命令。数据库重置会按当前 Flyway 迁移重建结构。
+
+### 创建管理端账号
+
+数据库迁移完成后，在仓库根目录打开终端执行以下命令，并替换邮箱和显示名称。
+
+```bash
+java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
+  account create-manager --env-file=backend/.env.dev \
+  --email=manager@example.com --display-name="测试管理员"
+```
+
+核对输出的目标数据库，按提示输入两次登录密码。密码输入无回显。命令使用配置的数据库 owner 创建 `manager` 账户并记录审计，密码采用和普通账户相同的长度规则与哈希算法。创建完成后，使用该邮箱和密码登录管理端。邮箱已注册时，命令报错并保留该账户原有角色和密码。
 
 ## 后端开发
 
@@ -267,10 +279,12 @@ java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --spring.pro
 
 ### 实时 HTTP 与 WebSocket
 
-通过 `ALLOWED_ORIGINS` 和 `RealtimeAccess` bean 启用 `realtime-api`。适配器认证 Session Cookie，重新检查其当前状态，验证 hello CSRF 令牌，并投影可见的事件来源。
+正常业务入口以 `infrastructure` servlet API 运行，自动装配 HTTP 补拉、`/api/v1/realtime` WebSocket、公开配置接口和业务事件投影，不需要额外的实时 profile 或能力开关。按[快速开始](#快速开始)启动的 API 进程即采用该角色；依赖探针、`file-probe` 以及不监听 HTTP 的 worker／scheduler 不装配这些组件，未启用 `infrastructure` 的轻量单元测试也不会加载。适配器认证 Session Cookie，重新检查其当前状态，验证 hello CSRF 令牌，并投影可见的事件来源。
 
+- 业务入口要求账户 Session、通知和会话读取适配器同时存在；缺少任一适配器时启动失败，不使用替身或空实现。正式适配器由 Issue #78／#79／#80 提供。其他业务来源通过 `RealtimeEventSources.SourceAccess` 登记当前可见性。
+- `GET /api/v1/capabilities` 返回 `config_version` 与账户公开 `limits`；无 Cookie 只返回访客限制，已失效 Cookie 按身份契约返回 401，响应使用 `no-store`。
 - `GET /api/v1/account/events/head` 返回账户纪元、头部序列和重放下限。`GET /api/v1/account/events?epoch=<uuid>&after_seq=<seq>` 在限定范围内扫描一页数据。
-- `/api/v1/realtime` 接受版本 1 的 `hello` 帧。有效游标会恢复投递。触发 `sync_reset` 后，加载当前快照并使用新游标发送 `resume`。通过 `ack` 确认最后连续处理的序列。
+- `/api/v1/realtime` 接受版本 1 的 `hello` 帧。有效游标会恢复投递。收到 `sync_reset` 后，先读取事件头，再加载通知、会话及其已读进度；全部查询成功后使用刚取得的头部游标发送 `resume`。通过 `ack` 确认最后连续处理的序列。
 - 在将来源连接记录到执行上下文之前，通过 `OriginConnectionLookup` 解析 `X-Origin-Connection-Id`。Redis 将连接租约限定到已认证的账户和 Session。
 
 ### 文件服务测试页
@@ -289,7 +303,7 @@ pnpm --dir frontend exec rsbuild dev --root file-probe
 
 ## CI 与发布
 
-GitHub Actions 在 Linux 上并行执行后端、后端集成和前端检查。后端使用 OpenJDK 27 和 Maven 执行 `verify` 并输出覆盖率；集成 job 使用独立的 PostgreSQL 和 Redis 容器，先执行 Flyway 迁移，再运行 `verify -Pintegration`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，检查 OpenAPI 生成类型、lint 和格式，再分别检查并构建两个应用。
+GitHub Actions 在 Linux 上并行执行后端、后端集成和前端检查。后端使用 OpenJDK 27 和 Maven 执行 `verify` 并输出覆盖率；集成 job 使用独立的 PostgreSQL 和 Redis 容器，先执行 Flyway 迁移，再运行 `verify -Pintegration`。前端使用 Node.js 26.13.1 和 pnpm 12.21.0，按锁文件安装依赖，检查 OpenAPI 生成类型、lint 和格式，运行各工作区的单元测试，再分别检查并构建两个应用。
 
 Jenkins 使用 OpenJDK 27、Maven 3.10.1、`.node-version`、`frontend/package.json` 中的 pnpm 版本和 Python 3。发布包构建跳过测试，前端仍需通过 TypeScript 类型检查；单元测试、集成测试、lint 和格式检查由 GitHub Actions 执行。本地运行发布脚本前，把已安装 Maven 的 `mvn` 加入 PATH。从仓库根目录构建：
 
