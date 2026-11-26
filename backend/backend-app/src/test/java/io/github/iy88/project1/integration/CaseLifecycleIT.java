@@ -414,7 +414,10 @@ class CaseLifecycleIT {
         assertThat(accounts.get(0).path("eligible").asBoolean()).isFalse();
         assertThat(accounts.get(1).path("display_name").asString()).isEqualTo("来源商品卖方");
         assertThat(accounts.get(1).path("eligible").asBoolean()).isTrue();
-        assertThat(queries.detail(context(reporter), caseId).has("reported_object")).isFalse();
+        var ownDetail = queries.detail(context(reporter), caseId);
+        assertThat(ownDetail.has("reported_object")).isFalse();
+        assertThat(ownDetail.at("/report_materials/product/title").asString()).isEqualTo("来源商品");
+        assertThat(ownDetail.at("/report_materials/product/id").asLong()).isEqualTo(product);
         assertThatThrownBy(() -> queries.detail(context(MANAGER_2.get()), caseId))
                 .isInstanceOfSatisfying(BusinessError.class,
                         failure -> assertThat(failure.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));

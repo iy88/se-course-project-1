@@ -544,7 +544,21 @@ class S4ProductionEnforcementIT {
         var redirect = URI.create(response.headers().firstValue("Location").orElseThrow());
         assertThat(redirect.getPath()).endsWith(location.key());
         assertThat(redirect.getRawQuery()).isNotEmpty();
+        var ownDetail = get(reporter, "/cases/" + caseId, 200);
+        assertThat(ownDetail.path("reported_reason").asString()).isEqualTo("请核实");
+        assertThat(ownDetail.at("/report_materials/supplements/0/note").asString()).isEqualTo("补充图片说明");
+        assertThat(ownDetail.at("/report_materials/attachments/0/evidence_id").asLong()).isEqualTo(evidence);
+        assertThat(ownDetail.path("thread").isNull()).isTrue();
+        assertThat(get(target, "/cases/" + caseId, 404).has("report_materials")).isFalse();
+        String ownFile = "/cases/" + caseId + "/evidence/" + evidence + "/file";
+        var ownResponse = http.send(request(reporter, ownFile).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(ownResponse.statusCode()).isEqualTo(302);
+        assertThat(ownResponse.headers().firstValue("Cache-Control")).contains("no-store");
+        get(target, ownFile, 404);
+        get(manager, ownFile, 404);
+        get(reporter, "/cases/" + caseId + "/evidence/999999999/file", 404);
         var detail = get(manager, "/cases/" + caseId, 200);
+        assertThat(detail.has("report_materials")).isFalse();
         assertThat(detail.path("decision_basis_actions").get(0).path("note").asString()).isEqualTo("补充图片说明");
         assertThat(detail.path("evidence").get(0).path("decision_basis").asBoolean()).isTrue();
         post(manager, decisionPath(caseId), """

@@ -152,6 +152,36 @@ public class CaseQueries {
                 : relatedView ? CaseVocabulary.VIEWPOINT_RELATED : CaseVocabulary.VIEWPOINT_MANAGER);
         body.put("reason_text", reasonText(facts, reporter, related, manager));
         body.put("reported_reason", reporter || manager ? facts.reportedReason() : null);
+        if (reporterView) {
+            var materials = body.putObject("report_materials");
+            targets.reportProduct(caseId).ifPresent(snapshot -> {
+                var product = materials.putObject("product");
+                product.put("id", Long.toString(snapshot.id()));
+                product.put("title", snapshot.title());
+            });
+            var supplements = materials.putArray("supplements");
+            for (var action : actions) {
+                if (!Long.valueOf(actor).equals(action.actorAccountId())) {
+                    continue;
+                }
+                if (CaseVocabulary.ACTION_SUBMIT.equals(action.actionKind())) {
+                    materials.put("original_note", action.note());
+                } else if (CaseVocabulary.ACTION_SUPPLEMENT.equals(action.actionKind()) && action.note() != null) {
+                    var item = supplements.addObject();
+                    item.put("action_id", Long.toString(action.actionId()));
+                    item.put("note", action.note());
+                    item.put("occurred_at", text(action.occurredAt()));
+                }
+            }
+            var attachments = materials.putArray("attachments");
+            for (var evidence : store.evidence(caseId)) {
+                if (evidence.submittedAttachmentBy(actor)) {
+                    var item = attachments.addObject();
+                    item.put("evidence_id", Long.toString(evidence.evidenceId()));
+                    item.put("submitted_at", text(evidence.submittedAt()));
+                }
+            }
+        }
         if (managerView) {
             var relatedIds = targets.relatedAccountIds(facts);
             var accountIds = new LinkedHashSet<>(relatedIds);
@@ -253,7 +283,7 @@ public class CaseQueries {
         var deadline = store.appealEligibility(caseId, actor).map(CaseRecords.AppealEligibility::appealDeadlineAt)
                 .orElse(null);
         body.put("appeal_deadline_at", text(deadline));
-        if (thread.isPresent()) {
+        if (!reporterView && thread.isPresent()) {
             body.set("thread", thread(thread.getAsLong()));
         } else {
             body.set("thread", json.nullNode());

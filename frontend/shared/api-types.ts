@@ -57,6 +57,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/cases/{case_id}/evidence/{evidence_id}/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 打开举报人本人提交的事项附件 */
+    get: operations["openOwnReportEvidenceFile"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/admin/product-reviews/{audit_id}": {
     parameters: {
       query?: never;
@@ -1678,6 +1695,25 @@ export interface components {
           description: string;
         };
       };
+      /** @description Report material visible to its reporter. */
+      report_materials?: {
+        original_note?: string | null;
+        product?: {
+          id: string;
+          title: string;
+        };
+        supplements: {
+          action_id: string;
+          note: string;
+          /** Format: date-time */
+          occurred_at: string;
+        }[];
+        attachments: {
+          evidence_id: string;
+          /** Format: date-time */
+          submitted_at: string;
+        }[];
+      };
       decision_basis_actions?: {
         action_id: string;
         /** @enum {string} */
@@ -1983,6 +2019,57 @@ export interface operations {
     };
   };
   openCaseEvidenceFile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+        evidence_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized short-lived evidence file location */
+      302: {
+        headers: {
+          Location?: string;
+          "Cache-Control"?: "no-store";
+          "Referrer-Policy"?: "no-referrer";
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description STORAGE_UNAVAILABLE / STORAGE_CONFIGURATION_INVALID / DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  openOwnReportEvidenceFile: {
     parameters: {
       query?: never;
       header?: never;

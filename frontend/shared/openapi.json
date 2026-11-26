@@ -218,6 +218,88 @@
         }
       }
     },
+    "/api/v1/cases/{case_id}/evidence/{evidence_id}/file": {
+      "get": {
+        "operationId": "openOwnReportEvidenceFile",
+        "summary": "打开举报人本人提交的事项附件",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Authorized short-lived evidence file location",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-referrer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_VISIBLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "STORAGE_UNAVAILABLE / STORAGE_CONFIGURATION_INVALID / DEPENDENCY_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/product-reviews/{audit_id}": {
       "get": {
         "operationId": "getProductReview",
@@ -7975,6 +8057,42 @@
                   },
                   "description": {
                     "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "report_materials": {
+            "description": "Report material visible to its reporter.",
+            "type": "object",
+            "required": ["supplements", "attachments"],
+            "properties": {
+              "original_note": { "type": ["string", "null"] },
+              "product": {
+                "type": "object",
+                "required": ["id", "title"],
+                "properties": { "id": { "type": "string" }, "title": { "type": "string" } }
+              },
+              "supplements": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["action_id", "note", "occurred_at"],
+                  "properties": {
+                    "action_id": { "type": "string" },
+                    "note": { "type": "string" },
+                    "occurred_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["evidence_id", "submitted_at"],
+                  "properties": {
+                    "evidence_id": { "type": "string" },
+                    "submitted_at": { "type": "string", "format": "date-time" }
                   }
                 }
               }

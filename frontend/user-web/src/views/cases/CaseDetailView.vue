@@ -68,6 +68,21 @@ const appealError = ref<string | null>(null);
 /* Pending inquiries come from the todo aggregation, not from the message list. */
 const pendingInquiryIds = ref<string[]>([]);
 
+const supplementDialog = ref<HTMLDialogElement | null>(null);
+const supplementOpen = ref(false);
+const reportMaterials = computed(() => detail.data.value?.report_materials);
+
+function toggleSupplement(): void {
+  const dialog = supplementDialog.value;
+  if (!dialog) return;
+  if (dialog.open) {
+    dialog.close();
+  } else {
+    dialog.showModal();
+    supplementOpen.value = true;
+  }
+}
+
 const supplementNote = ref("");
 const supplementFiles = ref<string[]>([]);
 const supplementPending = ref(false);
@@ -232,8 +247,10 @@ async function loadPendingInquiries(): Promise<void> {
 
 async function load(): Promise<void> {
   await detail.run();
-  await loadThread();
-  await loadPendingInquiries();
+  if (!isReporterView.value) {
+    await loadThread();
+    await loadPendingInquiries();
+  }
 }
 
 onMounted(() => {
@@ -253,6 +270,10 @@ onUnmounted(() => {
 });
 
 watch(caseId, () => {
+  supplementDialog.value?.close();
+  supplementNote.value = "";
+  supplementFiles.value = [];
+  supplementError.value = null;
   threadRequest?.abort();
   void load();
 });
@@ -360,8 +381,10 @@ async function submitSupplement(): Promise<void> {
       },
       newIdempotencyKey(),
     );
+    if (current.case_id !== caseId.value) return;
     supplementNote.value = "";
     supplementFiles.value = [];
+    supplementDialog.value?.close();
     notify.success(`已补充材料（第 ${result.supplement_count} 次）。`);
     await load();
   } catch (caught) {
@@ -413,6 +436,18 @@ async function submitSupplement(): Promise<void> {
           </span>
         </div>
 
+        <button
+          v-if="canSupplement"
+          type="button"
+          class="btn btn--primary supplement-toggle"
+          aria-haspopup="dialog"
+          aria-controls="case-supplement"
+          :aria-expanded="supplementOpen"
+          @click="toggleSupplement"
+        >
+          补充材料
+        </button>
+
         <p v-if="detail.data.value.reason_text" class="reason pre-line break-anywhere">
           {{ detail.data.value.reason_text }}
         </p>
@@ -438,6 +473,49 @@ async function submitSupplement(): Promise<void> {
         </div>
       </section>
 
+      <section v-if="isReporterView" class="card stack">
+        <div class="card__head"><h2>我的举报材料</h2></div>
+        <div v-if="detail.data.value.reported_reason || reportMaterials?.original_note">
+          <h3>举报说明</h3>
+          <p class="pre-line break-anywhere">{{ detail.data.value.reported_reason }}</p>
+          <p v-if="reportMaterials?.original_note" class="pre-line break-anywhere">
+            {{ reportMaterials.original_note }}
+          </p>
+        </div>
+        <div v-if="reportMaterials?.product">
+          <h3>关联商品</h3>
+          <RouterLink
+            :to="{ name: 'product-detail', params: { productId: reportMaterials.product.id } }"
+          >
+            {{ reportMaterials.product.title }} #{{ reportMaterials.product.id }}
+          </RouterLink>
+        </div>
+        <div v-if="reportMaterials?.supplements.length">
+          <h3>已提交的补充说明</h3>
+          <ul class="plain-list stack stack--tight">
+            <li v-for="item in reportMaterials.supplements" :key="item.action_id">
+              <p class="muted">{{ formatDateTime(item.occurred_at) }}</p>
+              <p class="pre-line break-anywhere">{{ item.note }}</p>
+            </li>
+          </ul>
+        </div>
+        <div v-if="reportMaterials?.attachments.length">
+          <h3>已提交的附件</h3>
+          <ul class="plain-list stack stack--tight">
+            <li v-for="item in reportMaterials.attachments" :key="item.evidence_id">
+              <a
+                :href="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                打开附件 #{{ item.evidence_id }}
+              </a>
+              <span class="muted"> · {{ formatDateTime(item.submitted_at) }}</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <section class="card">
         <div class="card__head"><h2>进度</h2></div>
         <ol class="timeline">
@@ -455,7 +533,7 @@ async function submitSupplement(): Promise<void> {
         </ol>
       </section>
 
-      <section class="card">
+      <section v-if="!isReporterView" class="card">
         <div class="card__head">
           <h2>沟通记录</h2>
           <span class="chip">{{ threadMessages.length }} 条</span>
@@ -579,46 +657,73 @@ async function submitSupplement(): Promise<void> {
         从「我的事项 → 我提交的」打开本事项，才能补充说明与证据。
       </p>
 
-      <section v-if="canSupplement" class="card">
-        <div class="card__head"><h2>补充材料</h2></div>
-        <p class="muted">可补充说明与证据；补充不会改变事项状态与已作出的决定。</p>
-        <div class="field">
-          <label class="field__label" for="supplement-note">补充说明</label>
-          <textarea
-            id="supplement-note"
-            v-model="supplementNote"
-            class="textarea"
-            maxlength="1000"
+      <dialog
+        v-if="canSupplement"
+        id="case-supplement"
+        ref="supplementDialog"
+        class="card supplement-dialog"
+        aria-labelledby="case-supplement-title"
+        @close="supplementOpen = false"
+        @cancel="supplementPending && $event.preventDefault()"
+      >
+        <form class="stack" @submit.prevent="submitSupplement">
+          <h2 id="case-supplement-title">补充材料</h2>
+          <div class="field">
+            <label class="field__label" for="supplement-note">补充说明</label>
+            <textarea
+              id="supplement-note"
+              v-model="supplementNote"
+              class="textarea"
+              maxlength="1000"
+            />
+          </div>
+          <ImageUploader
+            v-model="supplementFiles"
+            purpose="case_evidence"
+            label="证据文件"
+            hint="支持 JPG、PNG、PDF"
+            :max-count="5"
+            :target="null"
           />
-        </div>
-        <ImageUploader
-          v-model="supplementFiles"
-          purpose="case_evidence"
-          label="证据文件"
-          hint="支持 JPG、PNG、PDF"
-          :max-count="5"
-          :target="null"
-        />
-        <p class="muted">
-          证据先按暂存上传，提交补充时随材料一起绑定到该事项；事项归属核验随事项后端接入后改用事项目标。
-        </p>
-        <p v-if="supplementError" class="field__error" role="alert">{{ supplementError }}</p>
-        <div class="inline">
-          <button
-            type="button"
-            class="btn btn--primary"
-            :disabled="supplementPending"
-            @click="submitSupplement"
-          >
-            {{ supplementPending ? "提交中…" : "提交补充" }}
-          </button>
-        </div>
-      </section>
+          <p v-if="supplementError" class="field__error" role="alert">{{ supplementError }}</p>
+          <div class="inline">
+            <button
+              type="button"
+              class="btn btn--ghost"
+              :disabled="supplementPending"
+              @click="toggleSupplement"
+            >
+              关闭
+            </button>
+            <button type="submit" class="btn btn--primary" :disabled="supplementPending">
+              {{ supplementPending ? "提交中…" : "提交补充" }}
+            </button>
+          </div>
+        </form>
+      </dialog>
     </template>
   </div>
 </template>
 
 <style scoped>
+.supplement-toggle {
+  justify-self: start;
+}
+
+.supplement-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(36rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  color: inherit;
+}
+
+.supplement-dialog::backdrop {
+  background: rgb(0 0 0 / 38%);
+}
+
 .reason {
   font-size: 0.875rem;
   color: var(--ink-soft);

@@ -884,6 +884,13 @@ export interface PendingInquiry {
 }
 
 export interface CaseDetail {
+  reported_reason?: string | null;
+  report_materials?: {
+    original_note?: string | null;
+    product?: { id: string; title: string };
+    supplements: { action_id: string; note: string; occurred_at: string }[];
+    attachments: { evidence_id: string; submitted_at: string }[];
+  };
   case_id: string;
   case_type: CaseKind;
   case_status: CaseStatus;

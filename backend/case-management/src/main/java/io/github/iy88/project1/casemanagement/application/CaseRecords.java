@@ -57,6 +57,10 @@ public final class CaseRecords {
         public boolean decisionBasis() {
             return fileId != null && CaseVocabulary.EVIDENCE_SUBMITTER_ATTACHMENT.equals(evidenceKind);
         }
+
+        public boolean submittedAttachmentBy(long accountId) {
+            return decisionBasis() && Long.valueOf(accountId).equals(submittedBy);
+        }
     }
 
     /** Minimal message facts returned for one manager-authorised platform-record reference. */
