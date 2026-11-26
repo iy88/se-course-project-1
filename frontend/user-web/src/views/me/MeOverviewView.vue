@@ -34,6 +34,7 @@ const links = [
   { to: "/me/trades", title: "我的交易", description: "查看购买与出售记录", icon: "file" },
   { to: "/me/reviews", title: "我的评价", description: "查看写出的和收到的评价", icon: "check" },
   { to: "/conversations", title: "我的会话", description: "查看私聊与交易消息", icon: "mail" },
+  { to: "/me/cases", title: "我的事项", description: "查看举报、处理进度与结果", icon: "file" },
 ] as const;
 
 const rules = [

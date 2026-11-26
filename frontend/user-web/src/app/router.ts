@@ -168,6 +168,12 @@ export const routes: RouteRecordRaw[] = [
     ],
   },
   {
+    path: "/case-results",
+    name: "case-results",
+    component: () => import("../views/cases/CaseResultsView.vue"),
+    meta: { requiresAuth: true, backTo: "my-cases", backLabel: "事项列表" },
+  },
+  {
     path: "/cases/:caseId",
     name: "case-detail",
     component: () => import("../views/cases/CaseDetailView.vue"),
