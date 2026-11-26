@@ -21,7 +21,7 @@
 
 .admin-header__inner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
   align-items: center;
   gap: var(--space-4);
   inline-size: 100%;
@@ -45,6 +45,7 @@
   color: var(--ink);
   font-weight: 650;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .admin-brand:hover {
@@ -62,7 +63,6 @@
   display: flex;
   align-self: stretch;
   gap: var(--space-4);
-  flex-wrap: wrap;
 }
 
 .admin-nav a {
@@ -75,6 +75,7 @@
   color: var(--ink-soft);
   text-align: center;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .admin-nav .ui-icon {
@@ -98,6 +99,12 @@
   align-items: center;
   gap: var(--space-2);
   justify-self: end;
+  min-inline-size: 0;
+}
+
+.admin-account .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .admin-account__name {
@@ -186,7 +193,7 @@
   background: var(--info-soft);
 }
 
-@media (width < 48rem) {
+@media (width < 60rem) {
   .admin-header__inner {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-2);
@@ -207,14 +214,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .admin-brand--with-back {
-    display: none;
-  }
-
-  .admin-account__name {
-    display: none;
-  }
-
   .admin-nav a {
     gap: var(--space-1);
     min-block-size: var(--control-min-block);
@@ -231,6 +230,13 @@
 
   .admin-menu-toggle {
     display: inline-flex;
+  }
+}
+
+@media (width < 48rem) {
+  .admin-brand--with-back,
+  .admin-account__name {
+    display: none;
   }
 
   .admin-main {
