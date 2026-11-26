@@ -7,6 +7,7 @@ import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.trade.domain.TradeModels;
 import io.github.iy88.project1.trade.domain.TradeVocabulary;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -104,6 +105,33 @@ public final class TradePorts {
         /** Creates the shared exception case and its dispute link in the caller's transaction. */
         long openDisputeCase(WriteTransaction transaction, ExecutionContext context, long tradeId, long disputeId,
                              java.time.Instant at);
+
+        /**
+         * Case-owned plan for auto-closing one self-resolved dispute: the case row plus its
+         * existing threads. A historical dispute without a case contributes no keys and must not
+         * create a case here. The caller merges this plan with the trade and account plan.
+         */
+        default LockPlan prepareSelfResolution(long caseId) {
+            return new LockPlan(Map.of(), Set.of());
+        }
+
+        /**
+         * Locks and validates the case row before the caller locks the trade conversation. The
+         * caller has already declared and acquired the CASE key; this method only re-reads the
+         * locked row and verifies that the case is the dispute case of this trade.
+         */
+        default void lockSelfResolution(WriteTransaction transaction, long caseId, long tradeId, long disputeId) {
+        }
+
+        /**
+         * Archives the case and its existing threads after the second distinct party confirms.
+         * Thread locks are acquired in ascending id order. A thread missing from the prepared plan
+         * surfaces as {@link LockPlan.Changed} so the whole transaction is replanned. An archived
+         * case is left untouched to keep the stream single-write.
+         */
+        default void archiveSelfResolved(WriteTransaction transaction, long caseId, long tradeId, long disputeId,
+                                         Instant at) {
+        }
     }
 
     public interface Notifications {
@@ -117,6 +145,9 @@ public final class TradePorts {
         Optional<TradeModels.ConversationAccess> findConversationAccess(long tradeId);
 
         TradeModels.ConversationAccess conversationAccess(long tradeId);
+
+        /** Product carried by the trade, or empty when the trade does not exist. */
+        OptionalLong productId(long tradeId);
 
         boolean pairFrozen(long firstAccountId, long secondAccountId);
 
@@ -263,7 +294,7 @@ public final class TradePorts {
 
         LockPlan accountBanPlan(long accountId);
 
-        void closePendingForProduct(WriteTransaction transaction, LockPlan plan, long productId,
+        int closePendingForProduct(WriteTransaction transaction, LockPlan plan, long productId,
                                     TradeVocabulary.CloseReason reason, String basisRef);
 
         void applyAccountBan(WriteTransaction transaction, LockPlan plan, long accountId,
@@ -271,5 +302,23 @@ public final class TradePorts {
 
         void removeAccountBan(WriteTransaction transaction, LockPlan plan, long accountId,
                               long restrictionId, String basisRef);
+
+        /**
+         * Same mutations for callers that already acquired every trade and conversation row through
+         * their own {@link SubjectPlan}. These methods never take a second lock; a candidate that
+         * was not acquired raises {@link LockPlan.Changed} so the caller re-plans the whole batch.
+         * The returned count is the number of changed trade facts.
+         */
+        int closePendingForProductLocked(WriteTransaction transaction, long productId,
+                                         TradeVocabulary.CloseReason reason, String basisRef);
+
+        int applyAccountBanLocked(WriteTransaction transaction, long accountId, long restrictionId,
+                                  String reason, String basisRef);
+
+        int removeAccountBanLocked(WriteTransaction transaction, long accountId, long restrictionId,
+                                   String basisRef);
+
+        /** Whether any trade involving the account still carries an active freeze. */
+        boolean hasActiveAccountFreeze(long accountId);
     }
 }

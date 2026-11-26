@@ -122,7 +122,7 @@ class TradeCaseEnforcementTests {
     void legacyTradeReferenceResolvesTheUniqueTransitionAndReportsRemainingFreezes() {
         var recorded = new CaseRecords.Enforcement("enf-1", CASE_ID, "freeze_trade", "trade", TRADE_ID,
                 "case:40", MANAGER, NOW, "trade", TRADE_ID, "applied", "frozen", "frozen",
-                List.of(BUYER, SELLER), null, null, NOW);
+                List.of(BUYER, SELLER), null, null, NOW, null);
         var lifted = new TradePorts.CaseEnforcementOutcome(TRADE_ID, 56L, UUID.randomUUID(),
                 "in_progress", "in_progress", "first_agreement_pending", "first_agreement_pending",
                 true, true, false);

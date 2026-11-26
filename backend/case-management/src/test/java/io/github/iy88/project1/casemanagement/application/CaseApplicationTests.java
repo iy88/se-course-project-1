@@ -201,7 +201,7 @@ class CaseApplicationTests {
     @Test
     void appealRevocationUsesTheExecutionPortAndLiftsTheRecordedEnforcement() {
         var recorded = new CaseRecords.Enforcement("enf-1", CASE_ID, "freeze_trade", "trade", 900L, "case:41",
-                MANAGER, NOW, "trade", 900L, "applied", "active", "frozen", List.of(RELATED), null, null, NOW);
+                MANAGER, NOW, "trade", 900L, "applied", "active", "frozen", List.of(RELATED), null, null, NOW, null);
         var reversing = new CasePorts.Enforcement() {
             @Override
             public LockPlan plan(ExecutionContext context, long caseId,
@@ -250,7 +250,7 @@ class CaseApplicationTests {
         var harness = harness(decided());
         when(harness.store.enforcements(CASE_ID)).thenReturn(List.of(new CaseRecords.Enforcement("enf-1",
                 CASE_ID, "freeze_trade", "trade", 900L, "case:41", MANAGER, NOW, "trade", 900L, "applied",
-                "active", "frozen", List.of(RELATED), null, null, NOW)));
+                "active", "frozen", List.of(RELATED), null, null, NOW, null)));
         when(harness.store.appealOf(CASE_ID, RELATED)).thenReturn(Optional.of(new CaseRecords.Action(102,
                 CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
                 RELATED, null, null, null, null, null)));
@@ -319,7 +319,7 @@ class CaseApplicationTests {
     private static CaseRecords.Enforcement recordedEnforcement() {
         return new CaseRecords.Enforcement("enf-1", CASE_ID, "restrict_account", "account", RELATED, "case:41",
                 MANAGER, NOW, "account_restriction", RELATED, "applied", "active", "restricted",
-                List.of(RELATED), null, null, NOW);
+                List.of(RELATED), null, null, NOW, null);
     }
 
     // ------------------------------------------------------------------ harness

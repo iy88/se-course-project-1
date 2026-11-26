@@ -25,8 +25,8 @@ const overview = useAsyncData<MyOverview>((signal) => readOverview(signal));
 const links = [
   {
     to: "/me/todos",
-    title: "待处理交易",
-    description: "处理待接受的请求、约定、完成与取消",
+    title: "我的待办",
+    description: "处理交易请求、约定、完成、取消与管理问询",
     icon: "inbox",
   },
   { to: "/me/products", title: "我的商品", description: "管理发布内容与审核状态", icon: "box" },
@@ -155,8 +155,8 @@ function requestSignOut(): void {
         <li>
           <RouterLink to="/me/todos" class="overview__stat overview__stat--todo">
             <span class="overview__value">{{ overview.data.value.todo_count }}</span>
-            <span class="overview__label">待处理交易</span>
-            <span class="muted overview__detail">逐条在交易详情完成</span>
+            <span class="overview__label">我的待办</span>
+            <span class="muted overview__detail">逐条在对应详情完成</span>
           </RouterLink>
         </li>
       </ul>

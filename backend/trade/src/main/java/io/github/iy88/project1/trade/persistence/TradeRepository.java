@@ -143,6 +143,43 @@ public class TradeRepository {
                 .param("created", time(review.createdAt())).query(Long.class).single();
     }
 
+    /** Moderation facts for one review; the caller must hold the review's trade row lock. */
+    public record ReviewModerationFact(long reviewId, long tradeId, long authorAccountId, boolean visible,
+                                       Instant removedAt) {
+    }
+
+    public Optional<ReviewModerationFact> reviewModerationFact(long reviewId) {
+        return jdbc.sql("""
+                        SELECT id, trade_id, reviewer_id, visible, removed_at
+                          FROM trade_review WHERE id = :review
+                        """)
+                .param("review", reviewId)
+                .query((row, index) -> new ReviewModerationFact(row.getLong("id"), row.getLong("trade_id"),
+                        row.getLong("reviewer_id"), row.getBoolean("visible"),
+                        instant(row, "removed_at")))
+                .optional();
+    }
+
+    /**
+     * Hides one review and records the moderation facts without touching the rating or body.
+     * Returns false when the review was already removed.
+     */
+    public boolean markReviewRemoved(long reviewId, long tradeId, long removedBy, String reason,
+                                     String basisRef, Instant at) {
+        return jdbc.sql("""
+                        UPDATE trade_review
+                           SET visible = FALSE,
+                               removed_at = :at,
+                               removed_by = :removedBy,
+                               removed_reason = :reason,
+                               removal_basis_ref = :basis
+                         WHERE id = :review AND trade_id = :trade AND removed_at IS NULL
+                        """)
+                .param("at", time(at)).param("removedBy", removedBy).param("reason", reason)
+                .param("basis", basisRef).param("review", reviewId).param("trade", tradeId)
+                .update() == 1;
+    }
+
     public ReviewPage pageReviews(long accountId, String direction, int limit, long offset) {
         String ownership = "written".equals(direction) ? "reviewer_id = :account" : "reviewee_id = :account";
         var reviews = jdbc.sql("SELECT * FROM trade_review WHERE " + ownership

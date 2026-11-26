@@ -6,11 +6,11 @@
  * keeps file ids that the backend has verified, so every id handed to the parent
  * is safe to reference from a product or profile write.
  */
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import UiIcon from "../../../shared/UiIcon.vue";
 import { newIdempotencyKey } from "../app/keys";
 import { problemMessage } from "../app/problems";
-import { uploadVerifiedFile } from "../api/files";
+import { acceptedFileTypes, readUploadCapabilities, uploadVerifiedFile } from "../api/files";
 import type { FilePurpose, ResourceRef } from "../api/contracts";
 
 const props = withDefaults(
@@ -40,14 +40,18 @@ const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
 
 const previews = ref<Record<string, string>>({});
 const failedPreviews = ref<Record<string, true>>({});
+const pdfFiles = ref<Record<string, true>>({});
+const acceptedTypes = ref<string[]>(acceptedFileTypes(props.purpose));
 const uploading = ref(false);
 const error = ref<string | null>(null);
 const input = ref<HTMLInputElement | null>(null);
 
 const fileIds = computed(() => props.modelValue);
+const accept = computed(() => acceptedTypes.value.join(","));
 const items = computed(() =>
   fileIds.value.map((fileId) => ({
     fileId,
+    pdf: pdfFiles.value[fileId] === true,
     previewUrl:
       failedPreviews.value[fileId] === true
         ? ""
@@ -57,6 +61,15 @@ const items = computed(() =>
 const canAdd = computed(
   () => !props.disabled && !uploading.value && fileIds.value.length < props.maxCount,
 );
+
+onMounted(async () => {
+  try {
+    const capabilities = await readUploadCapabilities();
+    acceptedTypes.value = acceptedFileTypes(props.purpose, capabilities);
+  } catch {
+    // The fallback keeps image uploads working when capabilities are unavailable.
+  }
+});
 
 function sync(next: string[]): void {
   emit("update:modelValue", next);
@@ -79,7 +92,14 @@ async function onFilesSelected(event: Event): Promise<void> {
       const fileId = await uploadVerifiedFile(props.purpose, file, props.target, () =>
         newIdempotencyKey(),
       );
-      previews.value = { ...previews.value, [fileId]: URL.createObjectURL(file) };
+      if (file.type === "application/pdf") {
+        pdfFiles.value = { ...pdfFiles.value, [fileId]: true };
+        const nextPreviews = { ...previews.value };
+        delete nextPreviews[fileId];
+        previews.value = nextPreviews;
+      } else {
+        previews.value = { ...previews.value, [fileId]: URL.createObjectURL(file) };
+      }
       const nextFailures = { ...failedPreviews.value };
       delete nextFailures[fileId];
       failedPreviews.value = nextFailures;
@@ -99,6 +119,9 @@ function remove(fileId: string): void {
   const next = { ...previews.value };
   delete next[fileId];
   previews.value = next;
+  const nextPdf = { ...pdfFiles.value };
+  delete nextPdf[fileId];
+  pdfFiles.value = nextPdf;
   sync(fileIds.value.filter((id) => id !== fileId));
 }
 
@@ -127,6 +150,10 @@ onBeforeUnmount(() => {
           class="uploader__image"
           @error="markPreviewFailed(item.fileId)"
         />
+        <span v-else-if="item.pdf" class="uploader__placeholder">
+          <UiIcon name="file" />
+          <span>PDF 文件</span>
+        </span>
         <span v-else class="uploader__placeholder">
           <UiIcon name="box" />
           <span>预览不可用</span>
@@ -150,7 +177,7 @@ onBeforeUnmount(() => {
     <input
       ref="input"
       type="file"
-      accept="image/jpeg,image/png"
+      :accept="accept"
       multiple
       class="visually-hidden"
       @change="onFilesSelected"

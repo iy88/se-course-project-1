@@ -46,6 +46,12 @@ public class CaseLifecycleStore {
             from moderation_case_action
             """;
 
+    private static final String EVIDENCE = """
+            select id, case_id, evidence_kind, file_id, file_reference_id, source_ref_type,
+                   source_ref_id, required_scope, submitted_by, submitted_at
+            from case_evidence
+            """;
+
     private final JdbcClient jdbc;
 
     public CaseLifecycleStore(JdbcClient jdbc) {
@@ -152,6 +158,13 @@ public class CaseLifecycleStore {
         return holder.get();
     }
 
+    /** Existing threads of a case in ascending id order, for planning and archive. */
+    public List<Long> selfResolutionThreadIds(long caseId) {
+        return jdbc.sql("select case_conversation_id from case_conversation where case_id = ?"
+                        + " order by case_conversation_id")
+                .param(caseId).query(Long.class).list();
+    }
+
     public Optional<CaseRecords.Facts> findOpenReport(long reporterAccountId, CaseCommands.Target target) {
         String sql = FACTS + " where case_type = 'report' and archived_at is null"
                 + " and reporter_account_id = ? and target_type = ? and target_id = ?"
@@ -228,6 +241,27 @@ public class CaseLifecycleStore {
         jdbc.sql("update moderation_case set archived_at = ?, updated_at = ? where id = ? and archived_at is null")
                 .param(stamp(at)).param(stamp(at)).param(caseId).update();
         return require(caseId);
+    }
+
+    /**
+     * Closes the dispute case after both parties confirmed the resolution. The claim, target and
+     * decision facts stay as recorded; only the decided/archived projection and the single
+     * system-actor close action are written. An already archived case is left untouched.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void archiveSelfResolved(long caseId, long tradeId, long disputeId, Instant at) {
+        int updated = jdbc.sql("""
+                        update moderation_case
+                           set case_status = ?, archived_at = ?, updated_at = ?
+                         where id = ? and case_type = 'dispute' and archived_at is null
+                        """)
+                .param(CaseVocabulary.DECIDED).param(stamp(at)).param(stamp(at)).param(caseId).update();
+        if (updated == 0) {
+            return;
+        }
+        String basis = "[\"trade:" + tradeId + "\",\"dispute:" + disputeId + "\"]";
+        addAction(new CaseRecords.Action(0, caseId, CaseVocabulary.ACTION_CLOSE, CaseVocabulary.ACTOR_SYSTEM,
+                null, at, null, null, null, null, null, "双方确认争议已解决", basis));
     }
 
     public CaseRecords.Facts publish(long caseId, String summary, String reason, long managerId, Instant at) {
@@ -326,17 +360,14 @@ public class CaseLifecycleStore {
     }
 
     public List<CaseRecords.Evidence> evidence(long caseId) {
-        return jdbc.sql("""
-                        select id, case_id, evidence_kind, file_id, file_reference_id, source_ref_type,
-                               source_ref_id, required_scope, submitted_by, submitted_at
-                        from case_evidence where case_id = ? order by id
-                        """)
-                .param(caseId).query((rs, row) -> new CaseRecords.Evidence(rs.getLong("id"),
-                        rs.getLong("case_id"), rs.getString("evidence_kind"),
-                        rs.getObject("file_id", Long.class), rs.getObject("file_reference_id", Long.class),
-                        rs.getString("source_ref_type"), rs.getObject("source_ref_id", Long.class),
-                        rs.getString("required_scope"), rs.getObject("submitted_by", Long.class),
-                        instant(rs, "submitted_at"))).list();
+        return jdbc.sql(EVIDENCE + " where case_id = ? order by id")
+                .param(caseId).query(this::evidenceRow).list();
+    }
+
+    /** Exact evidence lookup scoped to its case, used by authorized file reads. */
+    public Optional<CaseRecords.Evidence> evidence(long caseId, long evidenceId) {
+        return jdbc.sql(EVIDENCE + " where case_id = ? and id = ?")
+                .param(caseId).param(evidenceId).query(this::evidenceRow).optional();
     }
 
     public void addAppealEligibility(long caseId, long accountId, Instant deadline, String basisRef, Instant at) {
@@ -409,7 +440,7 @@ public class CaseLifecycleStore {
                         select id, case_id, enforcement_id, action, target_type, target_id, basis_ref,
                                requested_by, requested_at, result_type, result_id, result_status,
                                previous_state, current_state, affected_scope::text as affected_scope,
-                               failure_code, failure_reason, occurred_at
+                               failure_code, failure_reason, occurred_at, lifted_at
                         from case_enforcement where case_id = ? order by id
                         """)
                 .param(caseId).query(this::enforcement).list();
@@ -420,7 +451,7 @@ public class CaseLifecycleStore {
                         select id, case_id, enforcement_id, action, target_type, target_id, basis_ref,
                                requested_by, requested_at, result_type, result_id, result_status,
                                previous_state, current_state, affected_scope::text as affected_scope,
-                               failure_code, failure_reason, occurred_at
+                               failure_code, failure_reason, occurred_at, lifted_at
                         from case_enforcement where case_id = ? and enforcement_id = ?
                         """)
                 .param(caseId).param(enforcementId).query(this::enforcement).optional();
@@ -527,6 +558,14 @@ public class CaseLifecycleStore {
                 rs.getString("basis_ref"));
     }
 
+    private CaseRecords.Evidence evidenceRow(ResultSet rs, int row) throws SQLException {
+        return new CaseRecords.Evidence(rs.getLong("id"), rs.getLong("case_id"),
+                rs.getString("evidence_kind"), rs.getObject("file_id", Long.class),
+                rs.getObject("file_reference_id", Long.class), rs.getString("source_ref_type"),
+                rs.getObject("source_ref_id", Long.class), rs.getString("required_scope"),
+                rs.getObject("submitted_by", Long.class), instant(rs, "submitted_at"));
+    }
+
     private CaseRecords.Enforcement enforcement(ResultSet rs, int row) throws SQLException {
         return new CaseRecords.Enforcement(rs.getString("enforcement_id"), rs.getLong("case_id"),
                 rs.getString("action"), rs.getString("target_type"), rs.getLong("target_id"),
@@ -534,7 +573,7 @@ public class CaseLifecycleStore {
                 rs.getString("result_type"), rs.getObject("result_id", Long.class), rs.getString("result_status"),
                 rs.getString("previous_state"), rs.getString("current_state"),
                 affectedAccounts(rs.getString("affected_scope")), rs.getString("failure_code"),
-                rs.getString("failure_reason"), instant(rs, "occurred_at"));
+                rs.getString("failure_reason"), instant(rs, "occurred_at"), instant(rs, "lifted_at"));
     }
 
     private static List<Long> affectedAccounts(String scope) {

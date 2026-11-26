@@ -282,15 +282,15 @@ public class TradeOwnedReadModel {
      * cancellation, and a current counterpart confirmation for completion. An active freeze
      * removes every trade action.
      */
-    private static final String TODO_CANDIDATES = """
-            with candidate as (
+    private static final String TODO_CANDIDATE_SELECT = """
                 select 'request_response'::text as kind, t.id as source_id, t.id as trade_id,
                        null::bigint as agreement_id, null::bigint as confirmation_id,
                        null::bigint as cancellation_id, t.requested_at as created_at,
                        t.requested_at as updated_at, t.product_id,
                        coalesce(s.title, case
                            when p.deleted_at is null and p.lifecycle_state in ('public', 'in_trade')
-                           then p.title end) as title
+                           then p.title end) as title,
+                       null::bigint as case_id, null::text as inquiry_action_ids
                   from trade t
                   left join trade_item_snapshot s on s.trade_id = t.id
                   left join product p on p.product_id = t.product_id
@@ -304,7 +304,8 @@ public class TradeOwnedReadModel {
                        a.proposed_at, a.proposed_at, t.product_id,
                        coalesce(s.title, case
                            when p.deleted_at is null and p.lifecycle_state in ('public', 'in_trade')
-                           then p.title end)
+                           then p.title end),
+                       null, null
                   from trade t
                   join agreement_version a on a.trade_id = t.id and a.status = 'proposed'
                   left join trade_item_snapshot s on s.trade_id = t.id
@@ -319,7 +320,8 @@ public class TradeOwnedReadModel {
                        c.submitted_at, c.submitted_at, t.product_id,
                        coalesce(s.title, case
                            when p.deleted_at is null and p.lifecycle_state in ('public', 'in_trade')
-                           then p.title end)
+                           then p.title end),
+                       null, null
                   from trade t
                   join trade_confirmation c on c.trade_id = t.id and c.invalidated_at is null
                   left join trade_item_snapshot s on s.trade_id = t.id
@@ -338,7 +340,8 @@ public class TradeOwnedReadModel {
                        cp.proposed_at, cp.proposed_at, t.product_id,
                        coalesce(s.title, case
                            when p.deleted_at is null and p.lifecycle_state in ('public', 'in_trade')
-                           then p.title end)
+                           then p.title end),
+                       null, null
                   from trade t
                   join cancellation_proposal cp on cp.trade_id = t.id and cp.status = 'pending'
                   left join trade_item_snapshot s on s.trade_id = t.id
@@ -348,6 +351,16 @@ public class TradeOwnedReadModel {
                    and cp.proposed_by <> :account
                    and not exists (select 1 from trade_freeze f
                                     where f.trade_id = t.id and f.ended_at is null)
-            )
             """;
+
+    private static final String TODO_CANDIDATES = "with candidate as (" + TODO_CANDIDATE_SELECT + ") ";
+
+    /**
+     * Trade-owned candidate projection reused by the account-level mixed todo union.
+     * The columns match the case-owned projection and keep the exact predicates of
+     * {@link #todos}.
+     */
+    public static String todoCandidateSql() {
+        return TODO_CANDIDATE_SELECT;
+    }
 }

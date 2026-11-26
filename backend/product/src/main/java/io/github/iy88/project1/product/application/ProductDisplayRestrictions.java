@@ -140,6 +140,32 @@ public class ProductDisplayRestrictions {
                 .optional();
     }
 
+    /** Resolves one restriction row by identifier, including released history. */
+    public Optional<Restriction> find(long restrictionId) {
+        positive(restrictionId, "限制标识");
+        return jdbc.sql("select " + COLUMNS + " from product_display_restriction where restriction_id = ?")
+                .param(restrictionId)
+                .query(ProductDisplayRestrictions::row)
+                .optional();
+    }
+
+    /**
+     * Every product touched by one source, active rows first. Reversal plans use this to lock the
+     * complete source scope even when an earlier retry already released one of the rows.
+     */
+    public List<Long> productIdsForSource(String sourceType, long sourceRef) {
+        String type = sourceType(sourceType);
+        long ref = positive(sourceRef, "来源标识");
+        return jdbc.sql("""
+                          select distinct product_id
+                            from product_display_restriction
+                           where source_type = ? and source_ref_id = ?
+                           order by product_id
+                        """)
+                .param(type).param(ref)
+                .query(Long.class).list();
+    }
+
     public boolean hasActive(long productId) {
         positive(productId, "商品标识");
         return jdbc.sql("""

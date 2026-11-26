@@ -7,6 +7,8 @@ import io.github.iy88.project1.category.CategorySettings;
 import io.github.iy88.project1.category.application.CategoryDirectory;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
+import io.github.iy88.project1.core.LockPlan;
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.persistence.CategoryApplication;
 import io.github.iy88.project1.product.persistence.CategoryApplicationRepository;
@@ -55,6 +57,7 @@ public class ProductService {
     private final CategoryApplicationRepository applications;
     private final ObjectProvider<ProductReviewCaseLifecycle> reviewCases;
     private final AccountRepository accounts;
+    private final AccountWriteGuard writeGuard;
     private final AccountAvatarService avatars;
     private final CategoryDirectory directory;
     private final ProductSettings settings;
@@ -74,7 +77,7 @@ public class ProductService {
                           ProductEditHistoryRepository edits, ProductAuditRepository audits,
                           CategoryApplicationRepository applications,
                           ObjectProvider<ProductReviewCaseLifecycle> reviewCases, AccountRepository accounts,
-                          AccountAvatarService avatars,
+                          AccountAvatarService avatars, AccountWriteGuard writeGuard,
                           CategoryDirectory directory, ProductSettings settings, CategorySettings categorySettings,
                           FileReferences fileReferences, FileRead fileReads, ProductTradeHistory tradeHistory,
                           ProductEditNotices editNotices, CaseCommentAccess cases,
@@ -89,6 +92,7 @@ public class ProductService {
         this.applications = applications;
         this.reviewCases = reviewCases;
         this.accounts = accounts;
+        this.writeGuard = writeGuard;
         this.avatars = avatars;
         this.directory = directory;
         this.settings = settings;
@@ -105,7 +109,7 @@ public class ProductService {
                 environment.getRequiredProperty("OSS_PREFIX"), environment.getRequiredProperty("OSS_ACCESS_KEY_ID"),
                 environment.getRequiredProperty("OSS_ACCESS_KEY_SECRET"));
         this.jdbc = jdbc;
-        this.transaction = new TransactionTemplate(manager);
+        this.transaction = new TransactionTemplate(manager); // REQUIRED: joins a caller's write transaction.
     }
 
     public ProductDetail create(long sellerId, CreateCommand command) {
@@ -119,6 +123,7 @@ public class ProductService {
         String proposed = proposedName(command.proposedCategoryName());
         requireSelectable(categoryIds);
         return transaction.execute(status -> {
+            writeGuard.requireWritable(sellerId);
             Instant now = Instant.now();
             Product product = products.save(new Product(sellerId, title, description, price, now));
             saveLinks(product.id(), sellerId, categoryIds, now);
@@ -143,6 +148,7 @@ public class ProductService {
     public ProductDetail edit(long sellerId, long productId, EditCommand command, ExecutionContext context) {
         ExecutionContext caller = context == null ? internalContext() : context;
         return transaction.execute(status -> {
+            writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
             if (Product.IN_TRADE.equals(product.lifecycleState())) {
                 throw new BusinessError("EDIT_NOT_ALLOWED_IN_TRADE", 409, "交易中不能修改商品");
@@ -256,6 +262,7 @@ public class ProductService {
 
     public Resubmitted resubmit(long sellerId, long productId, Integer expectedVersion) {
         return transaction.execute(status -> {
+            writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
             requireVersion(product, expectedVersion);
             ProductAudit latest = latestAudit(productId);
@@ -279,6 +286,7 @@ public class ProductService {
 
     public Withdrawn withdraw(long sellerId, long productId, Integer expectedVersion) {
         return transaction.execute(status -> {
+            writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
             requireVersion(product, expectedVersion);
             if (!Product.PENDING_REVIEW.equals(product.lifecycleState())) {
@@ -303,24 +311,50 @@ public class ProductService {
         });
     }
 
-    public OffShelf offShelf(long sellerId, long productId, Integer expectedVersion) {
-        return transaction.execute(status -> {
-            Product product = lockForSeller(sellerId, productId);
-            requireVersion(product, expectedVersion);
-            if (!Product.PUBLIC.equals(product.lifecycleState())) {
-                throw new BusinessError("STATE_CONFLICT", 409, "商品不在公开状态");
-            }
-            if (product.occupiedByTradeId() != null) {
-                throw new BusinessError("PRODUCT_LOCKED", 409, "商品存在未结束交易");
-            }
-            product.transition(Product.OFF_SHELF, Instant.now());
-            products.save(product);
-            return new OffShelf(detail(product, sellerId, latestAudit(productId)), 0);
-        });
+    /**
+     * Locks the product row and checks the seller may take it off shelf. Callers use this inside a
+     * shared {@link WriteTransaction} so the {@code PRODUCT} lock is recorded before trade locks,
+     * then close pending requests and call {@link #completeOffShelf} with the real count.
+     */
+    public void lockForOffShelf(long sellerId, long productId, Integer expectedVersion) {
+        writeGuard.requireWritable(sellerId);
+        Product product = lockForSeller(sellerId, productId);
+        requireOffShelfable(product, expectedVersion);
+    }
+
+    /**
+     * Applies the off-shelf transition after pending requests were closed in the same transaction.
+     * The product row is locked again, which is a no-op when the caller already holds that row.
+     */
+    public OffShelf completeOffShelf(long sellerId, long productId, Integer expectedVersion,
+                                     int closedPendingRequestCount) {
+        if (closedPendingRequestCount < 0) {
+            throw new IllegalArgumentException("Closed request count cannot be negative");
+        }
+        Product product = lockForSeller(sellerId, productId);
+        requireOffShelfable(product, expectedVersion);
+        product.transition(Product.OFF_SHELF, Instant.now());
+        products.save(product);
+        return new OffShelf(detail(product, sellerId, latestAudit(productId)), closedPendingRequestCount);
+    }
+
+    private static void requireOffShelfable(Product product, Integer expectedVersion) {
+        requireVersion(product, expectedVersion);
+        if (!Product.PUBLIC.equals(product.lifecycleState())) {
+            throw new BusinessError("STATE_CONFLICT", 409, "商品不在公开状态");
+        }
+        if (product.occupiedByTradeId() != null) {
+            throw new BusinessError("PRODUCT_LOCKED", 409, "商品存在未结束交易");
+        }
+    }
+
+    public static LockPlan.Key offShelfLockKey(long productId) {
+        return new LockPlan.Key(LockPlan.Domain.PRODUCT, List.of(productId));
     }
 
     public ProductDetail onShelf(long sellerId, long productId, Integer expectedVersion) {
         return transaction.execute(status -> {
+            writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
             requireVersion(product, expectedVersion);
             if (!Product.OFF_SHELF.equals(product.lifecycleState())) {
@@ -345,6 +379,7 @@ public class ProductService {
             throw new BusinessError("INPUT_INVALID", 422, "分类名称无效");
         }
         return transaction.execute(status -> {
+            writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
             if (!categoryApplicationAllowed(product, latestAudit(productId))) {
                 throw new BusinessError("CATEGORY_APPLICATION_NOT_ALLOWED", 409, "当前状态不能提交分类申请");
@@ -360,6 +395,7 @@ public class ProductService {
 
     public void withdrawApplication(long sellerId, long productId) {
         transaction.executeWithoutResult(status -> {
+            writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
             if (!categoryApplicationAllowed(product, latestAudit(productId))) {
                 throw new BusinessError("CATEGORY_APPLICATION_NOT_PENDING", 409, "没有待处理分类申请");

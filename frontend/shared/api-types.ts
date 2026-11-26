@@ -40,6 +40,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/admin/cases/{case_id}/evidence/{evidence_id}/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 打开当前认领管理员可读的事项证据文件 */
+    get: operations["openCaseEvidenceFile"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/admin/product-reviews/{audit_id}": {
     parameters: {
       query?: never;
@@ -1547,6 +1564,8 @@ export interface components {
       /** @enum {string} */
       result_status: "applied" | "replayed" | "failed";
       current_state?: string | null;
+      /** @description Management viewpoint only. True when this enforcement is applied, not already lifted, and reversible by API-CASE-008. */
+      can_lift?: boolean;
     };
     CasePendingInquiry: {
       inquiry_action_id: string;
@@ -1799,6 +1818,57 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  openCaseEvidenceFile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+        evidence_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized short-lived evidence file location */
+      302: {
+        headers: {
+          Location?: string;
+          "Cache-Control"?: "no-store";
+          "Referrer-Policy"?: "no-referrer";
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description STORAGE_UNAVAILABLE / STORAGE_CONFIGURATION_INVALID / DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
         };
       };
     };

@@ -16,10 +16,12 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
+import tools.jackson.databind.JsonNode;
 
 @RestController
 @RequestMapping("/api/v1/products")
@@ -28,11 +30,14 @@ class ProductController {
     private final ProductService products;
     private final CurrentAccount current;
     private final ApiRequestContext requestContext;
+    private final ProductOffShelfWrite offShelfWrites;
 
-    ProductController(ProductService products, CurrentAccount current, ApiRequestContext requestContext) {
+    ProductController(ProductService products, CurrentAccount current, ApiRequestContext requestContext,
+                      ProductOffShelfWrite offShelfWrites) {
         this.products = products;
         this.current = current;
         this.requestContext = requestContext;
+        this.offShelfWrites = offShelfWrites;
     }
 
     @PostMapping
@@ -100,12 +105,14 @@ class ProductController {
     }
 
     @PostMapping("/{productId}/off-shelf")
-    ResponseEntity<ProductService.OffShelf> offShelf(@PathVariable String productId,
-                                                     @RequestBody VersionRequest body,
-                                                     HttpServletRequest request) {
+    ResponseEntity<JsonNode> offShelf(@PathVariable String productId,
+                                      @RequestHeader("Idempotency-Key") String key,
+                                      @RequestBody VersionRequest body,
+                                      HttpServletRequest request) {
         var identity = current.require(request);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(products.offShelf(identity.account().id(), id(productId), body.expectedVersion()));
+        var result = offShelfWrites.offShelf(context(identity, request), key, id(productId),
+                body.expectedVersion());
+        return ResponseEntity.status(result.status()).cacheControl(CacheControl.noStore()).body(result.data());
     }
 
     @PostMapping("/{productId}/on-shelf")

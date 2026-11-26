@@ -51,12 +51,12 @@ public final class CaseRecords {
     public record AppealEligibility(long caseId, long accountId, Instant appealDeadlineAt, String basisRef) {
     }
 
-    /** One persisted enforcement request and its subject result. */
+    /** One persisted enforcement request and its subject result; {@code liftedAt} is null until reverted. */
     public record Enforcement(String enforcementId, long caseId, String action, String targetType, long targetId,
                               String basisRef, long requestedBy, Instant requestedAt, String resultType,
                               Long resultId, String resultStatus, String previousState, String currentState,
                               List<Long> affectedAccountIds, String failureCode, String failureReason,
-                              Instant occurredAt) {
+                              Instant occurredAt, Instant liftedAt) {
         public Enforcement {
             affectedAccountIds = List.copyOf(affectedAccountIds);
         }

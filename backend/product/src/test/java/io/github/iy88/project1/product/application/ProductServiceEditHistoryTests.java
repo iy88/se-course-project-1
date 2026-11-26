@@ -60,7 +60,7 @@ class ProductServiceEditHistoryTests {
         service = new ProductService(products, mock(ProductCategoryRepository.class), edits,
                 mock(ProductAuditRepository.class), mock(io.github.iy88.project1.product.persistence.CategoryApplicationRepository.class),
                 mock(org.springframework.beans.factory.ObjectProvider.class), mock(AccountRepository.class),
-                mock(AccountAvatarService.class),
+                mock(AccountAvatarService.class), mock(AccountWriteGuard.class),
                 mock(CategoryDirectory.class), new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class), tradeHistory,
                 (context, sellerId, productId, editId, title, visible, occurredAt) -> { },

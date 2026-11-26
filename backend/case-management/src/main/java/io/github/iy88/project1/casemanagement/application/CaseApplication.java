@@ -850,7 +850,7 @@ public class CaseApplication {
                 store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
                         outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
                         outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
-                        outcome.currentState(), outcome.affectedAccountIds(), null, null, now));
+                        outcome.currentState(), outcome.affectedAccountIds(), null, null, now, null));
                 notificationFor(transaction, facts, outcome, reason, now);
                 for (long accountId : outcome.affectedAccountIds()) {
                     if (!seen.add(accountId)) {
@@ -1251,7 +1251,7 @@ public class CaseApplication {
             store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
                     outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
                     outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
-                    outcome.currentState(), outcome.affectedAccountIds(), null, null, now));
+                    outcome.currentState(), outcome.affectedAccountIds(), null, null, now, null));
             if (!outcome.affectedAccountIds().isEmpty()) {
                 notifications.create(transaction, enforcementEvent(outcome.action()),
                         "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":reversed",

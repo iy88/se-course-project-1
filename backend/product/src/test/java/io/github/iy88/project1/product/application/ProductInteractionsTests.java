@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.domain.ProductComment;
 import io.github.iy88.project1.product.persistence.Product;
@@ -23,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
@@ -307,6 +310,65 @@ class ProductInteractionsTests {
     }
 
     @Test
+    void lockedRemovalTrustsThePreparedKeysAndKeepsTheAuthor() {
+        var transaction = mock(WriteTransaction.class);
+        when(transaction.context()).thenReturn(context(MANAGER));
+        when(store.comment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, null)));
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(store.markRemovedByAdmin(eq(500L), eq(MANAGER), eq("spam"), eq("case:100:enforcement:E-1"), eq(NOW)))
+                .thenReturn(true);
+
+        var removed = interactions.removeCommentLocked(transaction, CASE, 500, PRODUCT, "E-1", "spam", NOW);
+
+        verify(transaction).requireLocked(ProductInteractions.productLockKey(PRODUCT));
+        verify(transaction).requireLocked(ProductInteractions.commentLockKey(500));
+        assertThat(removed.commentId()).isEqualTo("500");
+        assertThat(removed.authorAccountId()).isEqualTo(VIEWER);
+        assertThat(removed.previousState()).isEqualTo(ProductComment.PUBLISHED);
+        assertThat(removed.currentState()).isEqualTo(ProductComment.REMOVED_BY_ADMIN);
+        assertThat(removed.status()).isEqualTo(ProductComment.REMOVED_BY_ADMIN);
+    }
+
+    @Test
+    void lockedRemovalRejectsAStaleProductTarget() {
+        var transaction = mock(WriteTransaction.class);
+        when(transaction.context()).thenReturn(context(MANAGER));
+        when(store.comment(500L)).thenReturn(Optional.of(new ProductComment(500, OTHER_PRODUCT, VIEWER, null,
+                "Hello", NOW, null, null, null, null)));
+
+        assertFailure(() -> interactions.removeCommentLocked(transaction, CASE, 500, PRODUCT, "E-1", "spam", NOW),
+                "TARGET_STATE_CONFLICT");
+        verify(store, never()).markRemovedByAdmin(anyLong(), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void lockedRemovalDistinguishesMissingAndAlreadyRemovedComments() {
+        var transaction = mock(WriteTransaction.class);
+        when(transaction.context()).thenReturn(context(MANAGER));
+        when(store.comment(500L)).thenReturn(Optional.empty());
+        when(store.comment(501L)).thenReturn(Optional.of(comment(501, VIEWER, null, NOW, NOW)));
+
+        assertFailure(() -> interactions.removeCommentLocked(transaction, CASE, 500, PRODUCT, "E-1", "spam", NOW),
+                "CONTENT_NOT_FOUND");
+        assertFailure(() -> interactions.removeCommentLocked(transaction, CASE, 501, PRODUCT, "E-1", "spam", NOW),
+                "TARGET_STATE_CONFLICT");
+    }
+
+    @Test
+    void productAndCommentLookupsAreAvailableBeforeLocking() {
+        when(store.productIdOfComment(500L)).thenReturn(OptionalLong.of(PRODUCT));
+        when(store.comment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, null)));
+
+        assertThat(interactions.productForComment(500L)).hasValue(PRODUCT);
+        assertThat(interactions.commentTarget(500L)).get()
+                .satisfies(target -> {
+                    assertThat(target.commentId()).isEqualTo(500);
+                    assertThat(target.productId()).isEqualTo(PRODUCT);
+                    assertThat(target.authorAccountId()).isEqualTo(VIEWER);
+                });
+    }
+
+    @Test
     void claimedManagerReadsTheCaseScopeOnAPublicProduct() {
         when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
         when(cases.claimedForProduct(MANAGER, CASE, PRODUCT)).thenReturn(true);
@@ -411,6 +473,11 @@ class ProductInteractionsTests {
         Product product = product(PRODUCT, Product.PUBLIC);
         ReflectionTestUtils.setField(product, "deletedAt", NOW);
         return product;
+    }
+
+    private static ExecutionContext context(long accountId) {
+        return new ExecutionContext(UUID.randomUUID(), ExecutionContext.ActorKind.ACCOUNT,
+                Long.toString(accountId), UUID.randomUUID(), null, 1L, "product-interaction-test");
     }
 
     private static ProductComment comment(long id, long author, Long parent, Instant createdAt, Instant removedAt) {

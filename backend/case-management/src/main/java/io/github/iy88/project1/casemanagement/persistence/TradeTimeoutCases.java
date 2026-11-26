@@ -89,6 +89,33 @@ public class TradeTimeoutCases {
         }
     }
 
+    /**
+     * Verifies that the locked case, the dispute and the trade are linked by the same rows. The
+     * caller owns the CASE row lock; this read never creates a missing historical case link.
+     */
+    public void requireDisputeLink(long caseId, long tradeId, long disputeId) {
+        boolean linked = jdbc.sql("""
+                select exists (
+                    select 1
+                      from trade_dispute_case d
+                      join trade_dispute t on t.id = d.dispute_id
+                     where d.case_id = :caseId
+                       and d.dispute_id = :disputeId
+                       and d.trade_id = :tradeId
+                       and t.trade_id = :tradeId
+                       and t.case_id = :caseId
+                )
+                """)
+                .param("caseId", caseId)
+                .param("disputeId", disputeId)
+                .param("tradeId", tradeId)
+                .query(Boolean.class)
+                .single();
+        if (!linked) {
+            throw new BusinessError("TARGET_STATE_CONFLICT", 409, "事项与争议关联不一致");
+        }
+    }
+
     private static Long linkedTradeId(CaseFacts facts) {
         if (facts.timeoutTradeId() != null && facts.disputeTradeId() != null) {
             throw new BusinessError("STATE_CONFLICT", 409, "事项关联不唯一");

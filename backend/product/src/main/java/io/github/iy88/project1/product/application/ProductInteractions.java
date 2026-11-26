@@ -1,6 +1,8 @@
 package io.github.iy88.project1.product.application;
 
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.LockPlan;
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.domain.ProductComment;
 import io.github.iy88.project1.product.persistence.Product;
@@ -12,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
@@ -140,6 +143,13 @@ public class ProductInteractions {
         return store.comment(commentId).map(ProductComment::authorAccountId);
     }
 
+    /** Product carrying a reported comment, including a removed comment's retained history. */
+    public OptionalLong commentProductId(long commentId) {
+        return store.comment(commentId)
+                .map(comment -> OptionalLong.of(comment.productId()))
+                .orElseGet(OptionalLong::empty);
+    }
+
     private boolean reportableCommentThread(Product product, ProductComment comment, long viewerId) {
         var root = comment.topLevel() ? Optional.of(comment) : store.comment(comment.parentCommentId());
         return root.filter(parent -> parent.productId() == product.id() && parent.topLevel() && parent.published())
@@ -235,9 +245,44 @@ public class ProductInteractions {
     }
 
     /**
+     * Product lookup for the enforcement prepare phase. It reads without a row lock; the caller
+     * plans the product and comment keys and revalidates them under the write transaction.
+     */
+    public OptionalLong productForComment(long commentId) {
+        return store.productIdOfComment(commentId);
+    }
+
+    /** Product and author of a comment, used when the caller needs both before locking. */
+    public Optional<CommentTarget> commentTarget(long commentId) {
+        return store.comment(commentId)
+                .map(comment -> new CommentTarget(comment.commentId(), comment.productId(),
+                        comment.authorAccountId()));
+    }
+
+    /**
+     * Locks one comment row for a caller that already planned the PRODUCT_DETAIL comment key. The
+     * caller must hold the product row first, matching the product -> comment order used by all
+     * comment mutations.
+     */
+    public ProductComment lockCommentRow(long commentId) {
+        return store.lockComment(commentId).orElseThrow(ProductInteractions::contentNotFound);
+    }
+
+    /**
+     * Acquires the planned PRODUCT_DETAIL comment key and locks its row. For callers outside a
+     * {@code SubjectPlan} callback; the key must already be part of the write lock plan.
+     */
+    public ProductComment lockCommentRow(WriteTransaction transaction, long commentId) {
+        ProductComment[] locked = new ProductComment[1];
+        transaction.lock(commentLockKey(commentId), () -> locked[0] = lockCommentRow(commentId));
+        return locked[0];
+    }
+
+    /**
      * Enforcement entry used by the handling work package (R2b): a claimed manager removes one
      * comment and the removal keeps the body, author and time for review history. The caller owns
-     * the surrounding transaction; this call joins it.
+     * the surrounding transaction; this call joins it. Case-target authorization stays with the
+     * caller.
      */
     public RemovedComment removeComment(long managerId, long caseId, long commentId, String enforcementId,
                                         String reason) {
@@ -245,25 +290,77 @@ public class ProductInteractions {
         return transaction.execute(status -> {
             // Resolve the product without a lock so the row lock order stays product -> comment.
             long productId = store.comment(commentId).map(ProductComment::productId)
-                    .orElseThrow(() -> new BusinessError("CONTENT_NOT_FOUND", 404, "评论不存在"));
+                    .orElseThrow(ProductInteractions::contentNotFound);
             products.lockById(productId)
                     .filter(product -> !product.deleted())
-                    .orElseThrow(() -> new BusinessError("CONTENT_NOT_FOUND", 404, "评论不存在"));
+                    .orElseThrow(ProductInteractions::contentNotFound);
             ProductComment comment = store.lockComment(commentId)
                     .filter(found -> found.productId() == productId)
-                    .orElseThrow(() -> new BusinessError("CONTENT_NOT_FOUND", 404, "评论不存在"));
+                    .orElseThrow(ProductInteractions::contentNotFound);
             if (!cases.claimedForProduct(managerId, caseId, comment.productId())) {
                 throw new BusinessError("ACTION_NOT_ALLOWED", 403, "只能移除本人认领事项范围内的评论");
             }
             comment.requireRemovable();
-            String basisRef = enforcementId == null || enforcementId.isBlank()
-                    ? "case:" + caseId : "case:" + caseId + ":enforcement:" + enforcementId;
-            if (!store.markRemovedByAdmin(commentId, managerId, text, basisRef, clock.instant())) {
-                throw new BusinessError("STATE_CONFLICT", 409, "评论已被移除");
-            }
-            return new RemovedComment(Long.toString(commentId), comment.authorAccountId(),
-                    ProductComment.REMOVED_BY_ADMIN);
+            return removeCommentFacts(comment, managerId, caseId, enforcementId, text, clock.instant(),
+                    "STATE_CONFLICT");
         });
+    }
+
+    /**
+     * Locked enforcement variant. The case coordinator has already authorized the case target and
+     * acquired the PRODUCT and PRODUCT_DETAIL comment keys through the shared lock plan; this
+     * method re-reads under those locks and writes only the removal facts.
+     */
+    public RemovedComment removeCommentLocked(WriteTransaction transaction, long caseId, long commentId,
+                                              long expectedProductId, String enforcementId, String reason,
+                                              Instant at) {
+        transaction.requireLocked(productLockKey(expectedProductId));
+        transaction.requireLocked(commentLockKey(commentId));
+        if (at == null) {
+            throw new BusinessError(INVALID_INPUT, 422, "移除时间无效");
+        }
+        String text = requiredReason(reason);
+        ProductComment comment = store.comment(commentId).orElseThrow(ProductInteractions::contentNotFound);
+        if (comment.productId() != expectedProductId) {
+            throw targetConflict("评论所属商品已变化");
+        }
+        if (comment.removedAt() != null) {
+            throw targetConflict("评论已被移除");
+        }
+        products.findById(expectedProductId).filter(product -> !product.deleted())
+                .orElseThrow(ProductInteractions::contentNotFound);
+        long managerId = Long.parseLong(transaction.context().actorId());
+        return removeCommentFacts(comment, managerId, caseId, enforcementId, text, at, "TARGET_STATE_CONFLICT");
+    }
+
+    private RemovedComment removeCommentFacts(ProductComment comment, long managerId, long caseId,
+                                              String enforcementId, String reason, Instant at,
+                                              String conflictCode) {
+        String basisRef = enforcementId == null || enforcementId.isBlank()
+                ? "case:" + caseId : "case:" + caseId + ":enforcement:" + enforcementId;
+        if (!store.markRemovedByAdmin(comment.commentId(), managerId, reason, basisRef, at)) {
+            throw new BusinessError(conflictCode, 409, "评论已被移除");
+        }
+        return new RemovedComment(Long.toString(comment.commentId()), comment.authorAccountId(),
+                comment.state(), ProductComment.REMOVED_BY_ADMIN);
+    }
+
+    /** Shared key for the comment row in the existing PRODUCT_DETAIL lock domain. */
+    public static LockPlan.Key commentLockKey(long commentId) {
+        return new LockPlan.Key(LockPlan.Domain.PRODUCT_DETAIL, List.of(commentId));
+    }
+
+    /** Shared key for the product root; comment writes always take it before the comment row. */
+    public static LockPlan.Key productLockKey(long productId) {
+        return new LockPlan.Key(LockPlan.Domain.PRODUCT, List.of(productId));
+    }
+
+    private static BusinessError contentNotFound() {
+        return new BusinessError("CONTENT_NOT_FOUND", 404, "评论不存在");
+    }
+
+    private static BusinessError targetConflict(String message) {
+        return new BusinessError("TARGET_STATE_CONFLICT", 409, message);
     }
 
     // ------------------------------------------------------------------ favourites
@@ -497,6 +594,26 @@ public class ProductInteractions {
     public record FavoriteStatus(boolean favorited, boolean valid, Instant favoritedAt) {
     }
 
-    public record RemovedComment(String commentId, long authorAccountId, String status) {
+    /** Product and author of a comment, resolved before the caller plans its locks. */
+    public record CommentTarget(long commentId, long productId, long authorAccountId) {
+    }
+
+    /**
+     * A removed comment with the retained author and named before/after states. The three-argument
+     * constructor keeps the previous direct-entry result shape.
+     */
+    public record RemovedComment(String commentId, long authorAccountId, String previousState,
+                                 String currentState) {
+        public RemovedComment(String commentId, long authorAccountId, String status) {
+            this(commentId, authorAccountId, null, status);
+        }
+
+        public String resultId() {
+            return commentId;
+        }
+
+        public String status() {
+            return currentState;
+        }
     }
 }

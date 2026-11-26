@@ -47,6 +47,12 @@ public final class WriteTransaction {
         }
     }
 
+    /** Whether this transaction already acquired the key in the public lock order. */
+    public boolean isAcquired(LockPlan.Key key) {
+        requireActive();
+        return acquired.contains(key);
+    }
+
     /** Requires the exclusive qualification lock acquired by the write executor. */
     public void requireExclusiveAccount(long accountId) {
         requireActive();

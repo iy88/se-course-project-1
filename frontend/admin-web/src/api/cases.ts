@@ -59,7 +59,17 @@ export interface ManagementCaseDetail {
     action: string;
     result_status: string;
     current_state: string | null;
+    /** Management viewpoint only; true when API-CASE-008 can lift this enforcement. */
+    can_lift?: boolean;
   }[];
+}
+
+export interface LiftEnforcementResult {
+  enforcement_id: string;
+  lifted_at: string;
+  lifted_by: string;
+  restored_scope: string[];
+  remaining_restrictions: string[];
 }
 
 export type CaseDecision = "no_action" | "not_actionable" | "violation";
@@ -83,6 +93,11 @@ export interface CaseThreadPage {
 
 export function readCase(caseId: string, signal?: AbortSignal): Promise<ManagementCaseDetail> {
   return request("GET", `/cases/${encodeURIComponent(caseId)}`, { signal });
+}
+
+/** Same-origin read route for one verified case evidence attachment. */
+export function caseEvidenceFileHref(caseId: string, evidenceId: string): string {
+  return `/api/v1/admin/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(evidenceId)}/file`;
 }
 
 export function readCaseThread(
@@ -138,4 +153,18 @@ export function writeCase<T extends keyof CaseManagementWrites>(
     body,
     idempotencyKey,
   });
+}
+
+/** API-CASE-008: explicitly lifts one applied enforcement of the current manager's case. */
+export function liftCaseEnforcement(
+  caseId: string,
+  enforcementId: string,
+  reason: string,
+  idempotencyKey: string,
+): Promise<LiftEnforcementResult> {
+  return request(
+    "POST",
+    `/admin/cases/${encodeURIComponent(caseId)}/enforcements/${encodeURIComponent(enforcementId)}/lift`,
+    { body: { reason }, idempotencyKey },
+  );
 }

@@ -50,6 +50,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     private static final Pattern REVIEW_WRITES = Pattern.compile(
             "/api/v1/admin/(cases/[^/]+/claim|product-reviews/[^/]+/decision)");
     private static final Pattern TRADE_REVIEW_WRITE = Pattern.compile("/api/v1/trades/[^/]+/reviews");
+    private static final Pattern PRODUCT_OFF_SHELF_WRITE = Pattern.compile("/api/v1/products/\\d+/off-shelf");
     private static final Pattern NOTIFICATION_READ = Pattern.compile("/api/v1/account/notifications/[^/]+/read");
     private static final String DIGEST_VERSION = "s2-v1";
 
@@ -77,11 +78,13 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
         String method = request.getMethod();
-        // Review and notification commands authorize replays inside their own write transaction.
+        // Review, notification and coordinated product writes authorize replays inside their own
+        // write transaction; product off-shelf also owns its audit there.
         return !path.startsWith("/api/v1/")
                 || SAFE.contains(method)
                 || ("POST".equals(method) && (REVIEW_WRITES.matcher(path).matches()
-                        || TRADE_REVIEW_WRITE.matcher(path).matches()))
+                        || TRADE_REVIEW_WRITE.matcher(path).matches()
+                        || PRODUCT_OFF_SHELF_WRITE.matcher(path).matches()))
                 || ("PUT".equals(method) && NOTIFICATION_READ.matcher(path).matches());
     }
 

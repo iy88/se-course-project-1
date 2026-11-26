@@ -23,6 +23,10 @@ import tools.jackson.databind.json.JsonMapper;
  * widens access after publication.
  */
 public class CaseQueries {
+    /** Actions with a real subject adapter that can reverse the original enforcement (API-CASE-008). */
+    private static final Set<String> LIFTABLE_ACTIONS =
+            Set.of("freeze_trade", "restrict_account", "withdraw_public_access");
+
     private final JdbcClient jdbc;
     private final CaseLifecycleStore store;
     private final CasePorts.Threads threads;
@@ -175,6 +179,9 @@ public class CaseQueries {
             item.put("action", enforcement.action());
             item.put("result_status", enforcement.resultStatus());
             item.put("current_state", enforcement.currentState());
+            if (manager) {
+                item.put("can_lift", canLift(enforcement));
+            }
         }
         var deadline = store.appealEligibility(caseId, actor).map(CaseRecords.AppealEligibility::appealDeadlineAt)
                 .orElse(null);
@@ -347,6 +354,12 @@ public class CaseQueries {
             return facts.reasonText();
         }
         return null;
+    }
+
+    private static boolean canLift(CaseRecords.Enforcement enforcement) {
+        return "applied".equals(enforcement.resultStatus())
+                && enforcement.liftedAt() == null
+                && LIFTABLE_ACTIONS.contains(enforcement.action());
     }
 
     private boolean managerRole(ExecutionContext context) {

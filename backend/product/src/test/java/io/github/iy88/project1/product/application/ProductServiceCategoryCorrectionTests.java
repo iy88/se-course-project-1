@@ -101,7 +101,7 @@ class ProductServiceCategoryCorrectionTests {
         when(accounts.findById(anyLong())).thenReturn(Optional.empty());
         service = new ProductService(products, links, edits, mock(ProductAuditRepository.class),
                 mock(CategoryApplicationRepository.class), mock(org.springframework.beans.factory.ObjectProvider.class),
-                accounts, mock(AccountAvatarService.class), directory,
+                accounts, mock(AccountAvatarService.class), mock(AccountWriteGuard.class), directory,
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class),
                 mock(ProductTradeHistory.class), mock(ProductEditNotices.class), cases, notices,

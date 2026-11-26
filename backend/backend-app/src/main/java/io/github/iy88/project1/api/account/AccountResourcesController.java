@@ -76,7 +76,13 @@ class AccountResourcesController {
                 yield ResponseEntity.ok().cacheControl(CacheControl.noStore())
                         .body(queries.evaluationResources(accountId, direction, page, pageSize));
             }
-            case "report" -> throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "该资源类型暂未接入");
+            case "report" -> {
+                if (hasValue(role)) {
+                    throw new BusinessError("INPUT_INVALID", 422, "举报资源不接受 role");
+                }
+                yield ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                        .body(queries.reportResources(accountId, direction, state, page, pageSize));
+            }
             default -> throw new BusinessError("INPUT_INVALID", 422, "资源类型无效");
         };
     }

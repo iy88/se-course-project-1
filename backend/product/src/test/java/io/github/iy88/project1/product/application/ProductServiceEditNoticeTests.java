@@ -75,7 +75,7 @@ class ProductServiceEditNoticeTests {
         when(environment.getRequiredProperty("OSS_ACCESS_KEY_SECRET")).thenReturn("secret");
         service = new ProductService(products, links, edits, mock(ProductAuditRepository.class),
                 mock(CategoryApplicationRepository.class), mock(org.springframework.beans.factory.ObjectProvider.class),
-                mock(AccountRepository.class), mock(AccountAvatarService.class), mock(CategoryDirectory.class),
+                mock(AccountRepository.class), mock(AccountAvatarService.class), mock(AccountWriteGuard.class), mock(CategoryDirectory.class),
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class),
                 mock(ProductTradeHistory.class), notices, mock(CaseCommentAccess.class),

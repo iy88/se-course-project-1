@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, useId } from "vue";
 import {
+  caseEvidenceFileHref,
+  liftCaseEnforcement,
   readCase,
   readCaseThread,
   writeCase,
@@ -48,6 +50,7 @@ const publicSummary = ref("");
 const publicReason = ref("");
 const confirmClose = ref(false);
 const appealDraft = ref<{ id: string; reply: string; basis: string }>();
+const liftDraft = ref<{ enforcementId: string; reason: string }>();
 const enforcementOptions = [
   { action: "restrict_account", target: "account", label: "封禁账户" },
   { action: "withdraw_public_access", target: "product", label: "撤销商品展示" },
@@ -174,6 +177,45 @@ async function uphold(appeal: PendingCaseAppeal): Promise<void> {
   }
 }
 
+function openLift(enforcementId: string): void {
+  if (writing.value) return;
+  writeError.value = "";
+  liftDraft.value = { enforcementId, reason: "" };
+}
+
+function cancelLift(): void {
+  liftDraft.value = undefined;
+  writeError.value = "";
+}
+
+function submitLift(): void {
+  const draft = liftDraft.value;
+  if (!draft || writing.value) return;
+  const reason = draft.reason.trim();
+  if (!reason) {
+    writeError.value = "请填写解除原因。";
+    return;
+  }
+  void lift(draft.enforcementId, reason);
+}
+
+async function lift(enforcementId: string, reason: string): Promise<void> {
+  writing.value = true;
+  writeError.value = "";
+  const key = JSON.stringify(["lift", enforcementId, reason]);
+  try {
+    await liftCaseEnforcement(props.caseId, enforcementId, reason, keys.current(key));
+    keys.rotate(key);
+    liftDraft.value = undefined;
+    notify.success("已解除处置。");
+    await load();
+  } catch (caught) {
+    writeError.value = problemMessage(caught);
+  } finally {
+    writing.value = false;
+  }
+}
+
 function submitDecision(): void {
   const enforcements: CaseEnforcementInput[] =
     decisionKind.value === "violation"
@@ -229,12 +271,51 @@ onUnmounted(() => {
           <p v-if="detail.public_result_at">公开于 {{ formatDateTime(detail.public_result_at) }}</p>
         </div>
         <ul v-if="detail.enforcements.length" class="stack">
-          <li v-for="item in detail.enforcements" :key="item.enforcement_id">
-            {{
-              enforcementOptions.find((option) => option.action === item.action)?.label ?? "处置"
-            }}
-            {{ item.result_status === "failed" ? "失败" : "已记录" }}
-            <span v-if="item.current_state"> · {{ item.current_state }}</span>
+          <li
+            v-for="item in detail.enforcements"
+            :key="item.enforcement_id"
+            class="stack stack--tight"
+          >
+            <div class="spread">
+              <span>
+                {{
+                  enforcementOptions.find((option) => option.action === item.action)?.label ??
+                  "处置"
+                }}
+                {{ item.result_status === "failed" ? "失败" : "已记录" }}
+                <span v-if="item.current_state"> · {{ item.current_state }}</span>
+              </span>
+              <button
+                v-if="item.can_lift"
+                type="button"
+                class="btn"
+                @click="openLift(item.enforcement_id)"
+              >
+                解除处置
+              </button>
+            </div>
+            <form
+              v-if="item.can_lift && liftDraft?.enforcementId === item.enforcement_id"
+              class="stack"
+              :aria-labelledby="`${ids}-lift`"
+              @submit.prevent="submitLift"
+            >
+              <h3 :id="`${ids}-lift`">解除处置</h3>
+              <label class="field" :for="`${ids}-lift-reason`">
+                <span>解除原因</span>
+                <textarea
+                  :id="`${ids}-lift-reason`"
+                  v-model="liftDraft.reason"
+                  name="reason"
+                  class="textarea"
+                  required
+                />
+              </label>
+              <div class="inline">
+                <button type="button" class="btn" @click="cancelLift">取消</button>
+                <button type="submit" class="btn btn--primary" :disabled="writing">确认解除</button>
+              </div>
+            </form>
           </li>
         </ul>
       </section>
@@ -244,6 +325,13 @@ onUnmounted(() => {
           <li v-for="item in detail.evidence" :key="item.evidence_id">
             证据 #{{ item.evidence_id
             }}<template v-if="item.file_id"> · 文件 #{{ item.file_id }}</template>
+            <a
+              v-if="item.file_id"
+              :href="caseEvidenceFileHref(caseId, item.evidence_id)"
+              target="_blank"
+              rel="noopener noreferrer"
+              >打开证据</a
+            >
           </li>
         </ul>
       </section>

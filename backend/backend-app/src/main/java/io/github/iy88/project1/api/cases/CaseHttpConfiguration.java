@@ -1,6 +1,7 @@
 package io.github.iy88.project1.api.cases;
 
 import io.github.iy88.project1.account.application.AccountQueries;
+import io.github.iy88.project1.account.application.AccountRestrictions;
 import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import io.github.iy88.project1.casemanagement.CaseSettings;
@@ -24,6 +25,7 @@ import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.notification.application.NotificationApplication;
 import io.github.iy88.project1.notification.application.NotificationIntent;
+import io.github.iy88.project1.product.application.ProductDisplayRestrictions;
 import io.github.iy88.project1.product.application.ProductInteractions;
 import io.github.iy88.project1.product.persistence.ProductRepository;
 import io.github.iy88.project1.storage.FilePurpose;
@@ -102,8 +104,15 @@ public class CaseHttpConfiguration {
     }
 
     @Bean
-    CasePorts.Enforcement caseEnforcement(TradePorts.CaseEnforcement trades, TradePorts.Participation participation) {
-        return new TradeCaseEnforcement(trades, participation);
+    CasePorts.Enforcement caseEnforcement(CaseLifecycleStore cases, CasePorts.Targets targets,
+                                          AccountRestrictions accounts, ProductDisplayRestrictions displays,
+                                          ProductRepository products, ProductInteractions comments,
+                                          TradePorts.Closure closures, TradePorts.CaseEnforcement trades,
+                                          TradePorts.Participation participation, ObjectProvider<Clock> clocks) {
+        var tradeHandler = new TradeCaseEnforcement(trades, participation);
+        var subjectHandler = new SubjectCaseEnforcement(cases, targets, accounts, displays, products, comments,
+                closures, trades, participation, clocks.getIfAvailable(Clock::systemUTC));
+        return new CoordinatingCaseEnforcement(tradeHandler, subjectHandler);
     }
 
     @Bean
