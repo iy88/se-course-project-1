@@ -155,7 +155,7 @@ public class CategoryService {
 
     public void delete(long categoryId) {
         transaction.executeWithoutResult(status -> {
-            Category category = lock(categoryId);
+            Category category = lockExisting(categoryId);
             if (category.deleted()) {
                 return;
             }
@@ -170,12 +170,16 @@ public class CategoryService {
     }
 
     private Category lock(long categoryId) {
-        Category category = categories.lockById(categoryId)
-                .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "分类不存在"));
+        Category category = lockExisting(categoryId);
         if (category.deleted()) {
             throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "分类不存在");
         }
         return category;
+    }
+
+    private Category lockExisting(long categoryId) {
+        return categories.lockById(categoryId)
+                .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "分类不存在"));
     }
 
     private CategoryDetail detail(Category category) {
