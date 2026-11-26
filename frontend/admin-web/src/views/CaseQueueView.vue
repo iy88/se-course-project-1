@@ -4,7 +4,7 @@
  * a keyword search and paging are all resolved by the backend before paging; the
  * page only renders the authorized summaries it receives.
  */
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import UiIcon from "../../../shared/UiIcon.vue";
 import type { ManagementTodoItem, TodoKind, WorkbenchOwnership } from "../api/contracts";
 import { listCaseQueue } from "../api/cases";
@@ -20,6 +20,7 @@ import {
 } from "../app/labels";
 import { problemMessage } from "../app/problems";
 import { navigate } from "../app/router";
+import { session } from "../app/session";
 import { notify } from "../app/toast";
 import EmptyState from "../components/EmptyState.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
@@ -87,7 +88,8 @@ const emptyDescription = computed(() => {
 
 async function load(target = page.value): Promise<void> {
   controller?.abort();
-  controller = new AbortController();
+  const request = new AbortController();
+  controller = request;
   loading.value = true;
   error.value = null;
   try {
@@ -99,23 +101,26 @@ async function load(target = page.value): Promise<void> {
         page: target,
         page_size: pageSize,
       },
-      controller.signal,
+      request.signal,
     );
+    if (controller !== request) return;
     items.value = result.items;
     page.value = result.page;
     total.value = result.total;
     counts.value = result.counts_by_kind;
   } catch (caught) {
-    if (caught instanceof AbortedError) return;
+    if (controller !== request || caught instanceof AbortedError) return;
     error.value = caught;
   } finally {
-    loading.value = false;
+    if (controller === request) loading.value = false;
   }
 }
 
 onMounted(() => {
   void load(1);
 });
+
+onUnmounted(() => controller?.abort());
 
 watch(
   () => [props.ownership, props.kind, props.keyword],
@@ -172,9 +177,29 @@ function detailAuditId(item: ManagementTodoItem): string | null {
   return item.kind === "product_review" && item.summary.audit_id ? item.summary.audit_id : null;
 }
 
-function open(item: ManagementTodoItem): void {
+function canOpen(item: ManagementTodoItem): boolean {
+  if (
+    props.ownership === "completed_all" &&
+    item.manager_id !== session.identity.value?.account.account_id
+  ) {
+    return false;
+  }
+  return item.kind !== "product_review" || detailAuditId(item) !== null;
+}
+
+function open(item: ManagementTodoItem, ownership = props.ownership): void {
   const auditId = detailAuditId(item);
-  if (auditId) navigate({ name: "review", auditId });
+  if (auditId) {
+    navigate({ name: "review", auditId });
+  } else if (item.kind !== "product_review") {
+    navigate({
+      name: "case",
+      caseId: item.case_id,
+      ownership,
+      kind: props.kind,
+      keyword: props.keyword,
+    });
+  }
 }
 
 async function claim(item: ManagementTodoItem): Promise<void> {
@@ -185,12 +210,7 @@ async function claim(item: ManagementTodoItem): Promise<void> {
     await claimCase(item.case_id, keys.current(operation));
     keys.rotate(operation);
     notify.success("已认领该事项。");
-    const auditId = detailAuditId(item);
-    if (auditId) {
-      navigate({ name: "review", auditId });
-    } else {
-      await load();
-    }
+    open(item, "mine");
   } catch (caught) {
     notify.error(problemMessage(caught));
     await load();
@@ -309,7 +329,7 @@ async function claim(item: ManagementTodoItem): Promise<void> {
                     {{ claiming === item.case_id ? "认领中…" : "认领" }}
                   </button>
                   <button
-                    v-else-if="detailAuditId(item)"
+                    v-else-if="canOpen(item)"
                     type="button"
                     class="btn btn--small"
                     @click="open(item)"

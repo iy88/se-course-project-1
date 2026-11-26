@@ -56,6 +56,7 @@ describe("admin routes", () => {
       { name: "review", auditId: "1001" },
       { name: "cases", ownership: "completed_mine", kind: "report", keyword: "旧书" },
       { name: "cases", ownership: "unclaimed", kind: "all", keyword: "" },
+      { name: "case", caseId: "422", ownership: "completed_mine", kind: "report", keyword: "旧书" },
       { name: "categories" },
       { name: "banned" },
     ] as const;

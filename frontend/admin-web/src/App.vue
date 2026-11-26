@@ -7,6 +7,7 @@ import PageFeedback from "../../shared/PageFeedback.vue";
 import UiIcon from "../../shared/UiIcon.vue";
 import LoginView from "./views/LoginView.vue";
 import BannedScopeView from "./views/BannedScopeView.vue";
+import CaseDetailView from "./views/CaseDetailView.vue";
 import CaseQueueView from "./views/CaseQueueView.vue";
 import CategoriesView from "./views/CategoriesView.vue";
 import ReviewDetailView from "./views/ReviewDetailView.vue";
@@ -47,7 +48,11 @@ const navItems = [
 ] as const;
 
 const page = computed(() => route.value.name);
-const activeKey = computed(() => (page.value === "review" ? "reviews" : page.value));
+const activeKey = computed(() => {
+  if (page.value === "review") return "reviews";
+  if (page.value === "case") return "cases";
+  return page.value;
+});
 const queueOwnership = computed(() =>
   route.value.name === "reviews" ? route.value.ownership : "unclaimed",
 );
@@ -58,7 +63,10 @@ const workbench = computed(() =>
     : { ownership: "unclaimed" as const, kind: "all" as const, keyword: "" },
 );
 const canGoBack = computed(() => page.value !== "reviews" && page.value !== "cases");
-const backLabel = computed(() => (page.value === "review" ? "返回我的认领" : "返回商品审核"));
+const backLabel = computed(() => {
+  if (page.value === "case") return "返回事项工作台";
+  return page.value === "review" ? "返回我的认领" : "返回商品审核";
+});
 
 onMounted(() => {
   void session.load();
@@ -69,6 +77,11 @@ async function signOut(): Promise<void> {
 }
 
 function goBack(): void {
+  if (route.value.name === "case") {
+    const { ownership, kind, keyword } = route.value;
+    navigate({ name: "cases", ownership, kind, keyword });
+    return;
+  }
   navigate({
     name: "reviews",
     ownership: page.value === "review" ? "mine" : "unclaimed",
@@ -143,6 +156,19 @@ function goBack(): void {
           :ownership="workbench.ownership"
           :kind="workbench.kind"
           :keyword="workbench.keyword"
+        />
+        <CaseDetailView
+          v-else-if="route.name === 'case'"
+          :key="route.caseId"
+          :case-id="route.caseId"
+          :back-href="
+            routeHref({
+              name: 'cases',
+              ownership: route.ownership,
+              kind: route.kind,
+              keyword: route.keyword,
+            })
+          "
         />
         <ReviewQueueView v-else-if="page === 'reviews'" :ownership="queueOwnership" />
         <ReviewDetailView v-else-if="page === 'review'" :audit-id="reviewAuditId" />

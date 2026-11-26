@@ -3,10 +3,17 @@ import type { TodoKind, WorkbenchOwnership } from "../api/contracts";
 
 export type Ownership = "unclaimed" | "mine";
 
+export interface WorkbenchFilters {
+  ownership: WorkbenchOwnership;
+  kind: TodoKind;
+  keyword: string;
+}
+
 export type AdminRoute =
   | { name: "reviews"; ownership: Ownership }
   | { name: "review"; auditId: string }
-  | { name: "cases"; ownership: WorkbenchOwnership; kind: TodoKind; keyword: string }
+  | ({ name: "cases" } & WorkbenchFilters)
+  | ({ name: "case"; caseId: string } & WorkbenchFilters)
   | { name: "categories" }
   | { name: "banned" };
 
@@ -44,12 +51,14 @@ export function parseHash(hash: string): AdminRoute {
     return { name: "reviews", ownership: parseOwnership(query.get("ownership")) };
   }
   if (segments[0] === "cases") {
-    return {
-      name: "cases",
+    const filters = {
       ownership: parseWorkbenchOwnership(query.get("ownership")),
       kind: parseTodoKind(query.get("kind")),
       keyword: (query.get("keyword") ?? "").trim(),
     };
+    return segments[1] && /^[1-9][0-9]*$/.test(segments[1])
+      ? { name: "case", caseId: segments[1], ...filters }
+      : { name: "cases", ...filters };
   }
   if (segments[0] === "categories") return { name: "categories" };
   if (segments[0] === "banned") return { name: "banned" };
@@ -63,11 +72,14 @@ export function routeHref(route: AdminRoute): string {
       return `#/reviews/${encodeURIComponent(route.auditId)}`;
     case "reviews":
       return `#/reviews?ownership=${route.ownership}`;
-    case "cases": {
+    case "cases":
+    case "case": {
       const query = new URLSearchParams({ ownership: route.ownership, kind: route.kind });
       const keyword = route.keyword.trim();
       if (keyword) query.set("keyword", keyword);
-      return `#/cases?${query.toString()}`;
+      const path =
+        route.name === "case" ? `#/cases/${encodeURIComponent(route.caseId)}` : "#/cases";
+      return `${path}?${query.toString()}`;
     }
     case "categories":
       return "#/categories";
