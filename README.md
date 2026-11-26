@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.60
-Version-Datetime: 2026-11-25T03:25:12+08:00
+Version: 0.1.61
+Version-Datetime: 2026-11-26T13:44:33+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -83,7 +83,7 @@ Windows PowerShell 5.1 或更高版本：
 |---|---|
 | PostgreSQL | `DATABASE_URL`、`DATABASE_USERNAME`、`DATABASE_PASSWORD`、`DATABASE_OWNER_USERNAME`、`DATABASE_OWNER_PASSWORD`。URL 必须包含数据库名，应用账号与迁移账号使用不同凭据。 |
 | Redis | `REDIS_URL` 和独立的 `REDIS_NAMESPACE`，例如 `project1:dev:iy88`。不同开发环境使用不同命名空间。 |
-| OSS | `OSS_REGION`、`OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_PREFIX` 和开发 RAM 用户的 AccessKey。开发 Bucket 保持私有并关闭版本控制。 |
+| OSS | `OSS_REGION`、`OSS_ENDPOINT`、`OSS_BUCKET`、`OSS_PREFIX` 和开发 RAM 用户的 AccessKey。开发 Bucket 保持私有并关闭版本控制，且专用于对应部署。 |
 | SMTP | `SMTP_HOST`、`SMTP_PORT`、`SMTP_TLS_MODE`、`SMTP_USERNAME`、`SMTP_PASSWORD` 和 `SMTP_FROM`。常用配置为 587 端口配 `starttls`，或 465 端口配 `ssl`。 |
 
 可用以下命令生成 PostgreSQL 应用账号和迁移账号的 URL 安全密码：
@@ -116,7 +116,7 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 
 部署新版本时先执行 `db migrate`，再启动应用。`db init` 会创建缺失的 `owner`、`app` 角色和数据库；已有角色沿用现有密码，并确保 owner 具有 `CREATEDB`。
 
-重置会删除数据。执行前停止所选环境的所有应用进程和任务。先预览目标：
+重置会删除数据。执行前停止所选环境的所有应用进程和任务。PostgreSQL 按配置的专用数据库、Redis 按配置的命名空间、OSS 按整个 Bucket 分别处理；先预览目标：
 
 ```bash
 java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
@@ -136,7 +136,7 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 
 - `db reset` 使用 owner 凭据检查 Redis 可扫描指定命名空间，删除并重建 PostgreSQL 目标库、执行 Flyway，最后清空 `REDIS_NAMESPACE:*`。PostgreSQL 存在活动连接时拒绝删除。
 - 仅当旧数据库仍由 app 角色持有时，confirmed `db reset` 才需要额外传入 `--admin-user` 完成角色迁移。
-- `oss reset` 清空 `OSS_BUCKET` 内的全部对象，每批最多删除 1,000 个。开发和联调时，维护配置应指向开发桶。
+- `oss reset` 清空 `OSS_BUCKET` 内的全部对象，不按 `OSS_PREFIX` 过滤，预览范围标记为 `ALL_OBJECTS`，沿用预览令牌确认，每批最多删除 1,000 个。该桶必须专用于对应部署，不得与 legacy 或其他部署、环境共用；开发与联调共用的开发桶按单一开发部署处理，不得混入其他环境对象。应用运行时以 `OSS_PREFIX` 限定文件对象，调度器的 `FileCleanup` 只回收登记且到期的无引用文件，不执行整桶清理。
 - 重置中途失败时保持写入停止，修复后重新预览并执行完整命令。数据库重置会按当前 Flyway 迁移重建结构。
 
 ### 创建管理端账号
@@ -233,7 +233,7 @@ java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --spring.pro
 
 ### OSS 配置
 
-后端探针和维护工具共用阿里云 OSS Java SDK 2.0（`com.aliyun:alibabacloud-oss-v2`）。v2 使用两个私有 Bucket：开发和联调共用开发桶，生产使用独立桶。各环境的 `OSS_BUCKET` 只填本环境桶名。商品图片与事项证据分别使用 `<OSS_PREFIX>/product_image/` 和 `<OSS_PREFIX>/case_evidence/`。
+后端探针和维护工具共用阿里云 OSS Java SDK 2.0（`com.aliyun:alibabacloud-oss-v2`）。v2 使用两个私有 Bucket：开发桶供开发与联调使用，生产使用独立桶；两桶分别专属于对应部署，不与 legacy 共用。各环境的 `OSS_BUCKET` 只填本环境桶名。商品图片与事项证据分别使用 `<OSS_PREFIX>/product_image/` 和 `<OSS_PREFIX>/case_evidence/`。
 
 商品图片支持 JPG／JPEG、PNG，事项证据另外支持 PDF，默认每文件上限 100 MiB。可通过 `FILE_PRODUCT_IMAGE_*` 和 `FILE_CASE_EVIDENCE_*` 调整大小与 MIME 列表；变更规则时同步更新 `FILE_RULE_VERSION`。
 
