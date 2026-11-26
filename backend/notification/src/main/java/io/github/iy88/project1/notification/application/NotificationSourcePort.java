@@ -31,7 +31,12 @@ public interface NotificationSourcePort {
      * @param source  the object the reader may open, or null to hide the jump
      */
     record NotificationSourceView(String summary, ResourceRef source, String subject, String body, Long commentId,
-                                  Long caseMessageId) {
+                                  Long caseMessageId, String anchor) {
+        public NotificationSourceView(String summary, ResourceRef source, String subject, String body, Long commentId,
+                                      Long caseMessageId) {
+            this(summary, source, subject, body, commentId, caseMessageId, null);
+        }
+
         public NotificationSourceView(String summary, ResourceRef source, String subject, String body, Long commentId) {
             this(summary, source, subject, body, commentId, null);
         }

@@ -255,9 +255,9 @@ public class CaseApplication {
                 if (facts.archived()) {
                     throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
                 }
+                Long firstEvidence = attachEvidence(transaction, caseId, reporter, request.attachments());
                 store.addAction(new CaseRecords.Action(0, caseId, CaseVocabulary.ACTION_SUPPLEMENT,
-                        CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null));
-                attachEvidence(transaction, caseId, reporter, request.attachments());
+                        CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
                 store.touch(caseId, now);
                 audit(transaction, "case.report.supplement", caseId, reporter);
                 return new WriteResult.Response<>(200,
@@ -271,9 +271,9 @@ public class CaseApplication {
             if (opened == null) {
                 var current = store.findOpenReport(reporter, request.target()).orElseThrow(CaseApplication::conflict);
                 var facts = store.lock(transaction, current.caseId());
+                Long firstEvidence = attachEvidence(transaction, facts.caseId(), reporter, request.attachments());
                 store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_SUPPLEMENT,
-                        CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null));
-                attachEvidence(transaction, facts.caseId(), reporter, request.attachments());
+                        CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
                 store.touch(facts.caseId(), now);
                 audit(transaction, "case.report.supplement", facts.caseId(), reporter);
                 return new WriteResult.Response<>(200, submitted(facts.caseId(), facts.caseStatus(), true),
@@ -337,9 +337,9 @@ public class CaseApplication {
             }
             lockFiles(transaction, request.supplement().attachments());
             Instant now = now();
+            Long firstEvidence = attachEvidence(transaction, facts.caseId(), reporter, request.supplement().attachments());
             store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_SUPPLEMENT,
-                    CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null));
-            attachEvidence(transaction, facts.caseId(), reporter, request.supplement().attachments());
+                    CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
             store.touch(facts.caseId(), now);
             audit(transaction, "case.report.supplement", facts.caseId(), reporter);
             long supplements = store.actions(facts.caseId()).stream()
@@ -1605,17 +1605,20 @@ public class CaseApplication {
         return list;
     }
 
-    private void attachEvidence(WriteTransaction transaction, long caseId, long reporter, List<Long> fileIds) {
+    private Long attachEvidence(WriteTransaction transaction, long caseId, long reporter, List<Long> fileIds) {
         if (fileIds.isEmpty()) {
-            return;
+            return null;
         }
         var ordered = fileIds.stream().distinct().sorted().toList();
         var references = files.attach(transaction, caseId, reporter, ordered);
         Instant now = now();
+        Long first = null;
         for (int index = 0; index < ordered.size(); index++) {
             Long referenceId = index < references.size() ? references.get(index) : null;
-            store.addEvidence(caseId, ordered.get(index), referenceId, reporter, now);
+            long evidenceId = store.addEvidence(caseId, ordered.get(index), referenceId, reporter, now);
+            if (index == 0) first = evidenceId;
         }
+        return first;
     }
 
     private void lockFiles(WriteTransaction transaction, List<Long> fileIds) {

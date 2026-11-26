@@ -35,6 +35,7 @@ final class NotificationWire {
         if (view.body() != null) body.put("body", view.body());
         if (view.commentId() != null) body.put("comment_id", Long.toString(view.commentId()));
         if (view.caseMessageId() != null) body.put("case_message_id", Long.toString(view.caseMessageId()));
+        if (view.anchor() != null) body.put("anchor", view.anchor());
         return body;
     }
 

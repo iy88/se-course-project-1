@@ -2,6 +2,7 @@ package io.github.iy88.project1.api.productreview;
 
 import io.github.iy88.project1.account.application.SessionService;
 import io.github.iy88.project1.api.account.CurrentAccount;
+import io.github.iy88.project1.casemanagement.application.ManagementCaseChange;
 import io.github.iy88.project1.casemanagement.application.ReviewManagerAccess;
 import io.github.iy88.project1.casemanagement.application.ReviewNotifications;
 import io.github.iy88.project1.casemanagement.persistence.ReviewCaseStore;
@@ -13,6 +14,7 @@ import io.github.iy88.project1.notification.application.ReviewNotificationAdapte
 import io.github.iy88.project1.product.application.ProductReviewCaseLifecycle;
 import java.time.Instant;
 import java.util.Optional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -22,7 +24,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 @Profile("infrastructure")
 class ReviewStageConfiguration {
     @Bean
-    ProductReviewCaseLifecycle productReviewCaseLifecycle(ReviewCaseStore cases) {
+    ProductReviewCaseLifecycle productReviewCaseLifecycle(ReviewCaseStore cases, ApplicationEventPublisher events) {
         return new ProductReviewCaseLifecycle() {
             @Override
             public long open(Instant submittedAt) {
@@ -32,6 +34,22 @@ class ReviewStageConfiguration {
             @Override
             public void requireUnclaimed(long caseId) {
                 cases.requireUnclaimed(caseId);
+            }
+
+            @Override
+            public void contentUpdated(long caseId, long editId, Instant at) {
+                events.publishEvent(new ManagementCaseChange(caseId, "review_updated", "review:edit:" + editId, at));
+            }
+
+            @Override
+            public void classificationWithdrawn(long caseId, long applicationId, Instant at) {
+                events.publishEvent(new ManagementCaseChange(caseId, "classification_withdrawn",
+                        "review:category:" + applicationId, at));
+            }
+
+            @Override
+            public void withdrawn(long caseId, Instant at) {
+                events.publishEvent(new ManagementCaseChange(caseId, "withdrawn", "review:withdrawn", at));
             }
         };
     }

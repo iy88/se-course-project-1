@@ -126,6 +126,8 @@ class CaseLifecycleIT {
                 new CaseCommands.Target("account", related, null, null), "虚假信息", "请核实", List.of()));
         long caseId = Long.parseLong(report.data().get("case_id").asString());
         assertThat(report.status()).isEqualTo(201);
+        assertThat(managementNoticeRecipients(caseId, "opened"))
+                .contains(MANAGER_1.get(), MANAGER_2.get());
 
         // Two managers claim at the same time: exactly one wins, the loser sees CASE_ALREADY_CLAIMED.
         var start = new CountDownLatch(1);
@@ -176,10 +178,12 @@ class CaseLifecycleIT {
                 new CaseCommands.Message(threadId, CaseVocabulary.KIND_STATEMENT, "商品描述属实", inquiryActionId,
                         null, null, null));
         assertThat(statement.status()).isEqualTo(201);
+        assertThat(managementNoticeRecipients(caseId, "statement")).containsExactly(manager);
 
         var supplement = cases.supplement(context(reporter), "supplement-1", caseId,
                 new CaseCommands.Supplement("补充商品情况", List.of()));
         assertThat(supplement.status()).isEqualTo(200);
+        assertThat(managementNoticeRecipients(caseId, "supplement")).containsExactly(manager);
         var choices = queries.detail(context(manager), caseId).path("decision_basis_actions");
         assertThat(choices.size()).isEqualTo(3);
         assertThat(choices.get(2).path("note").asString()).isEqualTo("补充商品情况");
@@ -212,6 +216,19 @@ class CaseLifecycleIT {
                 new CaseCommands.Message(threadId, CaseVocabulary.KIND_APPEAL, "请求复核", null, null, null, null));
         assertThat(appeal.status()).isEqualTo(201);
         long appealActionId = store.appealOf(caseId, related).orElseThrow().actionId();
+        assertThat(managementNoticeRecipients(caseId, "appeal")).containsExactly(manager);
+        var notifications = app.getBean(io.github.iy88.project1.notification.application.NotificationQueries.class);
+        var inbox = notifications.list(context(manager),
+                new io.github.iy88.project1.notification.application.NotificationQuery(1, 20, null,
+                        "management.case_appeal"), true);
+        var notice = inbox.items().stream().filter(item -> item.source().id() == caseId).findFirst().orElseThrow();
+        assertThat(notice.summary()).isEqualTo("收到申辩");
+        assertThat(notifications.get(context(manager), notice.notificationId(), true).anchor())
+                .isEqualTo("case-message-" + appeal.data().path("case_message_id").asString());
+        assertThatThrownBy(() -> notifications.get(context(manager), notice.notificationId()))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+        assertManagementInbox(manager, notice.notificationId(), caseId);
         assertThat(queries.detail(context(manager), caseId).path("pending_appeals"))
                 .singleElement().satisfies(item -> {
                     assertThat(item.path("appeal_action_id").asString()).isEqualTo(Long.toString(appealActionId));
@@ -655,6 +672,34 @@ class CaseLifecycleIT {
 
     private static CaseCommands.Report reportFor(CaseCommands.Target target) {
         return new CaseCommands.Report(target, "请核实内容", null, List.of());
+    }
+
+    private static void assertManagementInbox(long manager, long notificationId, long caseId) throws Exception {
+        var accounts = app.getBean(AccountService.class);
+        var email = manager == MANAGER_1.get() ? "manager1-" : "manager2-";
+        var claimant = accounts.login(email + RUN_ID + "@example.invalid", PASSWORD);
+        var user = accounts.login("related-" + RUN_ID + "@example.invalid", PASSWORD);
+        String path = "/account/notifications/" + notificationId;
+        try (var http = HttpClient.newHttpClient()) {
+            var detail = read(http, claimant, path + "?audience=management", 200);
+            assertThat(detail.at("/source/resource_id").asLong()).isEqualTo(caseId);
+            assertThat(detail.path("read_at").isNull()).isTrue();
+            read(http, claimant, path, 404);
+            read(http, user, path + "?audience=management", 403);
+            var filtered = read(http, claimant, "/account/notifications?event_type=management.case_appeal", 200);
+            assertThat(filtered.path("total").asLong()).isZero();
+        } finally {
+            var sessions = app.getBean(SessionService.class);
+            sessions.revoke(sessions.authenticate(claimant.token()));
+            sessions.revoke(sessions.authenticate(user.token()));
+        }
+    }
+
+    private static List<Long> managementNoticeRecipients(long caseId, String kind) {
+        return db.sql("""
+                select recipient_account_id from notification
+                where source_type = 'case' and source_id = ? and event_type = ?
+                """).param(caseId).param("management.case_" + kind).query(Long.class).list();
     }
 
     private static void assertInquiryNotification(long caseId, long noticeId, String messageId) throws Exception {

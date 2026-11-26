@@ -35,11 +35,13 @@ interface NotificationRepository extends Repository<NotificationRecord, Long> {
                    or (:readState = 1 and n.readAt is null)
                    or (:readState = 2 and n.readAt is not null))
               and (:eventType is null or n.eventType = :eventType)
+              and ((:management = true and n.eventType like 'management.%')
+                   or (:management = false and n.eventType not like 'management.%'))
             order by n.id desc
             """)
     List<NotificationRecord> pageFor(@Param("recipient") long recipientAccountId,
                                      @Param("readState") int readState,
-                                     @Param("eventType") String eventType, Pageable page);
+                                     @Param("eventType") String eventType, @Param("management") boolean management, Pageable page);
 
     @Query("""
             select count(n) from NotificationRecord n
@@ -48,13 +50,17 @@ interface NotificationRepository extends Repository<NotificationRecord, Long> {
                    or (:readState = 1 and n.readAt is null)
                    or (:readState = 2 and n.readAt is not null))
               and (:eventType is null or n.eventType = :eventType)
+              and ((:management = true and n.eventType like 'management.%')
+                   or (:management = false and n.eventType not like 'management.%'))
             """)
     long countFor(@Param("recipient") long recipientAccountId, @Param("readState") int readState,
-                  @Param("eventType") String eventType);
+                  @Param("eventType") String eventType, @Param("management") boolean management);
 
     @Query("""
             select count(n) from NotificationRecord n
             where n.recipientAccountId = :recipient and n.readAt is null
+              and ((:management = true and n.eventType like 'management.%')
+                   or (:management = false and n.eventType not like 'management.%'))
             """)
-    long countUnread(@Param("recipient") long recipientAccountId);
+    long countUnread(@Param("recipient") long recipientAccountId, @Param("management") boolean management);
 }

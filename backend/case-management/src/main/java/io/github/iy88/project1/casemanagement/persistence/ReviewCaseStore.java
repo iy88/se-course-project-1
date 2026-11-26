@@ -1,5 +1,7 @@
 package io.github.iy88.project1.casemanagement.persistence;
 
+import io.github.iy88.project1.casemanagement.application.ManagementCaseChange;
+import org.springframework.context.ApplicationEventPublisher;
 import io.github.iy88.project1.casemanagement.application.CaseClaim;
 import io.github.iy88.project1.casemanagement.application.ProductReviewCases;
 import io.github.iy88.project1.casemanagement.application.SubjectPlan;
@@ -24,11 +26,13 @@ public class ReviewCaseStore implements ProductReviewCases {
     private final ModerationCaseRepository cases;
     private final ModerationCaseActionRepository actions;
     private final JdbcClient jdbc;
+    private final ApplicationEventPublisher events;
 
-    public ReviewCaseStore(ModerationCaseRepository cases, ModerationCaseActionRepository actions, JdbcClient jdbc) {
+    public ReviewCaseStore(ModerationCaseRepository cases, ModerationCaseActionRepository actions, JdbcClient jdbc, ApplicationEventPublisher events) {
         this.cases = cases;
         this.actions = actions;
         this.jdbc = jdbc;
+        this.events = events;
     }
 
     @Override
@@ -38,7 +42,9 @@ public class ReviewCaseStore implements ProductReviewCases {
 
     public long open(Instant submittedAt) {
         requireWriteTransaction();
-        return cases.save(new ModerationCase(PRODUCT_REVIEW, submittedAt)).id();
+        long id = cases.save(new ModerationCase(PRODUCT_REVIEW, submittedAt)).id();
+        events.publishEvent(ManagementCaseChange.opened(id, submittedAt));
+        return id;
     }
 
     @Override
@@ -75,10 +81,12 @@ public class ReviewCaseStore implements ProductReviewCases {
         var current = requireEntity(caseId);
         current.claim(managerId, claimedAt);
         actions.save(ModerationCaseAction.claim(caseId, managerId, claimedAt));
+        events.publishEvent(new ManagementCaseChange(caseId, "claim", "review:claim", claimedAt));
     }
 
     public void recordDecision(long caseId, long managerId, Instant decidedAt) {
         actions.save(ModerationCaseAction.decision(caseId, managerId, decidedAt));
+        events.publishEvent(new ManagementCaseChange(caseId, "decide", "review:decide", decidedAt));
     }
 
     /**

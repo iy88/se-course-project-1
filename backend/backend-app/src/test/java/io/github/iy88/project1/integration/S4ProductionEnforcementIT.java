@@ -159,8 +159,14 @@ class S4ProductionEnforcementIT {
                 .query(String.class).single()).isEqualTo("claimed");
         assertThat(db.sql("select count(*) from case_enforcement where case_id = ?").param(caseId)
                 .query(Long.class).single()).isZero();
-        assertThat(db.sql("select count(*) from notification where source_type = 'case' and source_id = ?")
-                .param(caseId).query(Long.class).single()).isZero();
+        assertThat(db.sql("""
+                select count(*) from notification where source_type = 'case' and source_id = ?
+                  and event_type = 'management.case_decide'
+                """).param(caseId).query(Long.class).single()).isZero();
+        assertThat(db.sql("""
+                select count(*) from notification where source_type = 'case' and source_id = ?
+                  and event_type not like 'management.%'
+                """).param(caseId).query(Long.class).single()).isZero();
     }
 
     @Test
@@ -280,8 +286,10 @@ class S4ProductionEnforcementIT {
                   and event_type = 'trade.restored'
                 """).param(trade).query(Long.class).list()).containsExactlyInAnyOrder(
                         buyer.account().id(), seller.account().id());
-        assertThat(db.sql("select count(*) from notification where source_type = 'case' and source_id = ?")
-                .param(caseId).query(Long.class).single()).isZero();
+        assertThat(db.sql("""
+                select count(*) from notification where source_type = 'case' and source_id = ?
+                  and event_type not like 'management.%'
+                """).param(caseId).query(Long.class).single()).isZero();
     }
 
     @Test

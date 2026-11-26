@@ -272,6 +272,13 @@ public class CaseQueries {
             item.put("action_kind", action.actionKind());
             item.put("occurred_at", text(action.occurredAt()));
             item.put("actor_kind", action.actorKind());
+            if (managerView) {
+                item.put("action_id", Long.toString(action.actionId()));
+                if (action.messageId() != null && action.relatedAccountId() != null) {
+                    item.put("message_id", Long.toString(action.messageId()));
+                    item.put("related_account_id", Long.toString(action.relatedAccountId()));
+                }
+            }
         }
         var enforcementArray = body.putArray("enforcements");
         for (var enforcement : enforcements) {

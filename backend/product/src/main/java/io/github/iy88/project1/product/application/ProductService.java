@@ -226,6 +226,10 @@ public class ProductService {
             Set<Long> afterCategories = new LinkedHashSet<>(links.activeCategoryIds(productId));
             Map<String, Object> after = snapshot(product, afterCategories);
             ProductEditHistory edit = edits.save(new ProductEditHistory(productId, sellerId, before, after, now));
+            if (latest != null && "pending".equals(latest.status())) {
+                var lifecycle = reviewCases.getIfAvailable();
+                if (lifecycle != null) lifecycle.contentUpdated(latest.caseId(), edit.id(), now);
+            }
             editNotices.productEdited(caller, sellerId, productId, edit.id(), product.title(),
                     Product.PUBLIC.equals(product.lifecycleState()), now);
             ProductDetail detail = detail(product, sellerId, latest);
@@ -372,6 +376,9 @@ public class ProductService {
             Instant now = Instant.now();
             audit.withdraw(now);
             audits.save(audit);
+            if (lifecycle != null) {
+                lifecycle.withdrawn(audit.caseId(), now);
+            }
             CategoryApplication pending = applications.lockPending(productId).orElse(null);
             Long applicationId = null;
             if (pending != null) {
@@ -511,13 +518,19 @@ public class ProductService {
         transaction.executeWithoutResult(status -> {
             writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
-            if (!categoryApplicationAllowed(product, latestAudit(productId))) {
+            ProductAudit latest = latestAudit(productId);
+            if (!categoryApplicationAllowed(product, latest)) {
                 throw new BusinessError("CATEGORY_APPLICATION_NOT_PENDING", 409, "没有待处理分类申请");
             }
             CategoryApplication application = applications.lockPending(productId)
                     .orElseThrow(() -> new BusinessError("CATEGORY_APPLICATION_NOT_PENDING", 409, "没有待处理分类申请"));
-            application.withdraw(Instant.now());
+            Instant now = Instant.now();
+            application.withdraw(now);
             applications.save(application);
+            var lifecycle = reviewCases.getIfAvailable();
+            if (lifecycle != null && latest != null && "pending".equals(latest.status())) {
+                lifecycle.classificationWithdrawn(latest.caseId(), application.id(), now);
+            }
             Map<String, Object> facts = new LinkedHashMap<>();
             facts.put("product_id", Long.toString(productId));
             facts.put("status", application.status());
