@@ -96,10 +96,15 @@ final class CaseIds {
                 conversationId = body(body.thread().conversationId(), "conversation_id");
             }
         }
+        if (body.basisRefs() != null && (body.basisRef() != null
+                || body.basisRefs().stream().anyMatch(ref -> ref == null || ref.isBlank()))) {
+            throw new BusinessError("INPUT_INVALID", 422, "依据引用字段无效");
+        }
         return new CaseCommands.Message(conversationId, body.messageKind(), body.body(),
                 optionalId(body.inquiryActionId(), "inquiry_action_id"),
                 optionalId(body.appealActionId(), "appeal_action_id"), body.resolution(), body.basisRef(),
-                enforcementId(body.originalEnforcementId()), enforcements(body.replacementEnforcements()));
+                enforcementId(body.originalEnforcementId()), enforcements(body.replacementEnforcements()),
+                body.basisRefs());
     }
 
     static CaseCommands.Decision decision(CaseRequests.Decision body) {

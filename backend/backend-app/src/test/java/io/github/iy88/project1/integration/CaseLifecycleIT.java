@@ -239,10 +239,20 @@ class CaseLifecycleIT {
         assertThat(queries.detail(context(reporter), caseId).has("pending_appeals")).isFalse();
         assertThat(queries.detail(context(related), caseId).has("pending_appeals")).isFalse();
 
+        var basisRefs = List.of("action:" + appealActionId, "action:" + inquiryActionId);
+        assertThatThrownBy(() -> cases.postMessage(context(manager), "resolve-invalid-basis", caseId,
+                new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "维持原决定", null,
+                        appealActionId, CaseVocabulary.RESOLUTION_UPHOLD, null, null, List.of(),
+                        List.of("case:" + caseId))))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("BASIS_REQUIRED"));
         var resolution = cases.postMessage(context(manager), "resolve-1", caseId,
                 new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "维持原决定", null,
-                        appealActionId, CaseVocabulary.RESOLUTION_UPHOLD, "依据"));
+                        appealActionId, CaseVocabulary.RESOLUTION_UPHOLD, null, null, List.of(), basisRefs));
         assertThat(resolution.status()).isEqualTo(201);
+        var resolutionAction = store.action(caseId, resolution.data().path("case_action_id").asLong()).orElseThrow();
+        var recordedBasis = app.getBean(JsonMapper.class).readTree(resolutionAction.basisRef());
+        assertThat(recordedBasis).extracting(JsonNode::asString).containsExactlyElementsOf(basisRefs);
         assertThat(queries.detail(context(manager), caseId).path("pending_appeals")).isEmpty();
 
         // A resolved appeal no longer blocks, but the deadline still does.

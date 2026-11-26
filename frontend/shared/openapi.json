@@ -8520,7 +8520,17 @@
             "enum": ["uphold", "revoke", "adjust", null]
           },
           "basis_ref": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "description": "Legacy appeal basis text. Supply either this field or basis_refs."
+          },
+          "basis_refs": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Selected case materials or the current appeal. Only valid for a manager's appeal resolution.",
+            "items": {
+              "type": "string",
+              "pattern": "^(action|evidence):[1-9][0-9]*$"
+            }
           },
           "original_enforcement_id": {
             "type": ["string", "null"],

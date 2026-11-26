@@ -60,15 +60,15 @@ const basis = ref<string[]>([]);
 const publicSummary = ref("");
 const publicReason = ref("");
 const confirmClose = ref(false);
-const appealDraft = ref<{
-  id: string;
+interface AppealDraft {
   reply: string;
-  basis: string;
+  basis: string[];
   resolution: AppealResolution | "";
   originalId: string;
   replacementAction: string;
   replacementExpected: string;
-}>();
+}
+const appealDrafts = ref<{ appeal: PendingCaseAppeal; draft: AppealDraft }[]>([]);
 const liftDraft = ref<{ enforcementId: string; reason: string }>();
 const enforcementOptions = [
   { action: "restrict_account", target: "account", label: "封禁账户" },
@@ -109,6 +109,9 @@ const pageDescription = computed(() =>
     : "读取事项摘要、材料、会话与处置操作。",
 );
 const reportedObject = computed(() => detail.value?.reported_object);
+const basisEvidence = computed(
+  () => detail.value?.evidence?.filter((item) => item.decision_basis) ?? [],
+);
 const submittedNotes = computed(
   () =>
     detail.value?.decision_basis_actions?.filter((item) => item.action_kind === "supplement") ?? [],
@@ -223,6 +226,19 @@ async function load(): Promise<void> {
     const next = await readCase(props.caseId, controller.signal);
     if (detailRequest === controller) {
       detail.value = next;
+      appealDrafts.value = (next.pending_appeals ?? []).map((appeal) => ({
+        appeal,
+        draft: appealDrafts.value.find(
+          (item) => item.appeal.appeal_action_id === appeal.appeal_action_id,
+        )?.draft ?? {
+          reply: "",
+          basis: [],
+          resolution: "",
+          originalId: "",
+          replacementAction: "",
+          replacementExpected: "terminated",
+        },
+      }));
       selectDefaultPeer(next);
       selectThreadFor(next);
     }
@@ -334,26 +350,11 @@ async function citeMessage(): Promise<void> {
   }
 }
 
-function beginAppeal(appeal: PendingCaseAppeal): void {
-  appealDraft.value = {
-    id: appeal.appeal_action_id,
-    reply: "",
-    basis: "",
-    resolution: "",
-    originalId: "",
-    replacementAction: "",
-    replacementExpected: "terminated",
-  };
-}
-
-function selectedAppealEnforcement(appeal: PendingCaseAppeal): AppealableEnforcement | undefined {
-  return appeal.original_enforcements?.find(
-    (item) => item.enforcement_id === appealDraft.value?.originalId,
-  );
-}
-
-function resetAppealReplacement(): void {
-  if (appealDraft.value) appealDraft.value.replacementAction = "";
+function selectedAppealEnforcement(
+  appeal: PendingCaseAppeal,
+  draft: AppealDraft,
+): AppealableEnforcement | undefined {
+  return appeal.original_enforcements?.find((item) => item.enforcement_id === draft.originalId);
 }
 
 function appealEnforcementLabel(item: AppealableEnforcement): string {
@@ -364,8 +365,8 @@ function appealEnforcementLabel(item: AppealableEnforcement): string {
   );
 }
 
-function appealReplacementOptions(appeal: PendingCaseAppeal) {
-  const original = selectedAppealEnforcement(appeal);
+function appealReplacementOptions(appeal: PendingCaseAppeal, draft: AppealDraft) {
+  const original = selectedAppealEnforcement(appeal, draft);
   if (!original) return [];
   const liftActions = new Set(["lift_account_restriction", "restore_display", "lift_trade_freeze"]);
   return enforcementOptions.filter(
@@ -376,12 +377,14 @@ function appealReplacementOptions(appeal: PendingCaseAppeal) {
   );
 }
 
-function appealReplacement(appeal: PendingCaseAppeal): CaseReplacementEnforcement[] {
-  const draft = appealDraft.value;
-  const original = selectedAppealEnforcement(appeal);
+function appealReplacement(
+  appeal: PendingCaseAppeal,
+  draft: AppealDraft,
+): CaseReplacementEnforcement[] {
+  const original = selectedAppealEnforcement(appeal, draft);
   const option = enforcementOptions.find(
     (candidate) =>
-      candidate.action === draft?.replacementAction && candidate.target === original?.target_type,
+      candidate.action === draft.replacementAction && candidate.target === original?.target_type,
   );
   if (!original || !option) return [];
   return [
@@ -390,14 +393,13 @@ function appealReplacement(appeal: PendingCaseAppeal): CaseReplacementEnforcemen
       target_type: original.target_type,
       target_id: original.target_id,
       expected_result:
-        option.action === "adjust_trade_status" ? draft?.replacementExpected : undefined,
+        option.action === "adjust_trade_status" ? draft.replacementExpected : undefined,
     },
   ];
 }
 
-async function resolveAppeal(appeal: PendingCaseAppeal): Promise<void> {
-  const draft = appealDraft.value;
-  if (writing.value || !draft || draft.id !== appeal.appeal_action_id) return;
+async function resolveAppeal(appeal: PendingCaseAppeal, draft: AppealDraft): Promise<void> {
+  if (writing.value) return;
   const resolution = draft.resolution;
   if (!resolution) {
     writeError.value = "请选择处理结果。";
@@ -407,13 +409,17 @@ async function resolveAppeal(appeal: PendingCaseAppeal): Promise<void> {
     writeError.value = "请选择要撤销或调整的原处置。";
     return;
   }
-  const replacements = resolution === "adjust" ? appealReplacement(appeal) : [];
+  const replacements = resolution === "adjust" ? appealReplacement(appeal, draft) : [];
   if (resolution === "adjust" && replacements.length === 0) {
     writeError.value = "请选择替代处置。";
     return;
   }
   const reply = draft.reply.trim();
-  const basisRef = draft.basis.trim();
+  const basisRefs = draft.basis;
+  if (!basisRefs.length) {
+    writeError.value = "请选择依据引用。";
+    return;
+  }
   const key = JSON.stringify([
     "resolve-appeal",
     appeal.appeal_action_id,
@@ -421,7 +427,7 @@ async function resolveAppeal(appeal: PendingCaseAppeal): Promise<void> {
     resolution === "uphold" ? null : draft.originalId,
     replacements,
     reply,
-    basisRef,
+    basisRefs,
   ]);
   writing.value = true;
   writeError.value = "";
@@ -433,11 +439,13 @@ async function resolveAppeal(appeal: PendingCaseAppeal): Promise<void> {
       draft.originalId || null,
       replacements,
       reply,
-      basisRef,
+      basisRefs,
       keys.current(key),
     );
     keys.rotate(key);
-    appealDraft.value = undefined;
+    appealDrafts.value = appealDrafts.value.filter(
+      (item) => item.appeal.appeal_action_id !== appeal.appeal_action_id,
+    );
     notify.success("已处理申辩。");
     if (selectedThread.value?.conversation_id === appeal.thread.conversation_id) {
       await loadThread(selectedThread.value);
@@ -641,8 +649,8 @@ onUnmounted(() => {
 
             <section v-if="detail.decision_kind" class="info-block">
               <div class="section-heading">
-                <h3>{{ decisionKindLabels[detail.decision_kind] }}</h3>
-                <span v-if="detail.decision_kind" class="chip">{{
+                <h3>决定理由</h3>
+                <span v-if="decisionKindLabels[detail.decision_kind]" class="chip">{{
                   decisionKindLabels[detail.decision_kind]
                 }}</span>
               </div>
@@ -1070,13 +1078,7 @@ onUnmounted(() => {
         </label>
         <fieldset class="stack">
           <legend>补充依据（可选）</legend>
-          <p
-            v-if="
-              !detail.decision_basis_actions?.length &&
-              !detail.evidence?.some((item) => item.decision_basis)
-            "
-            class="muted"
-          >
+          <p v-if="!detail.decision_basis_actions?.length && !basisEvidence.length" class="muted">
             暂无可引用的问询、回复或用户材料。
           </p>
           <label v-for="item in detail.decision_basis_actions" :key="item.action_id">
@@ -1084,11 +1086,7 @@ onUnmounted(() => {
             {{ messages[item.action_kind] }} · {{ formatDateTime(item.occurred_at) }}
             <span v-if="item.note" class="pre-line"> · {{ item.note }}</span>
           </label>
-          <div
-            v-for="item in detail.evidence?.filter((entry) => entry.decision_basis)"
-            :key="item.evidence_id"
-            class="inline"
-          >
+          <div v-for="item in basisEvidence" :key="item.evidence_id" class="inline">
             <label>
               <input v-model="basis" type="checkbox" :value="`evidence:${item.evidence_id}`" />
               用户上传附件 · 证据 #{{ item.evidence_id }}
@@ -1183,151 +1181,157 @@ onUnmounted(() => {
         </div>
       </form>
 
-      <section
-        v-if="actions.has('resolve_appeal') && detail.pending_appeals?.length"
-        class="card stack"
-      >
+      <section v-if="actions.has('resolve_appeal') && appealDrafts.length" class="card stack">
         <h2>待处理申辩</h2>
-        <div v-for="appeal in detail.pending_appeals" :key="appeal.appeal_action_id" class="stack">
-          <div class="spread">
-            <p>账户 #{{ appeal.related_account_id }} · {{ formatDateTime(appeal.submitted_at) }}</p>
-            <button
-              type="button"
-              class="btn"
-              @click="
-                loadThread({ ...appeal.thread, related_account_id: appeal.related_account_id })
-              "
-            >
-              查看申辩会话
-            </button>
-            <button
-              v-if="appealDraft?.id !== appeal.appeal_action_id"
-              type="button"
-              class="btn"
-              @click="beginAppeal(appeal)"
-            >
-              处理申辩
-            </button>
-          </div>
-          <form
-            v-if="appealDraft?.id === appeal.appeal_action_id"
-            class="stack"
-            :aria-label="`处理申辩 #${appeal.appeal_action_id}`"
-            @submit.prevent="resolveAppeal(appeal)"
+        <form
+          v-for="{ appeal, draft } in appealDrafts"
+          :key="appeal.appeal_action_id"
+          class="stack"
+          :aria-label="`处理申辩 #${appeal.appeal_action_id}`"
+          @submit.prevent="resolveAppeal(appeal, draft)"
+        >
+          <p>账户 #{{ appeal.related_account_id }} · {{ formatDateTime(appeal.submitted_at) }}</p>
+          <fieldset class="stack">
+            <legend>处理结果</legend>
+            <label>
+              <input
+                v-model="draft.resolution"
+                type="radio"
+                name="resolution"
+                value="uphold"
+                required
+              />
+              维持原决定
+            </label>
+            <label>
+              <input
+                v-model="draft.resolution"
+                type="radio"
+                name="resolution"
+                value="revoke"
+                :disabled="!appeal.original_enforcements?.length"
+                required
+              />
+              撤销原处置
+            </label>
+            <label>
+              <input
+                v-model="draft.resolution"
+                type="radio"
+                name="resolution"
+                value="adjust"
+                :disabled="!appeal.original_enforcements?.length"
+                required
+              />
+              调整处置
+            </label>
+          </fieldset>
+          <p v-if="!appeal.original_enforcements?.length" class="muted">
+            没有可撤销或调整的原处置，只能维持原决定。
+          </p>
+          <label
+            v-if="draft.resolution === 'revoke' || draft.resolution === 'adjust'"
+            class="field"
           >
-            <fieldset class="stack">
-              <legend>处理结果</legend>
-              <label>
-                <input
-                  v-model="appealDraft.resolution"
-                  type="radio"
-                  name="resolution"
-                  value="uphold"
-                  required
-                />
-                维持原决定
-              </label>
-              <label>
-                <input
-                  v-model="appealDraft.resolution"
-                  type="radio"
-                  name="resolution"
-                  value="revoke"
-                  :disabled="!appeal.original_enforcements?.length"
-                  required
-                />
-                撤销原处置
-              </label>
-              <label>
-                <input
-                  v-model="appealDraft.resolution"
-                  type="radio"
-                  name="resolution"
-                  value="adjust"
-                  :disabled="!appeal.original_enforcements?.length"
-                  required
-                />
-                调整处置
-              </label>
-            </fieldset>
-            <p v-if="!appeal.original_enforcements?.length" class="muted">
-              没有可撤销或调整的原处置，只能维持原决定。
-            </p>
-            <label
-              v-if="appealDraft.resolution === 'revoke' || appealDraft.resolution === 'adjust'"
-              class="field"
+            <span>原处置</span>
+            <select
+              v-model="draft.originalId"
+              name="original_enforcement_id"
+              class="select"
+              required
+              @change="draft.replacementAction = ''"
             >
-              <span>原处置</span>
+              <option value="" disabled>请选择原处置</option>
+              <option
+                v-for="item in appeal.original_enforcements ?? []"
+                :key="item.enforcement_id"
+                :value="item.enforcement_id"
+              >
+                {{ appealEnforcementLabel(item) }} · {{ item.enforcement_id }} · 目标 #{{
+                  item.target_id
+                }}
+              </option>
+            </select>
+          </label>
+          <template v-if="draft.resolution === 'adjust'">
+            <label class="field">
+              <span>替代处置</span>
               <select
-                v-model="appealDraft.originalId"
-                name="original_enforcement_id"
+                v-model="draft.replacementAction"
+                name="replacement_action"
                 class="select"
                 required
-                @change="resetAppealReplacement()"
               >
-                <option value="" disabled>请选择原处置</option>
+                <option value="" disabled>请选择替代处置</option>
                 <option
-                  v-for="item in appeal.original_enforcements ?? []"
-                  :key="item.enforcement_id"
-                  :value="item.enforcement_id"
+                  v-for="option in appealReplacementOptions(appeal, draft)"
+                  :key="`${option.action}-${option.target}`"
+                  :value="option.action"
                 >
-                  {{ appealEnforcementLabel(item) }} · {{ item.enforcement_id }} · 目标 #{{
-                    item.target_id
-                  }}
+                  {{ option.label }}
                 </option>
               </select>
             </label>
-            <template v-if="appealDraft.resolution === 'adjust'">
-              <label class="field">
-                <span>替代处置</span>
-                <select
-                  v-model="appealDraft.replacementAction"
-                  name="replacement_action"
-                  class="select"
-                  required
-                >
-                  <option value="" disabled>请选择替代处置</option>
-                  <option
-                    v-for="option in appealReplacementOptions(appeal)"
-                    :key="`${option.action}-${option.target}`"
-                    :value="option.action"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
-              </label>
-              <p
-                v-if="appealDraft.originalId && appealReplacementOptions(appeal).length === 0"
-                class="muted"
+            <p
+              v-if="draft.originalId && appealReplacementOptions(appeal, draft).length === 0"
+              class="muted"
+            >
+              该原处置暂不支持调整，请选择撤销或维持。
+            </p>
+            <label v-if="draft.replacementAction === 'adjust_trade_status'" class="field">
+              <span>目标状态</span>
+              <select
+                v-model="draft.replacementExpected"
+                name="replacement_expected_result"
+                class="select"
               >
-                该原处置暂不支持调整，请选择撤销或维持。
-              </p>
-              <label v-if="appealDraft.replacementAction === 'adjust_trade_status'" class="field">
-                <span>目标状态</span>
-                <select
-                  v-model="appealDraft.replacementExpected"
-                  name="replacement_expected_result"
-                  class="select"
-                >
-                  <option value="terminated">已终止</option>
-                  <option value="completed">已完成</option>
-                </select>
+                <option value="terminated">已终止</option>
+                <option value="completed">已完成</option>
+              </select>
+            </label>
+          </template>
+          <label class="field"
+            ><span>回复内容</span>
+            <textarea v-model="draft.reply" name="reply" class="textarea" required />
+          </label>
+          <fieldset class="stack">
+            <legend>依据引用（至少选一项）</legend>
+            <label>
+              <input
+                v-model="draft.basis"
+                type="checkbox"
+                :value="`action:${appeal.appeal_action_id}`"
+              />
+              本次申辩 · {{ formatDateTime(appeal.submitted_at) }}
+            </label>
+            <label v-for="item in detail.decision_basis_actions" :key="item.action_id">
+              <input v-model="draft.basis" type="checkbox" :value="`action:${item.action_id}`" />
+              {{ messages[item.action_kind] }} · {{ formatDateTime(item.occurred_at) }}
+              <span v-if="item.note" class="pre-line"> · {{ item.note }}</span>
+            </label>
+            <div v-for="item in basisEvidence" :key="item.evidence_id" class="inline">
+              <label>
+                <input
+                  v-model="draft.basis"
+                  type="checkbox"
+                  :value="`evidence:${item.evidence_id}`"
+                />
+                用户上传附件 · 证据 #{{ item.evidence_id }}
+                <span v-if="item.submitted_at"> · {{ formatDateTime(item.submitted_at) }}</span>
               </label>
-            </template>
-            <label class="field"
-              ><span>回复内容</span>
-              <textarea v-model="appealDraft.reply" name="reply" class="textarea" required />
-            </label>
-            <label class="field"
-              ><span>依据引用</span>
-              <input v-model="appealDraft.basis" name="basis_ref" class="input" required />
-            </label>
-            <div class="inline">
-              <button type="button" class="btn" @click="appealDraft = undefined">取消</button>
-              <button type="submit" class="btn btn--primary" :disabled="writing">提交处理</button>
+              <a
+                :href="caseEvidenceFileHref(caseId, item.evidence_id)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                打开附件
+              </a>
             </div>
-          </form>
-        </div>
+          </fieldset>
+          <div class="inline">
+            <button type="submit" class="btn btn--primary" :disabled="writing">提交处理</button>
+          </div>
+        </form>
       </section>
 
       <section v-if="actions.has('close')" class="card stack">

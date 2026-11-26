@@ -241,7 +241,7 @@ export function resolveCaseAppeal(
   originalEnforcementId: string | null,
   replacementEnforcements: CaseReplacementEnforcement[],
   body: string,
-  basisRef: string,
+  basisRefs: string[] | string,
   idempotencyKey: string,
 ): Promise<unknown> {
   const payload: Record<string, unknown> = {
@@ -250,7 +250,7 @@ export function resolveCaseAppeal(
     appeal_action_id: appeal.appeal_action_id,
     resolution,
     body,
-    basis_ref: basisRef,
+    ...(typeof basisRefs === "string" ? { basis_ref: basisRefs } : { basis_refs: basisRefs }),
   };
   if (resolution !== "uphold") {
     payload.original_enforcement_id = originalEnforcementId;

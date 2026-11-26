@@ -1,5 +1,6 @@
 package io.github.iy88.project1.casemanagement.application;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import io.github.iy88.project1.core.BusinessError;
 import java.util.List;
@@ -65,10 +66,19 @@ public final class CaseCommands {
      */
     public record Message(Long conversationId, String messageKind, String body, Long inquiryActionId,
                           Long appealActionId, String resolution, String basisRef,
-                          String originalEnforcementId, List<Enforcement> replacementEnforcements) {
+                          String originalEnforcementId, List<Enforcement> replacementEnforcements,
+                          @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> basisRefs) {
         public Message {
+            basisRefs = basisRefs == null ? List.of() : List.copyOf(basisRefs);
             replacementEnforcements = replacementEnforcements == null ? List.of()
                     : List.copyOf(replacementEnforcements);
+        }
+
+        public Message(Long conversationId, String messageKind, String body, Long inquiryActionId,
+                       Long appealActionId, String resolution, String basisRef,
+                       String originalEnforcementId, List<Enforcement> replacementEnforcements) {
+            this(conversationId, messageKind, body, inquiryActionId, appealActionId, resolution, basisRef,
+                    originalEnforcementId, replacementEnforcements, List.of());
         }
 
         /** Compatibility constructor for callers that do not select an original execution. */

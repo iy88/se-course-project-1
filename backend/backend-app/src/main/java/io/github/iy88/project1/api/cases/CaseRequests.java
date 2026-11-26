@@ -31,7 +31,14 @@ public final class CaseRequests {
 
     public record Message(ThreadRef thread, String messageKind, String body, String inquiryActionId,
                           String appealActionId, String resolution, String basisRef,
-                          String originalEnforcementId, List<Enforcement> replacementEnforcements) {
+                          String originalEnforcementId, List<Enforcement> replacementEnforcements, List<String> basisRefs) {
+        public Message(ThreadRef thread, String messageKind, String body, String inquiryActionId,
+                       String appealActionId, String resolution, String basisRef,
+                       String originalEnforcementId, List<Enforcement> replacementEnforcements) {
+            this(thread, messageKind, body, inquiryActionId, appealActionId, resolution, basisRef,
+                    originalEnforcementId, replacementEnforcements, null);
+        }
+
         /** Compatibility constructor for existing callers that do not select an execution. */
         public Message(ThreadRef thread, String messageKind, String body, String inquiryActionId,
                        String appealActionId, String resolution, String basisRef) {

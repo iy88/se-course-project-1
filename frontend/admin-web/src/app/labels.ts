@@ -70,6 +70,9 @@ export const todoKindOptions: { value: TodoKind; label: string }[] = [
 ];
 
 export const decisionKindLabels: Record<string, string> = {
+  violation: "违规成立",
+  no_action: "无需处理",
+  not_actionable: "不予处理",
   approved: "通过",
   rejected: "不通过",
 };

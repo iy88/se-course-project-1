@@ -688,10 +688,6 @@ public class CaseApplication {
                     throw new BusinessError("INPUT_INVALID", 422, "撤销处置不能同时给出替代处置");
                 }
             }
-            if (message.basisRef() == null || message.basisRef().isBlank()) {
-                throw new BusinessError("BASIS_REQUIRED", 422, "处理申辩须给出依据");
-            }
-            String basisRef = requiredText(message.basisRef(), settings.getMaxNoteLength(), "依据引用");
             var appeal = store.action(facts.caseId(), message.appealActionId())
                     .filter(action -> CaseVocabulary.ACTION_APPEAL.equals(action.actionKind()))
                     .orElseThrow(() -> new BusinessError("INPUT_INVALID", 422, "申辩不存在"));
@@ -701,17 +697,37 @@ public class CaseApplication {
             if (appeal.relatedAccountId() == null) {
                 throw new BusinessError("STATE_CONFLICT", 409, "申辩记录不完整");
             }
+            var basisRefs = message.basisRefs();
+            String basisRef;
+            if (basisRefs.isEmpty()) {
+                if (message.basisRef() == null || message.basisRef().isBlank()) {
+                    throw new BusinessError("BASIS_REQUIRED", 422, "处理申辩须给出依据");
+                }
+                basisRef = requiredText(message.basisRef(), settings.getMaxNoteLength(), "依据引用");
+                basisRefs = List.of(basisRef);
+            } else {
+                if (message.basisRef() != null) {
+                    throw new BusinessError("INPUT_INVALID", 422, "只能使用一种依据引用字段");
+                }
+                var allowed = decisionBasisRefs(facts.caseId());
+                allowed.add("action:" + appeal.actionId());
+                if (!allowed.containsAll(basisRefs)) {
+                    throw new BusinessError("BASIS_REQUIRED", 422, "请选择本事项的依据");
+                }
+                basisRefs = basisRefs.stream().distinct().toList();
+                basisRef = basisJson(basisRefs);
+            }
             long appellant = appeal.relatedAccountId();
             long conversationId = requireThread(facts.caseId(), appellant, message.conversationId());
             Instant now = now();
             String sourceNote = uphold ? null : reverse(transaction, facts, appellant, message, actor, now, plan,
-                    basisRef);
+                    basisRef, basisRefs);
             var appended = threads.append(transaction, facts.caseId(), appellant,
                     CaseVocabulary.KIND_MANAGER_REPLY, CaseVocabulary.ACTOR_MANAGER, actor, message.body());
             long actionId = store.addAction(new CaseRecords.Action(0, facts.caseId(),
                     CaseVocabulary.ACTION_MANAGER_REPLY, CaseVocabulary.ACTOR_MANAGER, actor, now,
                     appended.messageId(), appellant, null, appeal.actionId(), message.resolution(),
-                    sourceNote, basisJson(List.of(basisRef))));
+                    sourceNote, basisJson(basisRefs)));
             notifications.create(transaction, CaseVocabulary.EVENT_APPEAL_RESOLVED,
                     "case:" + facts.caseId() + ":appeal:" + appeal.actionId() + ":resolved",
                     new ResourceRef("case", facts.caseId()), Set.of(appellant),
@@ -730,7 +746,7 @@ public class CaseApplication {
          */
         private String reverse(WriteTransaction transaction, CaseRecords.Facts facts, long appellant,
                                CaseCommands.Message message, long manager, Instant now, LockPlan plan,
-                               String basisRef) {
+                               String basisRef, List<String> basisRefs) {
             if (enforcement == null) {
                 throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "撤销或调整须由处置执行提供");
             }
@@ -777,7 +793,7 @@ public class CaseApplication {
             store.markEnforcementLifted(facts.caseId(), recorded.enforcementId(), manager, basisRef, now);
             store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_LIFT,
                     CaseVocabulary.ACTOR_MANAGER, manager, now, null, appellant, null, null, null,
-                    sourceNote, basisJson(List.of(basisRef))));
+                    sourceNote, basisJson(basisRefs)));
             return sourceNote;
         }
 
@@ -878,15 +894,8 @@ public class CaseApplication {
                 throw new BusinessError("INPUT_INVALID", 422, "decision_kind 取值无效");
             }
             String reason = requiredText(decision.reason(), settings.getMaxReasonLength(), "决定理由");
-            if (!decision.basisRefs().isEmpty()) {
-                var allowed = new java.util.HashSet<String>();
-                store.actions(facts.caseId()).stream().filter(CaseRecords.Action::decisionBasis)
-                        .forEach(action -> allowed.add("action:" + action.actionId()));
-                store.evidence(facts.caseId()).stream().filter(CaseRecords.Evidence::decisionBasis)
-                        .forEach(evidence -> allowed.add("evidence:" + evidence.evidenceId()));
-                if (!allowed.containsAll(decision.basisRefs())) {
-                    throw new BusinessError("BASIS_REQUIRED", 422, "请选择本事项的问询、回复或用户补充材料");
-                }
+            if (!decision.basisRefs().isEmpty() && !decisionBasisRefs(facts.caseId()).containsAll(decision.basisRefs())) {
+                throw new BusinessError("BASIS_REQUIRED", 422, "请选择本事项的问询、回复或用户补充材料");
             }
             Instant now = now();
             if (instructions.isEmpty()) {
@@ -1469,7 +1478,7 @@ public class CaseApplication {
 
     private static void rejectResolutionFields(CaseCommands.Message message) {
         rejectSelectionFields(message);
-        if (message.appealActionId() != null || message.resolution() != null) {
+        if (message.appealActionId() != null || message.resolution() != null || !message.basisRefs().isEmpty()) {
             throw new BusinessError("INPUT_INVALID", 422, "当前发言不能给出申辩处理字段");
         }
     }
@@ -1669,6 +1678,15 @@ public class CaseApplication {
         body.put("case_status", facts.caseStatus());
         body.put("archived_at", facts.archivedAt().toString());
         return body;
+    }
+
+    private Set<String> decisionBasisRefs(long caseId) {
+        var allowed = new java.util.HashSet<String>();
+        store.actions(caseId).stream().filter(CaseRecords.Action::decisionBasis)
+                .forEach(action -> allowed.add("action:" + action.actionId()));
+        store.evidence(caseId).stream().filter(CaseRecords.Evidence::decisionBasis)
+                .forEach(evidence -> allowed.add("evidence:" + evidence.evidenceId()));
+        return allowed;
     }
 
     private String basisJson(List<String> basisRefs) {
