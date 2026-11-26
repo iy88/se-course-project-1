@@ -1,15 +1,8 @@
 <script setup lang="ts">
-/*
- * Report submission (US-07, US-08).
- *
- * The target usually arrives from the object being reported (product, comment,
- * message, evaluation, account). When the page is opened directly the user must
- * name the target explicitly, so the same form covers both entry points.
- */
-import { computed, onMounted, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { submitReport } from "../../api/cases";
-import type { ConversationKind, ReportTarget, ReportTargetType } from "../../api/contracts";
+import type { ReportTarget, ReportTargetType } from "../../api/contracts";
 import { newIdempotencyKey } from "../../app/keys";
 import { rememberCaseScope } from "../../app/case-directory";
 import { problemMessage } from "../../app/problems";
@@ -21,10 +14,6 @@ import PageHeader from "../../components/PageHeader.vue";
 const route = useRoute();
 const router = useRouter();
 
-const targetType = ref<ReportTargetType>("product");
-const targetId = ref("");
-const conversationKind = ref<ConversationKind | "">("");
-const conversationId = ref("");
 const reason = ref("");
 const note = ref("");
 const files = ref<string[]>([]);
@@ -39,55 +28,50 @@ const targetTypes: { value: ReportTargetType; label: string }[] = [
   { value: "account", label: "账户" },
 ];
 
-const needsConversation = computed(() => targetType.value === "message");
-const targetReady = computed(
-  () =>
-    targetId.value.trim() !== "" &&
-    (!needsConversation.value ||
-      (conversationKind.value !== "" && conversationId.value.trim() !== "")),
-);
+const resourceId = /^[1-9][0-9]*$/;
+const target = computed<ReportTarget | null>(() => {
+  const { target_type, target_id, conversation_kind, conversation_id } = route.query;
+  const type = targetTypes.find((option) => option.value === target_type)?.value;
+  if (!type || typeof target_id !== "string" || !resourceId.test(target_id)) return null;
 
-onMounted(() => {
-  const query = route.query;
-  const prefilledType = targetTypes.find((option) => option.value === query.target_type);
-  if (prefilledType) targetType.value = prefilledType.value;
-  if (typeof query.target_id === "string") targetId.value = query.target_id;
-  if (query.conversation_kind === "chat" || query.conversation_kind === "trade") {
-    conversationKind.value = query.conversation_kind;
-  }
-  if (typeof query.conversation_id === "string") conversationId.value = query.conversation_id;
+  if (type !== "message") return { target_type: type, target_id };
+  if (
+    (conversation_kind !== "chat" && conversation_kind !== "trade") ||
+    typeof conversation_id !== "string" ||
+    !resourceId.test(conversation_id)
+  )
+    return null;
+
+  return { target_type: type, target_id, conversation_kind, conversation_id };
 });
 
-function buildTarget(): ReportTarget | null {
-  if (!targetReady.value) return null;
-  const target: ReportTarget = {
-    target_type: targetType.value,
-    target_id: targetId.value.trim(),
-  };
-  if (needsConversation.value && conversationKind.value !== "") {
-    target.conversation_kind = conversationKind.value;
-    target.conversation_id = conversationId.value.trim();
-  }
-  return target;
-}
+const targetLabel = computed(
+  () => targetTypes.find((option) => option.value === target.value?.target_type)?.label,
+);
+
+watch(
+  () => route.fullPath,
+  () => {
+    reason.value = "";
+    note.value = "";
+    files.value = [];
+    error.value = null;
+  },
+);
 
 async function submit(): Promise<void> {
-  if (pending.value) return;
+  const reportTarget = target.value;
+  if (pending.value || !reportTarget) return;
   error.value = null;
   if (!reason.value.trim()) {
     error.value = "请填写举报理由。";
-    return;
-  }
-  const target = buildTarget();
-  if (!target) {
-    error.value = "请填写被举报对象。消息类举报还需指定所属会话。";
     return;
   }
   pending.value = true;
   try {
     const result = await submitReport(
       {
-        target,
+        target: reportTarget,
         reason: reason.value.trim(),
         note: note.value.trim() || undefined,
         attachments: files.value.map((fileId) => ({ file_id: fileId })),
@@ -99,9 +83,11 @@ async function submit(): Promise<void> {
     notify.success(
       result.reused ? "该对象已有未结的举报，本次内容已作为补充记录。" : "举报已提交。",
     );
-    await router.push({ name: "case-detail", params: { caseId: result.case_id } });
+    if (target.value === reportTarget) {
+      await router.push({ name: "case-detail", params: { caseId: result.case_id } });
+    }
   } catch (caught) {
-    error.value = problemMessage(caught);
+    if (target.value === reportTarget) error.value = problemMessage(caught);
   } finally {
     pending.value = false;
   }
@@ -110,62 +96,24 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="stack stack--loose">
-    <PageHeader
-      eyebrow="事项"
-      title="提交举报"
-      description="举报对象可以是商品、评论、消息、评价或账户；请尽量附上可核对的证据。"
-    >
+    <PageHeader eyebrow="事项" title="提交举报">
       <template #actions>
         <RouterLink to="/me/cases" class="btn btn--ghost">我的事项</RouterLink>
       </template>
     </PageHeader>
 
-    <form class="stack stack--loose" @submit.prevent="submit">
-      <section class="card stack">
-        <div class="card__head"><h2>举报对象</h2></div>
-        <div class="form-row">
-          <div class="field">
-            <label class="field__label" for="target-type">对象类型</label>
-            <select id="target-type" v-model="targetType" class="select">
-              <option v-for="option in targetTypes" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="field__label" for="target-id">对象标识</label>
-            <input
-              id="target-id"
-              v-model="targetId"
-              class="input"
-              inputmode="numeric"
-              placeholder="例如 12"
-              required
-            />
-          </div>
-        </div>
-        <div v-if="needsConversation" class="form-row">
-          <div class="field">
-            <label class="field__label" for="conversation-kind">会话类型</label>
-            <select id="conversation-kind" v-model="conversationKind" class="select" required>
-              <option value="">请选择</option>
-              <option value="chat">私聊</option>
-              <option value="trade">交易会话</option>
-            </select>
-          </div>
-          <div class="field">
-            <label class="field__label" for="conversation-id">会话标识</label>
-            <input
-              id="conversation-id"
-              v-model="conversationId"
-              class="input"
-              inputmode="numeric"
-              required
-            />
-          </div>
-        </div>
-        <p class="muted">从商品页或消息页进入时，对象标识会自动填入；直接打开本页时请手动填写。</p>
-      </section>
+    <p v-if="!target" class="banner banner--info">
+      请从商品、评论、评价、消息或商品卖方旁的举报入口发起。
+    </p>
+    <form v-else class="stack" @submit.prevent="submit">
+      <p class="muted break-anywhere">
+        举报对象 · {{ targetLabel }} #{{ target.target_id }}
+        <template v-if="target.target_type === 'message'">
+          · {{ target.conversation_kind === "chat" ? "私聊" : "交易会话" }} #{{
+            target.conversation_id
+          }}
+        </template>
+      </p>
 
       <section class="card stack">
         <div class="card__head"><h2>举报内容</h2></div>
