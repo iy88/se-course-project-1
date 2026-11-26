@@ -12,3 +12,7 @@ PostgreSQL 18.7 (Debian 18.7-1.pgdg13+5) on x86_64-pc-linux-gnu, compiled by gcc
 
 $ flyway schema (project1_acceptance)
 24 migrations, max version 9
+
+# OSS 隔离（2026-11-26T23:02:04+08:00）
+OSS_BUCKET=campus-market-v2-jwy (private)
+OSS_PREFIX=project1/acceptance/jwy
