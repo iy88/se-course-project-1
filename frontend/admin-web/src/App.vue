@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /* Administration shell: identity gate, navigation and the active page. */
 import { computed, onMounted } from "vue";
+import BrandMark from "../../shared/BrandMark.vue";
 import MobileBackButton from "../../shared/MobileBackButton.vue";
 import PageFeedback from "../../shared/PageFeedback.vue";
 import UiIcon from "../../shared/UiIcon.vue";
@@ -79,7 +80,7 @@ function goBack(): void {
             :class="{ 'admin-brand--with-back': canGoBack }"
             :href="routeHref({ name: 'reviews', ownership: 'unclaimed' })"
           >
-            <span class="admin-brand__logo" aria-hidden="true">二</span>
+            <BrandMark />
             <span>
               校园二手交易
               <small>管理端</small>

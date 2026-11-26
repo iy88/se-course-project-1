@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.iy88.project1.BackendAppApplication;
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
+import io.github.iy88.project1.core.ResourceRef;
+import io.github.iy88.project1.notification.application.NotificationQueries;
 import io.github.iy88.project1.product.application.ProductInteractions;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -74,7 +77,8 @@ class ProductInteractionIT {
         properties.setProperty("DB_LOCK_TIMEOUT_SECONDS", "10");
         properties.setProperty("ACCOUNT_ENTRY_SIGNING_KEY", "product-interaction-it-signing-key-0123456789");
 
-        var application = new SpringApplication(BackendAppApplication.class);
+        var application = new SpringApplication(BackendAppApplication.class,
+                InfrastructureIT.Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("product-interaction-it", properties)));
         app = application.run("--spring.profiles.active=infrastructure", "--server.port=0",
@@ -109,6 +113,11 @@ class ProductInteractionIT {
 
     /** Removes only rows created by this test domain, so a shared integration database is safe. */
     private static void cleanupFixtures() {
+        for (String table : List.of("notification", "user_event", "account_event_head")) {
+            String column = "account_event_head".equals(table) ? "account_id" : "recipient_account_id";
+            db.sql("delete from " + table + " where " + column + " in (" + MY_ACCOUNTS + ")")
+                    .param(EMAIL_LIKE).update();
+        }
         db.sql("delete from product_favorite where product_id in (" + MY_PRODUCTS + ")")
                 .param(EMAIL_LIKE).update();
         db.sql("delete from product_comment where product_id in (" + MY_PRODUCTS + ")")
@@ -120,6 +129,57 @@ class ProductInteractionIT {
         db.sql("delete from product where seller_account_id in (" + MY_ACCOUNTS + ")")
                 .param(EMAIL_LIKE).update();
         db.sql("delete from account where email like ?").param(EMAIL_LIKE).update();
+    }
+
+    @Test
+    void commentAndReplyNotifyOnlyTheOtherParticipant() {
+        var comment = interactions.createComment(buyer, publicProduct, "Is the book available?");
+        var reply = interactions.replyToComment(seller, publicProduct, Long.parseLong(comment.id()), "Yes.");
+        var ownComment = interactions.createComment(seller, publicProduct, "Updated availability.");
+        interactions.replyToComment(seller, publicProduct, Long.parseLong(ownComment.id()), "Still available.");
+
+        assertThat(db.sql("""
+                select recipient_account_id from notification
+                where source_type = 'product' and source_id = ? order by notification_id
+                """).param(publicProduct).query(Long.class).list()).containsExactly(seller, buyer);
+        assertThat(db.sql("""
+                select recipient_account_id from user_event
+                where event_type = 'notification_created' and source_type = 'product' and source_id = ?
+                order by recipient_account_id
+                """).param(publicProduct).query(Long.class).list()).containsExactlyInAnyOrder(seller, buyer);
+
+        var queries = app.getBean(NotificationQueries.class);
+        long replyNoticeId = db.sql("""
+                select notification_id from notification
+                where recipient_account_id = ? and event_type = 'product_comment.replied'
+                """).param(buyer).query(Long.class).single();
+        var context = new ExecutionContext(UUID.randomUUID(), ExecutionContext.ActorKind.ACCOUNT,
+                Long.toString(buyer), UUID.randomUUID(), null, 0L, "interaction-it");
+        var visible = queries.get(context, replyNoticeId);
+        assertThat(visible.summary()).isEqualTo("卖家回复了你的评论");
+        assertThat(visible.source()).isEqualTo(new ResourceRef("product", publicProduct));
+        assertThat(visible.subject()).isEqualTo("Public book");
+        assertThat(visible.body()).isEqualTo("Yes.");
+        assertThat(visible.commentId()).isEqualTo(Long.parseLong(reply.id()));
+
+        var thread = interactions.listComments(buyer, publicProduct, 1, 1, null, Long.parseLong(reply.id()));
+        assertThat(thread.page()).isEqualTo(2);
+        assertThat(thread.items()).singleElement().satisfies(root -> {
+            assertThat(root.id()).isEqualTo(comment.id());
+            assertThat(root.replies()).extracting(ProductInteractions.CommentView::id).containsExactly(reply.id());
+        });
+
+        interactions.deleteComment(seller, publicProduct, Long.parseLong(reply.id()));
+        var removed = queries.get(context, replyNoticeId);
+        assertThat(removed.commentId()).isNull();
+        assertThat(removed.body()).isEqualTo("该评论当前不可查看。");
+
+        db.sql("update product set lifecycle_state = 'off_shelf' where product_id = ?")
+                .param(publicProduct).update();
+        var hidden = queries.get(context, replyNoticeId);
+        assertThat(hidden.summary()).isEqualTo(visible.summary());
+        assertThat(hidden.source()).isNull();
+        assertThat(hidden.subject()).isNull();
     }
 
     @Test

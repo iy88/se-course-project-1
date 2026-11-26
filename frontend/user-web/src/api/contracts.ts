@@ -235,6 +235,7 @@ export interface CategoryView {
 export interface SellerRef {
   id: string;
   display_name: string;
+  avatar_url?: string | null;
 }
 
 export interface CategoryRef {
@@ -363,6 +364,7 @@ export type CommentStatus = "published" | "deleted_by_author" | "removed_by_admi
 export interface CommentAuthor {
   id: string;
   display_name: string;
+  avatar_url?: string | null;
 }
 
 /** One product comment or seller reply; replies only appear on top-level comments. */
@@ -491,6 +493,8 @@ export interface TradeDispute {
   initiator_id: string;
   statement: string;
   status: DisputeStatus;
+  /** Management case created for the dispute, when the backend has one. */
+  case_id?: string | null;
   opened_at: string;
   resolved_at?: string | null;
 }
@@ -520,13 +524,11 @@ export type TradeAction =
   | "withdraw"
   | "propose_agreement"
   | "decide_agreement"
-  | "submit_completion"
+  | "submit_confirmation"
   | "propose_cancellation"
   | "decide_cancellation"
   | "open_dispute"
-  | "confirm_dispute_resolution"
-  | "submit_review"
-  | "open_trade_conversation";
+  | "confirm_dispute_resolution";
 
 export interface TradeView {
   id: string;
@@ -631,13 +633,21 @@ export interface TradeReview {
   reviewer: TradeAccountRef;
   reviewee: TradeAccountRef;
   rating: number;
-  content: string;
+  /** Null or empty when the reviewer only left a rating. */
+  content?: string | null;
   visible: boolean;
   created_at: string;
 }
 
 export interface SubmitReviewResult {
   review: TradeReview;
+}
+
+/** API-TRD-016 `GET /trades/{trade_id}/reviews` projection for one viewer. */
+export interface TradeReviewsView {
+  can_review: boolean;
+  written: TradeReview | null;
+  received: TradeReview | null;
 }
 
 export interface MyTradesQuery {
@@ -659,6 +669,7 @@ export interface ConversationRef {
 export interface ConversationPeer {
   account_id: string;
   display_name: string;
+  avatar_url?: string | null;
 }
 
 export interface ConversationBranch {
@@ -695,6 +706,7 @@ export interface ConversationMessage {
 
 export interface ConversationMessagesPage {
   items: ConversationMessage[];
+  trade_id?: string;
   next_after_seq?: number | null;
   next_before_seq?: number | null;
   branch_status: "active" | "archived";
@@ -730,6 +742,12 @@ export interface NotificationSummary {
   read_at?: string | null;
   summary: string;
   source?: ResourceRef | null;
+  subject?: string;
+}
+
+export interface NotificationDetail extends NotificationSummary {
+  body?: string;
+  comment_id?: string;
 }
 
 export type NotificationReadFilter = "all" | "unread" | "read";

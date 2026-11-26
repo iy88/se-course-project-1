@@ -18,7 +18,7 @@ import java.util.Map;
 final class NotificationWire {
     private NotificationWire() {}
 
-    static Map<String, Object> view(NotificationView view) {
+    private static Map<String, Object> summary(NotificationView view) {
         var body = new LinkedHashMap<String, Object>();
         body.put("notification_id", Long.toString(view.notificationId()));
         body.put("event_type", view.eventType());
@@ -26,12 +26,20 @@ final class NotificationWire {
         body.put("read_at", view.readAt());
         body.put("summary", view.summary());
         body.put("source", source(view.source()));
+        if (view.subject() != null) body.put("subject", view.subject());
+        return body;
+    }
+
+    static Map<String, Object> detail(NotificationView view) {
+        var body = summary(view);
+        if (view.body() != null) body.put("body", view.body());
+        if (view.commentId() != null) body.put("comment_id", Long.toString(view.commentId()));
         return body;
     }
 
     static Map<String, Object> page(NotificationPage page) {
         var body = new LinkedHashMap<String, Object>();
-        body.put("items", page.items().stream().map(NotificationWire::view).toList());
+        body.put("items", page.items().stream().map(NotificationWire::summary).toList());
         body.put("page", page.page());
         body.put("page_size", page.pageSize());
         body.put("total", page.total());

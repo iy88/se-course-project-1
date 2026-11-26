@@ -1,10 +1,12 @@
 package io.github.iy88.project1.product.application;
 
+import io.github.iy88.project1.account.application.AccountAvatarService;
 import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import io.github.iy88.project1.category.CategorySettings;
 import io.github.iy88.project1.category.application.CategoryDirectory;
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.persistence.CategoryApplication;
 import io.github.iy88.project1.product.persistence.CategoryApplicationRepository;
@@ -30,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
@@ -38,6 +41,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
@@ -50,11 +55,14 @@ public class ProductService {
     private final CategoryApplicationRepository applications;
     private final ObjectProvider<ProductReviewCaseLifecycle> reviewCases;
     private final AccountRepository accounts;
+    private final AccountAvatarService avatars;
     private final CategoryDirectory directory;
     private final ProductSettings settings;
     private final CategorySettings categorySettings;
     private final FileReferences fileReferences;
     private final FileRead fileReads;
+    private final ProductTradeHistory tradeHistory;
+    private final ProductEditNotices editNotices;
     private final OssSettings oss;
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -63,8 +71,11 @@ public class ProductService {
                           ProductEditHistoryRepository edits, ProductAuditRepository audits,
                           CategoryApplicationRepository applications,
                           ObjectProvider<ProductReviewCaseLifecycle> reviewCases, AccountRepository accounts,
+                          AccountAvatarService avatars,
                           CategoryDirectory directory, ProductSettings settings, CategorySettings categorySettings,
-                          FileReferences fileReferences, FileRead fileReads, org.springframework.core.env.Environment environment,
+                          FileReferences fileReferences, FileRead fileReads, ProductTradeHistory tradeHistory,
+                          ProductEditNotices editNotices,
+                          org.springframework.core.env.Environment environment,
                           JdbcClient jdbc, PlatformTransactionManager manager) {
         this.products = products;
         this.links = links;
@@ -73,11 +84,14 @@ public class ProductService {
         this.applications = applications;
         this.reviewCases = reviewCases;
         this.accounts = accounts;
+        this.avatars = avatars;
         this.directory = directory;
         this.settings = settings;
         this.categorySettings = categorySettings;
         this.fileReferences = fileReferences;
         this.fileReads = fileReads;
+        this.tradeHistory = tradeHistory;
+        this.editNotices = editNotices;
         this.oss = new OssSettings(environment.getRequiredProperty("OSS_ENDPOINT"),
                 environment.getRequiredProperty("OSS_REGION"), environment.getRequiredProperty("OSS_BUCKET"),
                 environment.getRequiredProperty("OSS_PREFIX"), environment.getRequiredProperty("OSS_ACCESS_KEY_ID"),
@@ -111,6 +125,15 @@ public class ProductService {
     }
 
     public ProductDetail edit(long sellerId, long productId, EditCommand command) {
+        return edit(sellerId, productId, command, internalContext());
+    }
+
+    /**
+     * Seller edit entry. Buyer notices are written in this same transaction, so a notification or
+     * delivery-intent failure rolls the edit back.
+     */
+    public ProductDetail edit(long sellerId, long productId, EditCommand command, ExecutionContext context) {
+        ExecutionContext caller = context == null ? internalContext() : context;
         return transaction.execute(status -> {
             Product product = lockForSeller(sellerId, productId);
             if (Product.IN_TRADE.equals(product.lifecycleState())) {
@@ -159,7 +182,10 @@ public class ProductService {
             product.editContent(title, description, price, now);
             products.save(product);
             Set<Long> afterCategories = new LinkedHashSet<>(links.activeCategoryIds(productId));
-            edits.save(new ProductEditHistory(productId, sellerId, before, snapshot(product, afterCategories), now));
+            ProductEditHistory edit = edits.save(new ProductEditHistory(productId, sellerId, before,
+                    snapshot(product, afterCategories), now));
+            editNotices.productEdited(caller, sellerId, productId, edit.id(), product.title(),
+                    Product.PUBLIC.equals(product.lifecycleState()), now);
             return detail(product, sellerId, latestAudit(productId));
         });
     }
@@ -306,13 +332,20 @@ public class ProductService {
 
     public ProductDetail detail(long viewerId, long productId) {
         Product product = products.findById(productId)
-                .filter(found -> !found.deleted())
+                .filter(found -> detailVisibleTo(found, viewerId))
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
         boolean owner = product.sellerAccountId() == viewerId;
-        if (!owner && !Product.PUBLIC.equals(product.lifecycleState())) {
-            throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在");
-        }
         return detail(product, owner ? viewerId : 0, owner ? latestAudit(productId) : null);
+    }
+
+    public Optional<String> notificationTitle(long viewerId, long productId) {
+        return products.findById(productId).filter(product -> detailVisibleTo(product, viewerId))
+                .map(Product::title);
+    }
+
+    private static boolean detailVisibleTo(Product product, long viewerId) {
+        return !product.deleted()
+                && (product.sellerAccountId() == viewerId || Product.PUBLIC.equals(product.lifecycleState()));
     }
 
     public boolean ownsProduct(long accountId, long productId) {
@@ -352,24 +385,77 @@ public class ProductService {
         return new MyResources("product", items, currentPage, size, result.getTotalElements(), Instant.now());
     }
 
+    /** Lifecycle counts for the account overview; one row per product, hidden products excluded. */
+    public ProductCounts myCounts(long accountId) {
+        var rows = jdbc.sql("""
+                        select lifecycle_state, count(*) as total
+                          from product
+                         where seller_account_id = :account and deleted_at is null
+                         group by lifecycle_state
+                         order by lifecycle_state
+                        """)
+                .param("account", accountId)
+                .query((row, index) -> new StateCount(row.getString("lifecycle_state"), row.getLong("total")))
+                .list();
+        long total = 0;
+        Map<String, Long> byState = new LinkedHashMap<>();
+        for (StateCount row : rows) {
+            total += row.total();
+            byState.put(row.state(), row.total());
+        }
+        return new ProductCounts(total, byState);
+    }
+
     public PageResult<EditView> editHistory(long viewerId, long productId, Integer page, Integer pageSize) {
+        return editHistory(viewerId, productId, null, page, pageSize);
+    }
+
+    /**
+     * Seller reads the full history. A buyer reads only the changes from their own request time
+     * onward, optionally narrowed to one exact trade, with administrator reasons removed.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResult<EditView> editHistory(long viewerId, long productId, Long tradeId, Integer page,
+                                            Integer pageSize) {
         Product product = products.findById(productId).filter(found -> !found.deleted())
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
-        if (product.sellerAccountId() != viewerId) {
-            throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在");
-        }
+        boolean seller = product.sellerAccountId() == viewerId;
+        ProductTradeHistory.BuyerScope buyerScope = seller ? null
+                : tradeHistory.buyerScope(productId, viewerId, tradeId)
+                        .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
         int currentPage = page == null ? 1 : page;
         int size = pageSize == null ? settings.pageSize() : pageSize;
         if (currentPage < 1 || size < 1 || size > settings.pageSizeMax()) {
             throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
         }
-        var pageResult = edits.findByProductIdOrderByEditedAtDescIdDesc(productId,
-                PageRequest.of(currentPage - 1, size));
+        Pageable pageable = PageRequest.of(currentPage - 1, size);
+        var pageResult = seller
+                ? edits.findByProductIdOrderByEditedAtDescIdDesc(productId, pageable)
+                : edits.findBuyerHistory(productId, buyerScope.requestedAt(), pageable);
         List<EditView> items = pageResult.getContent().stream()
-                .map(edit -> new EditView(Long.toString(edit.id()), edit.editedAt(), edit.operatorKind(),
-                        edit.editKind(), edit.beforeContent(), edit.afterContent(), edit.reason()))
+                .map(edit -> seller
+                        ? new EditView(Long.toString(edit.id()), edit.editedAt(), edit.operatorKind(),
+                                edit.editKind(), edit.beforeContent(), edit.afterContent(), edit.reason())
+                        : new EditView(Long.toString(edit.id()), edit.editedAt(), edit.operatorKind(),
+                                edit.editKind(), buyerContent(edit.beforeContent()),
+                                buyerContent(edit.afterContent()), null))
                 .toList();
         return new PageResult<>(items, currentPage, size, pageResult.getTotalElements());
+    }
+
+    private static ExecutionContext internalContext() {
+        return new ExecutionContext(java.util.UUID.randomUUID(), ExecutionContext.ActorKind.SYSTEM,
+                "product-edit", null, null, null, "internal");
+    }
+
+    private static Map<String, Object> buyerContent(Map<String, Object> content) {
+        Map<String, Object> allowed = new LinkedHashMap<>();
+        for (String key : List.of("title", "description", "price_cents", "image_file_ids", "category_ids")) {
+            if (content != null && content.containsKey(key)) {
+                allowed.put(key, content.get(key));
+            }
+        }
+        return allowed;
     }
 
     private ProductDetail detail(Product product, long ownerId, ProductAudit audit) {
@@ -379,7 +465,8 @@ public class ProductService {
                 .map(id -> new CategoryRef(Long.toString(id), names.get(id))).toList();
         Account seller = accounts.findById(product.sellerAccountId()).orElse(null);
         SellerRef sellerRef = new SellerRef(Long.toString(product.sellerAccountId()),
-                seller == null ? "" : seller.displayName());
+                seller == null ? "" : seller.displayName(),
+                seller == null ? null : avatars.currentUrl(seller.id()));
         boolean owner = ownerId == product.sellerAccountId();
         ReviewRef pending = null;
         ReviewRef latest = null;
@@ -429,6 +516,7 @@ public class ProductService {
         for (Account account : accounts.findByIdIn(sellerIds)) {
             sellers.put(account.id(), account.displayName());
         }
+        Map<Long, String> avatarsByAccount = avatars.currentUrls(sellerIds);
         Map<Long, ImageRef> thumbnails = thumbnailImages(fileReferences.firstCurrent(
                 "product", productIds, "image"));
         List<ProductSummary> items = new ArrayList<>();
@@ -439,7 +527,8 @@ public class ProductService {
             items.add(new ProductSummary(Long.toString(product.id()), product.title(), product.priceCents(),
                     thumbnails.get(product.id()),
                     categories, new SellerRef(Long.toString(product.sellerAccountId()),
-                    sellers.getOrDefault(product.sellerAccountId(), "")), product.createdAt()));
+                    sellers.getOrDefault(product.sellerAccountId(), ""),
+                    avatarsByAccount.get(product.sellerAccountId())), product.createdAt()));
         }
         return items;
     }
@@ -689,7 +778,10 @@ public class ProductService {
     public record CategoryRef(String id, String name) {
     }
 
-    public record SellerRef(String id, String displayName) {
+    public record SellerRef(String id, String displayName, String avatarUrl) {
+        public SellerRef(String id, String displayName) {
+            this(id, displayName, null);
+        }
     }
 
     public record ReviewRef(String auditId, String caseId, String status, Instant submittedAt, String reason,
@@ -726,6 +818,15 @@ public class ProductService {
 
     public record MyResources(String kind, List<MyResourceItem> items, int page, int pageSize, long total,
                               Instant asOf) {
+    }
+
+    public record ProductCounts(long total, Map<String, Long> byState) {
+        public ProductCounts {
+            byState = Map.copyOf(byState);
+        }
+    }
+
+    private record StateCount(String state, long total) {
     }
 
     public record EditView(String editId, Instant editedAt, String operatorKind, String editKind,

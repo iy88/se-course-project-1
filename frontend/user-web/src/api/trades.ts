@@ -21,6 +21,7 @@ import type {
   TradeConfirmation,
   TradeDispute,
   TradeReview,
+  TradeReviewsView,
   TradeView,
 } from "./contracts";
 
@@ -162,6 +163,13 @@ export function confirmDisputeResolution(
   return request("POST", `/trades/${tradeId}/disputes/${disputeId}/resolution-confirmations`, {
     body: { expected_version: expectedVersion },
     idempotencyKey,
+  });
+}
+
+export function getTradeReviews(tradeId: string, signal?: AbortSignal): Promise<TradeReviewsView> {
+  return request<TradeReviewsView>("GET", `/trades/${tradeId}/reviews`, {
+    query: {},
+    signal,
   });
 }
 

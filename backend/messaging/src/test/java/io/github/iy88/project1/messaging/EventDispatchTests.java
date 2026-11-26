@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -64,10 +65,12 @@ class EventDispatchTests {
 
         assertThat(events.publishDue()).isEqualTo(updatedRows);
 
-        var calls = inOrder(manager, stream, markPublished);
+        var calls = inOrder(manager, stream, markPublished, redis);
         calls.verify(manager).commit(any());
         calls.verify(stream).add(eq(STREAM), eq(hint), any(XAddOptions.class));
         calls.verify(markPublished).update();
+        if (updatedRows == 1) calls.verify(redis).convertAndSend("test:events:wake", "14");
+        else verify(redis, never()).convertAndSend(any(), any());
         verify(markPublished).param("id", eventId);
         UUID token = leaseToken();
         verify(markPublished).param("token", token);

@@ -36,7 +36,11 @@ public class NotificationConfiguration {
     @Bean
     NotificationQueries notificationQueries(NotificationStore store,
                                             ObjectProvider<NotificationSourcePort> sources) {
-        return new NotificationQueries(store, Optional.ofNullable(sources.getIfAvailable()));
+        var projections = sources.orderedStream().toList();
+        NotificationSourcePort composite = (context, facts) -> projections.stream()
+                .flatMap(projection -> projection.project(context, facts).stream())
+                .findFirst();
+        return new NotificationQueries(store, Optional.of(composite));
     }
 
     @Bean

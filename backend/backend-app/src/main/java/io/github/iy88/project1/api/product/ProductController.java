@@ -1,7 +1,9 @@
 package io.github.iy88.project1.api.product;
 
+import io.github.iy88.project1.api.ApiRequestContext;
 import io.github.iy88.project1.api.account.CurrentAccount;
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.product.application.ProductService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -25,10 +27,12 @@ import org.springframework.web.util.UriComponentsBuilder;
 class ProductController {
     private final ProductService products;
     private final CurrentAccount current;
+    private final ApiRequestContext requestContext;
 
-    ProductController(ProductService products, CurrentAccount current) {
+    ProductController(ProductService products, CurrentAccount current, ApiRequestContext requestContext) {
         this.products = products;
         this.current = current;
+        this.requestContext = requestContext;
     }
 
     @PostMapping
@@ -73,7 +77,7 @@ class ProductController {
         var updated = products.edit(identity.account().id(), id(productId), new ProductService.EditCommand(
                 body.title(), body.description(), body.imageFileIds(), body.priceCents(), body.categoryIds(),
                 body.categoryApplication() == null ? null : body.categoryApplication().proposedName(),
-                body.expectedVersion()));
+                body.expectedVersion()), context(identity, request));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(updated);
     }
 
@@ -132,10 +136,19 @@ class ProductController {
     @GetMapping("/{productId}/edit-history")
     ResponseEntity<ProductService.PageResult<ProductService.EditView>> editHistory(
             @PathVariable String productId, @RequestParam(required = false) Integer page,
-            @RequestParam(value = "page_size", required = false) Integer pageSize, HttpServletRequest request) {
+            @RequestParam(value = "page_size", required = false) Integer pageSize,
+            @RequestParam(value = "trade_id", required = false) String tradeId, HttpServletRequest request) {
         var identity = current.require(request);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(products.editHistory(identity.account().id(), id(productId), page, pageSize));
+                .body(products.editHistory(identity.account().id(), id(productId),
+                        tradeId == null || tradeId.isBlank() ? null : id(tradeId), page, pageSize));
+    }
+
+    private ExecutionContext context(io.github.iy88.project1.account.application.SessionService.Identity identity,
+                                     HttpServletRequest request) {
+        return requestContext.forActor(request, ExecutionContext.ActorKind.ACCOUNT,
+                Long.toString(identity.account().id()), identity.guard().id(), null,
+                (long) identity.guard().credentialVersion());
     }
 
     private static long id(String value) {

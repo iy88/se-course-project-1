@@ -15,6 +15,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -74,6 +75,27 @@ class WriteExecutorTests {
                 eq(true), eq(EMPTY));
         verify(transactions).rollback(any());
         verify(transactions, times(2)).commit(any());
+    }
+
+    @Test
+    void distinguishesPlannedResourcesFromLocksAlreadyAcquired() {
+        var trade = new LockPlan.Key(LockPlan.Domain.TRADE, List.of(1L));
+        var matter = new LockPlan.Key(LockPlan.Domain.CASE, List.of(2L));
+        var file = new LockPlan.Key(LockPlan.Domain.FILE_RECORD, List.of(3L));
+        var transaction = new WriteTransaction(context, UUID.randomUUID(),
+                new LockPlan(Map.of(), Set.of(trade, matter)), null);
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            assertThatThrownBy(() -> transaction.requireLocked(trade)).isInstanceOf(IllegalStateException.class);
+            assertThatThrownBy(() -> transaction.requireLocked(file))
+                    .isInstanceOfSatisfying(LockPlan.Changed.class,
+                            changed -> assertThat(changed.additional().resources()).containsExactly(file));
+            transaction.lock(trade, () -> {});
+            transaction.lock(matter, () -> {});
+            transaction.requireLocked(trade);
+        } finally {
+            TransactionSynchronizationManager.clear();
+        }
     }
 
     @Test

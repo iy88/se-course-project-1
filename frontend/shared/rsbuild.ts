@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rsbuild/core";
 import { pluginVue } from "@rsbuild/plugin-vue";
 
@@ -12,7 +13,10 @@ export function createWebConfig(port: number) {
   return defineConfig(({ command }) => {
     return {
       plugins: [pluginVue()],
-      html: { template: "./index.html" },
+      html: {
+        template: "./index.html",
+        favicon: fileURLToPath(new URL("./assets/campus-market.svg", import.meta.url)),
+      },
       source: {
         define: createBrowserDefines(command),
       },
@@ -24,6 +28,7 @@ export function createWebConfig(port: number) {
           "/api/v1": {
             target: process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8080",
             changeOrigin: true,
+            ws: true,
           },
         },
       },

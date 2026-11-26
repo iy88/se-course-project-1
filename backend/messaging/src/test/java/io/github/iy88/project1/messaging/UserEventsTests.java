@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -29,7 +30,7 @@ class UserEventsTests {
     private final UserEvents.Head head = new UserEvents.Head(epoch, 5L, 2L);
     private final JdbcClient jdbc = mock(JdbcClient.class);
     private final UserEvents events = spy(new UserEvents(jdbc,
-            new DeliverySettings(3600, 10, 30, 5, 3, 1, 3, 100)));
+            new DeliverySettings(3600, 10, 30, 5, 3, 1, 3, 100), mock(ApplicationEventPublisher.class)));
 
     @BeforeEach
     void configureHead() {

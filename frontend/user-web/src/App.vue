@@ -4,14 +4,22 @@
  *
  * Primary navigation sits at the bottom on mobile and in the header on desktop.
  */
-import { computed, watch } from "vue";
+import { computed, onBeforeUnmount, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
+import BrandMark from "../../shared/BrandMark.vue";
 import MobileBackButton from "../../shared/MobileBackButton.vue";
 import PageFeedback from "../../shared/PageFeedback.vue";
 import UiIcon from "../../shared/UiIcon.vue";
 import { session } from "./app/session";
-import { badges, refreshBadges } from "./app/badges";
+import { badges, refreshBadges, resetBadges } from "./app/badges";
 import { backFallbackFor, hasBackEntry } from "./app/navigation";
+import { refreshesNotificationList } from "./app/notification-events";
+import {
+  registerSnapshotReloader,
+  resetRealtimeCursor,
+  restartRealtime,
+  subscribeRealtime,
+} from "./app/realtime";
 
 import { dismiss, toasts } from "./app/toast";
 import AvatarBadge from "./components/AvatarBadge.vue";
@@ -22,6 +30,7 @@ const router = useRouter();
 
 const primaryNav = [
   { name: "home", label: "逛逛", icon: "grid" },
+  { name: "conversations", label: "消息", icon: "mail" },
   { name: "notifications", label: "通知", icon: "bell" },
   { name: "me", label: "我的", icon: "user" },
 ] as const;
@@ -29,12 +38,14 @@ const primaryNav = [
 const isAuthScreen = computed(() => route.meta.anonymous === true);
 const hasSplitAuthLayout = computed(() => route.name === "login" || route.name === "register");
 const activeSection = computed(() => {
+  if (route.name === "conversations" || route.name === "conversation") return "conversations";
   if (route.path.startsWith("/me/notifications")) return "notifications";
   if (route.path === "/me" || route.path.startsWith("/me/")) return "me";
   if (route.path === "/" || route.path === "/search" || route.path.startsWith("/products/"))
     return "home";
   return null;
 });
+const isMessagesView = computed(() => activeSection.value === "conversations");
 const backFallback = computed(() => backFallbackFor(route.meta, route.params));
 const hasHistoryBack = computed(() => {
   // Reading fullPath refreshes the computed when navigation changes history state.
@@ -55,6 +66,63 @@ function goBack(): void {
   if (fallback) void router.push(fallback);
 }
 
+// Unread badges belong to the resync snapshot: after a `sync_reset` the client
+// reloads every registered snapshot before resuming from the recorded head.
+registerSnapshotReloader(() => refreshBadges());
+
+let unsubscribeRealtime: (() => void) | null = null;
+let badgeTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleBadgeRefresh(): void {
+  if (badgeTimer !== undefined) return;
+  badgeTimer = setTimeout(() => {
+    badgeTimer = undefined;
+    void refreshBadges();
+  }, 80);
+}
+
+// Realtime exists only while a session owns at least one subscription. The shell
+// subscribes after authentication, and logout tears the subscription down so the
+// transport closes even when a route component forgets to clean up.
+watch(
+  () => [session.isAuthenticated.value, session.accountId.value] as const,
+  (current, previous) => {
+    const [authenticated, accountId] = current;
+    const [wasAuthenticated, previousAccountId] = previous ?? [false, null];
+    if (!authenticated) {
+      unsubscribeRealtime?.();
+      unsubscribeRealtime = null;
+      if (badgeTimer !== undefined) {
+        clearTimeout(badgeTimer);
+        badgeTimer = undefined;
+      }
+      resetRealtimeCursor();
+      resetBadges();
+      return;
+    }
+    const accountChanged =
+      wasAuthenticated && previousAccountId !== null && accountId !== previousAccountId;
+    if (accountChanged) {
+      resetRealtimeCursor();
+      resetBadges();
+    }
+    if (!unsubscribeRealtime) {
+      unsubscribeRealtime = subscribeRealtime((frame) => {
+        if (refreshesNotificationList(frame)) scheduleBadgeRefresh();
+      });
+    }
+    if (accountChanged) restartRealtime();
+    void refreshBadges();
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  unsubscribeRealtime?.();
+  unsubscribeRealtime = null;
+  if (badgeTimer !== undefined) clearTimeout(badgeTimer);
+});
+
 watch(
   () => route.fullPath,
   () => {
@@ -66,7 +134,7 @@ watch(
 
 <template>
   <a class="skip-link" href="#main">跳到主要内容</a>
-  <div class="shell" :class="{ 'shell--auth': isAuthScreen }">
+  <div class="shell" :class="{ 'shell--auth': isAuthScreen, 'shell--messages': isMessagesView }">
     <MobileBackButton
       v-if="isAuthScreen && canGoBack"
       class="shell__auth-back"
@@ -83,7 +151,7 @@ watch(
             @back="goBack"
           />
           <RouterLink to="/" class="shell__brand" :class="{ 'shell__brand--with-back': canGoBack }">
-            <span class="shell__logo" aria-hidden="true">二</span>
+            <BrandMark class="shell__logo" />
             <span class="shell__brand-text">校园二手交易</span>
           </RouterLink>
         </div>
@@ -152,6 +220,17 @@ watch(
   padding-block-end: calc(var(--tabbar-height) + env(safe-area-inset-bottom));
 }
 
+.shell--messages {
+  block-size: 100dvh;
+  overflow: hidden;
+}
+
+.shell--messages .shell__main {
+  display: flex;
+  min-block-size: 0;
+  padding-block: var(--space-3);
+}
+
 .shell--auth {
   position: relative;
   padding-block-end: 0;
@@ -212,14 +291,7 @@ watch(
 }
 
 .shell__logo {
-  display: grid;
-  place-items: center;
-  flex: 0 0 1.875rem;
-  block-size: 1.875rem;
-  border-radius: var(--radius-sm);
-  background: var(--brand-soft);
-  color: var(--brand-ink);
-  font-size: 0.875rem;
+  --brand-mark-size: 1.875rem;
 }
 
 .shell__brand-text {
@@ -231,7 +303,7 @@ watch(
   inset-inline: 0;
   inset-block-end: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   min-block-size: var(--tabbar-height);
   border-block-start: 1px solid var(--line);
   padding-block-end: env(safe-area-inset-bottom);

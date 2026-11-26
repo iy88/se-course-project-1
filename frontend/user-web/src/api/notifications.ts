@@ -8,7 +8,7 @@ import type {
   ListNotificationsQuery,
   MarkNotificationReadResult,
   NotificationPage,
-  NotificationSummary,
+  NotificationDetail,
 } from "./contracts";
 
 export function listNotifications(
@@ -24,8 +24,8 @@ export function listNotifications(
 export function getNotification(
   notificationId: string,
   signal?: AbortSignal,
-): Promise<NotificationSummary> {
-  return request<NotificationSummary>("GET", `/account/notifications/${notificationId}`, {
+): Promise<NotificationDetail> {
+  return request<NotificationDetail>("GET", `/account/notifications/${notificationId}`, {
     signal,
   });
 }

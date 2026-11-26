@@ -3,7 +3,7 @@
  * Modal confirmation used before irreversible or broadly visible actions.
  * Built on <dialog> so focus handling and the escape key follow the platform.
  */
-import { onBeforeUnmount, ref, watch } from "vue";
+import { onBeforeUnmount, ref, useId, watch } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -11,6 +11,7 @@ const props = withDefaults(
     title: string;
     description?: string;
     confirmLabel?: string;
+    confirmDisabled?: boolean;
     cancelLabel?: string;
     tone?: "primary" | "danger";
   }>(),
@@ -24,6 +25,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
 const dialog = ref<HTMLDialogElement | null>(null);
+const titleId = useId();
+const descriptionId = useId();
 
 watch(
   () => props.open,
@@ -45,10 +48,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <dialog ref="dialog" class="dialog" @cancel.prevent="close" @close="close">
+  <dialog
+    ref="dialog"
+    class="dialog"
+    :aria-labelledby="titleId"
+    :aria-describedby="description ? descriptionId : undefined"
+    @cancel.prevent="close"
+    @close="close"
+  >
     <form method="dialog" class="dialog__body">
-      <h2 class="dialog__title">{{ title }}</h2>
-      <p v-if="description" class="dialog__description">{{ description }}</p>
+      <h2 :id="titleId" class="dialog__title">{{ title }}</h2>
+      <p v-if="description" :id="descriptionId" class="dialog__description">{{ description }}</p>
       <slot />
       <div class="dialog__actions">
         <button type="button" class="btn" @click="close">{{ cancelLabel }}</button>
@@ -56,6 +66,7 @@ onBeforeUnmount(() => {
           type="button"
           class="btn"
           :class="tone === 'danger' ? 'btn--danger' : 'btn--primary'"
+          :disabled="confirmDisabled"
           @click="emit('confirm')"
         >
           {{ confirmLabel }}

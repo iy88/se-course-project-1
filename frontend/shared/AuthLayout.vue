@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BrandMark from "./BrandMark.vue";
+
 defineProps<{
   flat?: boolean;
   brand: string;
@@ -16,7 +18,7 @@ defineProps<{
       <article class="auth-layout__intro-content">
         <header class="auth-layout__intro-heading">
           <p class="auth-layout__brand">
-            <span class="auth-layout__mark" aria-hidden="true">二</span>
+            <BrandMark />
             {{ brand }}
           </p>
           <h2 class="auth-layout__headline">{{ introTitle }}</h2>
@@ -167,16 +169,6 @@ defineProps<{
     align-items: center;
     gap: var(--space-2);
     font-weight: 650;
-  }
-
-  .auth-layout__mark {
-    display: grid;
-    place-items: center;
-    flex: 0 0 2rem;
-    block-size: 2rem;
-    border-radius: var(--radius-sm);
-    background: var(--brand);
-    color: #fff;
   }
 
   .auth-layout__headline {

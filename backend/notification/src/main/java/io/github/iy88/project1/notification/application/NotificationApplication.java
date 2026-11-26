@@ -56,6 +56,14 @@ public class NotificationApplication {
      * another action.
      */
     public NotificationBatch createNotifications(WriteTransaction transaction, NotificationIntent intent) {
+        return createNotifications(transaction::addEventIntent, intent);
+    }
+
+    /**
+     * Same notification rules for a caller that owns an active transaction but not a
+     * {@link WriteTransaction}. The sink registers the delivery event in that same transaction.
+     */
+    public NotificationBatch createNotifications(NotificationEventSink events, NotificationIntent intent) {
         Instant now = clock.instant();
         List<NotificationItem> items = new ArrayList<>();
         for (long recipient : intent.sortedRecipients()) {
@@ -72,7 +80,7 @@ public class NotificationApplication {
             items.add(created.item());
             // One delivery event per created notification, addressed to its
             // recipient and pointing at the notification the client must load.
-            transaction.addEventIntent(Set.of(recipient), CREATED_EVENT_TYPE, SCHEMA_VERSION,
+            events.register(Set.of(recipient), CREATED_EVENT_TYPE, SCHEMA_VERSION,
                     intent.source(), intent.intentKey(),
                     new ResourceRef(NOTIFICATION_RESOURCE, created.notificationId()), null);
         }
