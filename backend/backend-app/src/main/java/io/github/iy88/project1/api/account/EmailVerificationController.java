@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -49,7 +50,7 @@ class EmailVerificationController {
                         DateTimeFormatter.ISO_INSTANT.format(item.expiresAt())))
                 .toList();
         return ResponseEntity.status(202)
-                .header("Retry-After", Integer.toString(result.retryAfterSeconds()))
+                .header(HttpHeaders.RETRY_AFTER, Integer.toString(result.retryAfterSeconds()))
                 .cacheControl(CacheControl.noStore())
                 .body(new VerificationResponse(body.purpose(), items, result.retryAfterSeconds()));
     }

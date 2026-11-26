@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /*
- * Trade to-dos owned by the current account.
+ * To-dos owned by the current account.
  *
- * Every item links back to the trade detail, which performs the actual write
- * with its own permission/version rules. Inquiry to-dos belong to the S4 case
- * screens and are intentionally not surfaced or counted here.
+ * Trade items link back to the trade detail; inquiry items link to the existing
+ * case detail, which owns the statement form and its permission checks. The
+ * aggregation only selects the destination from the item kind.
  */
 import { computed, onMounted, ref } from "vue";
 import { listMyTodos } from "../../api/aggregation";
@@ -18,15 +18,13 @@ import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
 import PaginationBar from "../../components/PaginationBar.vue";
 
-type TradeTodoKind = Exclude<TodoKind, "inquiry_response">;
-
-interface TradeTodoOption {
-  kind: TradeTodoKind;
+interface TodoOption {
+  kind: TodoKind;
   action: string;
   hint: string;
 }
 
-const tradeTodoOptions: TradeTodoOption[] = [
+const todoOptions: TodoOption[] = [
   {
     kind: "request_response",
     action: "处理购买请求",
@@ -47,9 +45,14 @@ const tradeTodoOptions: TradeTodoOption[] = [
     action: "回应取消申请",
     hint: "在交易详情同意、拒绝或撤回取消申请。",
   },
+  {
+    kind: "inquiry_response",
+    action: "回复管理问询",
+    hint: "在事项详情查看问询范围并提交说明。",
+  },
 ];
 
-const kind = ref<TradeTodoKind>("request_response");
+const kind = ref<TodoKind>("request_response");
 const counts = ref<Partial<Record<TodoKind, number>>>({});
 const asOf = ref<string | null>(null);
 
@@ -64,23 +67,23 @@ const list = usePagedList<TodoItem>((page, pageSize, signal) =>
 );
 
 const activeOption = computed(
-  () => tradeTodoOptions.find((option) => option.kind === kind.value) ?? tradeTodoOptions[0],
+  () => todoOptions.find((option) => option.kind === kind.value) ?? todoOptions[0],
 );
 
 const otherTodoCount = computed(() =>
-  tradeTodoOptions.reduce(
+  todoOptions.reduce(
     (sum, option) => (option.kind === kind.value ? sum : sum + (counts.value[option.kind] ?? 0)),
     0,
   ),
 );
 
 onMounted(async () => {
-  // A small probe supplies counts for every kind without mixing S4 inquiries
-  // into this page; the selected tab is then the first one that needs work.
+  // A small probe supplies counts for every kind; the selected tab is then the
+  // first one that needs work.
   try {
     const probe = await listMyTodos({ page: 1, page_size: 1 });
     applyCounts(probe);
-    const first = tradeTodoOptions.find((option) => (probe.counts_by_kind[option.kind] ?? 0) > 0);
+    const first = todoOptions.find((option) => (probe.counts_by_kind[option.kind] ?? 0) > 0);
     if (first) kind.value = first.kind;
   } catch {
     // The paged request below reports the authoritative failure with retry.
@@ -88,7 +91,7 @@ onMounted(async () => {
   await list.load(1);
 });
 
-function selectKind(next: TradeTodoKind): void {
+function selectKind(next: TodoKind): void {
   if (kind.value === next) return;
   kind.value = next;
   void list.load(1);
@@ -99,8 +102,13 @@ function tradeIdOf(item: TodoItem): string {
   return typeof value === "string" ? value : "";
 }
 
-function actionFor(item: TodoItem): TradeTodoOption {
-  return tradeTodoOptions.find((option) => option.kind === item.kind) ?? activeOption.value;
+function actionFor(item: TodoItem): TodoOption {
+  return todoOptions.find((option) => option.kind === item.kind) ?? activeOption.value;
+}
+
+function caseIdOf(item: TodoItem): string {
+  const value = item.source.case_id;
+  return typeof value === "string" ? value : "";
 }
 </script>
 
@@ -108,17 +116,18 @@ function actionFor(item: TodoItem): TradeTodoOption {
   <div class="stack stack--loose">
     <PageHeader
       eyebrow="我的"
-      title="待处理交易"
-      description="只列出当前仍需要你处理的交易事项；实际操作在交易详情中完成。"
+      title="我的待办"
+      description="只列出当前仍需要你处理的交易事项与管理问询；实际操作在对应详情中完成。"
     >
       <template #actions>
         <RouterLink to="/me/trades" class="btn btn--ghost">全部交易</RouterLink>
+        <RouterLink to="/me/cases" class="btn btn--ghost">我的事项</RouterLink>
       </template>
     </PageHeader>
 
     <div class="status-filter todo-filters" role="group" aria-label="待办类型">
       <button
-        v-for="option in tradeTodoOptions"
+        v-for="option in todoOptions"
         :key="option.kind"
         type="button"
         class="status-filter__option"
@@ -133,7 +142,7 @@ function actionFor(item: TodoItem): TradeTodoOption {
     </div>
 
     <p v-if="otherTodoCount > 0" class="banner banner--info">
-      {{ activeOption.action }}之外还有 {{ otherTodoCount }} 条交易待办，可切换上方类型查看。
+      {{ activeOption.action }}之外还有 {{ otherTodoCount }} 条待办，可切换上方类型查看。
     </p>
 
     <LoadingBlock v-if="list.isLoading.value && !list.items.value.length" label="正在加载待办…" />
@@ -145,9 +154,14 @@ function actionFor(item: TodoItem): TradeTodoOption {
     <EmptyState
       v-else-if="list.isEmpty.value"
       :title="`没有${todoKindLabels[activeOption.kind]}`"
-      description="待办完成后会自动移出；你仍可从交易列表查看历史。"
+      description="待办完成后会自动移出；你仍可从对应列表查看历史。"
     >
-      <RouterLink to="/me/trades" class="btn btn--primary">查看我的交易</RouterLink>
+      <RouterLink
+        :to="activeOption.kind === 'inquiry_response' ? '/me/cases' : '/me/trades'"
+        class="btn btn--primary"
+      >
+        {{ activeOption.kind === "inquiry_response" ? "查看我的事项" : "查看我的交易" }}
+      </RouterLink>
     </EmptyState>
     <template v-else>
       <p v-if="list.problem.value" class="banner banner--warn" role="alert">
@@ -165,13 +179,20 @@ function actionFor(item: TodoItem): TradeTodoOption {
             <p class="muted todo__time">更新于 {{ formatDateTime(item.updated_at) }}</p>
           </div>
           <RouterLink
-            v-if="tradeIdOf(item)"
+            v-if="item.kind === 'inquiry_response' && caseIdOf(item)"
+            :to="{ name: 'case-detail', params: { caseId: caseIdOf(item) } }"
+            class="btn btn--primary todo__action"
+          >
+            {{ actionFor(item).action }}
+          </RouterLink>
+          <RouterLink
+            v-else-if="tradeIdOf(item)"
             :to="{ name: 'trade-detail', params: { tradeId: tradeIdOf(item) } }"
             class="btn btn--primary todo__action"
           >
             {{ actionFor(item).action }}
           </RouterLink>
-          <span v-else class="muted todo__action">请从交易列表进入对应交易</span>
+          <span v-else class="muted todo__action">请从对应列表进入处理</span>
         </li>
       </ul>
       <PaginationBar

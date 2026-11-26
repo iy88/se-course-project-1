@@ -15,15 +15,17 @@ import org.springframework.stereotype.Service;
 public class ConversationReader {
     private final ChatConversationRepository chats;
     private final TradeConversationRepository trades;
+    private final CaseConversationRepository cases;
     private final ChatMessageRepository chatMessages;
     private final TradeMessageRepository tradeMessages;
     private final CaseMessageRepository caseMessages;
 
     public ConversationReader(ChatConversationRepository chats, TradeConversationRepository trades,
-                              ChatMessageRepository chatMessages, TradeMessageRepository tradeMessages,
-                              CaseMessageRepository caseMessages) {
+                              CaseConversationRepository cases, ChatMessageRepository chatMessages,
+                              TradeMessageRepository tradeMessages, CaseMessageRepository caseMessages) {
         this.chats = chats;
         this.trades = trades;
+        this.cases = cases;
         this.chatMessages = chatMessages;
         this.tradeMessages = tradeMessages;
         this.caseMessages = caseMessages;
@@ -48,12 +50,20 @@ public class ConversationReader {
         return trades.findById(conversationId);
     }
 
+    public Optional<CaseConversation> findCase(long conversationId) {
+        return cases.findById(conversationId);
+    }
+
     public Optional<ChatMessage> findChatMessage(long conversationId, long messageId) {
         return chatMessages.findById(messageId).filter(message -> message.conversationId() == conversationId);
     }
 
     public Optional<TradeMessage> findTradeMessage(long conversationId, long messageId) {
         return tradeMessages.findById(messageId).filter(message -> message.conversationId() == conversationId);
+    }
+
+    public Optional<CaseMessage> findCaseMessage(long conversationId, long messageId) {
+        return caseMessages.findById(messageId).filter(message -> message.conversationId() == conversationId);
     }
 
     public Optional<ChatMessage> chatLastMessage(long conversationId) {

@@ -1,5 +1,6 @@
 package io.github.iy88.project1.api.realtime;
 
+import io.github.iy88.project1.conversation.application.CaseParticipation;
 import io.github.iy88.project1.conversation.application.TradeParticipation;
 import io.github.iy88.project1.conversation.persistence.ConversationReader;
 import io.github.iy88.project1.core.ExecutionContext;
@@ -12,7 +13,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Profile("infrastructure & !dependency-probe & !file-probe")
-record ConversationRealtimeProjection(ConversationReader reader, TradeParticipation trades) implements Conversations {
+record ConversationRealtimeProjection(ConversationReader reader, TradeParticipation trades,
+                                      CaseParticipation cases) implements Conversations {
     @Override
     public boolean canRead(ExecutionContext context, ConversationRef conversation) {
         if (context.actorKind() != ExecutionContext.ActorKind.ACCOUNT) {
@@ -23,7 +25,9 @@ record ConversationRealtimeProjection(ConversationReader reader, TradeParticipat
             case CHAT -> reader.findChat(conversation.id()).filter(chat -> chat.involves(actor)).isPresent();
             case TRADE -> reader.findTrade(conversation.id()).flatMap(branch -> trades.participants(branch.tradeId()))
                     .filter(participants -> participants.involves(actor)).isPresent();
-            case CASE -> false;
+            case CASE -> reader.findCase(conversation.id())
+                    .filter(thread -> cases.canAccess(thread.caseId(), thread.relatedAccountId(), actor))
+                    .isPresent();
         };
     }
 
@@ -37,7 +41,8 @@ record ConversationRealtimeProjection(ConversationReader reader, TradeParticipat
                     .map(message -> new MessageHint(message.seq(), null));
             case TRADE -> reader.findTradeMessage(conversation.id(), messageId)
                     .map(message -> new MessageHint(message.seq(), message.businessEventId()));
-            case CASE -> Optional.empty();
+            case CASE -> reader.findCaseMessage(conversation.id(), messageId)
+                    .map(message -> new MessageHint(message.seq(), message.businessEventId()));
         };
     }
 }

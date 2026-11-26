@@ -8,7 +8,8 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { ApiError } from "./errors";
-import { uploadRequestBody, uploadToOss } from "./files";
+import { acceptedFileTypes, uploadRequestBody, uploadToOss } from "./files";
+import type { UploadCapabilities } from "./contracts";
 
 const upload = {
   method: "POST" as const,
@@ -105,5 +106,54 @@ describe("upload request body", () => {
     });
 
     assert.deepEqual(body.target, { resource_type: "product", resource_id: "5" });
+  });
+});
+
+describe("file picker types", () => {
+  const capabilities = (
+    allowed: Record<"product_image" | "case_evidence" | "account_avatar", string[]>,
+  ): UploadCapabilities => ({
+    rule_version: "test",
+    purposes: {
+      product_image: { max_bytes: 10, allowed_content_types: allowed.product_image },
+      case_evidence: { max_bytes: 10, allowed_content_types: allowed.case_evidence },
+      account_avatar: { max_bytes: 10, allowed_content_types: allowed.account_avatar },
+    },
+    upload_ttl_seconds: 300,
+    read_url_ttl_seconds: 60,
+  });
+
+  it("keeps the image-only fallback for product images", () => {
+    assert.deepEqual(acceptedFileTypes("product_image"), ["image/jpeg", "image/png"]);
+  });
+
+  it("adds PDF to the fallback only for case evidence", () => {
+    assert.deepEqual(acceptedFileTypes("case_evidence"), [
+      "image/jpeg",
+      "image/png",
+      "application/pdf",
+    ]);
+    assert.deepEqual(acceptedFileTypes("account_avatar"), ["image/jpeg", "image/png"]);
+  });
+
+  it("follows the same-purpose capability when it is available", () => {
+    const caps = capabilities({
+      product_image: ["image/png", "application/pdf"],
+      case_evidence: ["image/png", "application/pdf"],
+      account_avatar: ["image/jpeg"],
+    });
+
+    assert.deepEqual(acceptedFileTypes("product_image", caps), ["image/png"]);
+    assert.deepEqual(acceptedFileTypes("case_evidence", caps), ["image/png", "application/pdf"]);
+  });
+
+  it("does not add PDF when the case evidence capability excludes it", () => {
+    const caps = capabilities({
+      product_image: ["image/jpeg"],
+      case_evidence: ["image/jpeg", "image/png"],
+      account_avatar: ["image/png"],
+    });
+
+    assert.deepEqual(acceptedFileTypes("case_evidence", caps), ["image/jpeg", "image/png"]);
   });
 });

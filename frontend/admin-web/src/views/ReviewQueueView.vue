@@ -71,18 +71,18 @@ function switchOwnership(ownership: "unclaimed" | "mine"): void {
 }
 
 function open(item: ManagementTodoItem): void {
-  navigate({ name: "review", auditId: item.summary.audit_id });
+  if (item.summary.audit_id) navigate({ name: "review", auditId: item.summary.audit_id });
 }
 
 async function claim(item: ManagementTodoItem): Promise<void> {
   if (claiming.value) return;
-  claiming.value = item.summary.audit_id;
+  claiming.value = item.case_id;
   const operation = `claim-${item.case_id}`;
   try {
     await claimCase(item.case_id, keys.current(operation));
     keys.rotate(operation);
     notify.success("已认领该审核事项。");
-    navigate({ name: "review", auditId: item.summary.audit_id });
+    if (item.summary.audit_id) navigate({ name: "review", auditId: item.summary.audit_id });
   } catch (caught) {
     notify.error(problemMessage(caught));
     await load();
@@ -164,7 +164,7 @@ async function claim(item: ManagementTodoItem): Promise<void> {
                     @click="claim(item)"
                   >
                     <UiIcon name="plus" />
-                    {{ claiming === item.summary.audit_id ? "认领中…" : "认领" }}
+                    {{ claiming === item.case_id ? "认领中…" : "认领" }}
                   </button>
                   <button v-else type="button" class="btn btn--small" @click="open(item)">
                     <UiIcon name="check" />

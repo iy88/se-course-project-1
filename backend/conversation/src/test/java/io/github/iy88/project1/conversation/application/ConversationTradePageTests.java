@@ -41,6 +41,8 @@ class ConversationTradePageTests {
                 "trade_completed", "trade_transition", 55L);
         var text = tradeMessage(21L, 2L, "account", 7L, "text", "你好", null, null, null);
         when(reader.tradeMessages(2L, null, null, 20)).thenReturn(List.of(system, text));
+        when(trades.visibleSourceRef(9L, "trade_transition", 55L))
+                .thenReturn(Optional.of("trade_transition:55"));
         when(accounts.profiles(java.util.Set.of(7L))).thenReturn(Map.of(
                 7L, new AccountDirectory.Profile(7L, "张新悦")));
 
@@ -50,12 +52,46 @@ class ConversationTradePageTests {
         assertThat(page.items().getFirst().sender().senderKind()).isEqualTo("system");
         assertThat(page.items().getFirst().sender().displayName()).isEqualTo("系统");
         assertThat(page.items().getFirst().eventType()).isEqualTo("trade_completed");
-        assertThat(page.items().getFirst().sourceRef()).isNull();
+        assertThat(page.items().getFirst().sourceRef()).isEqualTo("trade_transition:55");
         assertThat(page.items().getLast().sender().displayName()).isEqualTo("张新悦");
         assertThat(page.branchStatus()).isEqualTo("active");
         assertThat(page.tradeId()).isEqualTo(9L);
         assertThat(page.nextBeforeSeq()).isEqualTo(1L);
         assertThat(page.nextAfterSeq()).isEqualTo(2L);
+    }
+
+    @Test
+    void omitsCrossTradeUnknownAndUnverifiedSourceReferences() {
+        var conversation = mock(TradeConversation.class);
+        when(conversation.id()).thenReturn(2L);
+        when(conversation.tradeId()).thenReturn(9L);
+        when(conversation.archived()).thenReturn(false);
+        when(store.trade(2L)).thenReturn(conversation);
+        when(trades.participants(9L)).thenReturn(Optional.of(new TradeParticipation.Participants(7L, 42L)));
+
+        var crossTrade = tradeMessage(30L, 1L, "system", null, "system_event", "其他交易",
+                "agreement_confirmed", "agreement_decision", 70L);
+        var unknown = tradeMessage(31L, 2L, "system", null, "system_event", "私有事项",
+                "dispute_opened", "case", 8L);
+        var legacy = tradeMessage(32L, 3L, "system", null, "system_event", "旧消息",
+                "request_created", null, null);
+        var valid = tradeMessage(33L, 4L, "system", null, "system_event", "完成确认",
+                "completion_confirmed", "completion_confirmation", 12L);
+        var text = tradeMessage(34L, 5L, "account", 7L, "text", "不受影响", null, null, null);
+        when(reader.tradeMessages(2L, null, null, 20)).thenReturn(List.of(crossTrade, unknown, legacy, valid, text));
+        when(trades.visibleSourceRef(9L, "agreement_decision", 70L)).thenReturn(Optional.empty());
+        when(trades.visibleSourceRef(9L, "case", 8L)).thenReturn(Optional.empty());
+        when(trades.visibleSourceRef(9L, "completion_confirmation", 12L))
+                .thenReturn(Optional.of("completion_confirmation:12"));
+        when(accounts.profiles(java.util.Set.of(7L))).thenReturn(Map.of(
+                7L, new AccountDirectory.Profile(7L, "张新悦")));
+
+        var page = queries.pageTrade(actor(7L), 2L, null, null, 20);
+
+        assertThat(page.items()).extracting(ConversationViews.Message::sourceRef)
+                .containsExactly(null, null, null, "completion_confirmation:12", null);
+        assertThat(page.items().getLast().sender().senderKind()).isEqualTo("account");
+        assertThat(page.items().getLast().body()).isEqualTo("不受影响");
     }
 
     @Test

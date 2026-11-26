@@ -144,17 +144,15 @@ export interface ChangeEmailRequest {
 /**
  * API-COM-AUTH-009 `PATCH /account/profile` (design 0.2.6, renamed to
  * 修改个人资料). At least one field must be sent and an omitted field keeps its
- * current value. Design text gives `avatar_file_id: null` as the removal signal,
- * but the deployed endpoint binds the field to a plain string and therefore cannot
- * tell an explicit `null` from an omission: it removes only on the `"0"` sentinel
- * (S2-02 handoff). The design wording needs the same correction.
+ * current value. An explicit `avatar_file_id: null` removes the avatar; a
+ * non-empty positive file id attaches a verified `account_avatar`; `"0"` is
+ * rejected as `INPUT_INVALID`.
  */
 export interface UpdateProfileRequest {
   display_name?: string;
   /**
-   * Avatar binding: a verified `account_avatar` file id replaces the avatar, `"0"`
-   * removes it, and omitting the field (or sending `null`, which the endpoint cannot
-   * distinguish from an omission) keeps the current avatar.
+   * Avatar binding: a verified `account_avatar` file id replaces the avatar, an
+   * explicit `null` removes it, and omitting the field keeps the current avatar.
    */
   avatar_file_id?: string | null;
 }
@@ -874,6 +872,15 @@ export interface CaseEnforcementView {
 }
 
 /** API-CASE-010 `GET /cases/{case_id}` — projected by the reader's viewpoint. */
+export type CaseViewpoint = "reporter" | "related_account" | "manager";
+
+export interface PendingInquiry {
+  inquiry_action_id: string;
+  asked_at?: string | null;
+  scope_text?: string | null;
+  related_account_id?: string | null;
+}
+
 export interface CaseDetail {
   case_id: string;
   case_type: CaseKind;
@@ -885,6 +892,23 @@ export interface CaseDetail {
   appeal_deadline_at?: string | null;
   actions: CaseActionView[];
   enforcements: CaseEnforcementView[];
+  /**
+   * How the server sees the caller on this case. `reporter` drives the supplement
+   * entry; when the field is absent the client falls back to the list scope.
+   */
+  viewpoint?: CaseViewpoint | null;
+  /**
+   * Actions the server allows for the current viewer. An array is authoritative and
+   * an empty array means no write entry is available; a missing field means the
+   * backend does not project the capability yet, so the client keeps its own rules.
+   */
+  available_actions?: string[] | null;
+  /**
+   * Inquiries this viewer may answer, each carrying the id the statement must send.
+   * Absent means the backend does not project it yet, so the client reads the todo
+   * projection instead.
+   */
+  pending_inquiries?: PendingInquiry[] | null;
   public_result_at?: string | null;
 }
 

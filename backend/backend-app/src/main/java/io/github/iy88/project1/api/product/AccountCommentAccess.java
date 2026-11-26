@@ -9,9 +9,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * Resolves comment author display names from the account module. Account restrictions are owned by
- * enforcement (#81); until that adapter is wired this projection reports no restriction, matching
- * the shared account read projection.
+ * Resolves comment author display names and write eligibility from the account module. The shared
+ * account projection owns the effective restriction read.
  */
 @Component
 @Profile("infrastructure")
@@ -35,6 +34,6 @@ class AccountCommentAccess implements CommentAccountAccess {
 
     @Override
     public boolean writeRestricted(long accountId) {
-        return false;
+        return accounts.writeRestricted(accountId);
     }
 }

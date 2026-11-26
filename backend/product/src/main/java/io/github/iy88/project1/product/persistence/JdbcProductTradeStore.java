@@ -43,6 +43,16 @@ public class JdbcProductTradeStore implements ProductTradeStore {
     }
 
     @Override
+    public boolean displayRestricted(long productId) {
+        return jdbc.sql("""
+                        select exists (
+                            select 1 from product_display_restriction
+                             where product_id = ? and released_at is null)
+                        """)
+                .param(productId).query(Boolean.class).single();
+    }
+
+    @Override
     public void acquire(long productId, long tradeId, Instant now) {
         requireTransaction();
         int changed = jdbc.sql("""

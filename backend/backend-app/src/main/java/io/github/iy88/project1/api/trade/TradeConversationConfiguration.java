@@ -26,12 +26,13 @@ class TradeConversationConfiguration {
     }
 
     @Bean
-    TradeParticipation tradeParticipation(TradePorts.Participation trades) {
-        return new TradeParticipationAdapter(trades);
+    TradeParticipation tradeParticipation(TradePorts.Participation trades, TradeRepository records) {
+        return new TradeParticipationAdapter(trades, records);
     }
 
     /** Projects trade reads required by the conversation module. */
-    private record TradeParticipationAdapter(TradePorts.Participation trades) implements TradeParticipation {
+    private record TradeParticipationAdapter(TradePorts.Participation trades,
+                                             TradeRepository records) implements TradeParticipation {
         @Override
         public Optional<TradeParticipation.Participants> participants(long tradeId) {
             return trades.findConversationAccess(tradeId)
@@ -46,6 +47,16 @@ class TradeConversationConfiguration {
         @Override
         public List<Long> tradeIdsOf(long accountId) {
             return trades.tradeIdsOf(accountId);
+        }
+
+        @Override
+        public Optional<String> visibleSourceRef(long tradeId, String sourceType, Long sourceId) {
+            if (tradeId <= 0 || sourceType == null || sourceId == null || sourceId <= 0) {
+                return Optional.empty();
+            }
+            return records.sourceRefBelongsToTrade(tradeId, sourceType, sourceId)
+                    ? Optional.of(sourceType + ":" + sourceId)
+                    : Optional.empty();
         }
     }
 
@@ -66,6 +77,11 @@ class TradeConversationConfiguration {
         @Override
         public void lockConversation(WriteTransaction transaction, long conversationId) {
             conversations.lockTrade(transaction, conversationId);
+        }
+
+        @Override
+        public void lockConversationRow(WriteTransaction transaction, long conversationId) {
+            conversations.lockTradeRow(conversationId);
         }
 
         @Override

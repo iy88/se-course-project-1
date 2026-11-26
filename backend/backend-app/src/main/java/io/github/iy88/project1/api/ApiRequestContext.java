@@ -1,5 +1,6 @@
 package io.github.iy88.project1.api;
 
+import io.github.iy88.project1.core.AuditContext;
 import io.github.iy88.project1.core.ExecutionContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -15,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class ApiRequestContext extends OncePerRequestFilter {
     private static final String ATTRIBUTE = ApiRequestContext.class.getName() + ".requestId";
+    private static final String OPERATION_ATTRIBUTE = ApiRequestContext.class.getName() + ".operationId";
     private final String configVersion;
 
     public ApiRequestContext(@Value("${project1.config-version}") String configVersion) {
@@ -51,5 +53,25 @@ public class ApiRequestContext extends OncePerRequestFilter {
                                      UUID sessionId, UUID originConnectionId, Long credentialVersion) {
         return new ExecutionContext(requestId(request), kind, actorId, sessionId, originConnectionId,
                 credentialVersion, configVersion);
+    }
+
+    /**
+     * Context for a product/category write whose business audit is committed by the domain service.
+     * The operation id is the idempotency claim's id, so a replay keeps the original operation id and
+     * does not create a second audit.
+     */
+    public AuditContext forWrite(HttpServletRequest request, ExecutionContext.ActorKind kind, String actorId,
+                                 UUID sessionId, UUID originConnectionId, Long credentialVersion) {
+        UUID operationId = (UUID) request.getAttribute(OPERATION_ATTRIBUTE);
+        if (operationId == null) {
+            operationId = UUID.randomUUID();
+        }
+        return new AuditContext(forActor(request, kind, actorId, sessionId, originConnectionId, credentialVersion),
+                operationId);
+    }
+
+    /** Called by the idempotency filter before the controller runs. */
+    public static void setOperationId(HttpServletRequest request, UUID operationId) {
+        request.setAttribute(OPERATION_ATTRIBUTE, operationId);
     }
 }

@@ -200,6 +200,13 @@ export interface MockMessage {
   body: string;
   created_at: string;
   case_message_kind?: CaseMessageKind;
+  /** Inquiry this statement answers; the API requires it for `statement`. */
+  inquiry_action_id?: string;
+}
+
+/** Stable inquiry identifier derived from the inquiry message. */
+export function inquiryActionIdOf(message: MockMessage): string {
+  return message.inquiry_action_id ?? `inquiry-${message.message_id}`;
 }
 
 export interface MockReadProgress {
@@ -243,6 +250,12 @@ export interface MockCase {
   actions: { action_kind: string; occurred_at: string; actor_kind: string }[];
   enforcements: { action: string; current_state: string }[];
   target: { target_type: string; target_id: string } | null;
+  /** Server-projected actions for the seeded viewer; absent exercises the fallback. */
+  available_actions?: string[] | null;
+  /** Server-projected viewpoint; absent exercises the list-scope fallback. */
+  viewpoint?: CaseDetail["viewpoint"];
+  /** Inquiries the seeded viewer may answer; absent exercises the todo fallback. */
+  pending_inquiries?: CaseDetail["pending_inquiries"];
   public_result: PublicCaseResult | null;
 }
 
@@ -274,6 +287,16 @@ export const DEMO_NOW = new Date("2026-11-20T09:00:00Z");
 
 function iso(offsetMs: number): string {
   return new Date(DEMO_NOW.getTime() + offsetMs).toISOString();
+}
+
+/**
+ * Offset from the real clock.
+ *
+ * Used for windows that must still be open when the demo runs — for example the
+ * appeal deadline — because `DEMO_NOW` is a fixed moment in the past.
+ */
+function isoFromNow(offsetMs: number): string {
+  return new Date(Date.now() + offsetMs).toISOString();
 }
 
 export function nextId(state: MockState, scope: string): string {
@@ -726,6 +749,16 @@ export function createSeedState(): MockState {
       created_at: iso(-1 * DAY),
       source_ref: { resource_type: "case", resource_id: "6" },
     },
+    {
+      // Thread of case 8: a decided report against account 1 whose appeal window
+      // is still open, so the appeal entry can be exercised locally.
+      conversation_id: "2",
+      kind: "case",
+      participant_ids: ["1", "4"],
+      archived_at: null,
+      created_at: iso(-5 * DAY),
+      source_ref: { resource_type: "case", resource_id: "8" },
+    },
   ];
   state.sequences.conversations = 6;
 
@@ -819,8 +852,20 @@ export function createSeedState(): MockState {
       created_at: iso(-1 * DAY),
       case_message_kind: "inquiry",
     },
+    {
+      message_id: "9",
+      conversation_id: "2",
+      kind: "case",
+      seq: 1,
+      sender_id: "4",
+      sender_kind: "user",
+      message_type: "manager_reply",
+      body: "已核实该账户在会话中重复发送站外交易链接，决定撤销相关商品公开访问。你可在截止前提交申辩。",
+      created_at: iso(-2 * DAY),
+      case_message_kind: "manager_reply",
+    },
   ];
-  state.sequences.messages = 8;
+  state.sequences.messages = 9;
 
   state.readProgress = [
     {
@@ -1154,6 +1199,12 @@ export function createSeedState(): MockState {
       status: "claimed",
       reporter_id: null,
       related_ids: ["1"],
+      // The inquired seller may answer, and the server says so explicitly.
+      viewpoint: "related_account",
+      available_actions: ["respond_inquiry"],
+      pending_inquiries: [
+        { inquiry_action_id: "31", asked_at: iso(-1 * DAY), scope_text: "请说明商品来源" },
+      ],
       manager_id: "4",
       claimed_at: iso(-1 * DAY),
       decision_kind: null,
@@ -1209,8 +1260,77 @@ export function createSeedState(): MockState {
         published_at: iso(-10 * DAY),
       },
     },
+    {
+      // Decided case against account 1 with an open appeal window, so the appeal
+      // entry and its deadline copy can be walked through locally.
+      case_id: "8",
+      case_type: "report",
+      status: "decided",
+      reporter_id: null,
+      related_ids: ["1"],
+      manager_id: "4",
+      claimed_at: iso(-4 * DAY),
+      decision_kind: "violation",
+      reason_text: "经核实该账户在会话中重复发送站外交易链接，已撤销相关商品公开访问。",
+      note: null,
+      archived_at: null,
+      appeal_deadline_at: isoFromNow(2 * DAY),
+      // Server-projected actions: only the appeal window is open for this viewer.
+      available_actions: ["submit_appeal"],
+      public_result_at: null,
+      created_at: iso(-5 * DAY),
+      updated_at: iso(-2 * DAY),
+      supplement_count: 0,
+      thread_id: "2",
+      actions: [
+        { action_kind: "submit", occurred_at: iso(-5 * DAY), actor_kind: "reporter" },
+        { action_kind: "claim", occurred_at: iso(-4 * DAY), actor_kind: "manager" },
+        { action_kind: "inquire", occurred_at: iso(-4 * DAY + 2 * HOUR), actor_kind: "manager" },
+        { action_kind: "statement", occurred_at: iso(-4 * DAY + 5 * HOUR), actor_kind: "account" },
+        { action_kind: "decide", occurred_at: iso(-2 * DAY), actor_kind: "manager" },
+        { action_kind: "execute", occurred_at: iso(-2 * DAY), actor_kind: "manager" },
+      ],
+      enforcements: [
+        { action: "withdraw_public_access", current_state: "restricted" },
+        { action: "remove_content", current_state: "removed" },
+      ],
+      target: { target_type: "product", target_id: "4" },
+      public_result: null,
+    },
+    {
+      // Same viewpoint as case 8 but with the appeal window already closed, so the
+      // "appeal window ended" copy and the missing entry can be checked.
+      case_id: "9",
+      case_type: "report",
+      status: "decided",
+      reporter_id: null,
+      related_ids: ["1"],
+      manager_id: "4",
+      claimed_at: iso(-20 * DAY),
+      decision_kind: "violation",
+      reason_text: "经核实存在重复发布违规内容，已限制账户发布资格。",
+      note: null,
+      archived_at: null,
+      appeal_deadline_at: isoFromNow(-1 * DAY),
+      // Nothing is actionable for this viewer any more.
+      available_actions: [],
+      public_result_at: null,
+      created_at: iso(-21 * DAY),
+      updated_at: iso(-15 * DAY),
+      supplement_count: 0,
+      thread_id: null,
+      actions: [
+        { action_kind: "submit", occurred_at: iso(-21 * DAY), actor_kind: "reporter" },
+        { action_kind: "claim", occurred_at: iso(-20 * DAY), actor_kind: "manager" },
+        { action_kind: "decide", occurred_at: iso(-16 * DAY), actor_kind: "manager" },
+        { action_kind: "execute", occurred_at: iso(-16 * DAY), actor_kind: "manager" },
+      ],
+      enforcements: [{ action: "restrict_account", current_state: "restricted_account" }],
+      target: { target_type: "account", target_id: "1" },
+      public_result: null,
+    },
   ];
-  state.sequences.cases = 7;
+  state.sequences.cases = 9;
 
   return state;
 }
@@ -1297,9 +1417,11 @@ export function tradeActions(trade: MockTrade, viewerId: string): TradeAction[] 
         actions.push("decide_cancellation");
       }
       if (current && !trade.dispute) actions.push("open_dispute");
+
       break;
     case "disputed":
       if (trade.dispute?.status === "resolved") actions.push("confirm_dispute_resolution");
+
       break;
     case "completed":
       break;
@@ -1455,6 +1577,9 @@ export function caseDetail(item: MockCase): CaseDetail {
     actions: item.actions,
     enforcements: item.enforcements,
     public_result_at: item.public_result_at,
+    available_actions: item.available_actions ?? null,
+    viewpoint: item.viewpoint ?? null,
+    pending_inquiries: item.pending_inquiries ?? null,
   };
 }
 

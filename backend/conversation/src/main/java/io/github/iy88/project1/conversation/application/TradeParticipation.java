@@ -16,6 +16,13 @@ public interface TradeParticipation {
     /** Trades in which the account is buyer or seller; used to assemble the conversation list. */
     List<Long> tradeIdsOf(long accountId);
 
+    /**
+     * Returns the public {@code type:id} reference only when the record is one of the trade-owned
+     * source kinds and belongs to {@code tradeId}. Missing, unknown and cross-trade records must
+     * stay hidden.
+     */
+    Optional<String> visibleSourceRef(long tradeId, String sourceType, Long sourceId);
+
     record Participants(long buyerId, long sellerId) {
         public Participants {
             if (buyerId <= 0 || sellerId <= 0 || buyerId == sellerId) {

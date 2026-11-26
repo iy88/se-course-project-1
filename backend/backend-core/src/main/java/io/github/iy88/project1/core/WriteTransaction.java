@@ -47,6 +47,20 @@ public final class WriteTransaction {
         }
     }
 
+    /** Whether this transaction already acquired the key in the public lock order. */
+    public boolean isAcquired(LockPlan.Key key) {
+        requireActive();
+        return acquired.contains(key);
+    }
+
+    /** Requires the exclusive qualification lock acquired by the write executor. */
+    public void requireExclusiveAccount(long accountId) {
+        requireActive();
+        if (plan.accounts().get(accountId) != LockPlan.AccountMode.EXCLUSIVE) {
+            throw new LockPlan.Changed(new LockPlan(Map.of(accountId, LockPlan.AccountMode.EXCLUSIVE), Set.of()));
+        }
+    }
+
     private void requirePlanned(LockPlan.Key key) {
         requireActive();
         if (!plan.resources().contains(key)) {

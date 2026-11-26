@@ -129,19 +129,26 @@ public class AccountService {
         String hash = hasher.hash(newPassword);
         Object result = transaction.execute(status -> {
             Instant now = Instant.now();
+            Long accountId = verifications.findAccountIdById(verificationId).orElse(null);
+            if (accountId == null) {
+                return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
+            }
+            // Request and consume both take the account lock before the verification row lock.
+            Account account = accounts.lockById(accountId)
+                    .orElseThrow(() -> new BusinessError("VERIFICATION_CODE_INVALID", 422, "验证码无效"));
             EmailVerification verification = verifications.lockById(verificationId)
                     .orElseThrow(() -> new BusinessError("VERIFICATION_CODE_INVALID", 422, "验证码无效"));
             if (!"password_reset".equals(verification.purpose())
+                    || entry == null
                     || verification.entryDigest() == null
                     || !MessageDigest.isEqual(verification.entryDigest(), entry.nonceDigest())
-                    || verification.accountId() == null) {
+                    || verification.accountId() == null
+                    || !accountId.equals(verification.accountId())) {
                 return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
             }
             if (!verification.usable(now)) {
                 return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");
             }
-            Account account = accounts.lockById(verification.accountId())
-                    .orElseThrow(() -> new BusinessError("VERIFICATION_CODE_INVALID", 422, "验证码无效"));
             if (verification.credentialVersion() == null
                     || account.credentialVersion() != verification.credentialVersion()) {
                 return new Failure("VERIFICATION_CODE_INVALID", 422, "验证码无效");

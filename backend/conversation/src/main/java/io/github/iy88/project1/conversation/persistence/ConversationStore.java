@@ -176,8 +176,13 @@ public class ConversationStore {
     public TradeConversation lockTrade(WriteTransaction transaction, long conversationId) {
         var holder = new AtomicReference<TradeConversation>();
         transaction.lock(key(LockPlan.Domain.TRADE_CONVERSATION, conversationId),
-                () -> holder.set(trades.lockById(conversationId).orElseThrow(ConversationStore::participantRequired)));
+                () -> holder.set(lockTradeRow(conversationId)));
         return holder.get();
+    }
+
+    /** Locks the trade-conversation row without declaring a plan key; the caller records it. */
+    public TradeConversation lockTradeRow(long conversationId) {
+        return trades.lockById(conversationId).orElseThrow(ConversationStore::participantRequired);
     }
 
     public TradeConversation lockTradeByTradeId(WriteTransaction transaction, long tradeId) {
@@ -307,15 +312,26 @@ public class ConversationStore {
         return true;
     }
 
-    public CaseReadProgress advanceCaseRead(WriteTransaction transaction, CaseConversation conversation,
-                                            long accountId, long displayedSeq) {
+    /**
+     * Moves one reader's case cursor forward. The caller has already locked the thread and checked
+     * the case qualification. A manager may not have a progress row yet, so one is created on the
+     * first read; the result tells the caller whether the cursor actually moved so a no-op read
+     * does not publish a message_read event.
+     */
+    public CaseReadAdvance advanceCaseRead(WriteTransaction transaction, CaseConversation conversation,
+                                           long accountId, long displayedSeq) {
         requireDisplayedSequence(conversation.seqHead(), displayedSeq);
         transaction.lock(key(LockPlan.Domain.READ_PROGRESS, conversation.id(), accountId), () -> {
         });
         var progress = caseProgress.lockByConversationAndAccount(conversation.id(), accountId)
-                .orElseThrow(ConversationStore::participantRequired);
+                .orElseGet(() -> new CaseReadProgress(conversation.id(), accountId));
+        long previous = progress.lastReadSeq();
         progress.advanceTo(displayedSeq, clock.instant());
-        return caseProgress.save(progress);
+        var saved = caseProgress.save(progress);
+        return new CaseReadAdvance(saved, saved.lastReadSeq() > previous);
+    }
+
+    public record CaseReadAdvance(CaseReadProgress progress, boolean advanced) {
     }
 
     public long caseUnread(CaseConversation conversation, long accountId) {

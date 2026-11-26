@@ -77,7 +77,7 @@ public class ConversationQueries {
             }
         }
         var profiles = accounts.profiles(senderIds);
-        var items = messages.stream().map(message -> tradeMessage(message, profiles)).toList();
+        var items = messages.stream().map(message -> tradeMessage(message, conversation.tradeId(), profiles)).toList();
         return new ConversationViews.MessagePage(items, lastSeq(items), firstSeq(items),
                 conversation.archived() ? "archived" : "active", conversation.tradeId());
     }
@@ -133,8 +133,9 @@ public class ConversationQueries {
     private ConversationViews.Branch tradeBranch(TradeConversation conversation, long actor) {
         var last = reader.tradeLastMessage(conversation.id()).orElse(null);
         Instant lastAt = last == null ? conversation.createdAt() : last.createdAt();
-        return new ConversationViews.Branch("trade", conversation.id(), null, conversation.archivedAt(),
-                store.tradeUnread(conversation, actor), lastAt, preview(last == null ? null : last.body()));
+        return new ConversationViews.Branch("trade", conversation.id(), "trade:" + conversation.tradeId(),
+                conversation.archivedAt(), store.tradeUnread(conversation, actor), lastAt,
+                preview(last == null ? null : last.body()));
     }
 
     private ConversationViews.Message chatMessage(ChatMessage message, Map<Long, AccountDirectory.Profile> profiles) {
@@ -144,15 +145,19 @@ public class ConversationQueries {
                 "text", message.body(), message.createdAt(), null, null);
     }
 
-    private ConversationViews.Message tradeMessage(TradeMessage message, Map<Long, AccountDirectory.Profile> profiles) {
+    private ConversationViews.Message tradeMessage(TradeMessage message, long tradeId,
+                                                    Map<Long, AccountDirectory.Profile> profiles) {
         var sender = "system".equals(message.senderKind())
                 ? new ConversationViews.Sender(null, "系统", "system")
                 : new ConversationViews.Sender(message.senderAccountId(),
                         displayName(message.senderAccountId(), profiles), "account");
-        // Source eligibility is not wired yet, so the reference stays hidden; API-CONV-003 only
-        // returns it once the trade module confirms the record belongs to this trade and is visible.
+        String sourceRef = null;
+        if ("system".equals(message.senderKind()) && message.sourceType() != null && message.sourceId() != null) {
+            sourceRef = tradesOf().visibleSourceRef(tradeId, message.sourceType(), message.sourceId())
+                    .orElse(null);
+        }
         return new ConversationViews.Message(message.id(), message.seq(), sender, message.messageType(),
-                message.body(), message.createdAt(), message.eventType(), null);
+                message.body(), message.createdAt(), message.eventType(), sourceRef);
     }
 
     private static List<ConversationViews.Branch> sortedBranches(List<ConversationViews.Branch> branches) {

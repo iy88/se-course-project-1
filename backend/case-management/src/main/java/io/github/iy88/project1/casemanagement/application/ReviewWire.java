@@ -104,11 +104,18 @@ final class ReviewWire {
             var row = rows.addObject();
             row.put("case_id", Long.toString(item.caseId()));
             row.put("kind", item.kind());
+            row.put("case_type", item.kind());
+            row.put("decision_kind", item.decisionKind());
+            row.put("manager_id", item.managerId() == null ? null : item.managerId().toString());
+            row.put("completed_at", item.completedAt() == null ? null : item.completedAt().toString());
             row.put("created_at", item.createdAt().toString());
             row.put("updated_at", item.updatedAt().toString());
             var summary = row.putObject("summary");
-            summary.put("audit_id", Long.toString(item.auditId()));
-            summary.put("product_id", Long.toString(item.productId()));
+            summary.put("title", item.title());
+            if (item.auditId() != null) {
+                summary.put("audit_id", item.auditId().toString());
+                summary.put("product_id", item.productId().toString());
+            }
         });
         body.put("page", page);
         body.put("page_size", pageSize);

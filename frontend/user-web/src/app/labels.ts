@@ -146,6 +146,79 @@ export const caseMessageKindLabels: Record<CaseMessageKind, string> = {
   system: "系统消息",
 };
 
+/**
+ * Progress rows, enforcement actions and their state snapshots.
+ *
+ * The API keeps the registered names; only the rendering is translated. Values the
+ * client does not know yet fall back to a neutral phrase instead of leaking a raw
+ * identifier into the interface.
+ */
+export const caseActionKindLabels: Record<string, string> = {
+  submit: "提交举报",
+  supplement: "补充材料",
+  claim: "认领事项",
+  inquire: "发起问询",
+  statement: "提交说明",
+  appeal: "提交申辩",
+  manager_reply: "管理员回复",
+  decide: "作出决定",
+  close: "结案归档",
+  execute: "执行处置",
+  lift: "解除处置",
+  publish_result: "公开结果",
+};
+
+export const caseActorKindLabels: Record<string, string> = {
+  account: "相关账户",
+  manager: "管理员",
+  system: "系统",
+};
+
+export const enforcementActionLabels: Record<string, string> = {
+  restrict_account: "账户限制",
+  lift_account_restriction: "解除账户限制",
+  withdraw_public_access: "撤销商品公开访问",
+  remove_content: "移除违规内容",
+  restore_display: "恢复商品展示",
+  freeze_trade: "冻结交易",
+  lift_trade_freeze: "解除交易冻结",
+  adjust_trade_status: "调整交易状态",
+  remove_evaluation_content: "移除违规评价",
+};
+
+export const enforcementStateLabels: Record<string, string> = {
+  applied: "已生效",
+  replayed: "已生效",
+  failed: "执行失败",
+  restricted: "受限",
+  restricted_account: "账户受限",
+  restricted_display: "停止公开展示",
+  released: "已解除",
+  visible: "正常展示",
+  frozen: "已冻结",
+  active: "进行中",
+  in_progress: "进行中",
+  closed: "已关闭",
+  removed: "已移除",
+};
+
+/** Neutral fallbacks so an unknown server value still reads as Chinese copy. */
+export function caseActionKindText(value: string): string {
+  return caseActionKindLabels[value] ?? "其他处理";
+}
+
+export function caseActorKindText(value: string): string {
+  return caseActorKindLabels[value] ?? "参与方";
+}
+
+export function enforcementActionText(value: string): string {
+  return enforcementActionLabels[value] ?? "处置措施";
+}
+
+export function enforcementStateText(value: string): string {
+  return enforcementStateLabels[value] ?? "已记录";
+}
+
 export const senderKindLabels: Record<MessageSenderKind, string> = {
   user: "用户",
   system: "系统",

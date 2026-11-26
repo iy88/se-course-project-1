@@ -28,6 +28,22 @@ class ConversationWireTests {
     }
 
     @Test
+    void systemMessageSourceRefUsesThePublicResourceRefShape() {
+        var page = new ConversationViews.MessagePage(List.of(
+                new ConversationViews.Message(22L, 3L,
+                        new ConversationViews.Sender(null, "系统", "system"),
+                        "system_event", "交易已完成", NOW, "trade_completed", "trade_transition:55")),
+                3L, 3L, "active", 19L);
+
+        var body = ConversationWire.messagePage(page, ConversationKind.TRADE);
+
+        @SuppressWarnings("unchecked")
+        var item = (java.util.Map<String, Object>) ((List<?>) body.get("items")).getFirst();
+        assertThat(item).containsEntry("source_ref", java.util.Map.of(
+                "resource_type", "trade_transition", "resource_id", "55"));
+    }
+
+    @Test
     void caseMessagesUseTheCaseIdAndKindNames() {
         var page = new ConversationViews.MessagePage(List.of(
                 new ConversationViews.Message(31L, 1L,

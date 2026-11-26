@@ -3,6 +3,7 @@ package io.github.iy88.project1.api.conversation;
 import io.github.iy88.project1.api.ApiRequestContext;
 import io.github.iy88.project1.conversation.ConversationKind;
 import io.github.iy88.project1.conversation.ConversationSettings;
+import io.github.iy88.project1.conversation.application.CaseConversationQueries;
 import io.github.iy88.project1.conversation.application.ConversationQueries;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
@@ -28,8 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * Identity always comes from the session adapter. Reads run against the query side and never
  * advance read progress; writes go through the shared write executor with an Idempotency-Key.
- * Case threads belong to the case module (#84, S4); until that adapter is wired this controller
- * answers 503 for {@code kind=case} instead of pretending the thread is missing.
+ * Case threads are read and marked read here (API-CONV-003/005); case messages are written through
+ * the case endpoint (API-CASE-006), so this controller rejects case sends.
  */
 @RestController
 @RequestMapping("/api/v1/conversations")
@@ -42,17 +43,20 @@ public class ConversationController {
     private static final int DEFAULT_LIMIT = 20;
 
     private final ObjectProvider<ConversationQueries> queries;
+    private final ObjectProvider<CaseConversationQueries> caseQueries;
     private final ObjectProvider<ConversationWriteCommands> commands;
     private final ObjectProvider<ConversationActorResolver> actors;
     private final ApiRequestContext requests;
     private final ConversationSettings settings;
 
     public ConversationController(ObjectProvider<ConversationQueries> queries,
+                                  ObjectProvider<CaseConversationQueries> caseQueries,
                                   ObjectProvider<ConversationWriteCommands> commands,
                                   ObjectProvider<ConversationActorResolver> actors,
                                   ApiRequestContext requests,
                                   ConversationSettings settings) {
         this.queries = queries;
+        this.caseQueries = caseQueries;
         this.commands = commands;
         this.actors = actors;
         this.requests = requests;
@@ -80,7 +84,6 @@ public class ConversationController {
             @RequestParam(required = false) Integer limit) {
         var context = context(request);
         var kind = kind(kindValue);
-        requireSupported(kind);
         long id = identifier(conversationId);
         int size = positive(limit, DEFAULT_LIMIT, "limit");
         if (size > settings.getMaxPageSize()) {
@@ -89,7 +92,7 @@ public class ConversationController {
         var page = switch (kind) {
             case CHAT -> queries().pageChat(context, id, beforeSeq, afterSeq, size);
             case TRADE -> queries().pageTrade(context, id, beforeSeq, afterSeq, size);
-            case CASE -> throw unsupportedKind();
+            case CASE -> caseQueries().pageCase(context, id, beforeSeq, afterSeq, size);
         };
         return ok(ConversationWire.messagePage(page, kind));
     }
@@ -114,12 +117,12 @@ public class ConversationController {
             @RequestHeader(name = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         var context = context(request);
         var kind = kind(kindValue);
-        requireSupported(kind);
         long id = identifier(conversationId);
         var key = idempotencyKey(idempotencyKey);
         if (body == null || body.body() == null || body.body().isBlank()) {
             throw new BusinessError("INPUT_INVALID", 422, "消息内容不能为空");
         }
+        requireSendable(kind);
         return write(commands().send(context, key, kind, id, body.body()));
     }
 
@@ -132,14 +135,15 @@ public class ConversationController {
             @RequestHeader(name = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
         var context = context(request);
         var kind = kind(kindValue);
-        requireSupported(kind);
         long id = identifier(conversationId);
         var key = idempotencyKey(idempotencyKey);
         Long displayed = body == null ? null : body.displayedSeq();
         if (displayed == null || displayed < 0) {
             throw new BusinessError("INPUT_INVALID", 422, "displayed_seq 取值无效");
         }
-        return write(commands().markRead(context, key, kind, id, displayed));
+        return write(kind == ConversationKind.CASE
+                ? commands().markCaseRead(context, key, id, displayed)
+                : commands().markRead(context, key, kind, id, displayed));
     }
 
     private ExecutionContext context(HttpServletRequest request) {
@@ -185,14 +189,18 @@ public class ConversationController {
         throw new BusinessError("INPUT_INVALID", 422, "conversation_kind 取值无效");
     }
 
-    private static void requireSupported(ConversationKind kind) {
-        if (kind == ConversationKind.CASE) {
-            throw unsupportedKind();
+    private CaseConversationQueries caseQueries() {
+        var available = caseQueries.getIfAvailable();
+        if (available == null) {
+            throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "事项会话查询暂不可用");
         }
+        return available;
     }
 
-    private static BusinessError unsupportedKind() {
-        return new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "事项会话由事项模块提供");
+    private static void requireSendable(ConversationKind kind) {
+        if (kind == ConversationKind.CASE) {
+            throw new BusinessError("ACTION_NOT_ALLOWED", 403, "事项消息请使用事项接口");
+        }
     }
 
     private static long identifier(String value) {

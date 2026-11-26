@@ -1,9 +1,34 @@
 /* Category maintenance endpoints (API-PRD-015—021). */
 import { request } from "./http";
-import type { CategoryDetail } from "./contracts";
+import type { CategoryDetail, Page } from "./contracts";
 
-export function listAdminCategories(signal?: AbortSignal): Promise<{ items: CategoryDetail[] }> {
-  return request<{ items: CategoryDetail[] }>("GET", "/admin/categories", { signal });
+export interface CategoryPageQuery {
+  page: number;
+  page_size: number;
+}
+
+export function listAdminCategories(
+  query: CategoryPageQuery,
+  signal?: AbortSignal,
+): Promise<Page<CategoryDetail>> {
+  return request<Page<CategoryDetail>>("GET", "/admin/categories", {
+    query: { page: query.page, page_size: query.page_size },
+    signal,
+  });
+}
+
+/**
+ * The review correction picker needs the complete active category directory.
+ * The maintenance table itself uses the paginated query above.
+ */
+export async function listAllAdminCategories(signal?: AbortSignal): Promise<CategoryDetail[]> {
+  const pageSize = 100;
+  const result: CategoryDetail[] = [];
+  for (let page = 1; ; page += 1) {
+    const current = await listAdminCategories({ page, page_size: pageSize }, signal);
+    result.push(...current.items);
+    if (result.length >= current.total || current.items.length === 0) return result;
+  }
 }
 
 export function createCategory(name: string, idempotencyKey: string): Promise<CategoryDetail> {

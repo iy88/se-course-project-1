@@ -13,6 +13,30 @@ import type {
   UploadCapabilities,
 } from "./contracts";
 
+const IMAGE_TYPES = ["image/jpeg", "image/png"] as const;
+
+/**
+ * File picker filter for one purpose. When the same-purpose capability is known,
+ * use its MIME list so the picker follows the backend rule; otherwise keep the
+ * established image formats and add PDF only for case evidence.
+ */
+export function acceptedFileTypes(
+  purpose: FilePurpose,
+  capabilities?: UploadCapabilities,
+): string[] {
+  if (capabilities) {
+    const allowed = capabilities.purposes?.[purpose]?.allowed_content_types ?? [];
+    const usable = allowed.filter(
+      (type) =>
+        type === "image/jpeg" ||
+        type === "image/png" ||
+        (purpose === "case_evidence" && type === "application/pdf"),
+    );
+    if (usable.length) return usable;
+  }
+  return purpose === "case_evidence" ? [...IMAGE_TYPES, "application/pdf"] : [...IMAGE_TYPES];
+}
+
 export function readUploadCapabilities(signal?: AbortSignal): Promise<UploadCapabilities> {
   return request<UploadCapabilities>("GET", "/files/upload-capabilities", { signal });
 }

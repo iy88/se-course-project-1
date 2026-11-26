@@ -26,8 +26,8 @@ final class TradeProductAdapter implements TradePorts.Product {
     @Override
     public Optional<ProductSummary> visibleSummary(long productId, long viewerId) {
         return products.read(productId)
-                .filter(product -> Product.PUBLIC.equals(product.lifecycleState())
-                        || product.sellerId() == viewerId)
+                .filter(product -> product.sellerId() == viewerId
+                        || Product.PUBLIC.equals(product.lifecycleState()) && !products.displayRestricted(productId))
                 .map(product -> new ProductSummary(product.title(), product.priceCents()));
     }
 
@@ -38,7 +38,8 @@ final class TradeProductAdapter implements TradePorts.Product {
 
     @Override
     public void requireTradable(ProductState state, long buyerId) {
-        if (!Product.PUBLIC.equals(state.lifecycleState()) || state.sellerId() == buyerId) {
+        if (!Product.PUBLIC.equals(state.lifecycleState()) || state.sellerId() == buyerId
+                || products.displayRestricted(state.productId())) {
             throw new BusinessError("PRODUCT_NOT_AVAILABLE", 409, "商品当前不可交易");
         }
     }

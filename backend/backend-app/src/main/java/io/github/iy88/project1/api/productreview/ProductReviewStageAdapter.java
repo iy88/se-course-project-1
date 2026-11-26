@@ -8,9 +8,6 @@ import io.github.iy88.project1.casemanagement.application.ReviewAction;
 import io.github.iy88.project1.casemanagement.application.ReviewDecision;
 import io.github.iy88.project1.casemanagement.application.ReviewPlan;
 import io.github.iy88.project1.casemanagement.application.SubjectPlan;
-import io.github.iy88.project1.casemanagement.application.TodoItem;
-import io.github.iy88.project1.casemanagement.application.TodoKinds;
-import io.github.iy88.project1.casemanagement.application.TodoOwnership;
 import io.github.iy88.project1.casemanagement.application.TodoPage;
 import io.github.iy88.project1.casemanagement.application.TodoQuery;
 import io.github.iy88.project1.core.ExecutionContext;
@@ -19,11 +16,7 @@ import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.application.ProductReviewSubjects;
 import io.github.iy88.project1.product.persistence.ProductAudit;
 import java.net.URI;
-import java.time.OffsetDateTime;
-import java.util.List;
-import java.util.Map;
 import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,11 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Profile("infrastructure")
 class ProductReviewStageAdapter implements ProductReviewPort {
     private final ProductReviewSubjects subjects;
-    private final JdbcClient jdbc;
+    private final ManagementTodoReadModel workbench;
 
-    ProductReviewStageAdapter(ProductReviewSubjects subjects, JdbcClient jdbc) {
+    ProductReviewStageAdapter(ProductReviewSubjects subjects, ManagementTodoReadModel workbench) {
         this.subjects = subjects;
-        this.jdbc = jdbc;
+        this.workbench = workbench;
     }
 
     @Override
@@ -106,39 +99,8 @@ class ProductReviewStageAdapter implements ProductReviewPort {
     }
 
     @Override
-    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public TodoPage todos(TodoQuery query) {
-        String source = """
-                 FROM moderation_case c
-                 JOIN product_audit a ON a.case_id = c.id
-                 JOIN product p ON p.product_id = a.product_id
-                 WHERE c.case_type = 'product_review' AND a.status = 'pending'
-                   AND p.lifecycle_state = 'pending_review' AND p.deleted_at IS NULL
-                """ + (query.ownership() == TodoOwnership.MINE
-                ? " AND c.claimed_manager_id = :manager" : " AND c.claimed_manager_id IS NULL");
-        var asOf = jdbc.sql("select transaction_timestamp()").query(OffsetDateTime.class).single().toInstant();
-        long count = queueQuery("SELECT COUNT(*)" + source, query).query(Long.class).single();
-        var counts = Map.of(TodoKinds.PRODUCT_REVIEW, count);
-        if (!TodoKinds.PRODUCT_REVIEW.equals(query.kind()) || count == 0) {
-            return new TodoPage(List.of(), 0, counts, asOf);
-        }
-        var rows = queueQuery("""
-                SELECT c.id, c.created_at, coalesce(c.claimed_at, c.created_at) AS updated_at,
-                       a.audit_id, a.product_id
-                """ + source + " ORDER BY updated_at DESC, c.id DESC LIMIT :limit OFFSET :offset", query)
-                .param("limit", query.pageSize())
-                .param("offset", (long) (query.page() - 1) * query.pageSize())
-                .query((row, index) -> new TodoItem(row.getLong("id"), TodoKinds.PRODUCT_REVIEW,
-                        row.getObject("created_at", OffsetDateTime.class).toInstant(),
-                        row.getObject("updated_at", OffsetDateTime.class).toInstant(),
-                        row.getLong("audit_id"), row.getLong("product_id")))
-                .list();
-        return new TodoPage(rows, count, counts, asOf);
-    }
-
-    private JdbcClient.StatementSpec queueQuery(String sql, TodoQuery query) {
-        var statement = jdbc.sql(sql);
-        return query.ownership() == TodoOwnership.MINE ? statement.param("manager", query.managerId()) : statement;
+        return workbench.page(query);
     }
 
     private SubjectPlan plan(ProductAudit audit) {

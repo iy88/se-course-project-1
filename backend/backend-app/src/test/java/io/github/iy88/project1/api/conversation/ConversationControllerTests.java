@@ -1,6 +1,5 @@
 package io.github.iy88.project1.api.conversation;
 
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -62,13 +61,17 @@ class ConversationControllerTests {
             when(queries.list(any(), anyInt(), anyInt())).thenReturn(new ConversationViews.Page<>(
                     List.of(new ConversationViews.Summary(
                             new ConversationViews.Peer(42L, "李四", "https://img.example/peer.png"),
-                            List.of(new ConversationViews.Branch("trade", 2L, null, null, 1L, NOW, "在吗")))),
+                            List.of(new ConversationViews.Branch("trade", 2L, "trade:19", null, 1L, NOW, "在吗")))),
                     1, 20, 1));
             when(queries.pageTrade(any(), eq(2L), any(), any(), anyInt())).thenReturn(
                     new ConversationViews.MessagePage(List.of(
                             new ConversationViews.Message(21L, 2L,
                                     new ConversationViews.Sender(7L, "张新悦", "account"),
-                                    "text", "在吗", NOW, null, null)), 2L, 2L, "active", 19L));
+                                    "text", "在吗", NOW, null, null),
+                            new ConversationViews.Message(22L, 3L,
+                                    new ConversationViews.Sender(null, "系统", "system"),
+                                    "system_event", "交易已完成", NOW, "trade_completed",
+                                    "trade_transition:55")), 3L, 2L, "active", 19L));
             when(queries.pageChat(any(), anyLong(), any(), any(), anyInt()))
                     .thenThrow(new BusinessError("PARTICIPANT_REQUIRED", 404, "会话不存在或无权访问"));
             return queries;
@@ -103,6 +106,15 @@ class ConversationControllerTests {
                                                       String key, ConversationKind kind, long conversationId,
                                                       long displayedSeq) {
                     return result(200, kind.wireValue(), conversationId, Map.of(
+                            "last_read_seq", 2,
+                            "unread_count", 0,
+                            "updated_at", NOW.toString()));
+                }
+
+                @Override
+                public WriteResult<JsonNode> markCaseRead(io.github.iy88.project1.core.ExecutionContext context,
+                                                          String key, long conversationId, long displayedSeq) {
+                    return result(200, "case_conversation", conversationId, Map.of(
                             "last_read_seq", 2,
                             "unread_count", 0,
                             "updated_at", NOW.toString()));
@@ -145,7 +157,7 @@ class ConversationControllerTests {
                 .andExpect(jsonPath("$.items[0].peer.avatar_url").value("https://img.example/peer.png"))
                 .andExpect(jsonPath("$.items[0].branches[0].conversation_kind").value("trade"))
                 .andExpect(jsonPath("$.items[0].branches[0].conversation_id").value("2"))
-                .andExpect(jsonPath("$.items[0].branches[0].source_ref").value(nullValue()))
+                .andExpect(jsonPath("$.items[0].branches[0].source_ref").value("trade:19"))
                 .andExpect(jsonPath("$.items[0].branches[0].unread_count").value(1))
                 .andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.page_size").value(20))
@@ -160,7 +172,10 @@ class ConversationControllerTests {
                 .andExpect(jsonPath("$.items[0].message_type").value("text"))
                 .andExpect(jsonPath("$.items[0].sender.sender_kind").value("account"))
                 .andExpect(jsonPath("$.items[0].seq").value(2))
-                .andExpect(jsonPath("$.next_after_seq").value(2))
+                .andExpect(jsonPath("$.items[1].event_type").value("trade_completed"))
+                .andExpect(jsonPath("$.items[1].source_ref.resource_type").value("trade_transition"))
+                .andExpect(jsonPath("$.items[1].source_ref.resource_id").value("55"))
+                .andExpect(jsonPath("$.next_after_seq").value(3))
                 .andExpect(jsonPath("$.next_before_seq").value(2))
                 .andExpect(jsonPath("$.branch_status").value("active"))
                 .andExpect(jsonPath("$.trade_id").value("19"));

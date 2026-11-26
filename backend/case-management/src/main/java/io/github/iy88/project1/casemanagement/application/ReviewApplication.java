@@ -97,18 +97,18 @@ public class ReviewApplication {
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode todos(ExecutionContext context, String ownershipValue, String kindValue,
-                          int page, int pageSize) {
+                          String keyword, int page, int pageSize) {
         var product = product();
         manager().requireManager(context, "MANAGEMENT_NOT_ALLOWED", 403);
         var ownership = TodoOwnership.parse(ownershipValue);
         String kind = kindValue == null ? TodoKinds.PRODUCT_REVIEW : kindValue;
-        if (!TodoKinds.legal(kind)) {
+        if (!TodoKinds.legal(kind) && !TodoKinds.ALL_KINDS.equals(kind)) {
             throw new BusinessError("INPUT_INVALID", 422, "待办类型无效");
         }
         if (page <= 0 || pageSize <= 0) {
             throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
         }
-        var result = product.todos(new TodoQuery(actor(context), ownership, kind, page, pageSize));
+        var result = product.todos(new TodoQuery(actor(context), ownership, kind, keyword == null ? "" : keyword.strip(), page, pageSize));
         return ReviewWire.todos(json, result.items(), page, pageSize, result.total(), result.countsByKind(),
                 result.asOf());
     }

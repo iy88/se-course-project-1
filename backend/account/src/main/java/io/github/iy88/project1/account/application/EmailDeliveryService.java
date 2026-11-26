@@ -26,12 +26,18 @@ public class EmailDeliveryService {
         try {
             return jdbc.sql("""
                             WITH candidate AS (
-                                SELECT id FROM email_verification
-                                WHERE code IS NOT NULL AND consumed_at IS NULL AND invalidated_at IS NULL
-                                  AND sent_at IS NULL AND next_attempt_at <= :now
-                                  AND (lease_until IS NULL OR lease_until < :now)
-                                  AND send_attempts < :maxAttempts
-                                ORDER BY next_attempt_at, id
+                                SELECT v.id FROM email_verification v
+                                WHERE v.code IS NOT NULL AND v.consumed_at IS NULL AND v.invalidated_at IS NULL
+                                  AND v.expires_at > :now
+                                  AND v.sent_at IS NULL AND v.next_attempt_at <= :now
+                                  AND (v.lease_until IS NULL OR v.lease_until < :now)
+                                  AND v.send_attempts < :maxAttempts
+                                  AND (v.account_id IS NULL OR EXISTS (
+                                      SELECT 1 FROM account a
+                                      WHERE a.account_id = v.account_id
+                                        AND a.credential_version = v.credential_version
+                                  ))
+                                ORDER BY v.next_attempt_at, v.id
                                 LIMIT :limit
                                 FOR UPDATE SKIP LOCKED
                             )

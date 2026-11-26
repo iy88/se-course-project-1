@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.domain.ProductComment;
 import io.github.iy88.project1.product.persistence.Product;
@@ -23,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,6 +47,7 @@ class ProductInteractionsTests {
     private final ProductInteractionStore store = mock(ProductInteractionStore.class);
     private final CaseCommentAccess cases = mock(CaseCommentAccess.class);
     private final CommentAccountAccess accounts = mock(CommentAccountAccess.class);
+    private final ProductDisplayRestrictions displayRestrictions = mock(ProductDisplayRestrictions.class);
     private final ProductSettings settings = new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 2, 60);
     private ProductInteractions interactions;
 
@@ -52,8 +56,7 @@ class ProductInteractionsTests {
         PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
         when(manager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         interactions = new ProductInteractions(products, details, store, cases, accounts, settings,
-                mock(ApplicationEventPublisher.class), manager,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                displayRestrictions, mock(ApplicationEventPublisher.class), manager, Clock.fixed(NOW, ZoneOffset.UTC));
         when(accounts.profiles(any())).thenReturn(Map.of(
                 VIEWER, new CommentAccountAccess.Profile("Viewer", "https://img.example/viewer.png"),
                 SELLER, new CommentAccountAccess.Profile("Seller", "https://img.example/seller.png")));
@@ -280,6 +283,22 @@ class ProductInteractionsTests {
     }
 
     @Test
+    void commentSnapshotKeepsTheRetainedBodyForTheCaseTargetRead() {
+        when(store.comment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, NOW)));
+
+        var snapshot = interactions.commentSnapshot(500L);
+
+        assertThat(snapshot).get().satisfies(fact -> {
+            assertThat(fact.commentId()).isEqualTo(500L);
+            assertThat(fact.productId()).isEqualTo(PRODUCT);
+            assertThat(fact.authorAccountId()).isEqualTo(VIEWER);
+            assertThat(fact.body()).isEqualTo("Hello");
+            assertThat(fact.state()).isEqualTo(ProductComment.REMOVED_BY_ADMIN);
+            assertThat(fact.removedAt()).isEqualTo(NOW);
+        });
+    }
+
+    @Test
     void removalRequiresAClaimOnTheCase() {
         var comment = comment(500, VIEWER, null, NOW, null);
         when(products.lockById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
@@ -304,6 +323,65 @@ class ProductInteractionsTests {
 
         assertThat(removed.authorAccountId()).isEqualTo(VIEWER);
         assertThat(removed.status()).isEqualTo(ProductComment.REMOVED_BY_ADMIN);
+    }
+
+    @Test
+    void lockedRemovalTrustsThePreparedKeysAndKeepsTheAuthor() {
+        var transaction = mock(WriteTransaction.class);
+        when(transaction.context()).thenReturn(context(MANAGER));
+        when(store.comment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, null)));
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(store.markRemovedByAdmin(eq(500L), eq(MANAGER), eq("spam"), eq("case:100:enforcement:E-1"), eq(NOW)))
+                .thenReturn(true);
+
+        var removed = interactions.removeCommentLocked(transaction, CASE, 500, PRODUCT, "E-1", "spam", NOW);
+
+        verify(transaction).requireLocked(ProductInteractions.productLockKey(PRODUCT));
+        verify(transaction).requireLocked(ProductInteractions.commentLockKey(500));
+        assertThat(removed.commentId()).isEqualTo("500");
+        assertThat(removed.authorAccountId()).isEqualTo(VIEWER);
+        assertThat(removed.previousState()).isEqualTo(ProductComment.PUBLISHED);
+        assertThat(removed.currentState()).isEqualTo(ProductComment.REMOVED_BY_ADMIN);
+        assertThat(removed.status()).isEqualTo(ProductComment.REMOVED_BY_ADMIN);
+    }
+
+    @Test
+    void lockedRemovalRejectsAStaleProductTarget() {
+        var transaction = mock(WriteTransaction.class);
+        when(transaction.context()).thenReturn(context(MANAGER));
+        when(store.comment(500L)).thenReturn(Optional.of(new ProductComment(500, OTHER_PRODUCT, VIEWER, null,
+                "Hello", NOW, null, null, null, null)));
+
+        assertFailure(() -> interactions.removeCommentLocked(transaction, CASE, 500, PRODUCT, "E-1", "spam", NOW),
+                "TARGET_STATE_CONFLICT");
+        verify(store, never()).markRemovedByAdmin(anyLong(), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void lockedRemovalDistinguishesMissingAndAlreadyRemovedComments() {
+        var transaction = mock(WriteTransaction.class);
+        when(transaction.context()).thenReturn(context(MANAGER));
+        when(store.comment(500L)).thenReturn(Optional.empty());
+        when(store.comment(501L)).thenReturn(Optional.of(comment(501, VIEWER, null, NOW, NOW)));
+
+        assertFailure(() -> interactions.removeCommentLocked(transaction, CASE, 500, PRODUCT, "E-1", "spam", NOW),
+                "CONTENT_NOT_FOUND");
+        assertFailure(() -> interactions.removeCommentLocked(transaction, CASE, 501, PRODUCT, "E-1", "spam", NOW),
+                "TARGET_STATE_CONFLICT");
+    }
+
+    @Test
+    void productAndCommentLookupsAreAvailableBeforeLocking() {
+        when(store.productIdOfComment(500L)).thenReturn(OptionalLong.of(PRODUCT));
+        when(store.comment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, null)));
+
+        assertThat(interactions.productForComment(500L)).hasValue(PRODUCT);
+        assertThat(interactions.commentTarget(500L)).get()
+                .satisfies(target -> {
+                    assertThat(target.commentId()).isEqualTo(500);
+                    assertThat(target.productId()).isEqualTo(PRODUCT);
+                    assertThat(target.authorAccountId()).isEqualTo(VIEWER);
+                });
     }
 
     @Test
@@ -342,6 +420,54 @@ class ProductInteractionsTests {
         verify(store, never()).favorites(anyLong(), any(), any(Integer.class).intValue(), anyLong());
     }
 
+    @Test
+    void activeDisplayRestrictionHidesPublicCommentsFromStrangers() {
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(displayRestrictions.hasActive(PRODUCT)).thenReturn(true);
+        when(store.hasCommentBy(PRODUCT, VIEWER)).thenReturn(false);
+
+        assertFailure(() -> interactions.listComments(VIEWER, PRODUCT, 1, 20, null), "RESOURCE_NOT_VISIBLE");
+    }
+
+    @Test
+    void restrictedProductCannotBeFavorited() {
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(displayRestrictions.hasActive(PRODUCT)).thenReturn(true);
+
+        assertFailure(() -> interactions.addFavorite(VIEWER, PRODUCT), "RESOURCE_NOT_VISIBLE");
+        verify(store, never()).insertFavorite(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void favouriteOfARestrictedProductIsInvalidWithoutContent() {
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(displayRestrictions.hasActive(PRODUCT)).thenReturn(true);
+        when(store.favorite(VIEWER, PRODUCT))
+                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(100L, PRODUCT, NOW)));
+
+        var status = interactions.favoriteStatus(VIEWER, PRODUCT);
+
+        assertThat(status.favorited()).isTrue();
+        assertThat(status.valid()).isFalse();
+    }
+
+    @Test
+    void favouriteListMarksARestrictedProductInvalidInOneBatch() {
+        when(store.favorites(VIEWER, null, 20, 0L)).thenReturn(List.of(
+                new ProductInteractionStore.FavoriteRow(100L, PRODUCT, NOW)));
+        when(store.countFavorites(VIEWER, null)).thenReturn(1L);
+        Product publicProduct = product(Product.PUBLIC);
+        when(products.findByIdIn(List.of(PRODUCT))).thenReturn(List.of(publicProduct));
+        when(displayRestrictions.activeProductIds(Set.of(PRODUCT))).thenReturn(Set.of(PRODUCT));
+
+        var page = interactions.listFavorites(VIEWER, 1, 20);
+
+        assertThat(page.items()).singleElement().satisfies(item -> {
+            assertThat(item.status()).isEqualTo("invalid");
+            assertThat(item.product()).isNull();
+        });
+    }
+
     private static void assertFailure(Runnable action, String code) {
         assertThatThrownBy(action::run)
                 .isInstanceOfSatisfying(BusinessError.class,
@@ -363,6 +489,11 @@ class ProductInteractionsTests {
         Product product = product(PRODUCT, Product.PUBLIC);
         ReflectionTestUtils.setField(product, "deletedAt", NOW);
         return product;
+    }
+
+    private static ExecutionContext context(long accountId) {
+        return new ExecutionContext(UUID.randomUUID(), ExecutionContext.ActorKind.ACCOUNT,
+                Long.toString(accountId), UUID.randomUUID(), null, 1L, "product-interaction-test");
     }
 
     private static ProductComment comment(long id, long author, Long parent, Instant createdAt, Instant removedAt) {

@@ -94,6 +94,11 @@ function canReply(comment: CommentView): boolean {
   return isSeller.value && comment.status === "published" && !comment.reply_to_comment_id;
 }
 
+function canReport(comment: CommentView): boolean {
+  const accountId = session.accountId.value;
+  return accountId !== null && comment.status === "published" && comment.author.id !== accountId;
+}
+
 function canDelete(comment: CommentView): boolean {
   return comment.status === "published" && comment.author.id === session.accountId.value;
 }
@@ -223,6 +228,13 @@ async function confirmDelete(): Promise<void> {
           >
             回复
           </button>
+          <RouterLink
+            v-if="canReport(comment)"
+            :to="{ name: 'report', query: { target_type: 'comment', target_id: comment.id } }"
+            class="btn btn--small btn--ghost"
+          >
+            举报
+          </RouterLink>
           <button
             v-if="canDelete(comment)"
             type="button"
@@ -280,6 +292,13 @@ async function confirmDelete(): Promise<void> {
             </header>
             <p v-if="reply.body" class="comment__body pre-line break-anywhere">{{ reply.body }}</p>
             <div class="comment__actions">
+              <RouterLink
+                v-if="canReport(reply)"
+                :to="{ name: 'report', query: { target_type: 'comment', target_id: reply.id } }"
+                class="btn btn--small btn--ghost"
+              >
+                举报
+              </RouterLink>
               <button
                 v-if="canDelete(reply)"
                 type="button"

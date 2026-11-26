@@ -662,6 +662,18 @@ describe("cases", () => {
   });
 
   it("accepts an inquiry reply on the case thread", async () => {
+    // The pending inquiry id comes from the todo projection, which is the entry
+    // point the screen uses; the message list itself carries no inquiry ids.
+    const todos = await call<{ items: { kind: string; source: Record<string, unknown> }[] }>(
+      "GET",
+      "/account/todos",
+    );
+    const pending = todos.items.find(
+      (item) => item.kind === "inquiry_response" && String(item.source.case_id) === "6",
+    );
+    const pendingIds = (pending?.source.inquiry_action_ids ?? []) as string[];
+    assert.ok(pendingIds.length > 0, "expected a pending inquiry id for case 6");
+
     const posted = await call<{ case_message_id: string; seq: number }>(
       "POST",
       "/cases/6/messages",
@@ -670,6 +682,7 @@ describe("cases", () => {
           thread: { conversation_kind: "case", conversation_id: "1" },
           message_kind: "statement",
           body: "该台灯为本人自用，三档亮度。",
+          inquiry_action_id: pendingIds[0],
         },
         idempotencyKey: "case-reply-1",
       },
@@ -677,6 +690,32 @@ describe("cases", () => {
     assert.ok(posted.seq > 0);
     const detail = await call<{ actions: { action_kind: string }[] }>("GET", "/cases/6");
     assert.ok(detail.actions.some((action) => action.action_kind === "statement"));
+
+    // Answering the only inquiry removes its todo entry.
+    const after = await call<{ items: { kind: string; source: Record<string, unknown> }[] }>(
+      "GET",
+      "/account/todos",
+    );
+    const remaining = after.items.find(
+      (item) => item.kind === "inquiry_response" && String(item.source.case_id) === "6",
+    );
+    assert.equal(remaining, undefined);
+  });
+
+  it("rejects an inquiry reply without the inquiry reference", async () => {
+    await expectFailure(
+      "POST",
+      "/cases/6/messages",
+      {
+        body: {
+          thread: { conversation_kind: "case", conversation_id: "1" },
+          message_kind: "statement",
+          body: "缺少问询标识的说明。",
+        },
+        idempotencyKey: "case-reply-missing",
+      },
+      "INQUIRY_NOT_PENDING",
+    );
   });
 });
 
@@ -756,23 +795,37 @@ describe("file uploads", () => {
     const identity = await call<Identity>("GET", "/account/session");
     assert.equal(identity.account.avatar_url, profile.avatar_url);
 
-    // An explicit null is indistinguishable from an omitted field, so it keeps the
-    // avatar; the "0" sentinel is the removal signal the deployed endpoint uses.
-    const kept = await call<{ display_name: string; avatar_url: string | null }>(
+    // An explicit null removes the avatar while an omitted field keeps it.
+    const removed = await call<{ display_name: string; avatar_url: string | null }>(
       "PATCH",
       "/account/profile",
       { body: { avatar_file_id: null }, idempotencyKey: "avatar-2" },
     );
-    assert.equal(kept.avatar_url, profile.avatar_url);
+    assert.equal(removed.avatar_url, null);
+    assert.equal(removed.display_name, "林同学");
 
-    // Removing the avatar reports the default state and keeps the name.
-    const removed = await call<{ display_name: string; avatar_url: string | null }>(
+    const reset = await call<{ avatar_url: string | null }>("PATCH", "/account/profile", {
+      body: { avatar_file_id: created.file_id },
+      idempotencyKey: "avatar-2b",
+    });
+    assert.equal(reset.avatar_url, profile.avatar_url);
+
+    const kept = await call<{ display_name: string; avatar_url: string | null }>(
+      "PATCH",
+      "/account/profile",
+      { body: { display_name: "林同学" }, idempotencyKey: "avatar-2c" },
+    );
+    assert.equal(kept.avatar_url, reset.avatar_url);
+
+    // "0" is not a removal sentinel; the deployed endpoint rejects it.
+    await expectFailure(
       "PATCH",
       "/account/profile",
       { body: { avatar_file_id: "0" }, idempotencyKey: "avatar-3" },
+      "INPUT_INVALID",
     );
-    assert.equal(removed.avatar_url, null);
-    assert.equal(removed.display_name, "林同学");
+    const stillSet = await call<Identity>("GET", "/account/session");
+    assert.equal(stillSet.account.avatar_url, reset.avatar_url);
   });
 
   it("refuses a file whose purpose is not the avatar purpose", async () => {
@@ -798,6 +851,15 @@ describe("file uploads", () => {
       "PATCH",
       "/account/profile",
       { body: {}, idempotencyKey: "avatar-5" },
+      "INPUT_INVALID",
+    );
+  });
+
+  it("treats an undefined avatar binding as omitted", async () => {
+    await expectFailure(
+      "PATCH",
+      "/account/profile",
+      { body: { avatar_file_id: undefined }, idempotencyKey: "avatar-6" },
       "INPUT_INVALID",
     );
   });

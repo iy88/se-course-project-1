@@ -10,19 +10,22 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only account projection used by cross-module callers. Account restrictions are owned by
- * enforcement (#81); until that adapter is wired this projection reports no restriction so the
- * conversation module does not depend on an undelivered table.
+ * Read-only account projection used by cross-module callers. Restriction facts and their effective
+ * state stay owned by {@link AccountRestrictions}; this projection only delegates the qualification
+ * read.
  */
 @Service
 @Profile("infrastructure")
 public class AccountQueries {
     private final AccountRepository accounts;
     private final AccountAvatarService avatars;
+    private final AccountRestrictions restrictions;
 
-    public AccountQueries(AccountRepository accounts, AccountAvatarService avatars) {
+    public AccountQueries(AccountRepository accounts, AccountAvatarService avatars,
+                          AccountRestrictions restrictions) {
         this.accounts = accounts;
         this.avatars = avatars;
+        this.restrictions = restrictions;
     }
 
     public Optional<Profile> profile(long accountId) {
@@ -47,7 +50,7 @@ public class AccountQueries {
     }
 
     public boolean writeRestricted(long accountId) {
-        return false;
+        return restrictions.isRestricted(accountId);
     }
 
     public record Profile(long accountId, String displayName, String avatarUrl) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* Category and alias maintenance (API-PRD-015—021). */
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import type { CategoryDetail } from "../api/contracts";
 import {
   addCategoryAlias,
@@ -16,11 +16,11 @@ import { IdempotencyKeys } from "../app/keys";
 import { categoryStateLabels } from "../app/labels";
 import { problemMessage } from "../app/problems";
 import { notify } from "../app/toast";
-import ConfirmDialog from "../components/ConfirmDialog.vue";
 import EmptyState from "../components/EmptyState.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
+import PaginationBar from "../components/PaginationBar.vue";
 
 interface PendingAction {
   type: "disable" | "delete" | "alias";
@@ -33,32 +33,36 @@ interface PendingAction {
 const items = ref<CategoryDetail[]>([]);
 const loading = ref(false);
 const error = ref<unknown>(null);
+const page = ref(1);
+const pageSize = ref(20);
+const total = ref(0);
 const createName = ref("");
 const creating = ref(false);
-const selectedId = ref<string | null>(null);
+const selected = ref<CategoryDetail | null>(null);
+const editorDialog = ref<HTMLDialogElement | null>(null);
 const renameValue = ref("");
 const aliasValue = ref("");
 const busy = ref(false);
 const pending = ref<PendingAction | null>(null);
 const keys = new IdempotencyKeys();
 
-const selected = computed(() => items.value.find((item) => item.id === selectedId.value) ?? null);
 const aliases = computed(
   () => selected.value?.names.filter((name) => name.kind === "alias" && name.active) ?? [],
 );
+const editorTitle = computed(() =>
+  selected.value ? `管理分类「${selected.value.main_name}」` : "管理分类",
+);
 
-async function load(): Promise<void> {
+async function load(targetPage = page.value): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    items.value = (await listAdminCategories()).items;
-    if (selectedId.value && !items.value.some((item) => item.id === selectedId.value)) {
-      selectedId.value = null;
-    }
-    if (selectedId.value) {
-      const current = items.value.find((item) => item.id === selectedId.value);
-      if (current) renameValue.value = current.main_name;
-    }
+    const result = await listAdminCategories({ page: targetPage, page_size: pageSize.value });
+    items.value = result.items;
+    page.value = result.page;
+    pageSize.value = result.page_size;
+    total.value = result.total;
+    syncSelected();
   } catch (caught) {
     error.value = caught;
   } finally {
@@ -66,12 +70,38 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load);
+onMounted(() => void load());
 
-function select(category: CategoryDetail): void {
-  selectedId.value = category.id;
+function syncSelected(): void {
+  if (!selected.value) return;
+  const current = items.value.find((item) => item.id === selected.value?.id);
+  if (current) selected.value = current;
+}
+
+function replaceCategory(category: CategoryDetail): void {
+  items.value = items.value.map((item) => (item.id === category.id ? category : item));
+}
+
+function openEditor(category: CategoryDetail): void {
+  selected.value = category;
   renameValue.value = category.main_name;
   aliasValue.value = "";
+  pending.value = null;
+  void nextTick(() => {
+    if (editorDialog.value && !editorDialog.value.open) editorDialog.value.showModal();
+  });
+}
+
+function closeEditor(): void {
+  if (busy.value) return;
+  editorDialog.value?.close();
+}
+
+function editorClosed(): void {
+  selected.value = null;
+  renameValue.value = "";
+  aliasValue.value = "";
+  pending.value = null;
 }
 
 async function create(): Promise<void> {
@@ -83,8 +113,9 @@ async function create(): Promise<void> {
     keys.rotate("category-create");
     createName.value = "";
     notify.success(`已创建分类「${created.main_name}」。`);
-    await load();
-    select(created);
+    const targetPage = Math.max(1, Math.ceil((total.value + 1) / pageSize.value));
+    await load(targetPage);
+    openEditor(items.value.find((item) => item.id === created.id) ?? created);
   } catch (caught) {
     notify.error(problemMessage(caught));
   } finally {
@@ -99,10 +130,11 @@ async function rename(): Promise<void> {
   if (name === category.main_name) return;
   busy.value = true;
   try {
-    await renameCategory(category.id, name, keys.current(`rename-${category.id}`));
+    const updated = await renameCategory(category.id, name, keys.current(`rename-${category.id}`));
     keys.rotate(`rename-${category.id}`);
+    selected.value = updated;
+    replaceCategory(updated);
     notify.success("分类主名已更新，旧主名保留为别名。");
-    await load();
   } catch (caught) {
     notify.error(problemMessage(caught));
   } finally {
@@ -120,7 +152,7 @@ async function addAlias(): Promise<void> {
     keys.rotate(`alias-${category.id}`);
     aliasValue.value = "";
     notify.success("别名已添加。");
-    await load();
+    await load(page.value);
   } catch (caught) {
     notify.error(problemMessage(caught));
   } finally {
@@ -134,16 +166,19 @@ async function runPending(): Promise<void> {
   pending.value = null;
   if (!action || !category) return;
   busy.value = true;
+  let deleted = false;
   try {
     if (action.type === "disable") {
-      await disableCategory(category.id, keys.current(`disable-${category.id}`));
+      const updated = await disableCategory(category.id, keys.current(`disable-${category.id}`));
       keys.rotate(`disable-${category.id}`);
+      selected.value = updated;
+      replaceCategory(updated);
       notify.success("分类已停用，已有商品保留关联。");
     } else if (action.type === "delete") {
       await deleteCategory(category.id, keys.current(`delete-${category.id}`));
       keys.rotate(`delete-${category.id}`);
       notify.success("分类已删除。");
-      selectedId.value = null;
+      deleted = true;
     } else if (action.type === "alias" && action.nameId) {
       await removeCategoryAlias(
         category.id,
@@ -153,11 +188,17 @@ async function runPending(): Promise<void> {
       keys.rotate(`alias-remove-${action.nameId}`);
       notify.success("别名已移除。");
     }
-    await load();
+    if (deleted) {
+      const remaining = Math.max(0, total.value - 1);
+      await load(Math.min(page.value, Math.max(1, Math.ceil(remaining / pageSize.value))));
+    } else {
+      await load(page.value);
+    }
   } catch (caught) {
     notify.error(problemMessage(caught));
   } finally {
     busy.value = false;
+    if (deleted) closeEditor();
   }
 }
 
@@ -200,7 +241,7 @@ function askRemoveAlias(nameId: string, name: string): void {
       description="一个分类保留一个主名并可维护多个别名；改名不改变分类身份，停用不影响已有商品与历史。"
     >
       <template #actions>
-        <span class="chip">{{ items.length }} 个分类</span>
+        <span class="chip">共 {{ total }} 个分类</span>
       </template>
     </PageHeader>
 
@@ -227,28 +268,37 @@ function askRemoveAlias(nameId: string, name: string): void {
         title="还没有分类"
         description="先创建一个分类，卖方发布商品时即可选择。"
       />
-      <div v-else class="table-wrap">
+      <div
+        v-else
+        class="table-wrap"
+        role="region"
+        aria-labelledby="category-table-caption"
+        tabindex="0"
+      >
         <table class="table">
+          <caption id="category-table-caption" class="visually-hidden">
+            分类列表
+          </caption>
           <thead>
             <tr>
-              <th>主名</th>
-              <th>别名</th>
-              <th>状态</th>
-              <th>关联商品</th>
-              <th>创建时间</th>
-              <th><span class="visually-hidden">操作</span></th>
+              <th scope="col">主名</th>
+              <th scope="col">别名</th>
+              <th scope="col">状态</th>
+              <th scope="col">关联商品</th>
+              <th scope="col">创建时间</th>
+              <th scope="col"><span class="visually-hidden">操作</span></th>
             </tr>
           </thead>
           <tbody>
             <tr
               v-for="category in items"
               :key="category.id"
-              :class="{ 'row--selected': category.id === selectedId }"
+              :class="{ 'row--selected': category.id === selected?.id }"
             >
-              <td>
+              <th scope="row">
                 <span class="mono muted">#{{ category.id }}</span>
                 <div>{{ category.main_name }}</div>
-              </td>
+              </th>
               <td>
                 <span
                   v-if="
@@ -272,81 +322,138 @@ function askRemoveAlias(nameId: string, name: string): void {
               <td>{{ category.associated_product_count }}</td>
               <td>{{ formatDateTime(category.created_at) }}</td>
               <td class="row-actions">
-                <button type="button" class="btn btn--small" @click="select(category)">管理</button>
+                <button type="button" class="btn btn--small" @click="openEditor(category)">
+                  管理
+                </button>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+      <PaginationBar
+        v-if="items.length"
+        :page="page"
+        :page-size="pageSize"
+        :total="total"
+        label="分类列表分页"
+        @change="load"
+      />
     </section>
 
-    <section v-if="selected" class="card">
-      <div class="card__head">
-        <h2>编辑「{{ selected.main_name }}」</h2>
-        <span class="chip">{{ categoryStateLabels[selected.state] ?? selected.state }}</span>
-      </div>
-
-      <div class="edit-grid">
-        <form class="stack stack--tight" @submit.prevent="rename">
-          <label class="field">
-            <span class="field__label">主名</span>
-            <input v-model="renameValue" class="input" maxlength="50" />
-            <span class="field__hint">改名后旧主名自动保留为别名。</span>
-          </label>
+    <dialog
+      ref="editorDialog"
+      class="category-editor"
+      aria-labelledby="category-editor-title"
+      @close="editorClosed"
+    >
+      <div v-if="selected" class="category-editor__body">
+        <header class="category-editor__head">
+          <div>
+            <p class="muted mono">分类 #{{ selected.id }}</p>
+            <h1 id="category-editor-title">{{ editorTitle }}</h1>
+          </div>
           <button
-            type="submit"
-            class="btn btn--small"
-            :disabled="busy || !renameValue.trim() || renameValue.trim() === selected.main_name"
+            type="button"
+            class="btn btn--small btn--ghost"
+            :disabled="busy"
+            @click="closeEditor"
           >
-            保存改名
+            关闭
           </button>
-        </form>
+        </header>
 
-        <form class="stack stack--tight" @submit.prevent="addAlias">
-          <label class="field">
-            <span class="field__label">新增别名</span>
-            <input v-model="aliasValue" class="input" maxlength="50" placeholder="例如：考研书" />
-          </label>
-          <button type="submit" class="btn btn--small" :disabled="busy || !aliasValue.trim()">
-            添加别名
-          </button>
-        </form>
-      </div>
+        <div class="edit-grid">
+          <form class="stack stack--tight" @submit.prevent="rename">
+            <label class="field">
+              <span class="field__label">主名</span>
+              <input
+                v-model="renameValue"
+                class="input"
+                maxlength="50"
+                autofocus
+                aria-describedby="rename-hint"
+              />
+              <span id="rename-hint" class="field__hint">改名后旧主名自动保留为别名。</span>
+            </label>
+            <button
+              type="submit"
+              class="btn btn--small"
+              :disabled="busy || !renameValue.trim() || renameValue.trim() === selected.main_name"
+            >
+              保存改名
+            </button>
+          </form>
 
-      <div class="divider" />
+          <form class="stack stack--tight" @submit.prevent="addAlias">
+            <label class="field">
+              <span class="field__label">新增别名</span>
+              <input v-model="aliasValue" class="input" maxlength="50" placeholder="例如：考研书" />
+            </label>
+            <button type="submit" class="btn btn--small" :disabled="busy || !aliasValue.trim()">
+              添加别名
+            </button>
+          </form>
+        </div>
 
-      <div class="stack stack--tight">
-        <h3 class="section-title">别名</h3>
-        <p v-if="!aliases.length" class="muted">当前没有有效别名。</p>
-        <ul v-else class="alias-list">
-          <li v-for="alias in aliases" :key="alias.category_name_id" class="spread alias-row">
-            <span>{{ alias.name }}</span>
+        <div class="divider" />
+
+        <section class="stack stack--tight" aria-labelledby="category-alias-heading">
+          <h2 id="category-alias-heading" class="section-title">别名</h2>
+          <p v-if="!aliases.length" class="muted">当前没有有效别名。</p>
+          <ul v-else class="alias-list">
+            <li v-for="alias in aliases" :key="alias.category_name_id" class="spread alias-row">
+              <span>{{ alias.name }}</span>
+              <button
+                type="button"
+                class="btn btn--small btn--ghost"
+                :disabled="busy"
+                @click="askRemoveAlias(alias.category_name_id, alias.name)"
+              >
+                移除
+              </button>
+            </li>
+          </ul>
+        </section>
+
+        <div class="divider" />
+
+        <div class="spread category-editor__status">
+          <p class="muted">
+            {{
+              selected.associated_product_count > 0
+                ? `曾关联 ${selected.associated_product_count} 件商品，只能停用。`
+                : "从未关联商品，可以删除。"
+            }}
+            <template v-if="selected.disabled_at">
+              停用于 {{ formatDateTime(selected.disabled_at) }}。
+            </template>
+          </p>
+          <span class="chip">
+            {{ categoryStateLabels[selected.state] ?? selected.state }}
+          </span>
+        </div>
+
+        <div v-if="pending" class="editor-confirm" role="alert">
+          <div>
+            <strong>{{ pending.title }}</strong>
+            <p>{{ pending.description }}</p>
+          </div>
+          <div class="inline">
+            <button type="button" class="btn btn--small" :disabled="busy" @click="pending = null">
+              取消
+            </button>
             <button
               type="button"
-              class="btn btn--small btn--ghost"
+              class="btn btn--small btn--danger"
               :disabled="busy"
-              @click="askRemoveAlias(alias.category_name_id, alias.name)"
+              @click="runPending"
             >
-              移除
+              {{ pending.confirmLabel }}
             </button>
-          </li>
-        </ul>
-      </div>
+          </div>
+        </div>
 
-      <div class="divider" />
-
-      <div class="spread">
-        <p class="muted">
-          {{
-            selected.associated_product_count > 0
-              ? `曾关联 ${selected.associated_product_count} 件商品，只能停用。`
-              : "从未关联商品，可以删除。"
-          }}
-          <template v-if="selected.disabled_at">
-            停用于 {{ formatDateTime(selected.disabled_at) }}。
-          </template>
-        </p>
-        <div class="inline">
+        <footer class="category-editor__actions">
           <button
             v-if="selected.state !== 'disabled'"
             type="button"
@@ -364,19 +471,9 @@ function askRemoveAlias(nameId: string, name: string): void {
           >
             删除分类
           </button>
-        </div>
+        </footer>
       </div>
-    </section>
-
-    <ConfirmDialog
-      :open="pending !== null"
-      :title="pending?.title ?? ''"
-      :description="pending?.description"
-      :confirm-label="pending?.confirmLabel"
-      tone="danger"
-      @cancel="pending = null"
-      @confirm="runPending"
-    />
+    </dialog>
   </div>
 </template>
 
@@ -395,6 +492,83 @@ function askRemoveAlias(nameId: string, name: string): void {
 
 .row--selected {
   background: var(--brand-soft);
+}
+
+.category-editor {
+  inline-size: min(56rem, calc(100vw - 2rem));
+  max-block-size: calc(100dvh - 2rem);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  overflow: auto;
+}
+
+.category-editor:modal {
+  overscroll-behavior: contain;
+}
+
+.category-editor::backdrop {
+  background: rgb(24 36 32 / 45%);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.category-editor__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.category-editor__head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.category-editor__head h1 {
+  font-size: 1.25rem;
+}
+
+.category-editor__head .muted {
+  margin-block-end: var(--space-1);
+}
+
+.category-editor__status {
+  align-items: center;
+}
+
+.category-editor__status .muted {
+  margin: 0;
+}
+
+.category-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--line);
+}
+
+.editor-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.editor-confirm p {
+  margin-block-start: var(--space-1);
+  color: var(--ink-soft);
 }
 
 .row-actions {
@@ -428,5 +602,17 @@ function askRemoveAlias(nameId: string, name: string): void {
 
 .alias-row:last-child {
   border-block-end: none;
+}
+
+@media (width < 36rem) {
+  .category-editor__body {
+    padding: var(--space-4);
+  }
+
+  .category-editor__status,
+  .editor-confirm {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 </style>

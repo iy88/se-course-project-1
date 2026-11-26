@@ -2,6 +2,7 @@ package io.github.iy88.project1.api.product;
 
 import io.github.iy88.project1.api.ApiRequestContext;
 import io.github.iy88.project1.api.account.CurrentAccount;
+import io.github.iy88.project1.core.AuditContext;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.product.application.ProductService;
@@ -16,10 +17,12 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
+import tools.jackson.databind.JsonNode;
 
 @RestController
 @RequestMapping("/api/v1/products")
@@ -28,11 +31,14 @@ class ProductController {
     private final ProductService products;
     private final CurrentAccount current;
     private final ApiRequestContext requestContext;
+    private final ProductOffShelfWrite offShelfWrites;
 
-    ProductController(ProductService products, CurrentAccount current, ApiRequestContext requestContext) {
+    ProductController(ProductService products, CurrentAccount current, ApiRequestContext requestContext,
+                      ProductOffShelfWrite offShelfWrites) {
         this.products = products;
         this.current = current;
         this.requestContext = requestContext;
+        this.offShelfWrites = offShelfWrites;
     }
 
     @PostMapping
@@ -40,7 +46,8 @@ class ProductController {
         var identity = current.require(request);
         var created = products.create(identity.account().id(), new ProductService.CreateCommand(
                 body.title(), body.description(), body.imageFileIds(), body.priceCents(), body.categoryIds(),
-                body.categoryApplication() == null ? null : body.categoryApplication().proposedName()));
+                body.categoryApplication() == null ? null : body.categoryApplication().proposedName()),
+                writeContext(identity, request));
         var location = UriComponentsBuilder.fromPath("/api/v1/products/{id}")
                 .buildAndExpand(created.id()).toUriString();
         return ResponseEntity.status(201).location(java.net.URI.create(location))
@@ -77,7 +84,7 @@ class ProductController {
         var updated = products.edit(identity.account().id(), id(productId), new ProductService.EditCommand(
                 body.title(), body.description(), body.imageFileIds(), body.priceCents(), body.categoryIds(),
                 body.categoryApplication() == null ? null : body.categoryApplication().proposedName(),
-                body.expectedVersion()), context(identity, request));
+                body.expectedVersion()), writeContext(identity, request));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(updated);
     }
 
@@ -87,7 +94,8 @@ class ProductController {
                                                         HttpServletRequest request) {
         var identity = current.require(request);
         return ResponseEntity.status(201).cacheControl(CacheControl.noStore())
-                .body(products.resubmit(identity.account().id(), id(productId), body.expectedVersion()));
+                .body(products.resubmit(identity.account().id(), id(productId), body.expectedVersion(),
+                        writeContext(identity, request)));
     }
 
     @PostMapping("/{productId}/withdrawal")
@@ -96,16 +104,19 @@ class ProductController {
                                                       HttpServletRequest request) {
         var identity = current.require(request);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(products.withdraw(identity.account().id(), id(productId), body.expectedVersion()));
+                .body(products.withdraw(identity.account().id(), id(productId), body.expectedVersion(),
+                        writeContext(identity, request)));
     }
 
     @PostMapping("/{productId}/off-shelf")
-    ResponseEntity<ProductService.OffShelf> offShelf(@PathVariable String productId,
-                                                     @RequestBody VersionRequest body,
-                                                     HttpServletRequest request) {
+    ResponseEntity<JsonNode> offShelf(@PathVariable String productId,
+                                      @RequestHeader("Idempotency-Key") String key,
+                                      @RequestBody VersionRequest body,
+                                      HttpServletRequest request) {
         var identity = current.require(request);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(products.offShelf(identity.account().id(), id(productId), body.expectedVersion()));
+        var result = offShelfWrites.offShelf(writeContext(identity, request).execution(), key, id(productId),
+                body.expectedVersion());
+        return ResponseEntity.status(result.status()).cacheControl(CacheControl.noStore()).body(result.data());
     }
 
     @PostMapping("/{productId}/on-shelf")
@@ -114,7 +125,8 @@ class ProductController {
                                                          HttpServletRequest request) {
         var identity = current.require(request);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(products.onShelf(identity.account().id(), id(productId), body.expectedVersion()));
+                .body(products.onShelf(identity.account().id(), id(productId), body.expectedVersion(),
+                        writeContext(identity, request)));
     }
 
     @PostMapping("/{productId}/category-applications")
@@ -123,13 +135,14 @@ class ProductController {
             HttpServletRequest request) {
         var identity = current.require(request);
         return ResponseEntity.status(201).cacheControl(CacheControl.noStore())
-                .body(products.createApplication(identity.account().id(), id(productId), body.proposedName()));
+                .body(products.createApplication(identity.account().id(), id(productId), body.proposedName(),
+                        writeContext(identity, request)));
     }
 
     @DeleteMapping("/{productId}/category-application")
     ResponseEntity<Void> withdrawCategoryApplication(@PathVariable String productId, HttpServletRequest request) {
         var identity = current.require(request);
-        products.withdrawApplication(identity.account().id(), id(productId));
+        products.withdrawApplication(identity.account().id(), id(productId), writeContext(identity, request));
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 
@@ -144,9 +157,10 @@ class ProductController {
                         tradeId == null || tradeId.isBlank() ? null : id(tradeId), page, pageSize));
     }
 
-    private ExecutionContext context(io.github.iy88.project1.account.application.SessionService.Identity identity,
-                                     HttpServletRequest request) {
-        return requestContext.forActor(request, ExecutionContext.ActorKind.ACCOUNT,
+    private AuditContext writeContext(
+            io.github.iy88.project1.account.application.SessionService.Identity identity,
+            HttpServletRequest request) {
+        return requestContext.forWrite(request, ExecutionContext.ActorKind.ACCOUNT,
                 Long.toString(identity.account().id()), identity.guard().id(), null,
                 (long) identity.guard().credentialVersion());
     }

@@ -105,6 +105,8 @@ class CaseEnforcementTests {
         assertThat(captured.getValue().toFrozen()).isTrue();
         verify(conversations, never()).append(any(), anyLong(), any(), anyString(), anyString(), any());
         verify(notifications, never()).register(any(), any(), anyString(), anyLong(), any());
+        verify(transaction).requireExclusiveAccount(BUYER);
+        verify(transaction).requireExclusiveAccount(SELLER);
     }
 
     @Test
@@ -296,6 +298,19 @@ class CaseEnforcementTests {
         verify(repository, never()).endFreeze(anyLong(), any(), any());
         verify(product, never()).release(any(), any(), anyLong(), anyString());
         verify(repository, never()).lockTrade(any(), anyLong());
+    }
+
+    @Test
+    void restoreRejectsADisputedTradeWithoutResolvingTheDispute() {
+        when(repository.find(TRADE_ID)).thenReturn(Optional.of(trade(TradeStatus.DISPUTED)));
+
+        assertThatThrownBy(() -> application.restoreLocked(transaction, CASE_ID, TRADE_ID, "basis-12", "restore"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TRANSITION_NOT_ALLOWED"));
+
+        verify(repository, never()).invalidateConfirmations(anyLong(), any(), any());
+        verify(repository, never()).resolveDispute(anyLong(), any(), anyLong(), any(), any());
+        verify(repository, never()).save(any(Trade.class));
     }
 
     @Test

@@ -90,14 +90,26 @@ export interface BannedScopeMutation {
   updated_at: string;
 }
 
+/** Workbench scopes agreed with the case query contract (QUERY-004). */
+export type WorkbenchOwnership = "unclaimed" | "mine" | "completed_mine" | "completed_all";
+
+export type TodoKind = "all" | "product_review" | "report" | "dispute" | "exception";
+
 export interface ManagementTodoItem {
   case_id: string;
   kind: string;
+  /** Same value as `kind`; kept for the cross-stage query contract. */
+  case_type?: string;
+  decision_kind?: string | null;
+  manager_id?: string | null;
+  completed_at?: string | null;
   created_at: string;
   updated_at: string;
   summary: {
-    audit_id: string;
-    product_id: string;
+    audit_id?: string;
+    product_id?: string;
+    /** Authorized one-line summary; other private content never reaches this field. */
+    title?: string;
   };
 }
 
@@ -189,4 +201,26 @@ export interface ReviewDecisionResult {
   category_application: ReviewCategoryApplication | null;
   reviewed_content_version: number;
   decided_at: string;
+}
+
+export interface CorrectionCategory {
+  id: string;
+  name: string;
+}
+
+/** API-PRD-032 request; the basis names the case the acting manager claimed. */
+export interface CategoryCorrectionRequest {
+  category_ids: string[];
+  reason: string;
+  basis_ref: { type: "case"; id: string };
+}
+
+export interface CategoryCorrectionResult {
+  product: {
+    id: string;
+    content_version: number;
+    categories: CorrectionCategory[];
+  };
+  previous_categories: CorrectionCategory[];
+  current_categories: CorrectionCategory[];
 }

@@ -10,6 +10,8 @@ import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import io.github.iy88.project1.api.account.AccountCookies;
 import io.github.iy88.project1.category.application.CategoryService;
+import io.github.iy88.project1.core.AuditContext;
+import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.OssFileObjects;
 import io.github.iy88.project1.storage.content.FileContentVerifier.VerifiedContent;
@@ -122,9 +124,8 @@ class S2ProductionReviewIT {
         var buyer = login("buyer", false);
         var manager = login("manager", true);
         var secondManager = login("other", true);
-        var categories = app.getBean(CategoryService.class);
-        String firstCategory = categories.create(manager.account().id(), "Lit " + RUN).id();
-        String secondCategory = categories.create(manager.account().id(), "Course " + RUN).id();
+        String firstCategory = createCategory(manager, "Lit " + RUN);
+        String secondCategory = createCategory(manager, "Course " + RUN);
         CATEGORY_IDS.addAll(List.of(Long.parseLong(firstCategory), Long.parseLong(secondCategory)));
 
         long image = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
@@ -132,8 +133,14 @@ class S2ProductionReviewIT {
                 {"title":"Book %s", "description":"First edition", "price_cents":1500,
                  "category_ids":["%s","%s"], "image_file_ids":["%s"]}
                 """.formatted(RUN, firstCategory, secondCategory, image);
-        var product = write(seller, "POST", "/products", createBody, key(), 201);
+        String createKey = key();
+        var product = write(seller, "POST", "/products", createBody, createKey, 201);
+        assertThat(write(seller, "POST", "/products", createBody, createKey, 201)).isEqualTo(product);
         String productId = text(product, "id");
+        assertThat(db.sql("""
+                        select count(*) from audit_record
+                        where action = 'product.submitted' and target_type = 'product' and target_id = ?
+                        """).param(Long.parseLong(productId)).query(Long.class).single()).isEqualTo(1);
         var pending = product.path("pending_review");
         String caseId = text(pending, "case_id");
         String auditId = text(pending, "audit_id");
@@ -192,6 +199,16 @@ class S2ProductionReviewIT {
         var approved = write(manager, "POST", "/admin/product-reviews/" + text(resubmitted, "audit_id") + "/decision",
                 "{\"decision\":\"approved\"}", key(), 200);
         assertThat(text(approved, "status")).isEqualTo("passed");
+        String completedReviews = "/management/todos?kind=product_review&keyword=Book%20" + RUN;
+        var mine = get(manager, completedReviews + "&ownership=completed_mine", 200);
+        assertThat(mine.path("total").asLong()).isEqualTo(2);
+        assertThat(mine.path("items")).extracting(row -> row.path("decision_kind").asString())
+                .containsExactly("approved", "rejected");
+        var all = get(secondManager, completedReviews + "&ownership=completed_all", 200);
+        assertThat(all.path("items")).isEqualTo(mine.path("items"));
+        assertThat(get(secondManager, completedReviews + "&ownership=completed_mine", 200)
+                .path("total").asLong()).isZero();
+        get(secondManager, detailPath, 404);
         var publiclyVisible = get(buyer, "/products/" + productId, 200);
         assertThat(text(publiclyVisible, "description")).isEqualTo("Updated description");
         var page = get(buyer, "/products?category_ids=" + firstCategory + "," + secondCategory, 200);
@@ -242,6 +259,108 @@ class S2ProductionReviewIT {
         assertThat(avatarReferences(accountId)).isEmpty();
     }
 
+    @Test
+    void categoryCreateReplayWritesExactlyOneBusinessAudit() throws Exception {
+        var manager = login("category-audit", true);
+        String body = "{\"name\":\"Audit " + RUN + "\"}";
+        String idempotencyKey = key();
+
+        var created = write(manager, "POST", "/admin/categories", body, idempotencyKey, 201);
+        assertThat(write(manager, "POST", "/admin/categories", body, idempotencyKey, 201)).isEqualTo(created);
+        String categoryId = text(created, "id");
+        CATEGORY_IDS.add(Long.parseLong(categoryId));
+        assertThat(db.sql("""
+                        select count(*) from audit_record
+                        where action = 'category.created' and target_type = 'category' and target_id = ?
+                        """).param(Long.parseLong(categoryId)).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void withdrawingAnUnclaimedReviewAllowsImageEditingAndResubmission() throws Exception {
+        var seller = login("withdrawn-seller", false);
+        var manager = login("withdrawn-manager", true);
+        String category = createCategory(manager, "Draft " + RUN);
+        CATEGORY_IDS.add(Long.parseLong(category));
+        long firstImage = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
+        long nextImage = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
+        var created = write(seller, "POST", "/products", """
+                {"title":"Withdrawn review","description":"First edition","price_cents":100,
+                 "category_ids":["%s"],"image_file_ids":["%d"]}
+                """.formatted(category, firstImage), key(), 201);
+        String path = "/products/" + text(created, "id");
+        String oldAudit = text(created.path("pending_review"), "audit_id");
+        write(seller, "POST", path + "/withdrawal", version(created), key(), 200);
+        var withdrawn = get(seller, path, 200);
+        assertThat(withdrawn.at("/permissions/can_submit_review").asBoolean()).isTrue();
+        var edited = write(seller, "PATCH", path, """
+                {"expected_version":%d,"description":"Second edition","image_file_ids":["%d"]}
+                """.formatted(withdrawn.path("content_version").asInt(), nextImage), key(), 200);
+        var history = get(seller, path + "/edit-history", 200).at("/items/0");
+        assertThat(history.at("/before_content/image_file_ids/0").asLong()).isEqualTo(firstImage);
+        assertThat(history.at("/after_content/image_file_ids/0").asLong()).isEqualTo(nextImage);
+        var resubmitted = write(seller, "POST", path + "/review-submissions", version(edited), key(), 201);
+        assertThat(text(resubmitted, "audit_id")).isNotEqualTo(oldAudit);
+        assertThat(db.sql("select status from product_audit where audit_id = ?")
+                .param(Long.parseLong(oldAudit)).query(String.class).single()).isEqualTo("withdrawn");
+    }
+
+    @Test
+    void managementStatisticsUseTradeResultTimeAndKeepCurrentCountsIndependentOfRange() throws Exception {
+        var manager = login("statistics", true);
+        var buyer = login("statistics-buyer", false);
+        String path = "/management/statistics";
+        get(buyer, path + "?time_scope=all", 403);
+        get(manager, path, 422);
+        get(manager, path + "?time_scope=all&start_at=2026-10-01T00:00:00Z", 422);
+        get(manager, path + "?time_scope=range&start_at=2026-10-01T00:00:00Z", 422);
+        get(manager, path + "?time_scope=range&start_at=2026-10-02T00:00:00Z&end_at=2026-10-01T00:00:00Z", 422);
+
+        String range = path + "?time_scope=range&start_at=2026-10-03T00:00:00Z&end_at=2026-10-04T00:00:00Z";
+        var before = get(manager, range, 200);
+        long buyerId = buyer.account().id();
+        long sellerId = manager.account().id();
+        try {
+            db.sql("""
+                    insert into trade(product_id, buyer_id, seller_id, status, terminal_reason, close_reason,
+                                      requested_at, ended_at, created_at, updated_at)
+                    select 50000000 + n, :buyer, :seller, status, terminal_reason, close_reason,
+                           '2026-09-01T00:00:00Z', ended_at, '2026-09-01T00:00:00Z', '2026-11-05T00:00:00Z'
+                    from (values
+                        (1, 'completed', 'completed', null, timestamptz '2026-10-03T00:00:00Z'),
+                        (2, 'completed', 'completed', null, timestamptz '2026-10-04T00:00:00Z'),
+                        (3, 'terminated', 'cancelled', null, timestamptz '2026-10-03T02:00:00Z'),
+                        (4, 'disputed', null, null, null),
+                        (5, 'closed', null, 'other_user_locked', null),
+                        (6, 'rejected', null, null, null),
+                        (7, 'withdrawn', null, null, null)
+                    ) as facts(n, status, terminal_reason, close_reason, ended_at)
+                    """).param("buyer", buyerId).param("seller", sellerId).update();
+            var selected = get(manager, range, 200);
+            var all = get(manager, path + "?time_scope=all", 200);
+            assertThat(selected.path("completed_in_selection").asLong())
+                    .isEqualTo(before.path("completed_in_selection").asLong() + 1);
+            assertThat(all.path("completed_in_selection").asLong()).isEqualTo(all.path("trades").path("completed").asLong());
+            assertThat(all.path("selection").path("start_at").isNull()).isTrue();
+            assertThat(all.path("selection").path("end_at").isNull()).isTrue();
+            for (String group : List.of("accounts", "products_by_state", "pending", "trades")) {
+                assertThat(selected.path(group)).isEqualTo(all.path(group));
+            }
+            assertThat(selected.path("trades").path("completed").asLong())
+                    .isEqualTo(before.path("trades").path("completed").asLong() + 2);
+            assertThat(selected.path("trades").path("terminated").asLong())
+                    .isEqualTo(before.path("trades").path("terminated").asLong() + 1);
+            assertThat(selected.path("trades").path("disputed").asLong())
+                    .isEqualTo(before.path("trades").path("disputed").asLong() + 1);
+            assertThat(selected.path("as_of").isString()).isTrue();
+
+            db.sql("update account set role = 'user' where account_id = ?").param(sellerId).update();
+            get(manager, path + "?time_scope=all", 403);
+        } finally {
+            db.sql("delete from trade where buyer_id = ? and seller_id = ?")
+                    .param(buyerId).param(sellerId).update();
+        }
+    }
+
     private static long uploadedImage(long owner, FilePurpose purpose, boolean verified) {
         var now = Instant.now().minusSeconds(1);
         var registry = app.getBean(FileRegistry.class);
@@ -267,8 +386,14 @@ class S2ProductionReviewIT {
                 .param(accountId).query(Long.class).list();
     }
 
-    private static SessionService.Issued login(String name, boolean manager) {
-        var email = name + "-" + RUN + "@s2-review.example";
+    private static String createCategory(SessionService.Issued manager, String name) {
+        var auditContext = new AuditContext(new ExecutionContext(UUID.randomUUID(),
+                ExecutionContext.ActorKind.ACCOUNT, Long.toString(manager.account().id()), UUID.randomUUID(), null,
+                1L, "s2-review-it"), UUID.randomUUID());
+        return app.getBean(CategoryService.class).create(manager.account().id(), name, auditContext).id();
+    }
+
+    private static SessionService.Issued login(String name, boolean manager) {        var email = name + "-" + RUN + "@s2-review.example";
         var digest = app.getBean(PasswordHasher.class).hash(PASSWORD);
         var account = app.getBean(AccountRepository.class).save(new Account(email, name, digest, Instant.now()));
         ACCOUNT_IDS.add(account.id());

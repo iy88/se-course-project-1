@@ -40,6 +40,7 @@ class FileCleanupTests {
         when(objects.bucket()).thenReturn(BUCKET);
         when(objects.purposePrefix(FilePurpose.PRODUCT_IMAGE)).thenReturn("dev/product_image/");
         when(objects.purposePrefix(FilePurpose.CASE_EVIDENCE)).thenReturn("dev/case_evidence/");
+        when(objects.purposePrefix(FilePurpose.ACCOUNT_AVATAR)).thenReturn("dev/account_avatar/");
     }
 
     @Test
@@ -59,7 +60,7 @@ class FileCleanupTests {
         var calls = inOrder(objects, files, manager);
         calls.verify(objects).requireWritableBucket();
         calls.verify(files).cleanupCandidates(eq(BUCKET), eq("dev/product_image/"), eq("dev/case_evidence/"),
-                any(Instant.class), any(Instant.class), eq(PageRequest.of(0, 8)));
+                eq("dev/account_avatar/"), any(Instant.class), any(Instant.class), eq(PageRequest.of(0, 8)));
         calls.verify(files).lockById(1);
         calls.verify(manager).commit(any());
         calls.verify(objects).delete(location(1));
@@ -114,17 +115,39 @@ class FileCleanupTests {
         assertThat(record.snapshot().state()).isEqualTo("deleted");
     }
 
+    @Test
+    void cleansAnUnreferencedAvatarAndKeepsAReferencedOne() {
+        var orphan = file(1, CREATED, FilePurpose.ACCOUNT_AVATAR);
+        var attached = file(2, CREATED, FilePurpose.ACCOUNT_AVATAR);
+        candidates(orphan, attached);
+        when(references.existsByFileId(2)).thenReturn(true);
+        when(objects.delete(location(1, FilePurpose.ACCOUNT_AVATAR))).thenReturn("avatar-request");
+
+        assertThat(cleanup.runBatch(objects, 8)).isEqualTo(new FileCleanup.Result(1, List.of()));
+
+        verify(objects).delete(location(1, FilePurpose.ACCOUNT_AVATAR));
+        verify(objects, never()).delete(location(2, FilePurpose.ACCOUNT_AVATAR));
+        assertThat(orphan.snapshot().state()).isEqualTo("deleted");
+        assertThat(orphan.snapshot().lastCleanupRequestId()).isEqualTo("avatar-request");
+        assertThat(attached.snapshot().state()).isEqualTo("uploading");
+    }
+
     private void candidates(FileRecord... records) {
         var ids = java.util.Arrays.stream(records).map(record -> record.snapshot().fileId()).toList();
         when(files.cleanupCandidates(eq(BUCKET), eq("dev/product_image/"), eq("dev/case_evidence/"),
-                any(Instant.class), any(Instant.class), eq(PageRequest.of(0, 8)))).thenReturn(ids);
+                eq("dev/account_avatar/"), any(Instant.class), any(Instant.class), eq(PageRequest.of(0, 8))))
+                .thenReturn(ids);
         for (var record : records) {
             when(files.lockById(record.snapshot().fileId())).thenReturn(Optional.of(record));
         }
     }
 
     private static FileRecord file(long id, Instant created) {
-        var record = new FileRecord(new UploadRegistration(1, FilePurpose.PRODUCT_IMAGE, null, location(id),
+        return file(id, created, FilePurpose.PRODUCT_IMAGE);
+    }
+
+    private static FileRecord file(long id, Instant created, FilePurpose purpose) {
+        var record = new FileRecord(new UploadRegistration(1, purpose, null, location(id, purpose),
                 64, "image/png", new UploadRegistration.Rules("test", 128, Set.of("image/png")), "test",
                 created, created.plusSeconds(60), created.plusSeconds(120)));
         ReflectionTestUtils.setField(record, "id", id);
@@ -132,7 +155,11 @@ class FileCleanupTests {
     }
 
     private static Location location(long id) {
-        return new Location(BUCKET, "dev/product_image/" + id);
+        return location(id, FilePurpose.PRODUCT_IMAGE);
+    }
+
+    private static Location location(long id, FilePurpose purpose) {
+        return new Location(BUCKET, "dev/" + purpose.value() + "/" + id);
     }
 
     private static FileRulesProperties rules() {

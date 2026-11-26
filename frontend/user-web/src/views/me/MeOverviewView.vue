@@ -25,8 +25,8 @@ const overview = useAsyncData<MyOverview>((signal) => readOverview(signal));
 const links = [
   {
     to: "/me/todos",
-    title: "待处理交易",
-    description: "处理待接受的请求、约定、完成与取消",
+    title: "我的待办",
+    description: "处理交易请求、约定、完成、取消与管理问询",
     icon: "inbox",
   },
   { to: "/me/products", title: "我的商品", description: "管理发布内容与审核状态", icon: "box" },
@@ -34,15 +34,7 @@ const links = [
   { to: "/me/trades", title: "我的交易", description: "查看购买与出售记录", icon: "file" },
   { to: "/me/reviews", title: "我的评价", description: "查看写出的和收到的评价", icon: "check" },
   { to: "/conversations", title: "我的会话", description: "查看私聊与交易消息", icon: "mail" },
-] as const;
-
-const rules = [
-  {
-    to: "/me/banned-items",
-    title: "禁发范围",
-    description: "发布前查阅不可交易的内容",
-    icon: "file",
-  },
+  { to: "/me/cases", title: "我的事项", description: "查看举报、处理进度与结果", icon: "file" },
 ] as const;
 
 onMounted(() => {
@@ -154,8 +146,8 @@ function requestSignOut(): void {
         <li>
           <RouterLink to="/me/todos" class="overview__stat overview__stat--todo">
             <span class="overview__value">{{ overview.data.value.todo_count }}</span>
-            <span class="overview__label">待处理交易</span>
-            <span class="muted overview__detail">逐条在交易详情完成</span>
+            <span class="overview__label">我的待办</span>
+            <span class="muted overview__detail">逐条在对应详情完成</span>
           </RouterLink>
         </li>
       </ul>
@@ -164,9 +156,24 @@ function requestSignOut(): void {
       </p>
     </section>
 
-    <div class="me-sections">
-      <section class="card me-section" aria-labelledby="my-market-title">
-        <h2 id="my-market-title">我的业务</h2>
+    <aside class="publish-guide" aria-labelledby="listing-rules-title">
+      <span class="publish-guide__icon" aria-hidden="true">
+        <UiIcon name="file" />
+      </span>
+      <div class="publish-guide__copy">
+        <span class="publish-guide__eyebrow">发布前提示</span>
+        <h2 id="listing-rules-title">先确认禁发范围，再发布商品</h2>
+        <p>法规禁止、危险管制、药品医疗等不可交易内容会在这里统一维护。</p>
+      </div>
+      <RouterLink to="/me/banned-items" class="btn publish-guide__action">
+        查看禁发范围
+        <UiIcon name="chevron-right" />
+      </RouterLink>
+    </aside>
+
+    <section class="card me-section" aria-labelledby="my-market-title">
+      <h2 id="my-market-title">我的业务</h2>
+      <div class="me-section__grid">
         <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="me-section__link">
           <span class="me-section__icon" aria-hidden="true">
             <UiIcon :name="link.icon" />
@@ -179,23 +186,8 @@ function requestSignOut(): void {
             <UiIcon name="chevron-right" />
           </span>
         </RouterLink>
-      </section>
-      <section class="card me-section" aria-labelledby="listing-rules-title">
-        <h2 id="listing-rules-title">发布规则</h2>
-        <RouterLink v-for="link in rules" :key="link.to" :to="link.to" class="me-section__link">
-          <span class="me-section__icon" aria-hidden="true">
-            <UiIcon :name="link.icon" />
-          </span>
-          <span class="me-section__copy">
-            <span class="me-section__label">{{ link.title }}</span>
-            <span class="me-section__description">{{ link.description }}</span>
-          </span>
-          <span class="me-section__chevron" aria-hidden="true">
-            <UiIcon name="chevron-right" />
-          </span>
-        </RouterLink>
-      </section>
-    </div>
+      </div>
+    </section>
 
     <dialog
       ref="signOutDialog"
@@ -274,10 +266,63 @@ function requestSignOut(): void {
   margin-block-start: var(--space-5);
 }
 
-.me-sections {
+.publish-guide {
   display: grid;
-  gap: var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid #cfe0ee;
+  border-radius: var(--radius);
+  background: var(--info-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+.publish-guide__icon {
+  display: grid;
+  place-items: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px #cfe0ee;
+  color: var(--info);
+}
+
+.publish-guide__icon svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+
+.publish-guide__copy {
+  display: grid;
+  gap: 0.125rem;
+  min-inline-size: 0;
+}
+
+.publish-guide__eyebrow {
+  color: var(--info);
+  font-size: 0.71875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.publish-guide__copy h2 {
+  font-size: 1rem;
+}
+
+.publish-guide__copy p {
+  max-inline-size: 46rem;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.publish-guide__action {
+  grid-column: 1 / -1;
+  justify-self: start;
+  background: var(--panel);
+  white-space: nowrap;
 }
 
 .overview {
@@ -348,6 +393,13 @@ function requestSignOut(): void {
 
 .me-section {
   display: grid;
+  gap: var(--space-3);
+  container-type: inline-size;
+}
+
+.me-section__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
 }
 
@@ -356,10 +408,12 @@ function requestSignOut(): void {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
+  min-inline-size: 0;
   min-block-size: 4rem;
-  padding: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px transparent;
+  background: var(--panel-soft);
+  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--ink);
   cursor: pointer;
   transition:
@@ -431,9 +485,27 @@ function requestSignOut(): void {
   block-size: 1rem;
 }
 
+@container (inline-size >= 46rem) {
+  .me-section__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .me-section__grid > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (width >= 48rem) {
-  .me-sections {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  .publish-guide {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    padding: var(--space-4) var(--space-5);
+  }
+
+  .publish-guide__action {
+    grid-column: auto;
+    justify-self: end;
   }
 }
 

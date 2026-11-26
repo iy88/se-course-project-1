@@ -13,6 +13,7 @@ import { rememberPeer } from "../../app/conversation-directory";
 import { IdempotencyKeys } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
 import { session } from "../../app/session";
+import { notify } from "../../app/toast";
 
 const props = withDefaults(
   defineProps<{
@@ -28,7 +29,6 @@ const props = withDefaults(
 const router = useRouter();
 const keys = new IdempotencyKeys();
 const pending = ref(false);
-const error = ref<string | null>(null);
 const isSelf = computed(
   () => !props.targetAccountId || props.targetAccountId === session.accountId.value,
 );
@@ -47,14 +47,12 @@ watch(
   () => props.targetAccountId,
   () => {
     keys.reset();
-    error.value = null;
   },
 );
 
 async function start(): Promise<void> {
   if (pending.value || isSelf.value) return;
   pending.value = true;
-  error.value = null;
   try {
     const conversation = await ensurePrivateConversation(
       props.targetAccountId,
@@ -72,7 +70,7 @@ async function start(): Promise<void> {
       params: { kind: "chat", conversationId: conversation.conversation_id },
     });
   } catch (caught) {
-    error.value = problemMessage(caught);
+    notify.error(problemMessage(caught));
   } finally {
     pending.value = false;
   }
@@ -91,7 +89,6 @@ async function start(): Promise<void> {
     >
       {{ pending ? "正在打开…" : label }}
     </button>
-    <span v-if="error" class="field__error" role="alert">{{ error }}</span>
   </span>
 </template>
 

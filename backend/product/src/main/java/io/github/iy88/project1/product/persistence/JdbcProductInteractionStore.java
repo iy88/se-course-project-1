@@ -179,6 +179,8 @@ public class JdbcProductInteractionStore implements ProductInteractionStore {
                  where f.account_id = :account
                    and (cast(:state as text) is null or :state = case
                        when p.deleted_at is null and p.lifecycle_state in ('public', 'in_trade')
+                            and not exists (select 1 from product_display_restriction r
+                                             where r.product_id = p.product_id and r.released_at is null)
                        then 'valid' else 'invalid' end)
                 """;
 
