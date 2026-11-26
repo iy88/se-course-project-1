@@ -442,7 +442,9 @@ class S4ProductionEnforcementIT {
         assertThat(report.path("summary").asString()).isEqualTo("收到的事项已作出处理决定");
         assertThat(report.toString()).doesNotContain("核实违规");
         get(buyer, "/products/" + product, 404);
-        assertThat(get(seller, "/products/" + product, 200).path("lifecycle_state").asString()).isEqualTo("public");
+        var ownerProduct = get(seller, "/products/" + product, 200);
+        assertThat(ownerProduct.path("lifecycle_state").asString()).isEqualTo("public");
+        assertThat(ownerProduct.at("/display_restrictions/0/source_type").asString()).isEqualTo("account_ban");
         assertThat(db.sql("select close_reason from trade where id = ?").param(pending).query(String.class).single())
                 .isEqualTo("account_banned");
         assertThat(db.sql("select archived_at is not null from trade_conversation where trade_id = ?")
@@ -461,7 +463,9 @@ class S4ProductionEnforcementIT {
         lift(otherManager, secondCase, second);
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned);
         assertThat(activeSources(active)).isEmpty();
-        get(buyer, "/products/" + product, 200);
+        var publicProduct = get(buyer, "/products/" + product, 200);
+        assertThat(publicProduct.has("display_restrictions")).isFalse();
+        assertThat(get(seller, "/products/" + product, 200).path("display_restrictions").size()).isZero();
         assertThat(db.sql("select status from trade where id = ?").param(pending).query(String.class).single())
                 .isEqualTo("closed");
     }

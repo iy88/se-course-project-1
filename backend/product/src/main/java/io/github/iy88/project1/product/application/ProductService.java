@@ -627,7 +627,7 @@ public class ProductService {
         var seller = new SellerRef(Long.toString(product.sellerAccountId()), "", null);
         return new ProductDetail(Long.toString(productId), snapshot.title(), snapshot.description(),
                 snapshot.priceCents(), List.of(), List.of(), seller, product.lifecycleState(), snapshot.contentVersion(),
-                product.createdAt(), snapshot.capturedAt(), null, null, null, null);
+                product.createdAt(), snapshot.capturedAt(), null, null, null, null, null);
     }
 
     private static BusinessError notVisible() {
@@ -819,10 +819,15 @@ public class ProductService {
                         found.status()))
                 .orElse(null)
                 : null;
+        List<DisplayRestrictionRef> restrictions = owner
+                ? displayRestrictions.findActive(product.id()).stream()
+                        .map(item -> new DisplayRestrictionRef(item.sourceType(), item.reason(), item.createdAt()))
+                        .toList()
+                : null;
         return new ProductDetail(Long.toString(product.id()), product.title(), product.description(),
                 product.priceCents(), images(product.id()), categories, sellerRef, product.lifecycleState(),
                 product.contentVersion(), product.createdAt(), product.updatedAt(), pending, latest, permissions,
-                categoryApplication);
+                categoryApplication, restrictions);
     }
 
     private List<CategoryRef> categoryRefs(Collection<Long> categoryIds) {
@@ -1182,7 +1187,13 @@ public class ProductService {
                                 List<ImageRef> images, List<CategoryRef> categories, SellerRef seller,
                                 String lifecycleState, int contentVersion, Instant createdAt, Instant updatedAt,
                                 ReviewRef pendingReview, ReviewRef latestReview, Permissions permissions,
-                                CategoryApplicationRef categoryApplication) {
+                                CategoryApplicationRef categoryApplication,
+                                @com.fasterxml.jackson.annotation.JsonInclude(
+                                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                                List<DisplayRestrictionRef> displayRestrictions) {
+    }
+
+    public record DisplayRestrictionRef(String sourceType, String reason, Instant createdAt) {
     }
 
     public record CategoryApplicationRef(String id, String proposedName, String status) {
