@@ -92,9 +92,9 @@ Version-Datetime: 2026-11-26T23:30:00+08:00
 
 | 执行项 | 场景摘要 | 覆盖原 TC | 结果 | 缺陷／备注 | 证据 |
 |---|---|---|---|---|---|
-| C01 | 重复购买请求与本人商品请求 | TC-TRD-001、002；TC-COM-002 | 未执行 | | |
-| C02 | 两买方竞争，卖方先后／同时接受 | TC-TRD-001；TC-COM-002 | 未执行 | | |
-| C03 | 接受前撤回与卖方拒绝 | TC-TRD-002、003、005 | 未执行 | | |
+| C01 | 重复购买请求与本人商品请求 | TC-TRD-001、002；TC-COM-002 | 通过 | 重复请求 409 REQUEST_DUPLICATE；本人商品 403 ACTION_NOT_ALLOWED；DB 待接受请求数为 1 | [证据](evidence/RUN-C1/RUN-C1-steps.md) |
+| C02 | 两买方竞争，卖方先后／同时接受 | TC-TRD-001；TC-COM-002 | 通过 | 接受其中一笔后另一笔 closed（other_user_locked）；商品 occupied_by_trade_id 指向该交易且 lifecycle_state=in_trade | [证据](evidence/RUN-C1/RUN-C1-steps.md) |
+| C03 | 接受前撤回与卖方拒绝 | TC-TRD-002、003、005 | 通过 | 撤回后 status=withdrawn；拒绝后 status=rejected | [证据](evidence/RUN-C1/RUN-C1-steps.md) |
 | C04 | 首次约定双方同意／拒绝 | TC-TRD-004、005 | 未执行 | | |
 | C05 | 已有单方确认时变更约定 | TC-TRD-004、005、015 | 未执行 | | |
 | C06 | 首约前取消、协商终止与拒绝 | TC-TRD-009 | 未执行 | | |
@@ -136,5 +136,6 @@ Version-Datetime: 2026-11-26T23:30:00+08:00
 
 ## 状态
 
-- 18 项均为未执行；本分支先提交环境与账号准备、报告骨架，随后按 RUN 逐步补齐截图、日志、DB 与 OSS／Redis 结果。
+- 执行进度：C01—C03 已通过（RUN-C1 前 3 项）；C04—C18 待执行。
+- 本分支已提交环境与账号准备、报告骨架，以及 RUN-C1 的步骤、网络、DB 证据；后续按 RUN 逐步补齐页面截图与 OSS／Redis 结果。
 - 完成后请求 `iy88` 审查，并在 #138 说明通过／失败项与复测结论。
