@@ -40,9 +40,15 @@ public class AccountAvatarService {
         if (current.isEmpty()) {
             return null;
         }
+        boolean transactional = TransactionSynchronizationManager.isActualTransactionActive();
         var read = OssClients.use(oss.endpoint(), oss.region(), oss.accessKeyId(), oss.accessKeySecret(),
-                client -> reads.prepare(target, current.getFirst().fileId(),
-                        new OssFileObjects(client, oss.bucket(), oss.prefix()), () -> { }));
+                client -> {
+                    var objects = new OssFileObjects(client, oss.bucket(), oss.prefix());
+                    long fileId = current.getFirst().fileId();
+                    return transactional
+                            ? reads.signInReadSnapshot(target, fileId, objects)
+                            : reads.prepare(target, fileId, objects, () -> { });
+                });
         return read.url().toString();
     }
 
