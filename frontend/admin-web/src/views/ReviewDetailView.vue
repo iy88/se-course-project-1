@@ -5,8 +5,10 @@
  * once and the page then shows the persisted result.
  */
 import { computed, onMounted, ref } from "vue";
-import type { ReviewDetail } from "../api/contracts";
+import type { CategoryCorrectionResult, CategoryDetail, ReviewDetail } from "../api/contracts";
+import { listAdminCategories } from "../api/categories";
 import { AbortedError } from "../api/errors";
+import { correctProductCategory } from "../api/products";
 import { decideReview, readReviewDetail } from "../api/reviews";
 import { formatCents, formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
@@ -37,6 +39,39 @@ const pendingApplication = computed(() => detail.value?.category_application?.st
 const decided = computed(() => detail.value !== null && detail.value.status !== "pending");
 const backHref = routeHref({ name: "reviews", ownership: "mine" });
 
+const categories = ref<CategoryDetail[]>([]);
+const selectedCategoryIds = ref<string[]>([]);
+const correctionReason = ref("");
+const correctionError = ref<string | null>(null);
+const correcting = ref(false);
+const correctionResult = ref<CategoryCorrectionResult | null>(null);
+
+const activeCategories = computed(() => categories.value.filter((item) => item.state === "active"));
+const disabledCurrentCategories = computed(() =>
+  (detail.value?.current_content.categories ?? []).filter(
+    (item) => !activeCategories.value.some((active) => active.id === item.id),
+  ),
+);
+
+function syncCategorySelection(): void {
+  const review = detail.value;
+  if (!review) return;
+  const selectable = new Set(activeCategories.value.map((item) => item.id));
+  selectedCategoryIds.value = review.current_content.categories
+    .map((item) => item.id)
+    .filter((id) => selectable.has(id));
+}
+
+async function loadCategories(): Promise<void> {
+  try {
+    categories.value = (await listAdminCategories()).items;
+  } catch {
+    // Without the directory the correction panel stays unavailable; the review flow is unaffected.
+    categories.value = [];
+  }
+  syncCategorySelection();
+}
+
 async function load(): Promise<void> {
   controller?.abort();
   controller = new AbortController();
@@ -50,6 +85,8 @@ async function load(): Promise<void> {
     categoryDecision.value = "";
     categoryReason.value = "";
     formError.value = null;
+    correctionError.value = null;
+    syncCategorySelection();
   } catch (caught) {
     if (caught instanceof AbortedError) return;
     error.value = caught;
@@ -58,7 +95,51 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  void loadCategories();
+  void load();
+});
+
+function toggleCategory(id: string): void {
+  selectedCategoryIds.value = selectedCategoryIds.value.includes(id)
+    ? selectedCategoryIds.value.filter((item) => item !== id)
+    : [...selectedCategoryIds.value, id];
+}
+
+async function submitCorrection(): Promise<void> {
+  const review = detail.value;
+  if (!review || correcting.value) return;
+  correctionError.value = null;
+  if (!selectedCategoryIds.value.length) {
+    correctionError.value = "请至少选择一个分类。";
+    return;
+  }
+  if (!correctionReason.value.trim()) {
+    correctionError.value = "请填写纠正理由。";
+    return;
+  }
+  correcting.value = true;
+  const operation = `correction-${review.product_id}`;
+  try {
+    correctionResult.value = await correctProductCategory(
+      review.product_id,
+      {
+        category_ids: selectedCategoryIds.value,
+        reason: correctionReason.value.trim(),
+        basis_ref: { type: "case", id: review.case_id },
+      },
+      keys.current(operation),
+    );
+    keys.rotate(operation);
+    correctionReason.value = "";
+    notify.success("商品分类已纠正。");
+    await load();
+  } catch (caught) {
+    notify.error(problemMessage(caught));
+  } finally {
+    correcting.value = false;
+  }
+}
 
 function toggleBanned(id: string): void {
   selectedBanned.value = selectedBanned.value.includes(id)
@@ -298,6 +379,54 @@ async function submit(): Promise<void> {
             </template>
           </section>
 
+          <section class="card">
+            <div class="card__head">
+              <h2>纠正分类</h2>
+              <span class="chip">{{ selectedCategoryIds.length }} 项</span>
+            </div>
+            <p class="muted">按本次认领的事项纠正商品当前分类，记录理由并通知卖方。</p>
+            <fieldset v-if="activeCategories.length" class="stack stack--tight correction-categories">
+              <legend class="visually-hidden">目标分类</legend>
+              <label v-for="category in activeCategories" :key="category.id" class="inline">
+                <input
+                  type="checkbox"
+                  :checked="selectedCategoryIds.includes(category.id)"
+                  :disabled="correcting"
+                  @change="toggleCategory(category.id)"
+                />
+                <span>{{ category.main_name }}</span>
+              </label>
+            </fieldset>
+            <p v-else class="muted">分类目录不可用，暂不能纠正分类。</p>
+            <p v-if="disabledCurrentCategories.length" class="muted">
+              当前分类已停用：{{ disabledCurrentCategories.map((item) => item.name).join("、") }}，请改选有效分类。
+            </p>
+            <label class="field">
+              <span class="field__label">纠正理由</span>
+              <textarea
+                v-model="correctionReason"
+                class="textarea"
+                rows="3"
+                :disabled="correcting"
+                placeholder="写明分类放错的原因，作为纠正依据"
+              />
+            </label>
+            <p v-if="correctionError" class="field__error" role="alert">{{ correctionError }}</p>
+            <button
+              type="button"
+              class="btn btn--primary btn--block"
+              :disabled="correcting"
+              @click="submitCorrection"
+            >
+              {{ correcting ? "正在提交…" : "提交纠正" }}
+            </button>
+            <div v-if="correctionResult" class="correction-result">
+              <p class="muted">上次纠正结果</p>
+              <p>原分类：{{ correctionResult.previous_categories.map((item) => item.name).join("、") || "—" }}</p>
+              <p>现分类：{{ correctionResult.current_categories.map((item) => item.name).join("、") || "—" }}</p>
+            </div>
+          </section>
+
           <section class="card muted">
             <p>审核结论提交后，卖方按站内通知获知结果；通过后商品进入公开可交易状态。</p>
           </section>
@@ -362,6 +491,17 @@ async function submit(): Promise<void> {
 
 .decision-block {
   margin-block-start: var(--space-3);
+}
+
+.correction-categories {
+  margin-block: var(--space-3);
+  padding: 0;
+  border: 0;
+}
+
+.correction-result {
+  margin-block-start: var(--space-3);
+  font-size: 0.875rem;
 }
 
 .facts {
