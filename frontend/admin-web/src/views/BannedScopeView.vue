@@ -13,6 +13,7 @@ import {
   readBannedScope,
   updateBannedItem,
 } from "../api/banned";
+import { lastBannedGroupPage, pageBannedGroup } from "../app/banned-pages";
 import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { bannedGroupLabels, bannedGroupOrder } from "../app/labels";
@@ -22,6 +23,7 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
+import PaginationBar from "../components/PaginationBar.vue";
 
 interface EditRow {
   key: number;
@@ -39,15 +41,18 @@ const loading = ref(false);
 const error = ref<unknown>(null);
 const updatedAt = ref<string | null>(null);
 const pendingRemove = ref<EditRow | null>(null);
+const groupPages = ref<Partial<Record<BannedGroupKey, number>>>({});
 const keys = new IdempotencyKeys();
 let nextKey = 1;
 
 const groupSections = computed(() =>
-  bannedGroupOrder.map((group) => ({
-    group,
-    label: bannedGroupLabels[group],
-    rows: rows.value.filter((row) => row.group === group),
-  })),
+  bannedGroupOrder.map((group) => {
+    return {
+      group,
+      label: bannedGroupLabels[group],
+      ...pageBannedGroup(rows.value, group, groupPages.value[group] ?? 1),
+    };
+  }),
 );
 
 async function load(): Promise<void> {
@@ -88,6 +93,7 @@ function nextOrder(group: BannedGroupKey): number {
 }
 
 function addRow(group: BannedGroupKey): void {
+  const nextPage = lastBannedGroupPage(rows.value.filter((row) => row.group === group).length + 1);
   rows.value = [
     ...rows.value,
     {
@@ -101,6 +107,11 @@ function addRow(group: BannedGroupKey): void {
       saving: false,
     },
   ];
+  groupPages.value = { ...groupPages.value, [group]: nextPage };
+}
+
+function setGroupPage(group: BannedGroupKey, page: number): void {
+  groupPages.value = { ...groupPages.value, [group]: page };
 }
 
 function isDirty(row: EditRow): boolean {
@@ -128,6 +139,11 @@ async function confirmRemove(): Promise<void> {
     const mutation = await deleteBannedItem(row.id, keys.current(`banned-item-${row.id}`));
     keys.rotate(`banned-item-${row.id}`);
     rows.value = rows.value.filter((candidate) => candidate.key !== row.key);
+    const remaining = rows.value.filter((candidate) => candidate.group === row.group).length;
+    setGroupPage(
+      row.group,
+      Math.min(groupPages.value[row.group] ?? 1, lastBannedGroupPage(remaining)),
+    );
     updatedAt.value = mutation.updated_at;
     notify.success("禁发细目已移除。");
   } catch (caught) {
@@ -196,12 +212,10 @@ async function saveRow(row: EditRow): Promise<void> {
       >
         <legend>
           <span>{{ section.label }}</span>
-          <span class="banned-group__count">{{ section.rows.length }} 条</span>
+          <span class="banned-group__count">{{ section.total }} 条</span>
         </legend>
         <div class="banned-group__body">
-          <p v-if="!section.rows.length" class="banned-group__empty">
-            暂无细目，可在本大类下添加。
-          </p>
+          <p v-if="!section.total" class="banned-group__empty">暂无细目，可在本大类下添加。</p>
           <ul v-else class="banned-list">
             <li
               v-for="row in section.rows"
@@ -250,6 +264,13 @@ async function saveRow(row: EditRow): Promise<void> {
               </div>
             </li>
           </ul>
+          <PaginationBar
+            :page="section.page"
+            :page-size="section.pageSize"
+            :total="section.total"
+            :label="`${section.label}细目分页`"
+            @change="setGroupPage(section.group, $event)"
+          />
           <button
             type="button"
             class="btn btn--small banned-group__add"
