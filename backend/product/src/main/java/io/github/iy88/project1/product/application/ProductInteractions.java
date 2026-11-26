@@ -260,6 +260,18 @@ public class ProductInteractions {
     }
 
     /**
+     * Read-only snapshot of one comment for a caller that has already authorized the exact case
+     * target. The body is retained after moderation so the claimed manager can review it; this
+     * method does not widen the public or author comment scope.
+     */
+    public Optional<CommentSnapshot> commentSnapshot(long commentId) {
+        return store.comment(commentId)
+                .map(comment -> new CommentSnapshot(comment.commentId(), comment.productId(),
+                        comment.authorAccountId(), comment.parentCommentId(), comment.body(), comment.state(),
+                        comment.createdAt(), comment.removedAt()));
+    }
+
+    /**
      * Locks one comment row for a caller that already planned the PRODUCT_DETAIL comment key. The
      * caller must hold the product row first, matching the product -> comment order used by all
      * comment mutations.
@@ -596,6 +608,11 @@ public class ProductInteractions {
 
     /** Product and author of a comment, resolved before the caller plans its locks. */
     public record CommentTarget(long commentId, long productId, long authorAccountId) {
+    }
+
+    /** Exact comment content for the claimed manager's case target. */
+    public record CommentSnapshot(long commentId, long productId, long authorAccountId, Long parentCommentId,
+                                  String body, String state, Instant createdAt, Instant removedAt) {
     }
 
     /**

@@ -105,6 +105,7 @@ public class EmailVerificationService {
             if (accounts.existsByEmail(newEmail)) {
                 throw new BusinessError("EMAIL_IN_USE", 409, "该邮箱已被使用");
             }
+            reserve("email_change", "account:" + locked.id(), now);
             reserve("email_change", newEmail, now);
             verifications.invalidateEmailChange(locked.id(), now);
             Instant expiresAt = now.plusSeconds(settings.emailCodeTtlSeconds());
@@ -120,8 +121,8 @@ public class EmailVerificationService {
         });
     }
 
-    private void reserve(String purpose, String email, Instant now) {
-        long retryAfterSeconds = budget.reserve(purpose, email, now, settings.emailResendIntervalSeconds());
+    private void reserve(String purpose, String subject, Instant now) {
+        long retryAfterSeconds = budget.reserve(purpose, subject, now, settings.emailResendIntervalSeconds());
         if (retryAfterSeconds > 0L) {
             throw new BusinessError("RATE_LIMITED", 429, "请求过于频繁，请稍后再试",
                     Map.of("retry_after_seconds", retryAfterSeconds));

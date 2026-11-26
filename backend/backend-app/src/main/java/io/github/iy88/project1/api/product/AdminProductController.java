@@ -40,7 +40,7 @@ class AdminProductController {
         if (!"manager".equals(identity.account().role())) {
             throw new BusinessError("ACTION_NOT_ALLOWED", 403, "无管理权限");
         }
-        var context = requestContext.forActor(request, ExecutionContext.ActorKind.ACCOUNT,
+        var context = requestContext.forWrite(request, ExecutionContext.ActorKind.ACCOUNT,
                 Long.toString(identity.account().id()), identity.guard().id(), null,
                 (long) identity.guard().credentialVersion());
         var correction = new ProductService.CorrectionCommand(body.categoryIds(), body.reason(),

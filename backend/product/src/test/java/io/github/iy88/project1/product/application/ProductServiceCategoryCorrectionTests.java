@@ -14,8 +14,12 @@ import io.github.iy88.project1.account.application.AccountAvatarService;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import io.github.iy88.project1.category.CategorySettings;
 import io.github.iy88.project1.category.application.CategoryDirectory;
+import io.github.iy88.project1.core.AuditActions;
+import io.github.iy88.project1.core.AuditContext;
+import io.github.iy88.project1.core.AuditStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
+import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.persistence.CategoryApplicationRepository;
 import io.github.iy88.project1.product.persistence.Product;
@@ -55,6 +59,8 @@ class ProductServiceCategoryCorrectionTests {
     private final CategoryDirectory directory = mock(CategoryDirectory.class);
     private final CaseCommentAccess cases = mock(CaseCommentAccess.class);
     private final ProductCorrectionNotices notices = mock(ProductCorrectionNotices.class);
+    private final AuditStore auditRecords = mock(AuditStore.class);
+    private final PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
     private ProductService service;
     private Product product;
     private final ExecutionContext context = new ExecutionContext(UUID.randomUUID(),
@@ -88,8 +94,7 @@ class ProductServiceCategoryCorrectionTests {
         when(history.id()).thenReturn(99L);
         when(edits.save(any())).thenReturn(history);
 
-        var manager = mock(PlatformTransactionManager.class);
-        when(manager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        when(transactions.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         var environment = mock(Environment.class);
         when(environment.getRequiredProperty("OSS_ENDPOINT")).thenReturn("https://oss.example");
         when(environment.getRequiredProperty("OSS_REGION")).thenReturn("region");
@@ -105,8 +110,8 @@ class ProductServiceCategoryCorrectionTests {
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class),
                 mock(ProductTradeHistory.class), mock(ProductEditNotices.class), cases, notices,
-                mock(ProductDisplayRestrictions.class), environment,
-                mock(JdbcClient.class), manager);
+                mock(ProductDisplayRestrictions.class), mock(org.springframework.beans.factory.ObjectProvider.class), environment,
+                mock(JdbcClient.class), transactions, auditRecords);
     }
 
     @Test
@@ -137,6 +142,36 @@ class ProductServiceCategoryCorrectionTests {
         assertThat(savedLinks.getAllValues()).filteredOn(link -> link.categoryId() == OLD_CATEGORY)
                 .allSatisfy(link -> assertThat(link.active()).isFalse());
         verify(notices).categoryCorrected(eq(context), eq(SELLER), eq(PRODUCT), eq(99L), eq(CASE), any(), any());
+
+        var audit = ArgumentCaptor.forClass(AuditContext.class);
+        var auditTarget = ArgumentCaptor.forClass(ResourceRef.class);
+        var auditBasis = ArgumentCaptor.forClass(ResourceRef.class);
+        @SuppressWarnings("unchecked")
+        var auditFacts = ArgumentCaptor.forClass(Map.class);
+        verify(auditRecords).record(audit.capture(), eq(AuditActions.PRODUCT_CATEGORY_CORRECTED),
+                auditTarget.capture(), auditBasis.capture(), auditFacts.capture());
+        assertThat(audit.getValue().execution()).isEqualTo(context);
+        assertThat(auditTarget.getValue()).isEqualTo(new ResourceRef("product", PRODUCT));
+        assertThat(auditBasis.getValue()).isEqualTo(new ResourceRef("case", CASE));
+        assertThat(auditFacts.getValue())
+                .containsEntry("edit_id", "99")
+                .containsEntry("previous_category_ids", List.of(String.valueOf(OLD_CATEGORY)))
+                .containsEntry("current_category_ids", List.of(String.valueOf(NEW_CATEGORY)));
+    }
+
+    @Test
+    void anAuditFailurePropagatesAndRollsBackTheCorrectionTransaction() {
+        when(cases.claimedForProduct(MANAGER, CASE, PRODUCT)).thenReturn(true);
+        when(auditRecords.record(any(), any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("audit unavailable"));
+
+        assertThatThrownBy(() -> service.correctCategory(MANAGER, PRODUCT,
+                new ProductService.CorrectionCommand(List.of(String.valueOf(NEW_CATEGORY)), "分类放错了", "case", CASE),
+                context))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("audit unavailable");
+        verify(edits).save(any());
+        verify(transactions).rollback(any());
     }
 
     @Test

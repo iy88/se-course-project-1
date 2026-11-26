@@ -1,8 +1,11 @@
 package io.github.iy88.project1.api.category;
 
+import io.github.iy88.project1.api.ApiRequestContext;
 import io.github.iy88.project1.api.account.CurrentAccount;
 import io.github.iy88.project1.category.application.CategoryService;
+import io.github.iy88.project1.core.AuditContext;
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
@@ -23,10 +26,12 @@ import org.springframework.web.bind.annotation.RestController;
 class AdminCategoryController {
     private final CategoryService categories;
     private final CurrentAccount current;
+    private final ApiRequestContext requestContext;
 
-    AdminCategoryController(CategoryService categories, CurrentAccount current) {
+    AdminCategoryController(CategoryService categories, CurrentAccount current, ApiRequestContext requestContext) {
         this.categories = categories;
         this.current = current;
+        this.requestContext = requestContext;
     }
 
     @GetMapping
@@ -40,48 +45,56 @@ class AdminCategoryController {
     ResponseEntity<CategoryService.CategoryDetail> create(@RequestBody NameRequest body, HttpServletRequest request) {
         var manager = CategoryController.manager(current, request);
         return ResponseEntity.status(201).cacheControl(CacheControl.noStore())
-                .body(categories.create(manager.account().id(), body.name()));
+                .body(categories.create(manager.account().id(), body.name(), writeContext(manager, request)));
     }
 
     @PatchMapping("/{categoryId}")
     ResponseEntity<CategoryService.CategoryDetail> rename(@PathVariable String categoryId,
                                                           @RequestBody MainNameRequest body,
                                                           HttpServletRequest request) {
-        CategoryController.manager(current, request);
+        var manager = CategoryController.manager(current, request);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(categories.rename(id(categoryId), body.mainName()));
+                .body(categories.rename(id(categoryId), body.mainName(), writeContext(manager, request)));
     }
 
     @PostMapping("/{categoryId}/aliases")
     ResponseEntity<CategoryService.AliasCreated> alias(@PathVariable String categoryId,
                                                        @RequestBody NameRequest body,
                                                        HttpServletRequest request) {
-        CategoryController.manager(current, request);
+        var manager = CategoryController.manager(current, request);
         return ResponseEntity.status(201).cacheControl(CacheControl.noStore())
-                .body(categories.addAlias(id(categoryId), body.name()));
+                .body(categories.addAlias(id(categoryId), body.name(), writeContext(manager, request)));
     }
 
     @DeleteMapping("/{categoryId}/aliases/{categoryNameId}")
     ResponseEntity<Void> removeAlias(@PathVariable String categoryId, @PathVariable String categoryNameId,
                                      HttpServletRequest request) {
-        CategoryController.manager(current, request);
-        categories.removeAlias(id(categoryId), id(categoryNameId));
+        var manager = CategoryController.manager(current, request);
+        categories.removeAlias(id(categoryId), id(categoryNameId), writeContext(manager, request));
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
     }
 
     @PostMapping("/{categoryId}/disable")
     ResponseEntity<CategoryService.CategoryDetail> disable(@PathVariable String categoryId,
                                                            HttpServletRequest request) {
-        CategoryController.manager(current, request);
+        var manager = CategoryController.manager(current, request);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(categories.disable(id(categoryId)));
+                .body(categories.disable(id(categoryId), writeContext(manager, request)));
     }
 
     @DeleteMapping("/{categoryId}")
     ResponseEntity<Void> delete(@PathVariable String categoryId, HttpServletRequest request) {
-        CategoryController.manager(current, request);
-        categories.delete(id(categoryId));
+        var manager = CategoryController.manager(current, request);
+        categories.delete(id(categoryId), writeContext(manager, request));
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+    }
+
+    private AuditContext writeContext(
+            io.github.iy88.project1.account.application.SessionService.Identity manager,
+            HttpServletRequest request) {
+        return requestContext.forWrite(request, ExecutionContext.ActorKind.ACCOUNT,
+                Long.toString(manager.account().id()), manager.guard().id(), null,
+                (long) manager.guard().credentialVersion());
     }
 
     private static long id(String value) {

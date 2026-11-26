@@ -283,6 +283,22 @@ class ProductInteractionsTests {
     }
 
     @Test
+    void commentSnapshotKeepsTheRetainedBodyForTheCaseTargetRead() {
+        when(store.comment(500L)).thenReturn(Optional.of(comment(500, VIEWER, null, NOW, NOW)));
+
+        var snapshot = interactions.commentSnapshot(500L);
+
+        assertThat(snapshot).get().satisfies(fact -> {
+            assertThat(fact.commentId()).isEqualTo(500L);
+            assertThat(fact.productId()).isEqualTo(PRODUCT);
+            assertThat(fact.authorAccountId()).isEqualTo(VIEWER);
+            assertThat(fact.body()).isEqualTo("Hello");
+            assertThat(fact.state()).isEqualTo(ProductComment.REMOVED_BY_ADMIN);
+            assertThat(fact.removedAt()).isEqualTo(NOW);
+        });
+    }
+
+    @Test
     void removalRequiresAClaimOnTheCase() {
         var comment = comment(500, VIEWER, null, NOW, null);
         when(products.lockById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));

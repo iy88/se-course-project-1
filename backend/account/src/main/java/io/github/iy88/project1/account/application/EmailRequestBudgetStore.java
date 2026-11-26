@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Persistent send budget for email-verification requests.
  *
- * <p>The budget key is a keyed digest of the normalized address, never the address itself. The
+ * <p>The budget key is a keyed digest of a normalized address or account key. The
  * primary-key row lock is the transaction-scoped serialization point for one purpose and address,
  * so known and unknown password-reset requests follow the same eligibility path.
  */
@@ -43,8 +43,8 @@ public class EmailRequestBudgetStore {
      * @return zero when the request may proceed, otherwise the positive Retry-After in seconds
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public long reserve(String purpose, String normalizedEmail, Instant now, int intervalSeconds) {
-        byte[] digest = digest(purpose, normalizedEmail);
+    public long reserve(String purpose, String subject, Instant now, int intervalSeconds) {
+        byte[] digest = digest(purpose, subject);
         int inserted = jdbc.sql("""
                         INSERT INTO email_request_budget (purpose, email_digest, last_requested_at)
                         VALUES (:purpose, :digest, :now)
@@ -83,13 +83,13 @@ public class EmailRequestBudgetStore {
         return 0L;
     }
 
-    private byte[] digest(String purpose, String normalizedEmail) {
+    private byte[] digest(String purpose, String subject) {
         try {
             Mac mac = Mac.getInstance(HMAC);
             mac.init(new SecretKeySpec(digestKey, HMAC));
             mac.update(purpose.getBytes(StandardCharsets.UTF_8));
             mac.update((byte) 0);
-            return mac.doFinal(normalizedEmail.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8));
+            return mac.doFinal(subject.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8));
         } catch (GeneralSecurityException impossible) {
             throw new IllegalStateException("Could not key the email request budget", impossible);
         }

@@ -4,6 +4,7 @@ import io.github.iy88.project1.account.application.EntryTokenService;
 import io.github.iy88.project1.account.application.SessionService;
 import io.github.iy88.project1.api.ApiRequestContext;
 import io.github.iy88.project1.api.account.AccountCookies;
+import io.github.iy88.project1.core.AuditActions;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.WriteSettings;
 import jakarta.servlet.FilterChain;
@@ -125,6 +126,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         }
         ContentCachingResponseWrapper wrappedResponse = new ContentCachingResponseWrapper(response);
         UUID operationId = claim == null ? UUID.randomUUID() : claim.operationId;
+        ApiRequestContext.setOperationId(request, operationId);
         try {
             chain.doFilter(wrappedRequest, wrappedResponse);
             int status = wrappedResponse.getStatus();
@@ -132,8 +134,10 @@ public class IdempotencyFilter extends OncePerRequestFilter {
             if (claim != null && claim.operationId != null && claim.owner) {
                 complete(claim.operationId, status, body);
             }
-            if (status >= 200 && status < 300 && actor != null) {
-                audit(requestId, operationId, actor, request, body);
+            String action = action(request.getMethod(), request.getRequestURI());
+            if (status >= 200 && status < 300 && actor != null && action != null
+                    && !AuditActions.TRANSACTIONAL_WRITES.contains(action)) {
+                audit(requestId, operationId, actor, action, body);
             }
         } finally {
             wrappedResponse.copyBodyToResponse();
@@ -200,11 +204,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         }
     }
 
-    private void audit(UUID requestId, UUID operationId, Actor actor, HttpServletRequest request, byte[] body) {
-        String action = action(request.getMethod(), request.getRequestURI());
-        if (action == null) {
-            return;
-        }
+    private void audit(UUID requestId, UUID operationId, Actor actor, String action, byte[] body) {
         long resolved = targetId(body);
         if (resolved <= 0 && "ACCOUNT".equals(actor.kind)
                 && (action.startsWith("account.") || action.startsWith("session."))) {
@@ -356,31 +356,35 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         if (upper.equals("POST") && path.equals("/api/v1/account/password-resets")) return "account.password_reset";
         if (upper.equals("PUT") && path.equals("/api/v1/account/email")) return "account.email_changed";
         if (upper.equals("PATCH") && path.equals("/api/v1/account/profile")) return "account.profile_changed";
-        if (upper.equals("POST") && path.equals("/api/v1/admin/categories")) return "category.created";
-        if (upper.equals("PATCH") && path.matches("/api/v1/admin/categories/\\d+")) return "category.renamed";
+        if (upper.equals("POST") && path.equals("/api/v1/admin/categories")) return AuditActions.CATEGORY_CREATED;
+        if (upper.equals("PATCH") && path.matches("/api/v1/admin/categories/\\d+"))
+            return AuditActions.CATEGORY_RENAMED;
         if (upper.equals("POST") && path.matches("/api/v1/admin/categories/\\d+/aliases"))
-            return "category.alias_added";
+            return AuditActions.CATEGORY_ALIAS_ADDED;
         if (upper.equals("DELETE") && path.matches("/api/v1/admin/categories/\\d+/aliases/\\d+"))
-            return "category.alias_removed";
+            return AuditActions.CATEGORY_ALIAS_REMOVED;
         if (upper.equals("POST") && path.matches("/api/v1/admin/categories/\\d+/disable"))
-            return "category.disabled";
-        if (upper.equals("DELETE") && path.matches("/api/v1/admin/categories/\\d+")) return "category.deleted";
+            return AuditActions.CATEGORY_DISABLED;
+        if (upper.equals("DELETE") && path.matches("/api/v1/admin/categories/\\d+"))
+            return AuditActions.CATEGORY_DELETED;
         if (upper.equals("PUT") && path.equals("/api/v1/admin/banned-items")) return "banned_scope.replaced";
         if (upper.equals("POST") && path.equals("/api/v1/admin/banned-items")) return "banned_item.created";
         if (upper.equals("PATCH") && path.matches("/api/v1/admin/banned-items/\\d+")) return "banned_item.updated";
         if (upper.equals("DELETE") && path.matches("/api/v1/admin/banned-items/\\d+")) return "banned_item.deleted";
-        if (upper.equals("POST") && path.equals("/api/v1/products")) return "product.submitted";
-        if (upper.equals("PATCH") && path.matches("/api/v1/products/\\d+")) return "product.edited";
+        if (upper.equals("POST") && path.equals("/api/v1/products")) return AuditActions.PRODUCT_SUBMITTED;
+        if (upper.equals("PATCH") && path.matches("/api/v1/products/\\d+")) return AuditActions.PRODUCT_EDITED;
         if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/review-submissions"))
-            return "product.review_resubmitted";
+            return AuditActions.PRODUCT_REVIEW_RESUBMITTED;
         if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/withdrawal"))
-            return "product.review_withdrawn";
-        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/off-shelf")) return "product.off_shelf";
-        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/on-shelf")) return "product.on_shelf";
+            return AuditActions.PRODUCT_REVIEW_WITHDRAWN;
+        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/off-shelf"))
+            return AuditActions.PRODUCT_OFF_SHELF;
+        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/on-shelf"))
+            return AuditActions.PRODUCT_ON_SHELF;
         if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/category-applications"))
-            return "category_application.created";
+            return AuditActions.CATEGORY_APPLICATION_CREATED;
         if (upper.equals("DELETE") && path.matches("/api/v1/products/\\d+/category-application"))
-            return "category_application.withdrawn";
+            return AuditActions.CATEGORY_APPLICATION_WITHDRAWN;
         return null;
     }
 

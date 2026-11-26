@@ -17,9 +17,13 @@ import io.github.iy88.project1.category.CategorySettings;
 import io.github.iy88.project1.category.persistence.Category;
 import io.github.iy88.project1.category.persistence.CategoryNameRepository;
 import io.github.iy88.project1.category.persistence.CategoryRepository;
+import io.github.iy88.project1.core.AuditContext;
+import io.github.iy88.project1.core.AuditStore;
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,14 +48,20 @@ class CategoryDeleteTests {
     CategoryProductVisibility visibility;
     @Mock
     PlatformTransactionManager transactions;
+    @Mock
+    AuditStore auditRecords;
 
     private CategoryService service;
+    private AuditContext auditContext;
 
     @BeforeEach
     void setUp() {
         when(transactions.getTransaction(any())).thenAnswer(call -> new SimpleTransactionStatus());
+        auditContext = new AuditContext(new ExecutionContext(UUID.randomUUID(),
+                ExecutionContext.ActorKind.ACCOUNT, "7", UUID.randomUUID(), null, 1L, "cfg"),
+                UUID.randomUUID());
         service = new CategoryService(categories, names, new CategorySettings(80, 200),
-                productVisibility, transactions);
+                productVisibility, transactions, auditRecords);
     }
 
     @Test
@@ -61,11 +71,11 @@ class CategoryDeleteTests {
         when(productVisibility.getIfAvailable()).thenReturn(visibility);
         when(visibility.associatedProductCount(CATEGORY_ID)).thenReturn(0L);
 
-        service.delete(CATEGORY_ID);
+        service.delete(CATEGORY_ID, auditContext);
         Instant firstDeletedAt = category.deletedAt();
         assertNotNull(firstDeletedAt);
 
-        assertDoesNotThrow(() -> service.delete(CATEGORY_ID));
+        assertDoesNotThrow(() -> service.delete(CATEGORY_ID, auditContext));
         assertEquals(firstDeletedAt, category.deletedAt());
         verify(categories, times(2)).lockById(CATEGORY_ID);
         verify(categories).save(category);
@@ -78,7 +88,7 @@ class CategoryDeleteTests {
     void missingCategoryStillReturnsNotFound() {
         when(categories.lockById(CATEGORY_ID)).thenReturn(Optional.empty());
 
-        BusinessError error = assertThrows(BusinessError.class, () -> service.delete(CATEGORY_ID));
+        BusinessError error = assertThrows(BusinessError.class, () -> service.delete(CATEGORY_ID, auditContext));
 
         assertEquals(404, error.status());
         assertEquals("RESOURCE_NOT_VISIBLE", error.code());
@@ -93,7 +103,7 @@ class CategoryDeleteTests {
         when(productVisibility.getIfAvailable()).thenReturn(visibility);
         when(visibility.associatedProductCount(CATEGORY_ID)).thenReturn(1L);
 
-        BusinessError error = assertThrows(BusinessError.class, () -> service.delete(CATEGORY_ID));
+        BusinessError error = assertThrows(BusinessError.class, () -> service.delete(CATEGORY_ID, auditContext));
 
         assertEquals(409, error.status());
         assertEquals("CATEGORY_NOT_DELETABLE", error.code());
@@ -108,7 +118,7 @@ class CategoryDeleteTests {
         category.delete(CREATED_AT.plusSeconds(1));
         when(categories.lockById(CATEGORY_ID)).thenReturn(Optional.of(category));
 
-        BusinessError error = assertThrows(BusinessError.class, () -> service.rename(CATEGORY_ID, "二手教材"));
+        BusinessError error = assertThrows(BusinessError.class, () -> service.rename(CATEGORY_ID, "二手教材", auditContext));
 
         assertEquals(404, error.status());
         assertEquals("RESOURCE_NOT_VISIBLE", error.code());

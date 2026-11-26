@@ -224,7 +224,8 @@ public class ProductReviewSubjects {
             categoryName = info.mainName();
             resolution = "existing_category";
         } else {
-            CategoryService.CategoryDetail created = categoryService.create(managerId, pending.proposedName());
+            CategoryService.CategoryDetail created = categoryService.createWithinReview(managerId,
+                    pending.proposedName());
             categoryId = parseCategoryId(created.id());
             categoryName = created.mainName();
             resolution = "new_category";

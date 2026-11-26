@@ -11,7 +11,10 @@ import io.github.iy88.project1.account.application.AccountAvatarService;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import io.github.iy88.project1.category.CategorySettings;
 import io.github.iy88.project1.category.application.CategoryDirectory;
+import io.github.iy88.project1.core.AuditContext;
+import io.github.iy88.project1.core.AuditStore;
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.persistence.CategoryApplicationRepository;
 import io.github.iy88.project1.product.persistence.Product;
@@ -26,6 +29,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.env.Environment;
@@ -47,6 +51,10 @@ class ProductServiceDisplayRestrictionTests {
     private final AccountRepository accounts = mock(AccountRepository.class);
     private final FileReferences fileReferences = mock(FileReferences.class);
     private final ProductDisplayRestrictions displayRestrictions = mock(ProductDisplayRestrictions.class);
+    private final AuditStore auditRecords = mock(AuditStore.class);
+    private final AuditContext auditContext = new AuditContext(new ExecutionContext(UUID.randomUUID(),
+            ExecutionContext.ActorKind.ACCOUNT, Long.toString(SELLER), UUID.randomUUID(), null, 1L, "cfg"),
+            UUID.randomUUID());
     private ProductService service;
 
     @BeforeEach
@@ -64,6 +72,10 @@ class ProductServiceDisplayRestrictionTests {
         when(environment.getRequiredProperty("OSS_PREFIX")).thenReturn("prefix");
         when(environment.getRequiredProperty("OSS_ACCESS_KEY_ID")).thenReturn("id");
         when(environment.getRequiredProperty("OSS_ACCESS_KEY_SECRET")).thenReturn("secret");
+        @SuppressWarnings("unchecked")
+        org.springframework.beans.factory.ObjectProvider<ProductTradeFreeze> freezeProvider =
+                mock(org.springframework.beans.factory.ObjectProvider.class);
+        when(freezeProvider.getIfAvailable()).thenReturn(mock(ProductTradeFreeze.class));
         service = new ProductService(products, links, mock(ProductEditHistoryRepository.class), audits,
                 mock(CategoryApplicationRepository.class),
                 mock(org.springframework.beans.factory.ObjectProvider.class), accounts,
@@ -72,7 +84,7 @@ class ProductServiceDisplayRestrictionTests {
                 new CategorySettings(50, 100), fileReferences, mock(FileRead.class),
                 mock(ProductTradeHistory.class), mock(ProductEditNotices.class),
                 mock(CaseCommentAccess.class), mock(ProductCorrectionNotices.class), displayRestrictions,
-                environment, mock(JdbcClient.class), manager);
+                freezeProvider, environment, mock(JdbcClient.class), manager, auditRecords);
     }
 
     @Test
@@ -102,7 +114,7 @@ class ProductServiceDisplayRestrictionTests {
         when(audits.findTopByProductIdOrderBySequenceNoDesc(PRODUCT)).thenReturn(Optional.of(audit));
         when(displayRestrictions.hasActive(PRODUCT)).thenReturn(true);
 
-        assertFailure(() -> service.onShelf(SELLER, PRODUCT, 1), "DISPLAY_RESTRICTED");
+        assertFailure(() -> service.onShelf(SELLER, PRODUCT, 1, auditContext), "DISPLAY_RESTRICTED");
         assertThat(product.lifecycleState()).isEqualTo(Product.OFF_SHELF);
     }
 
@@ -114,7 +126,7 @@ class ProductServiceDisplayRestrictionTests {
         when(audits.findTopByProductIdOrderBySequenceNoDesc(PRODUCT)).thenReturn(Optional.of(audit));
         when(displayRestrictions.hasActive(PRODUCT)).thenReturn(false);
 
-        var detail = service.onShelf(SELLER, PRODUCT, 1);
+        var detail = service.onShelf(SELLER, PRODUCT, 1, auditContext);
 
         assertThat(detail.lifecycleState()).isEqualTo(Product.PUBLIC);
         assertThat(product.lifecycleState()).isEqualTo(Product.PUBLIC);

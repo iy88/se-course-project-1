@@ -166,6 +166,7 @@ class EmailVerificationServiceTests {
 
         assertThat(result.requests()).extracting(EmailVerificationService.Item::purpose)
                 .containsExactly("email_change_old", "email_change_new");
+        verify(budget).reserve(eq("email_change"), eq("account:7"), any(), eq(60));
         verify(budget).reserve(eq("email_change"), eq("new@example.com"), any(), eq(60));
         verify(verifications).invalidateEmailChange(eq(7L), any());
         ArgumentCaptor<EmailVerification> saved = ArgumentCaptor.forClass(EmailVerification.class);
@@ -187,6 +188,22 @@ class EmailVerificationServiceTests {
         assertThat(failure.code()).isEqualTo("RATE_LIMITED");
         assertThat(failure.status()).isEqualTo(429);
         assertThat(failure.details()).isEqualTo(Map.of("retry_after_seconds", 15L));
+        verify(verifications, never()).invalidateEmailChange(anyLong(), any());
+        verify(verifications, never()).save(any());
+    }
+
+    @Test
+    void changingTheDestinationDoesNotBypassTheAccountBudget() {
+        Account account = account("old@example.com", 7L);
+        when(accounts.lockById(7L)).thenReturn(Optional.of(account));
+        when(budget.reserve(eq("email_change"), eq("account:7"), any(), anyInt())).thenReturn(20L);
+
+        BusinessError failure = catchThrowableOfType(
+                () -> service.request("email_change", "different@example.com", null, account),
+                BusinessError.class);
+
+        assertThat(failure.code()).isEqualTo("RATE_LIMITED");
+        verify(budget, never()).reserve(eq("email_change"), eq("different@example.com"), any(), anyInt());
         verify(verifications, never()).invalidateEmailChange(anyLong(), any());
         verify(verifications, never()).save(any());
     }

@@ -12,6 +12,7 @@ import io.github.iy88.project1.account.application.AccountAvatarService;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import io.github.iy88.project1.category.CategorySettings;
 import io.github.iy88.project1.category.application.CategoryDirectory;
+import io.github.iy88.project1.core.AuditStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.persistence.Product;
@@ -65,7 +66,8 @@ class ProductServiceEditHistoryTests {
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class), tradeHistory,
                 (context, sellerId, productId, editId, title, visible, occurredAt) -> { },
                 mock(CaseCommentAccess.class), mock(ProductCorrectionNotices.class),
-                mock(ProductDisplayRestrictions.class), environment, mock(JdbcClient.class), manager);
+                mock(ProductDisplayRestrictions.class), mock(org.springframework.beans.factory.ObjectProvider.class), environment, mock(JdbcClient.class), manager,
+                mock(AuditStore.class));
     }
 
     @Test

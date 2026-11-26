@@ -5,7 +5,11 @@ import io.github.iy88.project1.category.persistence.Category;
 import io.github.iy88.project1.category.persistence.CategoryName;
 import io.github.iy88.project1.category.persistence.CategoryNameRepository;
 import io.github.iy88.project1.category.persistence.CategoryRepository;
+import io.github.iy88.project1.core.AuditActions;
+import io.github.iy88.project1.core.AuditContext;
+import io.github.iy88.project1.core.AuditStore;
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.ResourceRef;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -27,15 +31,17 @@ public class CategoryService {
     private final CategorySettings settings;
     private final ObjectProvider<CategoryProductVisibility> productVisibility;
     private final TransactionTemplate transaction;
+    private final AuditStore auditRecords;
 
     public CategoryService(CategoryRepository categories, CategoryNameRepository names, CategorySettings settings,
                            ObjectProvider<CategoryProductVisibility> productVisibility,
-                           PlatformTransactionManager manager) {
+                           PlatformTransactionManager manager, AuditStore auditRecords) {
         this.categories = categories;
         this.names = names;
         this.settings = settings;
         this.productVisibility = productVisibility;
         this.transaction = new TransactionTemplate(manager);
+        this.auditRecords = auditRecords;
     }
 
     public List<CategoryView> listPublic() {
@@ -78,13 +84,34 @@ public class CategoryService {
                         .isPresent());
     }
 
-    public CategoryDetail create(long adminId, String rawName) {
+    public CategoryDetail create(long adminId, String rawName, AuditContext auditContext) {
+        return create(adminId, rawName, auditContext, true);
+    }
+
+    /**
+     * Category creation performed while approving a review decision. The enclosing review audit
+     * already records the decision, the reviewed content and the application resolution in the same
+     * shared transaction, so this path does not append a second business audit.
+     */
+    public CategoryDetail createWithinReview(long adminId, String rawName) {
+        return create(adminId, rawName, null, false);
+    }
+
+    private CategoryDetail create(long adminId, String rawName, AuditContext auditContext, boolean recordAudit) {
         String name = name(rawName);
         try {
             return transaction.execute(status -> {
                 Instant now = Instant.now();
                 Category category = categories.save(new Category(adminId, now));
-                names.save(new CategoryName(category.id(), name, "main", now));
+                CategoryName main = names.save(new CategoryName(category.id(), name, "main", now));
+                if (recordAudit) {
+                    Map<String, Object> facts = new LinkedHashMap<>();
+                    facts.put("main_name", main.name());
+                    facts.put("category_name_id", Long.toString(main.id()));
+                    facts.put("state", category.state());
+                    auditRecords.record(auditContext, AuditActions.CATEGORY_CREATED,
+                            new ResourceRef("category", category.id()), null, facts);
+                }
                 return detail(category);
             });
         } catch (DataIntegrityViolationException conflict) {
@@ -92,7 +119,7 @@ public class CategoryService {
         }
     }
 
-    public CategoryDetail rename(long categoryId, String rawName) {
+    public CategoryDetail rename(long categoryId, String rawName, AuditContext auditContext) {
         String name = name(rawName);
         try {
             return transaction.execute(status -> {
@@ -103,8 +130,16 @@ public class CategoryService {
                 if (main.name().equals(name)) {
                     return detail(category);
                 }
+                String previousName = main.name();
                 names.demoteMain(main.id());
-                names.save(new CategoryName(categoryId, name, "main", now));
+                CategoryName renamed = names.save(new CategoryName(categoryId, name, "main", now));
+                Map<String, Object> facts = new LinkedHashMap<>();
+                facts.put("previous_main_name", previousName);
+                facts.put("main_name", renamed.name());
+                facts.put("category_name_id", Long.toString(renamed.id()));
+                facts.put("state", category.state());
+                auditRecords.record(auditContext, AuditActions.CATEGORY_RENAMED,
+                        new ResourceRef("category", categoryId), null, facts);
                 return detail(category);
             });
         } catch (DataIntegrityViolationException conflict) {
@@ -112,12 +147,18 @@ public class CategoryService {
         }
     }
 
-    public AliasCreated addAlias(long categoryId, String rawName) {
+    public AliasCreated addAlias(long categoryId, String rawName, AuditContext auditContext) {
         String name = name(rawName);
         try {
             return transaction.execute(status -> {
                 Category category = lock(categoryId);
                 CategoryName alias = names.save(new CategoryName(category.id(), name, "alias", Instant.now()));
+                Map<String, Object> facts = new LinkedHashMap<>();
+                facts.put("category_name_id", Long.toString(alias.id()));
+                facts.put("name", alias.name());
+                facts.put("kind", alias.nameKind());
+                auditRecords.record(auditContext, AuditActions.CATEGORY_ALIAS_ADDED,
+                        new ResourceRef("category", categoryId), null, facts);
                 return new AliasCreated(Long.toString(alias.id()), alias.name());
             });
         } catch (DataIntegrityViolationException conflict) {
@@ -125,7 +166,7 @@ public class CategoryService {
         }
     }
 
-    public void removeAlias(long categoryId, long categoryNameId) {
+    public void removeAlias(long categoryId, long categoryNameId, AuditContext auditContext) {
         transaction.executeWithoutResult(status -> {
             lock(categoryId);
             CategoryName name = names.lockById(categoryNameId)
@@ -141,19 +182,33 @@ public class CategoryService {
             }
             name.deactivate(Instant.now());
             names.save(name);
+            Map<String, Object> facts = new LinkedHashMap<>();
+            facts.put("category_name_id", Long.toString(name.id()));
+            facts.put("name", name.name());
+            facts.put("kind", name.nameKind());
+            auditRecords.record(auditContext, AuditActions.CATEGORY_ALIAS_REMOVED,
+                    new ResourceRef("category", categoryId), null, facts);
         });
     }
 
-    public CategoryDetail disable(long categoryId) {
+    public CategoryDetail disable(long categoryId, AuditContext auditContext) {
         return transaction.execute(status -> {
             Category category = lock(categoryId);
+            String previousState = category.state();
             category.disable(Instant.now());
             categories.save(category);
+            if (!previousState.equals(category.state())) {
+                Map<String, Object> facts = new LinkedHashMap<>();
+                facts.put("previous_state", previousState);
+                facts.put("current_state", category.state());
+                auditRecords.record(auditContext, AuditActions.CATEGORY_DISABLED,
+                        new ResourceRef("category", categoryId), null, facts);
+            }
             return detail(category);
         });
     }
 
-    public void delete(long categoryId) {
+    public void delete(long categoryId, AuditContext auditContext) {
         transaction.executeWithoutResult(status -> {
             Category category = lockExisting(categoryId);
             if (category.deleted()) {
@@ -163,9 +218,15 @@ public class CategoryService {
                 throw new BusinessError("CATEGORY_NOT_DELETABLE", 409, "分类已关联商品，只能停用");
             }
             Instant now = Instant.now();
+            String previousState = category.state();
             category.delete(now);
             categories.save(category);
             names.deactivateAll(categoryId, now);
+            Map<String, Object> facts = new LinkedHashMap<>();
+            facts.put("previous_state", previousState);
+            facts.put("current_state", category.state());
+            auditRecords.record(auditContext, AuditActions.CATEGORY_DELETED,
+                    new ResourceRef("category", categoryId), null, facts);
         });
     }
 
