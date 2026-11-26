@@ -7980,6 +7980,19 @@
               }
             }
           },
+          "decision_basis_actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["action_id", "action_kind", "occurred_at", "note"],
+              "properties": {
+                "action_id": { "type": "string" },
+                "action_kind": { "type": "string", "enum": ["inquire", "statement", "supplement"] },
+                "occurred_at": { "type": "string", "format": "date-time" },
+                "note": { "type": ["string", "null"] }
+              }
+            }
+          },
           "reported_message": {
             "description": "Exact reported message identity without body or sender, only for the assigned manager.",
             "$ref": "#/components/schemas/CaseEvidenceReferenceRequest"
@@ -8121,6 +8134,7 @@
                   "type": "string",
                   "enum": ["submitter_attachment", "platform_record"]
                 },
+                "decision_basis": { "type": "boolean" },
                 "file_id": {
                   "type": ["string", "null"]
                 }
@@ -8440,7 +8454,7 @@
       },
       "CaseDecisionRequest": {
         "type": "object",
-        "required": ["decision_kind", "reason", "basis_refs"],
+        "required": ["decision_kind", "reason"],
         "additionalProperties": false,
         "properties": {
           "decision_kind": {
@@ -8454,9 +8468,9 @@
           "basis_refs": {
             "type": "array",
             "items": {
-              "type": "string"
-            },
-            "minItems": 1
+              "type": "string",
+              "pattern": "^(action|evidence):[1-9][0-9]*$"
+            }
           },
           "enforcements": {
             "type": "array",

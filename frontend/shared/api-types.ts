@@ -1678,6 +1678,14 @@ export interface components {
           description: string;
         };
       };
+      decision_basis_actions?: {
+        action_id: string;
+        /** @enum {string} */
+        action_kind: "inquire" | "statement" | "supplement";
+        /** Format: date-time */
+        occurred_at: string;
+        note: string | null;
+      }[];
       /** @description Exact reported message identity without body or sender, only for the assigned manager. */
       reported_message?: components["schemas"]["CaseEvidenceReferenceRequest"];
       /** @description Exact reported comment or evaluation projected only for the assigned manager. */
@@ -1722,6 +1730,7 @@ export interface components {
         evidence_id: string;
         /** @enum {string} */
         evidence_kind?: "submitter_attachment" | "platform_record";
+        decision_basis?: boolean;
         file_id?: string | null;
       }[];
       actions?: components["schemas"]["CaseActionView"][];
@@ -1835,7 +1844,7 @@ export interface components {
       /** @enum {string} */
       decision_kind: "no_action" | "not_actionable" | "violation";
       reason: string;
-      basis_refs: string[];
+      basis_refs?: string[];
       enforcements?: {
         /** @enum {string} */
         action:

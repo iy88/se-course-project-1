@@ -217,7 +217,7 @@ class CaseApplicationTests {
                 });
 
         var result = harness.application.decide(context(MANAGER), "decide-content", CASE_ID,
-                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:41"),
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of(),
                         List.of(new CaseCommands.Enforcement("remove_content", "comment", 500L, null))));
 
         assertThat(result.status()).isEqualTo(201);
@@ -650,7 +650,7 @@ class CaseApplicationTests {
         when(harness.store.appealEligibility(anyLong(), anyLong())).thenReturn(Optional.empty());
 
         var result = harness.application.decide(context(MANAGER), "restore-1", CASE_ID,
-                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of(),
                         List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID,
                                 "in_progress"))));
 
@@ -678,7 +678,7 @@ class CaseApplicationTests {
         var otherManager = harness(claimedTrade(OTHER_MANAGER), enforcement);
 
         assertThatThrownBy(() -> otherManager.application.decide(context(MANAGER), "restore-2", CASE_ID,
-                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of(),
                         List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID,
                                 "in_progress")))))
                 .isInstanceOfSatisfying(BusinessError.class,
@@ -686,7 +686,7 @@ class CaseApplicationTests {
 
         var harness = harness(claimedTrade(), enforcement);
         assertThatThrownBy(() -> harness.application.decide(context(MANAGER), "restore-3", CASE_ID,
-                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of(),
                         List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID + 1,
                                 "in_progress")))))
                 .isInstanceOfSatisfying(BusinessError.class,

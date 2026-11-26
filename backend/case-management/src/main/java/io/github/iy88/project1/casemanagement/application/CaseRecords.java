@@ -42,11 +42,21 @@ public final class CaseRecords {
     public record Action(long actionId, long caseId, String actionKind, String actorKind, Long actorAccountId,
                          Instant occurredAt, Long messageId, Long relatedAccountId, Long inquiryActionId,
                          Long appealActionId, String resolution, String note, String basisRef) {
+        public boolean decisionBasis() {
+            return switch (actionKind) {
+                case CaseVocabulary.ACTION_INQUIRE, CaseVocabulary.ACTION_STATEMENT -> messageId != null;
+                case CaseVocabulary.ACTION_SUPPLEMENT -> note != null && !note.isBlank();
+                default -> false;
+            };
+        }
     }
 
     public record Evidence(long evidenceId, long caseId, String evidenceKind, Long fileId, Long referenceId,
                            String sourceRefType, Long sourceRefId, String requiredScope, Long submittedBy,
                            Instant submittedAt) {
+        public boolean decisionBasis() {
+            return fileId != null && CaseVocabulary.EVIDENCE_SUBMITTER_ATTACHMENT.equals(evidenceKind);
+        }
     }
 
     /** Minimal message facts returned for one manager-authorised platform-record reference. */

@@ -177,9 +177,25 @@ class CaseLifecycleIT {
                         null, null, null));
         assertThat(statement.status()).isEqualTo(201);
 
+        var supplement = cases.supplement(context(reporter), "supplement-1", caseId,
+                new CaseCommands.Supplement("补充商品情况", List.of()));
+        assertThat(supplement.status()).isEqualTo(200);
+        var choices = queries.detail(context(manager), caseId).path("decision_basis_actions");
+        assertThat(choices.size()).isEqualTo(3);
+        assertThat(choices.get(2).path("note").asString()).isEqualTo("补充商品情况");
+        assertThat(queries.detail(context(reporter), caseId).has("decision_basis_actions")).isFalse();
+        for (String invalidBasis : List.of("case:" + caseId, "action:0", "evidence:0")) {
+            assertThatThrownBy(() -> cases.decide(context(manager), "invalid-basis-" + invalidBasis, caseId,
+                    new CaseCommands.Decision(CaseVocabulary.NO_ACTION, "核实", List.of(invalidBasis), List.of())))
+                    .isInstanceOfSatisfying(BusinessError.class,
+                            failure -> assertThat(failure.code()).isEqualTo("BASIS_REQUIRED"));
+        }
+
         // Decision executes the subject fake, records the enforcement link and appeal eligibility.
         var decision = cases.decide(context(manager), "decision-1", caseId, new CaseCommands.Decision(
-                CaseVocabulary.VIOLATION, "认定违规", List.of("case:" + caseId),
+                CaseVocabulary.VIOLATION, "认定违规", List.of("action:" + inquiryActionId,
+                        "action:" + choices.get(1).path("action_id").asString(),
+                        "action:" + choices.get(2).path("action_id").asString()),
                 List.of(new CaseCommands.Enforcement("restrict_account", "account", related, null))));
         assertThat(decision.status()).isEqualTo(201);
         assertThat(db.sql("select count(*) from case_enforcement where case_id = ?").param(caseId)
@@ -256,7 +272,7 @@ class CaseLifecycleIT {
         long caseId = Long.parseLong(submitted.data().get("case_id").asString());
         cases.claim(context(MANAGER_1.get()), "claim-lift-" + RUN_ID, caseId);
         var decision = cases.decide(context(MANAGER_1.get()), "decision-lift-" + RUN_ID, caseId,
-                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:" + caseId),
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of(),
                         List.of(new CaseCommands.Enforcement("restrict_account", "account", related2, null))));
         String enforcementId = decision.data().get("enforcements").get(0).get("enforcement_id").asString();
 
@@ -284,7 +300,7 @@ class CaseLifecycleIT {
         long caseId = Long.parseLong(submitted.data().path("case_id").asString());
         cases.claim(context(MANAGER_1.get()), "claim-appeal-selection-" + RUN_ID, caseId);
         var decision = cases.decide(context(MANAGER_1.get()), "decision-appeal-selection-" + RUN_ID, caseId,
-                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:" + caseId),
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of(),
                         List.of(new CaseCommands.Enforcement("restrict_account", "account", related, null))));
         String enforcementId = decision.data().path("enforcements").get(0).path("enforcement_id").asString();
         long threadId = storeThread(caseId, related);
@@ -575,7 +591,7 @@ class CaseLifecycleIT {
                         error -> assertThat(error.code()).isEqualTo("EVIDENCE_OUT_OF_SCOPE"));
 
         cases.decide(context(manager), "evidence-decide-" + RUN_ID, caseId, new CaseCommands.Decision(
-                CaseVocabulary.NO_ACTION, "不予处理", List.of("case:" + caseId), List.of()));
+                CaseVocabulary.NO_ACTION, "不予处理", List.of(), List.of()));
         cases.close(context(manager), "evidence-close-" + RUN_ID, caseId);
         assertThat(queries.referencedEvidence(context(manager), caseId, evidenceId)
                 .at("/message/body").asString()).isEqualTo("reported private body");
@@ -741,7 +757,7 @@ class CaseLifecycleIT {
             var managerContext = context(manager);
             cases.claim(managerContext, "workbench-claim-" + label, caseId);
             cases.decide(managerContext, "workbench-decide-" + label, caseId, new CaseCommands.Decision(
-                    CaseVocabulary.NO_ACTION, "workbench-private-" + RUN_ID, List.of("case:" + caseId), List.of()));
+                    CaseVocabulary.NO_ACTION, "workbench-private-" + RUN_ID, List.of(), List.of()));
             if (close) {
                 cases.close(managerContext, "workbench-close-" + label, caseId);
             }

@@ -56,7 +56,7 @@ const peer = ref("");
 const inquiry = ref("");
 const decisionKind = ref<CaseDecision>("no_action");
 const decisionReason = ref("");
-const basis = ref("");
+const basis = ref<string[]>([]);
 const publicSummary = ref("");
 const publicReason = ref("");
 const confirmClose = ref(false);
@@ -401,7 +401,7 @@ function submitDecision(): void {
   void submit("decisions", {
     decision_kind: decisionKind.value,
     reason: decisionReason.value.trim(),
-    basis_refs: basis.value.split(/[\s,，]+/).filter(Boolean),
+    basis_refs: basis.value,
     enforcements,
   });
 }
@@ -706,10 +706,39 @@ onUnmounted(() => {
           ><span>决定理由</span>
           <textarea v-model="decisionReason" name="reason" class="textarea" required />
         </label>
-        <label class="field"
-          ><span>依据引用（多个用空格分隔，例如 evidence:12）</span>
-          <input v-model="basis" name="basis_refs" class="input" required />
-        </label>
+        <fieldset class="stack">
+          <legend>补充依据（可选）</legend>
+          <p
+            v-if="
+              !detail.decision_basis_actions?.length &&
+              !detail.evidence?.some((item) => item.decision_basis)
+            "
+            class="muted"
+          >
+            暂无可引用的问询、回复或用户材料。
+          </p>
+          <label v-for="item in detail.decision_basis_actions" :key="item.action_id">
+            <input v-model="basis" type="checkbox" :value="`action:${item.action_id}`" />
+            {{ messages[item.action_kind] }} · {{ formatDateTime(item.occurred_at) }}
+            <span v-if="item.note" class="pre-line"> · {{ item.note }}</span>
+          </label>
+          <div
+            v-for="item in detail.evidence?.filter((entry) => entry.decision_basis)"
+            :key="item.evidence_id"
+            class="inline"
+          >
+            <label>
+              <input v-model="basis" type="checkbox" :value="`evidence:${item.evidence_id}`" />
+              用户附件 #{{ item.evidence_id }}
+            </label>
+            <a
+              :href="caseEvidenceFileHref(caseId, item.evidence_id)"
+              target="_blank"
+              rel="noopener noreferrer"
+              >打开附件</a
+            >
+          </div>
+        </fieldset>
         <template v-if="decisionKind === 'violation'">
           <fieldset v-for="instruction in instructions" :key="instruction.id" class="stack">
             <legend>处置项</legend>

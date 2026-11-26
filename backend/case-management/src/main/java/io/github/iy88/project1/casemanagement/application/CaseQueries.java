@@ -203,6 +203,19 @@ public class CaseQueries {
                 target.put("removed", snapshot.removed());
             });
         }
+        if (managerView) {
+            var choices = body.putArray("decision_basis_actions");
+            for (var action : actions) {
+                if (!action.decisionBasis()) {
+                    continue;
+                }
+                var item = choices.addObject();
+                item.put("action_id", Long.toString(action.actionId()));
+                item.put("action_kind", action.actionKind());
+                item.put("occurred_at", text(action.occurredAt()));
+                item.put("note", action.note());
+            }
+        }
         var available = body.putArray("available_actions");
         var availableList = availableActions(facts, reporterView, relatedView, managerView, actor, inquiries, now);
         availableList.forEach(available::add);
@@ -252,6 +265,7 @@ public class CaseQueries {
                     var entry = evidence.addObject();
                     entry.put("evidence_id", Long.toString(item.evidenceId()));
                     entry.put("evidence_kind", item.evidenceKind());
+                    entry.put("decision_basis", item.decisionBasis());
                     entry.put("file_id", item.fileId() == null ? null : Long.toString(item.fileId()));
                 }
             }

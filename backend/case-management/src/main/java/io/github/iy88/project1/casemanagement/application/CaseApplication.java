@@ -24,7 +24,6 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
@@ -68,7 +67,6 @@ public class CaseApplication {
     private static final Set<String> REVERSIBLE_ACTIONS = Set.of("freeze_trade", "restrict_account",
             "withdraw_public_access");
     private static final Set<String> ADJUST_TRADE_TARGETS = Set.of("completed", "terminated", "in_progress");
-    private static final Pattern EVIDENCE_REF = Pattern.compile("(?:evidence:)?(\\d+)");
 
     private final WriteExecutor writes;
     private final CaseLifecycleStore store;
@@ -880,15 +878,14 @@ public class CaseApplication {
                 throw new BusinessError("INPUT_INVALID", 422, "decision_kind 取值无效");
             }
             String reason = requiredText(decision.reason(), settings.getMaxReasonLength(), "决定理由");
-            if (decision.basisRefs().isEmpty()) {
-                throw new BusinessError("BASIS_REQUIRED", 422, "决定须给出依据");
-            }
-            var evidenceIds = store.evidence(facts.caseId()).stream()
-                    .map(CaseRecords.Evidence::evidenceId).collect(Collectors.toSet());
-            for (String basis : decision.basisRefs()) {
-                var matcher = EVIDENCE_REF.matcher(basis == null ? "" : basis.trim());
-                if (matcher.matches() && !evidenceIds.contains(Long.parseLong(matcher.group(1)))) {
-                    throw new BusinessError("BASIS_REQUIRED", 422, "依据不属于本事项");
+            if (!decision.basisRefs().isEmpty()) {
+                var allowed = new java.util.HashSet<String>();
+                store.actions(facts.caseId()).stream().filter(CaseRecords.Action::decisionBasis)
+                        .forEach(action -> allowed.add("action:" + action.actionId()));
+                store.evidence(facts.caseId()).stream().filter(CaseRecords.Evidence::decisionBasis)
+                        .forEach(evidence -> allowed.add("evidence:" + evidence.evidenceId()));
+                if (!allowed.containsAll(decision.basisRefs())) {
+                    throw new BusinessError("BASIS_REQUIRED", 422, "请选择本事项的问询、回复或用户补充材料");
                 }
             }
             Instant now = now();

@@ -103,10 +103,17 @@ export interface ManagementCaseDetail {
   threads?: ManagementCaseThread[];
   pending_appeals?: PendingCaseAppeal[];
   reported_message?: ReportedMessageReference;
+  decision_basis_actions?: {
+    action_id: string;
+    action_kind: string;
+    occurred_at: string;
+    note: string | null;
+  }[];
   evidence?: {
     evidence_id: string;
     evidence_kind?: "submitter_attachment" | "platform_record";
     file_id: string | null;
+    decision_basis?: boolean;
   }[];
   actions: { action_kind: string; occurred_at: string; actor_kind: string }[];
   enforcements: {
