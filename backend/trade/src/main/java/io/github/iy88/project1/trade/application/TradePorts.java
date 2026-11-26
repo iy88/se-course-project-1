@@ -86,6 +86,9 @@ public final class TradePorts {
         /** Locks the conversation row and records that lock in the current write transaction. */
         void lockConversation(WriteTransaction transaction, long conversationId);
 
+        /** Locks only the row for a caller that already declared and recorded the key. */
+        void lockConversationRow(WriteTransaction transaction, long conversationId);
+
         void append(WriteTransaction transaction, long conversationId, UUID businessEventId, String eventType,
                     String body, ResourceRef sourceRef);
 
@@ -155,8 +158,8 @@ public final class TradePorts {
      * Case-specific trade subject capability. The caller prepares a plan, locks the returned
      * product (terminal adjustment only), trade and trade-conversation rows once in
      * {@link LockPlan.Key} order together with its case lock. Action methods read current facts
-     * under those locks and leave notifications, audit and conversation messages to the case
-     * orchestrator.
+     * under those locks and leave notifications, audit and conversation messages to
+     * {@link #publishLocked}.
      */
     public interface CaseEnforcement {
         CaseEnforcementPlan prepare(long managerId, long tradeId, long caseId, boolean product);
@@ -166,6 +169,25 @@ public final class TradePorts {
         void lockConversation(WriteTransaction transaction, long conversationId);
 
         void lockCaseProduct(WriteTransaction transaction, long productId);
+
+        /**
+         * Locks only the trade row. The caller has already declared the TRADE key in its plan and
+         * records the acquisition itself, so this method must not call
+         * {@link WriteTransaction#lock}.
+         */
+        void lockTradeRow(WriteTransaction transaction, long tradeId);
+
+        /**
+         * Locks only the trade-conversation row. The caller has already declared the
+         * TRADE_CONVERSATION key in its plan and records the acquisition itself.
+         */
+        void lockConversationRow(WriteTransaction transaction, long conversationId);
+
+        /**
+         * Locks only the product row. The caller has already declared the PRODUCT key in its plan
+         * and records the acquisition itself.
+         */
+        void lockCaseProductRow(WriteTransaction transaction, long productId);
 
         CaseEnforcementOutcome freezeLocked(WriteTransaction transaction, long caseId, long tradeId,
                                             String basisRef, String reason);
@@ -180,6 +202,23 @@ public final class TradePorts {
 
         CaseEnforcementOutcome restoreLocked(WriteTransaction transaction, long caseId, long tradeId,
                                              String basisRef, String reason);
+
+        /**
+         * Publishes the trade-owned effects of one already locked case enforcement: the trade
+         * conversation system event, the two-party notification intent and the trade audit row.
+         * It reuses the same effects as the normal governance commands and therefore must be
+         * called at most once per action outcome; a replayed freeze publishes nothing.
+         */
+        void publishLocked(WriteTransaction transaction, long caseId, long tradeId, String action,
+                           CaseEnforcementOutcome outcome, String reason);
+
+        /**
+         * Resolves the unique admin-case freeze transition for a legacy case enforcement that
+         * stored the trade id in {@code result_id}. Matching is by explicit case source, trade,
+         * freeze source and the freeze action; zero or multiple matches mean the original freeze
+         * is not identifiable and the caller must fail closed instead of choosing a recent row.
+         */
+        long legacyFreezeTransition(long caseId, long tradeId);
     }
 
     /** Same-transaction governance capabilities; the case module keeps its own idempotency entry. */

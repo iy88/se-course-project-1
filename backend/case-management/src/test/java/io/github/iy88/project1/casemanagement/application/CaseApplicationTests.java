@@ -317,8 +317,9 @@ class CaseApplicationTests {
     }
 
     private static CaseRecords.Enforcement recordedEnforcement() {
-        return new CaseRecords.Enforcement("enf-1", CASE_ID, "freeze_trade", "trade", 900L, "case:41", MANAGER,
-                NOW, "trade", 900L, "applied", "frozen", "active", List.of(RELATED), null, null, NOW);
+        return new CaseRecords.Enforcement("enf-1", CASE_ID, "restrict_account", "account", RELATED, "case:41",
+                MANAGER, NOW, "account_restriction", RELATED, "applied", "active", "restricted",
+                List.of(RELATED), null, null, NOW);
     }
 
     // ------------------------------------------------------------------ harness
@@ -352,6 +353,7 @@ class CaseApplicationTests {
         when(store.find(anyLong())).thenAnswer(invocation -> Optional.of(facts.get()));
         when(store.require(anyLong())).thenAnswer(invocation -> facts.get());
         when(store.lock(any(), anyLong())).thenAnswer(invocation -> facts.get());
+        when(store.requireLocked(any(), anyLong())).thenAnswer(invocation -> facts.get());
         when(store.findOpenReport(anyLong(), any())).thenReturn(Optional.empty());
         when(store.findClosedReport(anyLong(), any())).thenReturn(Optional.empty());
         when(store.openReportIfAbsent(any(), anyLong(), anyString(), any())).thenReturn(Optional.of(CASE_ID));

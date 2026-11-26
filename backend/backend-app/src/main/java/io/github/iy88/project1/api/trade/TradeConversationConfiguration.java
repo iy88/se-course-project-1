@@ -69,6 +69,11 @@ class TradeConversationConfiguration {
         }
 
         @Override
+        public void lockConversationRow(WriteTransaction transaction, long conversationId) {
+            conversations.lockTradeRow(conversationId);
+        }
+
+        @Override
         public void append(WriteTransaction transaction, long conversationId, UUID businessEventId, String eventType,
                            String body, ResourceRef sourceRef) {
             var conversation = conversations.trade(conversationId);

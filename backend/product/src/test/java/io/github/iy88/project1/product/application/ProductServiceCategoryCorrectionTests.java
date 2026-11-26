@@ -104,7 +104,8 @@ class ProductServiceCategoryCorrectionTests {
                 accounts, mock(AccountAvatarService.class), directory,
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class),
-                mock(ProductTradeHistory.class), mock(ProductEditNotices.class), cases, notices, environment,
+                mock(ProductTradeHistory.class), mock(ProductEditNotices.class), cases, notices,
+                mock(ProductDisplayRestrictions.class), environment,
                 mock(JdbcClient.class), manager);
     }
 

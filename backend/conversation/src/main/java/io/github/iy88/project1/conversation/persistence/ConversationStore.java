@@ -176,8 +176,13 @@ public class ConversationStore {
     public TradeConversation lockTrade(WriteTransaction transaction, long conversationId) {
         var holder = new AtomicReference<TradeConversation>();
         transaction.lock(key(LockPlan.Domain.TRADE_CONVERSATION, conversationId),
-                () -> holder.set(trades.lockById(conversationId).orElseThrow(ConversationStore::participantRequired)));
+                () -> holder.set(lockTradeRow(conversationId)));
         return holder.get();
+    }
+
+    /** Locks the trade-conversation row without declaring a plan key; the caller records it. */
+    public TradeConversation lockTradeRow(long conversationId) {
+        return trades.lockById(conversationId).orElseThrow(ConversationStore::participantRequired);
     }
 
     public TradeConversation lockTradeByTradeId(WriteTransaction transaction, long tradeId) {

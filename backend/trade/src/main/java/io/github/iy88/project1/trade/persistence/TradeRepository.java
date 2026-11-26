@@ -44,13 +44,18 @@ public class TradeRepository {
 
     public Trade lockTrade(WriteTransaction transaction, long tradeId) {
         var result = new AtomicReference<Trade>();
-        transaction.lock(new LockPlan.Key(LockPlan.Domain.TRADE, List.of(tradeId)), () -> result.set(
-                jdbc.sql("SELECT * FROM trade WHERE id = :id FOR UPDATE").param("id", tradeId)
-                        .query((row, index) -> trade(row)).optional().orElse(null)));
+        transaction.lock(new LockPlan.Key(LockPlan.Domain.TRADE, List.of(tradeId)),
+                () -> result.set(lockTradeRow(tradeId)));
         if (result.get() == null) {
             throw Trade.notVisible();
         }
         return result.get();
+    }
+
+    /** Locks the trade row without declaring a plan key; the caller records the acquisition. */
+    public Trade lockTradeRow(long tradeId) {
+        return jdbc.sql("SELECT * FROM trade WHERE id = :id FOR UPDATE").param("id", tradeId)
+                .query((row, index) -> trade(row)).optional().orElseThrow(Trade::notVisible);
     }
 
     public long insertTrade(long productId, long buyerId, long sellerId, String note, Instant now) {
@@ -436,6 +441,27 @@ public class TradeRepository {
     public Optional<TradeModels.History> freezeTransition(long freezeId) {
         return histories.findByFreezeIdAndAction(freezeId, "trade.freeze")
                 .map(TradeHistoryRow::toHistory);
+    }
+
+    /**
+     * Legacy case enforcement rows stored the trade id instead of the transition id. Return every
+     * admin-case freeze transition explicitly linked to this case and trade so callers can require
+     * exactly one original and fail closed instead of choosing the newest row.
+     */
+    public List<Long> adminCaseFreezeTransitions(long caseId, long tradeId) {
+        return jdbc.sql("""
+                        select h.id
+                          from trade_state_history h
+                          join trade_freeze f on f.id = h.freeze_id
+                         where h.trade_id = :tradeId
+                           and h.action = 'trade.freeze'
+                           and h.case_id = :caseId
+                           and f.source = 'admin_case'
+                           and f.source_ref = :caseId
+                         order by h.id
+                        """)
+                .param("tradeId", tradeId).param("caseId", caseId)
+                .query(Long.class).list();
     }
 
     public List<TradeModels.History> history(long tradeId, int limit) {

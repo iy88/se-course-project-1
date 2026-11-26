@@ -79,9 +79,18 @@ public final class CaseRecords {
     /** Result of one subject enforcement call, before it is persisted. */
     public record EnforcementOutcome(String enforcementId, String action, String targetType, long targetId,
                                      String resultType, Long resultId, String resultStatus, String previousState,
-                                     String currentState, List<Long> affectedAccountIds, Instant occurredAt) {
+                                     String currentState, List<Long> affectedAccountIds, Instant occurredAt,
+                                     List<String> remainingRestrictions) {
         public EnforcementOutcome {
             affectedAccountIds = List.copyOf(affectedAccountIds);
+            remainingRestrictions = List.copyOf(remainingRestrictions);
+        }
+
+        public EnforcementOutcome(String enforcementId, String action, String targetType, long targetId,
+                                  String resultType, Long resultId, String resultStatus, String previousState,
+                                  String currentState, List<Long> affectedAccountIds, Instant occurredAt) {
+            this(enforcementId, action, targetType, targetId, resultType, resultId, resultStatus,
+                    previousState, currentState, affectedAccountIds, occurredAt, List.of());
         }
     }
 

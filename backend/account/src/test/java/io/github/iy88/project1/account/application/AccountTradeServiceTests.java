@@ -21,14 +21,17 @@ class AccountTradeServiceTests {
     private final AccountRepository accounts = mock(AccountRepository.class);
     private final AccountAvatarService avatars = mock(AccountAvatarService.class);
     private final SessionService sessions = mock(SessionService.class);
-    private final AccountTradeService service = new AccountTradeService(accounts, avatars, sessions);
+    private final AccountRestrictions restrictions = mock(AccountRestrictions.class);
+    private final AccountTradeService service =
+            new AccountTradeService(accounts, avatars, sessions, restrictions);
 
     @Test
-    void qualificationReportsOnlyPersistedAccounts() {
+    void qualificationReportsOnlyPersistedAccountsAndTheirRestrictionFact() {
         when(accounts.findById(7)).thenReturn(Optional.of(mock(Account.class)));
         when(accounts.findById(8)).thenReturn(Optional.empty());
+        when(restrictions.isRestricted(7)).thenReturn(true);
 
-        assertThat(service.qualification(7)).isEqualTo(new AccountTradeService.Qualification(true, false));
+        assertThat(service.qualification(7)).isEqualTo(new AccountTradeService.Qualification(true, true));
         assertThat(service.qualification(8)).isEqualTo(new AccountTradeService.Qualification(false, false));
     }
 

@@ -27,6 +27,9 @@ public interface ProductTradeStore {
     /** Locks the product row in the caller's transaction and returns its state. */
     Optional<TradeProduct> lock(long productId);
 
+    /** Read-only display fact for the next trade adaptation; it does not affect occupancy. */
+    boolean displayRestricted(long productId);
+
     /** Marks the product as occupied and in trade. Fails with {@code PRODUCT_NOT_AVAILABLE} on a race. */
     void acquire(long productId, long tradeId, Instant now);
 

@@ -117,8 +117,21 @@ public class CaseQueries {
         if (!reporter && !related && !manager) {
             throw notVisible();
         }
+        boolean reporterView = reporter;
+        boolean relatedView = !reporter && related;
+        boolean managerView = !reporter && !related && manager;
         var actions = store.actions(caseId);
-        var inquiries = pendingInquiries(caseId);
+        var pending = pendingInquiries(caseId);
+        List<CaseRecords.Action> inquiries;
+        if (facts.archived() || reporterView) {
+            inquiries = List.of();
+        } else if (relatedView) {
+            inquiries = pending.stream()
+                    .filter(inquiry -> inquiry.relatedAccountId() != null && inquiry.relatedAccountId() == actor)
+                    .toList();
+        } else {
+            inquiries = pending;
+        }
         var enforcements = store.enforcements(caseId);
         Instant now = clock.instant();
         var body = json.createObjectNode();
@@ -128,24 +141,21 @@ public class CaseQueries {
         body.put("decision_kind", facts.decisionKind());
         body.put("archived_at", text(facts.archivedAt()));
         body.put("public_result_at", text(facts.publicResultAt()));
-        body.put("viewpoint", reporter ? CaseVocabulary.VIEWPOINT_REPORTER
-                : related ? CaseVocabulary.VIEWPOINT_RELATED : CaseVocabulary.VIEWPOINT_MANAGER);
+        body.put("viewpoint", reporterView ? CaseVocabulary.VIEWPOINT_REPORTER
+                : relatedView ? CaseVocabulary.VIEWPOINT_RELATED : CaseVocabulary.VIEWPOINT_MANAGER);
         body.put("reason_text", reasonText(facts, reporter, related, manager));
         body.put("reported_reason", reporter || manager ? facts.reportedReason() : null);
         var available = body.putArray("available_actions");
-        var availableList = availableActions(facts, reporter, related, manager, actor, inquiries, now);
+        var availableList = availableActions(facts, reporterView, relatedView, managerView, actor, inquiries, now);
         availableList.forEach(available::add);
-        var pending = body.putArray("pending_inquiries");
-        if (related || manager) {
+        if (relatedView || managerView) {
+            var pendingItems = body.putArray("pending_inquiries");
             for (var inquiry : inquiries) {
-                if (related && inquiry.relatedAccountId() == null) {
-                    continue;
-                }
-                var item = pending.addObject();
+                var item = pendingItems.addObject();
                 item.put("inquiry_action_id", Long.toString(inquiry.actionId()));
                 item.put("asked_at", text(inquiry.occurredAt()));
                 item.put("scope_text", inquiry.note());
-                if (manager) {
+                if (managerView) {
                     item.put("related_account_id", inquiry.relatedAccountId() == null ? null
                             : Long.toString(inquiry.relatedAccountId()));
                 }
@@ -280,13 +290,14 @@ public class CaseQueries {
                 .toList();
     }
 
-    private Set<String> availableActions(CaseRecords.Facts facts, boolean reporter, boolean related, boolean manager,
-                                         long actor, List<CaseRecords.Action> inquiries, Instant now) {
+    private Set<String> availableActions(CaseRecords.Facts facts, boolean reporterView, boolean relatedView,
+                                         boolean managerView, long actor, List<CaseRecords.Action> inquiries,
+                                         Instant now) {
         var actions = new LinkedHashSet<String>();
-        if (reporter && !facts.archived()) {
+        if (reporterView && !facts.archived()) {
             actions.add(CaseVocabulary.SUPPLEMENT_EVIDENCE);
         }
-        if (related && !facts.archived()) {
+        if (relatedView && !facts.archived()) {
             if (inquiries.stream().anyMatch(inquiry -> inquiry.relatedAccountId() != null
                     && inquiry.relatedAccountId() == actor)) {
                 actions.add(CaseVocabulary.RESPOND_INQUIRY);
@@ -298,7 +309,7 @@ public class CaseQueries {
                 actions.add(CaseVocabulary.SUBMIT_APPEAL);
             }
         }
-        if (manager) {
+        if (managerView) {
             if (!facts.archived() && facts.claimedBy(actor)) {
                 actions.add(CaseVocabulary.INQUIRE);
             }

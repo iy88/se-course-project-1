@@ -10,9 +10,11 @@ import org.springframework.stereotype.Service;
 @Profile("infrastructure")
 public class AccountManagementReadModel {
     private final JdbcClient jdbc;
+    private final AccountRestrictions restrictions;
 
-    public AccountManagementReadModel(JdbcClient jdbc) {
+    public AccountManagementReadModel(JdbcClient jdbc, AccountRestrictions restrictions) {
         this.jdbc = jdbc;
+        this.restrictions = restrictions;
     }
 
     public Counts counts(long managerId, OffsetDateTime asOf) {
@@ -22,15 +24,7 @@ public class AccountManagementReadModel {
             throw new BusinessError("MANAGEMENT_NOT_ALLOWED", 403, "无管理权限");
         }
         long total = jdbc.sql("select count(*) from account").query(Long.class).single();
-        // The S3 schema has no ban facts. Once the account restriction migration adds these facts,
-        // multiple simultaneous sources still count as one banned account.
-        boolean hasBanFacts = jdbc.sql("select to_regclass('public.account_ban') is not null")
-                .query(Boolean.class).single();
-        long banned = hasBanFacts ? jdbc.sql("""
-                select count(distinct account_id) from public.account_ban
-                where applied_at <= :as_of and (released_at is null or released_at > :as_of)
-                """).param("as_of", asOf).query(Long.class).single() : 0;
-        return new Counts(total, banned);
+        return new Counts(total, restrictions.countRestricted(asOf));
     }
 
     public record Counts(long total, long banned) {}

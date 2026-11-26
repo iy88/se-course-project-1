@@ -44,6 +44,7 @@ public class ProductInteractions {
     private final CaseCommentAccess cases;
     private final CommentAccountAccess accounts;
     private final ProductSettings settings;
+    private final ProductDisplayRestrictions displayRestrictions;
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final TransactionTemplate transaction;
@@ -52,22 +53,24 @@ public class ProductInteractions {
     public ProductInteractions(ProductRepository products, ProductService productDetails,
                                ProductInteractionStore store, CaseCommentAccess cases,
                                CommentAccountAccess accounts, ProductSettings settings,
+                               ProductDisplayRestrictions displayRestrictions,
                                ApplicationEventPublisher events, PlatformTransactionManager transactionManager,
                                ObjectProvider<Clock> clocks) {
-        this(products, productDetails, store, cases, accounts, settings, events, transactionManager,
-                clocks.getIfAvailable(Clock::systemUTC));
+        this(products, productDetails, store, cases, accounts, settings, displayRestrictions, events,
+                transactionManager, clocks.getIfAvailable(Clock::systemUTC));
     }
 
     ProductInteractions(ProductRepository products, ProductService productDetails,
                         ProductInteractionStore store, CaseCommentAccess cases, CommentAccountAccess accounts,
-                        ProductSettings settings, ApplicationEventPublisher events,
-                        PlatformTransactionManager transactionManager, Clock clock) {
+                        ProductSettings settings, ProductDisplayRestrictions displayRestrictions,
+                        ApplicationEventPublisher events, PlatformTransactionManager transactionManager, Clock clock) {
         this.products = products;
         this.productDetails = productDetails;
         this.store = store;
         this.cases = cases;
         this.accounts = accounts;
         this.settings = settings;
+        this.displayRestrictions = displayRestrictions;
         this.events = events;
         this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
@@ -140,7 +143,7 @@ public class ProductInteractions {
     private boolean reportableCommentThread(Product product, ProductComment comment, long viewerId) {
         var root = comment.topLevel() ? Optional.of(comment) : store.comment(comment.parentCommentId());
         return root.filter(parent -> parent.productId() == product.id() && parent.topLevel() && parent.published())
-                .filter(parent -> visible(product) || parent.authorAccountId() == viewerId).isPresent();
+                .filter(parent -> baseVisible(product) || parent.authorAccountId() == viewerId).isPresent();
     }
 
     public CommentView createComment(long viewerId, long productId, String body) {
@@ -148,10 +151,11 @@ public class ProductInteractions {
             requireAccountWritable(viewerId);
             Product product = lockProduct(productId);
             boolean seller = product.sellerAccountId() == viewerId;
-            if (!seller && !visible(product)) {
+            boolean visible = publiclyVisible(product);
+            if (!seller && !visible) {
                 throw notVisible();
             }
-            if (!commentable(product)) {
+            if (!visible) {
                 throw new BusinessError("COMMENT_NOT_ALLOWED", 409, "当前商品不能发表评论");
             }
             String text = validatedBody(body);
@@ -175,7 +179,7 @@ public class ProductInteractions {
             if (product.sellerAccountId() != viewerId) {
                 throw new BusinessError("COMMENT_REPLY_NOT_ALLOWED", 403, "只能由商品卖方回复评论");
             }
-            if (!commentable(product)) {
+            if (!publiclyVisible(product)) {
                 throw new BusinessError("COMMENT_NOT_ALLOWED", 409, "当前商品不能回复评论");
             }
             ProductComment parent = store.lockComment(commentId)
@@ -301,9 +305,10 @@ public class ProductInteractions {
         }
         Map<Long, Product> productsById = products.findByIdIn(productIds).stream()
                 .collect(Collectors.toMap(Product::id, product -> product));
+        Set<Long> restricted = displayRestrictions.activeProductIds(productsById.keySet());
         List<Product> validProducts = rows.stream()
                 .map(row -> productsById.get(row.productId()))
-                .filter(product -> product != null && visible(product))
+                .filter(product -> product != null && baseVisible(product) && !restricted.contains(product.id()))
                 .toList();
         Map<Long, ProductService.ProductSummary> summaries = productDetails.summaries(validProducts).stream()
                 .collect(Collectors.toMap(summary -> Long.parseLong(summary.id()), summary -> summary));
@@ -323,7 +328,7 @@ public class ProductInteractions {
         // state is resolved before the product row decides whether the caller may learn about it.
         Optional<ProductInteractionStore.FavoriteRow> favorite = store.favorite(accountId, productId);
         Product product = products.findById(productId).orElse(null);
-        boolean valid = product != null && visible(product);
+        boolean valid = product != null && publiclyVisible(product);
         if (favorite.isEmpty() && !valid) {
             throw notVisible();
         }
@@ -335,7 +340,7 @@ public class ProductInteractions {
         return transaction.execute(status -> {
             requireAccountWritable(accountId);
             Product product = requireProduct(productId);
-            if (!visible(product)) {
+            if (!publiclyVisible(product)) {
                 throw notVisible();
             }
             ProductInteractionStore.FavoriteRow favorite = store.favorite(accountId, productId).orElse(null);
@@ -365,7 +370,7 @@ public class ProductInteractions {
         if (caseId != null && cases.claimedForProduct(viewerId, caseId, product.id())) {
             return ProductInteractionStore.Scope.CASE;
         }
-        if (visible(product)) {
+        if (publiclyVisible(product)) {
             return ProductInteractionStore.Scope.PUBLIC;
         }
         if (product.sellerAccountId() == viewerId) {
@@ -390,14 +395,14 @@ public class ProductInteractions {
     }
 
     /** A comment or favourite needs a product that is currently shown to the public. */
-    private static boolean visible(Product product) {
+    private boolean publiclyVisible(Product product) {
+        return baseVisible(product) && !displayRestrictions.hasActive(product.id());
+    }
+
+    private static boolean baseVisible(Product product) {
         return !product.deleted()
                 && (Product.PUBLIC.equals(product.lifecycleState())
                 || Product.IN_TRADE.equals(product.lifecycleState()));
-    }
-
-    private static boolean commentable(Product product) {
-        return visible(product);
     }
 
     private void requireAccountWritable(long accountId) {

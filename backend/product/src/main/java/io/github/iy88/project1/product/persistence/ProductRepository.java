@@ -32,6 +32,8 @@ public interface ProductRepository extends Repository<Product, Long> {
     @Query(value = """
             select p from Product p
             where p.deletedAt is null and p.lifecycleState = 'public'
+              and not exists (select r.id from ProductDisplayRestriction r
+                               where r.productId = p.id and r.releasedAt is null)
               and (:keyword = '' or lower(p.title) like lower(concat('%', :keyword, '%'))
                    or lower(p.description) like lower(concat('%', :keyword, '%')))
               and (:minPrice is null or p.priceCents >= :minPrice)
@@ -45,6 +47,8 @@ public interface ProductRepository extends Repository<Product, Long> {
             countQuery = """
             select count(p) from Product p
             where p.deletedAt is null and p.lifecycleState = 'public'
+              and not exists (select r.id from ProductDisplayRestriction r
+                               where r.productId = p.id and r.releasedAt is null)
               and (:keyword = '' or lower(p.title) like lower(concat('%', :keyword, '%'))
                    or lower(p.description) like lower(concat('%', :keyword, '%')))
               and (:minPrice is null or p.priceCents >= :minPrice)

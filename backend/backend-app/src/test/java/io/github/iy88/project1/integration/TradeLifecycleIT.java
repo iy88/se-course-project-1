@@ -1152,6 +1152,12 @@ class TradeLifecycleIT {
                             .param(0x5000_0000_0000_0000L + conversationId).query(Boolean.class).single());
         }
 
+        @Override
+        public void lockConversationRow(WriteTransaction transaction, long conversationId) {
+            db.sql("SELECT true FROM pg_advisory_xact_lock(?)")
+                    .param(0x5000_0000_0000_0000L + conversationId).query(Boolean.class).single();
+        }
+
         long messageCount(long tradeId, String type) {
             long conversationId = find(tradeId).orElseThrow();
             return messages.stream().filter(message ->

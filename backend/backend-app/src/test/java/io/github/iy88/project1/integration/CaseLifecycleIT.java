@@ -165,9 +165,11 @@ class CaseLifecycleIT {
         long threadId = storeThread(caseId, related);
         assertThat(db.sql("select count(*) from case_message where case_conversation_id = ?")
                 .param(threadId).query(Long.class).single()).isEqualTo(1);
-        assertThat(db.sql("select count(*) from notification where recipient_account_id = ?"
-                + " and event_type = 'case.inquiry_created'").param(related).query(Long.class).single())
-                .isEqualTo(1);
+        long noticeId = db.sql("""
+                select notification_id from notification where recipient_account_id = ?
+                    and source_type = 'case' and source_id = ? and event_type = 'case.inquiry_created'
+                """).param(related).param(caseId).query(Long.class).single();
+        assertInquiryNotification(caseId, noticeId);
 
         // The related account answers the inquiry in the same thread.
         var statement = cases.postMessage(context(related), "statement-1", caseId,
@@ -403,8 +405,74 @@ class CaseLifecycleIT {
                 """).param(message).param(conversation).query(Long.class).list()).containsExactly(recipient);
     }
 
+    @Test
+    void pendingInquiriesAreVisibleOnlyInTheSelectedCaseViewpoint() {
+        long buyer = REPORTER.get();
+        long seller = RELATED.get();
+        long manager = MANAGER_1.get();
+        long product = db.sql("""
+                insert into product (seller_account_id, title, description, price_cents, lifecycle_state)
+                values (?, 'Inquiry fixture', 'Inquiry fixture', 100, 'public') returning product_id
+                """).param(seller).query(Long.class).single();
+        long trade = db.sql("""
+                insert into trade (product_id, buyer_id, seller_id, status, requested_at, created_at, updated_at)
+                values (?, ?, ?, 'in_progress', now(), now(), now()) returning id
+                """).param(product).param(buyer).param(seller).query(Long.class).single();
+
+        long dispute = store.openTradeCase(CaseVocabulary.DISPUTE, trade, Instant.now());
+        askBoth(dispute, "dispute", manager, buyer, seller);
+        assertThat(queries.detail(context(buyer), dispute).path("pending_inquiries").valueStream()
+                .map(item -> item.path("scope_text").asString()).toList()).containsExactly("buyer-only question");
+        assertThat(queries.detail(context(seller), dispute).path("pending_inquiries").valueStream()
+                .map(item -> item.path("scope_text").asString()).toList()).containsExactly("seller-only question");
+        assertThat(queries.detail(context(manager), dispute).path("pending_inquiries").valueStream()
+                .map(item -> item.path("related_account_id").asString()).toList())
+                .containsExactlyInAnyOrder(Long.toString(buyer), Long.toString(seller));
+
+        var submitted = cases.submit(context(buyer), "report-inquiry-overlap", reportFor(
+                new CaseCommands.Target("trade", trade, null, null)));
+        long report = submitted.data().path("case_id").asLong();
+        cases.claim(context(manager), "report-claim-inquiry", report);
+        cases.inquire(context(manager), "report-seller-inquiry", report,
+                new CaseCommands.Inquiry(seller, "seller-only question"));
+        db.sql("insert into case_conversation (case_id, related_account_id, created_at) values (?, ?, now())")
+                .param(report).param(buyer).update();
+        var reporter = queries.detail(context(buyer), report);
+        assertThat(reporter.path("viewpoint").asString()).isEqualTo("reporter");
+        assertThat(reporter.path("pending_inquiries").isEmpty()).isTrue();
+        assertThat(reporter.path("available_actions").valueStream().map(JsonNode::asString).toList())
+                .containsExactly(CaseVocabulary.SUPPLEMENT_EVIDENCE);
+    }
+
+    private static void askBoth(long caseId, String fixture, long manager, long buyer, long seller) {
+        cases.claim(context(manager), fixture + "-claim-inquiry", caseId);
+        cases.inquire(context(manager), fixture + "-buyer-inquiry", caseId,
+                new CaseCommands.Inquiry(buyer, "buyer-only question"));
+        cases.inquire(context(manager), fixture + "-seller-inquiry", caseId,
+                new CaseCommands.Inquiry(seller, "seller-only question"));
+    }
+
     private static CaseCommands.Report reportFor(CaseCommands.Target target) {
         return new CaseCommands.Report(target, "请核实内容", null, List.of());
+    }
+
+    private static void assertInquiryNotification(long caseId, long noticeId) throws Exception {
+        var accounts = app.getBean(AccountService.class);
+        var recipient = accounts.login("related-" + RUN_ID + "@example.invalid", PASSWORD);
+        var reporter = accounts.login("reporter-" + RUN_ID + "@example.invalid", PASSWORD);
+        String path = "/account/notifications/" + noticeId;
+        try (var http = HttpClient.newHttpClient()) {
+            var detail = read(http, recipient, path, 200);
+            assertThat(detail.path("summary").asString()).isEqualTo("收到事项问询");
+            assertThat(detail.at("/source/resource_type").asString()).isEqualTo("case");
+            assertThat(detail.at("/source/resource_id").asLong()).isEqualTo(caseId);
+            assertThat(detail.path("body").asString()).doesNotContain("请说明商品问题");
+            read(http, reporter, path, 404);
+        } finally {
+            var sessions = app.getBean(SessionService.class);
+            sessions.revoke(sessions.authenticate(recipient.token()));
+            sessions.revoke(sessions.authenticate(reporter.token()));
+        }
     }
 
     private static void assertInvalidReport(long reporter, String key, CaseCommands.Target target) {

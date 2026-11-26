@@ -80,6 +80,18 @@ public final class CasePorts {
     public interface Enforcement {
         LockPlan plan(ExecutionContext context, long caseId, List<CaseRecords.EnforcementInstruction> instructions);
 
+        /**
+         * Composable row-lock callbacks for the actual candidate subjects of one decision batch,
+         * unique by {@link LockPlan.Key} and free of account locks (the executor owns those). The
+         * case use case merges the declared CASE callback, rejects keys beyond the prepared plan
+         * through {@link LockPlan.Changed}, and acquires every key once in the public order. The
+         * callbacks only lock rows and never mutate subject state.
+         */
+        default SubjectPlan lockCallbacks(ExecutionContext context, long caseId,
+                                          List<CaseRecords.EnforcementInstruction> instructions) {
+            return SubjectPlan.empty();
+        }
+
         List<CaseRecords.EnforcementOutcome> execute(WriteTransaction transaction, ExecutionContext context,
                                                      long caseId, String reason, String basisRef,
                                                      List<CaseRecords.EnforcementInstruction> instructions,
@@ -106,6 +118,16 @@ public final class CasePorts {
         default LockPlan reversePlan(ExecutionContext context, long caseId, CaseRecords.Enforcement recorded,
                                      String resolution) {
             return new LockPlan(Map.of(), Set.of());
+        }
+
+        /**
+         * Row-lock callbacks for {@link #reverse}, using the same rule as
+         * {@link #lockCallbacks}. A reversal without a callback cannot compose with the ordered
+         * write transaction and must fail closed before any state changes.
+         */
+        default SubjectPlan reverseLockCallbacks(ExecutionContext context, long caseId,
+                                                 CaseRecords.Enforcement recorded, String resolution) {
+            return SubjectPlan.empty();
         }
     }
 }

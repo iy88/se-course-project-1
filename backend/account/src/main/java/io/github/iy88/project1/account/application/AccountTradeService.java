@@ -18,18 +18,19 @@ public class AccountTradeService {
     private final AccountRepository accounts;
     private final AccountAvatarService avatars;
     private final SessionService sessions;
+    private final AccountRestrictions restrictions;
 
     public AccountTradeService(AccountRepository accounts, AccountAvatarService avatars,
-                               SessionService sessions) {
+                               SessionService sessions, AccountRestrictions restrictions) {
         this.accounts = accounts;
         this.avatars = avatars;
         this.sessions = sessions;
+        this.restrictions = restrictions;
     }
 
     public Qualification qualification(long accountId) {
-        // Account restriction records are owned by the enforcement work (#81); until that schema is
-        // committed an account has no persisted write restriction.
-        return new Qualification(accounts.findById(accountId).isPresent(), false);
+        boolean exists = accounts.findById(accountId).isPresent();
+        return new Qualification(exists, exists && restrictions.isRestricted(accountId));
     }
 
     public Map<Long, Profile> profiles(Set<Long> accountIds) {

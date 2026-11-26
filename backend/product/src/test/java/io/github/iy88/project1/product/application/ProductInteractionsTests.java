@@ -44,6 +44,7 @@ class ProductInteractionsTests {
     private final ProductInteractionStore store = mock(ProductInteractionStore.class);
     private final CaseCommentAccess cases = mock(CaseCommentAccess.class);
     private final CommentAccountAccess accounts = mock(CommentAccountAccess.class);
+    private final ProductDisplayRestrictions displayRestrictions = mock(ProductDisplayRestrictions.class);
     private final ProductSettings settings = new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 2, 60);
     private ProductInteractions interactions;
 
@@ -52,8 +53,7 @@ class ProductInteractionsTests {
         PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
         when(manager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         interactions = new ProductInteractions(products, details, store, cases, accounts, settings,
-                mock(ApplicationEventPublisher.class), manager,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                displayRestrictions, mock(ApplicationEventPublisher.class), manager, Clock.fixed(NOW, ZoneOffset.UTC));
         when(accounts.profiles(any())).thenReturn(Map.of(
                 VIEWER, new CommentAccountAccess.Profile("Viewer", "https://img.example/viewer.png"),
                 SELLER, new CommentAccountAccess.Profile("Seller", "https://img.example/seller.png")));
@@ -340,6 +340,54 @@ class ProductInteractionsTests {
         assertFailure(() -> interactions.listFavorites(VIEWER, 0, 20), "INPUT_INVALID");
         assertFailure(() -> interactions.listFavorites(VIEWER, 1, 101), "INPUT_INVALID");
         verify(store, never()).favorites(anyLong(), any(), any(Integer.class).intValue(), anyLong());
+    }
+
+    @Test
+    void activeDisplayRestrictionHidesPublicCommentsFromStrangers() {
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(displayRestrictions.hasActive(PRODUCT)).thenReturn(true);
+        when(store.hasCommentBy(PRODUCT, VIEWER)).thenReturn(false);
+
+        assertFailure(() -> interactions.listComments(VIEWER, PRODUCT, 1, 20, null), "RESOURCE_NOT_VISIBLE");
+    }
+
+    @Test
+    void restrictedProductCannotBeFavorited() {
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(displayRestrictions.hasActive(PRODUCT)).thenReturn(true);
+
+        assertFailure(() -> interactions.addFavorite(VIEWER, PRODUCT), "RESOURCE_NOT_VISIBLE");
+        verify(store, never()).insertFavorite(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void favouriteOfARestrictedProductIsInvalidWithoutContent() {
+        when(products.findById(PRODUCT)).thenReturn(Optional.of(product(Product.PUBLIC)));
+        when(displayRestrictions.hasActive(PRODUCT)).thenReturn(true);
+        when(store.favorite(VIEWER, PRODUCT))
+                .thenReturn(Optional.of(new ProductInteractionStore.FavoriteRow(100L, PRODUCT, NOW)));
+
+        var status = interactions.favoriteStatus(VIEWER, PRODUCT);
+
+        assertThat(status.favorited()).isTrue();
+        assertThat(status.valid()).isFalse();
+    }
+
+    @Test
+    void favouriteListMarksARestrictedProductInvalidInOneBatch() {
+        when(store.favorites(VIEWER, null, 20, 0L)).thenReturn(List.of(
+                new ProductInteractionStore.FavoriteRow(100L, PRODUCT, NOW)));
+        when(store.countFavorites(VIEWER, null)).thenReturn(1L);
+        Product publicProduct = product(Product.PUBLIC);
+        when(products.findByIdIn(List.of(PRODUCT))).thenReturn(List.of(publicProduct));
+        when(displayRestrictions.activeProductIds(Set.of(PRODUCT))).thenReturn(Set.of(PRODUCT));
+
+        var page = interactions.listFavorites(VIEWER, 1, 20);
+
+        assertThat(page.items()).singleElement().satisfies(item -> {
+            assertThat(item.status()).isEqualTo("invalid");
+            assertThat(item.product()).isNull();
+        });
     }
 
     private static void assertFailure(Runnable action, String code) {

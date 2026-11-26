@@ -859,6 +859,23 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     @Override
+    public void lockTradeRow(WriteTransaction transaction, long tradeId) {
+        repository.lockTradeRow(tradeId);
+    }
+
+    @Override
+    public void lockConversationRow(WriteTransaction transaction, long conversationId) {
+        conversations.lockConversationRow(transaction, conversationId);
+    }
+
+    @Override
+    public void lockCaseProductRow(WriteTransaction transaction, long productId) {
+        if (product.lock(transaction, productId) == null) {
+            throw productUnavailable();
+        }
+    }
+
+    @Override
     public TradePorts.CaseEnforcementOutcome freezeLocked(WriteTransaction transaction, long caseId, long tradeId,
                                                           String basisRef, String reason) {
         var trade = requireLockedTrade(transaction, caseId, tradeId);
@@ -884,12 +901,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         long conversationId = requireConversation(transaction, trade.id());
         UUID eventId = UUID.randomUUID();
         var outcome = freezeFacts(transaction, trade, caseId, manager, basisRef, validatedReason, now(), eventId);
-        outcome.filter(frozen -> !frozen.alreadyEffective()).ifPresent(frozen -> {
-            conversations.append(transaction, conversationId, eventId, "trade_frozen",
-                    "交易已被冻结", frozen.transitionRef());
-            notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.frozen", eventId);
-            audit(transaction, "trade.freeze", trade.id(), new ResourceRef("case", caseId));
-        });
+        outcome.filter(frozen -> !frozen.alreadyEffective()).ifPresent(frozen ->
+                publishFreeze(transaction, trade, conversationId, caseId, eventId, frozen));
         return governanceOutcome(trade.id());
     }
 
@@ -950,10 +963,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         UUID eventId = UUID.randomUUID();
         var outcome = liftFreezeFacts(transaction, trade, freeze, caseId, manager, basisRef, validatedReason,
                 now(), eventId);
-        conversations.append(transaction, conversationId, eventId, "trade_unfrozen", "交易冻结已解除",
-                outcome.transitionRef());
-        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.unfrozen", eventId);
-        audit(transaction, "trade.freeze.lift", trade.id(), new ResourceRef("case", caseId));
+        publishLift(transaction, trade, conversationId, caseId, eventId, outcome);
         return governanceOutcome(trade.id());
     }
 
@@ -1007,12 +1017,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         UUID eventId = UUID.randomUUID();
         var outcome = adjustStatusFacts(transaction, trade, state, target, caseId, manager, basisRef,
                 validatedReason, now(), eventId);
-        conversations.append(transaction, conversationId, eventId,
-                target == TradeStatus.COMPLETED ? "trade_completed" : "trade_terminated",
-                "管理员调整交易状态，如需继续出售，可前往商品详情重新上架。", outcome.transitionRef());
-        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.adjusted", eventId);
-        archive(transaction, conversationId, trade.id(), "admin_" + target.value());
-        audit(transaction, "trade.adjust", trade.id(), new ResourceRef("case", caseId));
+        publishAdjust(transaction, trade, conversationId, caseId, eventId, target, outcome.transitionRef());
         return governanceOutcome(trade.id());
     }
 
@@ -1047,6 +1052,36 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     @Override
+    public void publishLocked(WriteTransaction transaction, long caseId, long tradeId, String action,
+                              TradePorts.CaseEnforcementOutcome outcome, String reason) {
+        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
+        long conversationId = requireConversationId(tradeId);
+        switch (action) {
+            case "freeze_trade" -> {
+                if (!outcome.alreadyEffective()) {
+                    publishFreeze(transaction, trade, conversationId, caseId, outcome.businessEventId(), outcome);
+                }
+            }
+            case "lift_trade_freeze" ->
+                    publishLift(transaction, trade, conversationId, caseId, outcome.businessEventId(), outcome);
+            case "adjust_trade_status" -> publishAdjust(transaction, trade, conversationId, caseId,
+                    outcome.businessEventId(), TradeStatus.from(outcome.currentStatus()), outcome.transitionRef());
+            case "restore_trade" ->
+                    publishRestore(transaction, trade, conversationId, caseId, outcome.businessEventId(), outcome);
+            default -> throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "该处置动作没有交易发布逻辑");
+        }
+    }
+
+    @Override
+    public long legacyFreezeTransition(long caseId, long tradeId) {
+        var transitions = repository.adminCaseFreezeTransitions(caseId, tradeId);
+        if (transitions.size() != 1) {
+            throw freezeNotActive();
+        }
+        return transitions.getFirst();
+    }
+
+    @Override
     public TradePorts.GovernanceOutcome restoreInTransaction(WriteTransaction transaction,
                                                              ExecutionContext context, long caseId, long tradeId,
                                                              String basisRef, String reason) {
@@ -1062,10 +1097,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         long conversationId = requireConversation(transaction, trade.id());
         UUID eventId = UUID.randomUUID();
         var outcome = restoreFacts(transaction, trade, caseId, manager, basisRef, validatedReason, now(), eventId);
-        conversations.append(transaction, conversationId, eventId, "trade_restored",
-                "异常交易已恢复进行", outcome.transitionRef());
-        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.restored", eventId);
-        audit(transaction, "trade.restore", trade.id(), new ResourceRef("case", caseId));
+        publishRestore(transaction, trade, conversationId, caseId, eventId, outcome);
         return governanceOutcome(trade.id());
     }
 
@@ -1852,6 +1884,40 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
 
     private static String phase(TradePhase phase) {
         return phase == null ? null : phase.value();
+    }
+
+    private void publishFreeze(WriteTransaction transaction, Trade trade, long conversationId, long caseId,
+                               UUID eventId, TradePorts.CaseEnforcementOutcome outcome) {
+        conversations.append(transaction, conversationId, eventId, "trade_frozen",
+                "交易已被冻结", outcome.transitionRef());
+        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.frozen", eventId);
+        audit(transaction, "trade.freeze", trade.id(), new ResourceRef("case", caseId));
+    }
+
+    private void publishLift(WriteTransaction transaction, Trade trade, long conversationId, long caseId,
+                             UUID eventId, TradePorts.CaseEnforcementOutcome outcome) {
+        conversations.append(transaction, conversationId, eventId, "trade_unfrozen", "交易冻结已解除",
+                outcome.transitionRef());
+        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.unfrozen", eventId);
+        audit(transaction, "trade.freeze.lift", trade.id(), new ResourceRef("case", caseId));
+    }
+
+    private void publishAdjust(WriteTransaction transaction, Trade trade, long conversationId, long caseId,
+                               UUID eventId, TradeStatus target, ResourceRef transitionRef) {
+        conversations.append(transaction, conversationId, eventId,
+                target == TradeStatus.COMPLETED ? "trade_completed" : "trade_terminated",
+                "管理员调整交易状态，如需继续出售，可前往商品详情重新上架。", transitionRef);
+        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.adjusted", eventId);
+        archive(transaction, conversationId, trade.id(), "admin_" + target.value());
+        audit(transaction, "trade.adjust", trade.id(), new ResourceRef("case", caseId));
+    }
+
+    private void publishRestore(WriteTransaction transaction, Trade trade, long conversationId, long caseId,
+                                UUID eventId, TradePorts.CaseEnforcementOutcome outcome) {
+        conversations.append(transaction, conversationId, eventId, "trade_restored",
+                "异常交易已恢复进行", outcome.transitionRef());
+        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.restored", eventId);
+        audit(transaction, "trade.restore", trade.id(), new ResourceRef("case", caseId));
     }
 
     private void notify(WriteTransaction transaction, Trade trade, Set<Long> recipients, String eventType,

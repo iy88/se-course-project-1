@@ -253,6 +253,35 @@ class S2ProductionReviewIT {
     }
 
     @Test
+    void withdrawingAnUnclaimedReviewAllowsImageEditingAndResubmission() throws Exception {
+        var seller = login("withdrawn-seller", false);
+        var manager = login("withdrawn-manager", true);
+        String category = app.getBean(CategoryService.class).create(manager.account().id(), "Draft " + RUN).id();
+        CATEGORY_IDS.add(Long.parseLong(category));
+        long firstImage = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
+        long nextImage = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
+        var created = write(seller, "POST", "/products", """
+                {"title":"Withdrawn review","description":"First edition","price_cents":100,
+                 "category_ids":["%s"],"image_file_ids":["%d"]}
+                """.formatted(category, firstImage), key(), 201);
+        String path = "/products/" + text(created, "id");
+        String oldAudit = text(created.path("pending_review"), "audit_id");
+        write(seller, "POST", path + "/withdrawal", version(created), key(), 200);
+        var withdrawn = get(seller, path, 200);
+        assertThat(withdrawn.at("/permissions/can_submit_review").asBoolean()).isTrue();
+        var edited = write(seller, "PATCH", path, """
+                {"expected_version":%d,"description":"Second edition","image_file_ids":["%d"]}
+                """.formatted(withdrawn.path("content_version").asInt(), nextImage), key(), 200);
+        var history = get(seller, path + "/edit-history", 200).at("/items/0");
+        assertThat(history.at("/before_content/image_file_ids/0").asLong()).isEqualTo(firstImage);
+        assertThat(history.at("/after_content/image_file_ids/0").asLong()).isEqualTo(nextImage);
+        var resubmitted = write(seller, "POST", path + "/review-submissions", version(edited), key(), 201);
+        assertThat(text(resubmitted, "audit_id")).isNotEqualTo(oldAudit);
+        assertThat(db.sql("select status from product_audit where audit_id = ?")
+                .param(Long.parseLong(oldAudit)).query(String.class).single()).isEqualTo("withdrawn");
+    }
+
+    @Test
     void managementStatisticsUseTradeResultTimeAndKeepCurrentCountsIndependentOfRange() throws Exception {
         var manager = login("statistics", true);
         var buyer = login("statistics-buyer", false);

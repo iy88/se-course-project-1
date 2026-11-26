@@ -19,7 +19,6 @@ import io.github.iy88.project1.conversation.persistence.ConversationReader;
 import io.github.iy88.project1.conversation.persistence.ConversationStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
-import io.github.iy88.project1.core.LockPlan;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteTransaction;
@@ -35,7 +34,6 @@ import io.github.iy88.project1.trade.application.TradePorts;
 import io.github.iy88.project1.trade.application.TradeReviewReadModel;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,9 +102,8 @@ public class CaseHttpConfiguration {
     }
 
     @Bean
-    CasePorts.Enforcement caseEnforcement(ObjectProvider<TradePorts.GovernanceTransaction> governance,
-                                          TradePorts.Participation trades) {
-        return new TradeCaseEnforcement(governance, trades);
+    CasePorts.Enforcement caseEnforcement(TradePorts.CaseEnforcement trades, TradePorts.Participation participation) {
+        return new TradeCaseEnforcement(trades, participation);
     }
 
     @Bean
@@ -287,66 +284,6 @@ public class CaseHttpConfiguration {
                 return new BusinessError("RESOURCE_NOT_VISIBLE", 404, "文件不可见");
             }
             return new BusinessError("EVIDENCE_OUT_OF_SCOPE", 422, "证据文件不可引用");
-        }
-    }
-
-    /** Trade-backed execution. Account, product and evaluation actions stay with #81. */
-    private record TradeCaseEnforcement(ObjectProvider<TradePorts.GovernanceTransaction> governance,
-                                        TradePorts.Participation trades) implements CasePorts.Enforcement {
-        private static final Set<String> TRADE_ACTIONS = Set.of("freeze_trade", "adjust_trade_status");
-
-        @Override
-        public LockPlan plan(ExecutionContext context, long caseId, List<CaseRecords.EnforcementInstruction> items) {
-            var manager = Long.parseLong(context.actorId());
-            var plan = new LockPlan(Map.of(), Set.of());
-            for (var item : items) {
-                requireSupported(item);
-                plan = plan.merge(governancePort().governancePlan(manager, item.targetId(), caseId,
-                        "adjust_trade_status".equals(item.action())));
-            }
-            return plan;
-        }
-
-        @Override
-        public List<CaseRecords.EnforcementOutcome> execute(WriteTransaction transaction, ExecutionContext context,
-                                                            long caseId, String reason, String basisRef,
-                                                            List<CaseRecords.EnforcementInstruction> items,
-                                                            Instant occurredAt) {
-            var outcomes = new ArrayList<CaseRecords.EnforcementOutcome>();
-            for (var item : items) {
-                requireSupported(item);
-                var outcome = switch (item.action()) {
-                    case "freeze_trade" -> governancePort().freezeInTransaction(transaction, context, caseId,
-                            item.targetId(), basisRef, reason);
-                    case "adjust_trade_status" -> governancePort().adjustStatusInTransaction(transaction, context,
-                            caseId, item.targetId(), item.expectedResult(), basisRef, reason);
-                    default -> throw unavailable();
-                };
-                var parties = trades.findConversationAccess(item.targetId()).orElse(null);
-                var affected = parties == null ? List.<Long>of() : List.of(parties.buyerId(), parties.sellerId());
-                outcomes.add(new CaseRecords.EnforcementOutcome(item.enforcementId(), item.action(), "trade",
-                        item.targetId(), "trade", outcome.tradeId(), "applied", null,
-                        outcome.status() + ":v" + outcome.version(), affected, occurredAt));
-            }
-            return outcomes;
-        }
-
-        private TradePorts.GovernanceTransaction governancePort() {
-            var available = governance.getIfAvailable();
-            if (available == null) {
-                throw unavailable();
-            }
-            return available;
-        }
-
-        private static void requireSupported(CaseRecords.EnforcementInstruction item) {
-            if (!TRADE_ACTIONS.contains(item.action()) || !"trade".equals(item.targetType())) {
-                throw unavailable();
-            }
-        }
-
-        private static BusinessError unavailable() {
-            return new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "该处置动作的正式执行由 S4-01 提供");
         }
     }
 

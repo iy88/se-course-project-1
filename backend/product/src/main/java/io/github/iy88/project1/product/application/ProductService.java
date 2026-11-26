@@ -65,6 +65,7 @@ public class ProductService {
     private final ProductEditNotices editNotices;
     private final CaseCommentAccess cases;
     private final ProductCorrectionNotices correctionNotices;
+    private final ProductDisplayRestrictions displayRestrictions;
     private final OssSettings oss;
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -78,6 +79,7 @@ public class ProductService {
                           FileReferences fileReferences, FileRead fileReads, ProductTradeHistory tradeHistory,
                           ProductEditNotices editNotices, CaseCommentAccess cases,
                           ProductCorrectionNotices correctionNotices,
+                          ProductDisplayRestrictions displayRestrictions,
                           org.springframework.core.env.Environment environment,
                           JdbcClient jdbc, PlatformTransactionManager manager) {
         this.products = products;
@@ -97,6 +99,7 @@ public class ProductService {
         this.editNotices = editNotices;
         this.cases = cases;
         this.correctionNotices = correctionNotices;
+        this.displayRestrictions = displayRestrictions;
         this.oss = new OssSettings(environment.getRequiredProperty("OSS_ENDPOINT"),
                 environment.getRequiredProperty("OSS_REGION"), environment.getRequiredProperty("OSS_BUCKET"),
                 environment.getRequiredProperty("OSS_PREFIX"), environment.getRequiredProperty("OSS_ACCESS_KEY_ID"),
@@ -150,6 +153,7 @@ public class ProductService {
                     && command.imageFileIds() == null) {
                 throw new BusinessError("INPUT_INVALID", 422, "没有可更新的内容");
             }
+            ProductAudit latest = latestAudit(productId);
             Instant now = Instant.now();
             Set<Long> currentCategories = new LinkedHashSet<>(links.activeCategoryIds(productId));
             Map<String, Object> before = snapshot(product, currentCategories);
@@ -172,8 +176,7 @@ public class ProductService {
                 saveLinks(productId, sellerId, replacement, now);
             }
             if (command.proposedCategoryName() != null) {
-                if (!Product.PENDING_REVIEW.equals(product.lifecycleState())
-                        && !Product.REVIEW_REJECTED.equals(product.lifecycleState())) {
+                if (!categoryApplicationAllowed(product, latest)) {
                     throw new BusinessError("CATEGORY_APPLICATION_NOT_ALLOWED", 409, "当前状态不能提交分类申请");
                 }
                 if (applications.lockPending(productId).isEmpty()) {
@@ -191,7 +194,7 @@ public class ProductService {
                     snapshot(product, afterCategories), now));
             editNotices.productEdited(caller, sellerId, productId, edit.id(), product.title(),
                     Product.PUBLIC.equals(product.lifecycleState()), now);
-            return detail(product, sellerId, latestAudit(productId));
+            return detail(product, sellerId, latest);
         });
     }
 
@@ -256,10 +259,7 @@ public class ProductService {
             Product product = lockForSeller(sellerId, productId);
             requireVersion(product, expectedVersion);
             ProductAudit latest = latestAudit(productId);
-            boolean rejected = Product.REVIEW_REJECTED.equals(product.lifecycleState())
-                    || (Product.OFF_SHELF.equals(product.lifecycleState()) && latest != null
-                        && "rejected".equals(latest.status()));
-            if (!rejected) {
+            if (!resubmittable(product, latest)) {
                 throw new BusinessError("PRODUCT_NOT_RESUBMITTABLE", 409, "当前商品不能重新提交审核");
             }
             boolean hasSelectableCategory = links.activeCategoryIds(productId).stream()
@@ -330,6 +330,9 @@ public class ProductService {
             if (latest == null || !"passed".equals(latest.status())) {
                 throw new BusinessError("PRODUCT_NOT_RELISTABLE", 409, "最新审核未通过，不能重新上架");
             }
+            if (displayRestrictions.hasActive(productId)) {
+                throw new BusinessError("DISPLAY_RESTRICTED", 409, "商品存在展示限制，不能上架");
+            }
             product.transition(Product.PUBLIC, Instant.now());
             products.save(product);
             return detail(product, sellerId, latest);
@@ -343,8 +346,7 @@ public class ProductService {
         }
         return transaction.execute(status -> {
             Product product = lockForSeller(sellerId, productId);
-            if (!Product.PENDING_REVIEW.equals(product.lifecycleState())
-                    && !Product.REVIEW_REJECTED.equals(product.lifecycleState())) {
+            if (!categoryApplicationAllowed(product, latestAudit(productId))) {
                 throw new BusinessError("CATEGORY_APPLICATION_NOT_ALLOWED", 409, "当前状态不能提交分类申请");
             }
             if (applications.lockPending(productId).isPresent()) {
@@ -359,8 +361,7 @@ public class ProductService {
     public void withdrawApplication(long sellerId, long productId) {
         transaction.executeWithoutResult(status -> {
             Product product = lockForSeller(sellerId, productId);
-            if (!Product.PENDING_REVIEW.equals(product.lifecycleState())
-                    && !Product.REVIEW_REJECTED.equals(product.lifecycleState())) {
+            if (!categoryApplicationAllowed(product, latestAudit(productId))) {
                 throw new BusinessError("CATEGORY_APPLICATION_NOT_PENDING", 409, "没有待处理分类申请");
             }
             CategoryApplication application = applications.lockPending(productId)
@@ -404,9 +405,11 @@ public class ProductService {
                 .map(Product::title);
     }
 
-    private static boolean detailVisibleTo(Product product, long viewerId) {
+    private boolean detailVisibleTo(Product product, long viewerId) {
         return !product.deleted()
-                && (product.sellerAccountId() == viewerId || Product.PUBLIC.equals(product.lifecycleState()));
+                && (product.sellerAccountId() == viewerId
+                || (Product.PUBLIC.equals(product.lifecycleState()) || Product.IN_TRADE.equals(product.lifecycleState()))
+                && !displayRestrictions.hasActive(product.id()));
     }
 
     public boolean ownsProduct(long accountId, long productId) {
@@ -541,10 +544,10 @@ public class ProductService {
             permissions = new Permissions(
                     !Product.IN_TRADE.equals(product.lifecycleState()),
                     Product.PUBLIC.equals(product.lifecycleState()) && product.occupiedByTradeId() == null,
-                    Product.OFF_SHELF.equals(product.lifecycleState()) && "passed".equals(audit.status()),
+                    Product.OFF_SHELF.equals(product.lifecycleState()) && "passed".equals(audit.status())
+                            && !displayRestrictions.hasActive(product.id()),
                     Product.PENDING_REVIEW.equals(product.lifecycleState()),
-                    Product.REVIEW_REJECTED.equals(product.lifecycleState())
-                            || Product.OFF_SHELF.equals(product.lifecycleState()) && "rejected".equals(audit.status()));
+                    resubmittable(product, audit));
         }
         CategoryApplicationRef categoryApplication = owner
                 ? applications.findFirstByProductIdAndStatusOrderByIdDesc(product.id(), "pending")
@@ -752,6 +755,29 @@ public class ProductService {
         return audits.findTopByProductIdOrderBySequenceNoDesc(productId).orElse(null);
     }
 
+    /**
+     * Shared eligibility for resubmission and the owner-facing permission. A review rejection keeps
+     * its own lifecycle; a withdrawal or rejection after a submission lands on off_shelf with the
+     * withdrawn or rejected latest audit. Pending and approved off-shelf relisting are excluded.
+     */
+    private static boolean resubmittable(Product product, ProductAudit latest) {
+        if (Product.REVIEW_REJECTED.equals(product.lifecycleState())) {
+            return true;
+        }
+        return Product.OFF_SHELF.equals(product.lifecycleState())
+                && latest != null
+                && ("rejected".equals(latest.status()) || "withdrawn".equals(latest.status()));
+    }
+
+    /**
+     * Category applications prepare a replacement category while a review is active or while the
+     * product can be resubmitted. Existing pending applications still block a second application;
+     * old withdrawn or rejected applications are never reopened.
+     */
+    private static boolean categoryApplicationAllowed(Product product, ProductAudit latest) {
+        return Product.PENDING_REVIEW.equals(product.lifecycleState()) || resubmittable(product, latest);
+    }
+
     private long openCase(Instant submittedAt) {
         ProductReviewCaseLifecycle lifecycle = reviewCases.getIfAvailable();
         return lifecycle == null ? nextCaseId() : lifecycle.open(submittedAt);
@@ -766,7 +792,10 @@ public class ProductService {
         snapshot.put("title", product.title());
         snapshot.put("description", product.description());
         snapshot.put("price_cents", product.priceCents());
-        snapshot.put("image_file_ids", List.of());
+        snapshot.put("image_file_ids", fileReferences.current(
+                        new UploadRegistration.Target("product", product.id()), "image").stream()
+                .map(reference -> Long.toString(reference.fileId()))
+                .toList());
         snapshot.put("category_ids", categoryIds.stream().map(String::valueOf).toList());
         return snapshot;
     }
