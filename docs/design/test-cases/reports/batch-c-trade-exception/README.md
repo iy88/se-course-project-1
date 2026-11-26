@@ -108,8 +108,8 @@ Version-Datetime: 2026-11-26T23:30:00+08:00
 | C14 | 等待中争议被视为回应 |TC-TRD-008、011；TC-COM-010 | 通过 | 等待中争议被视为回应：`confirmation_wait` 结束（`end_reason=disputed`），交易 `disputed` | [证据](evidence/RUN-C1/RUN-C1d-steps.md) |
 | C15 | 管理员认领共享池异常事项 |TC-CASE-001、005 | 通过 | 认领前 404（共享池不可见），认领后 viewpoint=manager、available=[inquire, decide] | [证据](evidence/RUN-C1/RUN-C1-egf-steps.md) |
 | C16 | 冻结期间操作与消息被拒 |TC-TRD-006、007；TC-COM-003 | 部分通过 | 冻结期完成确认与争议均 409 STATE_CONFLICT；锁单与冻结保持 | [证据](evidence/RUN-C1/RUN-C1-egf-steps.md) |
-| C17 | 解冻恢复不重启计时 | TC-TRD-011；TC-CASE-007 | 未执行 | | |
-| C18 | 异常交易完成／终止后再恢复被拒 | TC-TRD-011、012、014；TC-CASE-005 | 未执行 | | |
+| C17 | 解冻恢复不重启计时 |TC-TRD-011；TC-CASE-007 | 部分通过／阻塞 | 恢复成功（in_progress、占用保持、旧计时未复活）；解冻动作 lift_trade_freeze 返回 503「由 S4-01 提供」，后续确认仍 TRADE_FROZEN | [证据](evidence/RUN-C1/RUN-C1-c17-steps.md) |
+| C18 | 异常交易完成／终止后再恢复被拒 |TC-TRD-011、012、014；TC-CASE-005 | 未执行 | 终止与终态保护已在 C09 验证；缺一笔独立异常交易样本 | [证据](evidence/RUN-C1/RUN-C1-c17-steps.md) |
 
 ## 自动测试补充
 
