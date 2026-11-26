@@ -410,7 +410,7 @@ onUnmounted(() => pending?.abort());
 .chart-grid {
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
 }
 .chart-card {
   display: grid;
