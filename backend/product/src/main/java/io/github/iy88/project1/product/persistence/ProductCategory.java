@@ -43,6 +43,12 @@ public class ProductCategory {
     @Column(name = "removed_by_id")
     private Long removedById;
 
+    @Column(name = "change_basis_type")
+    private String changeBasisType;
+
+    @Column(name = "change_basis_id")
+    private Long changeBasisId;
+
     protected ProductCategory() {
     }
 
@@ -52,11 +58,25 @@ public class ProductCategory {
 
     public ProductCategory(long productId, long categoryId, String source, String createdByKind,
                            long createdById, Instant now) {
+        this(productId, categoryId, source, createdByKind, createdById, null, null, now);
+    }
+
+    /** Relation created by an administrator correction; the basis names the case it relies on. */
+    public static ProductCategory adminCorrection(long productId, long categoryId, long managerId,
+                                                  String basisType, long basisId, Instant now) {
+        return new ProductCategory(productId, categoryId, "admin_correction", "admin", managerId, basisType,
+                basisId, now);
+    }
+
+    private ProductCategory(long productId, long categoryId, String source, String createdByKind,
+                            long createdById, String changeBasisType, Long changeBasisId, Instant now) {
         this.productId = productId;
         this.categoryId = categoryId;
         this.source = source;
         this.createdByKind = createdByKind;
         this.createdById = createdById;
+        this.changeBasisType = changeBasisType;
+        this.changeBasisId = changeBasisId;
         this.createdAt = now;
     }
 

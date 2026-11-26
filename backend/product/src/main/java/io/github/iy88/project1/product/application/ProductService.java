@@ -63,6 +63,8 @@ public class ProductService {
     private final FileRead fileReads;
     private final ProductTradeHistory tradeHistory;
     private final ProductEditNotices editNotices;
+    private final CaseCommentAccess cases;
+    private final ProductCorrectionNotices correctionNotices;
     private final OssSettings oss;
     private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
@@ -74,7 +76,8 @@ public class ProductService {
                           AccountAvatarService avatars,
                           CategoryDirectory directory, ProductSettings settings, CategorySettings categorySettings,
                           FileReferences fileReferences, FileRead fileReads, ProductTradeHistory tradeHistory,
-                          ProductEditNotices editNotices,
+                          ProductEditNotices editNotices, CaseCommentAccess cases,
+                          ProductCorrectionNotices correctionNotices,
                           org.springframework.core.env.Environment environment,
                           JdbcClient jdbc, PlatformTransactionManager manager) {
         this.products = products;
@@ -92,6 +95,8 @@ public class ProductService {
         this.fileReads = fileReads;
         this.tradeHistory = tradeHistory;
         this.editNotices = editNotices;
+        this.cases = cases;
+        this.correctionNotices = correctionNotices;
         this.oss = new OssSettings(environment.getRequiredProperty("OSS_ENDPOINT"),
                 environment.getRequiredProperty("OSS_REGION"), environment.getRequiredProperty("OSS_BUCKET"),
                 environment.getRequiredProperty("OSS_PREFIX"), environment.getRequiredProperty("OSS_ACCESS_KEY_ID"),
@@ -187,6 +192,62 @@ public class ProductService {
             editNotices.productEdited(caller, sellerId, productId, edit.id(), product.title(),
                     Product.PUBLIC.equals(product.lifecycleState()), now);
             return detail(product, sellerId, latestAudit(productId));
+        });
+    }
+
+    /**
+     * Administrator category correction (API-PRD-032). The acting manager must currently claim the
+     * case named by the basis, and that case must cover this product; the same case is stored with
+     * the correction history and the seller notice. Lifecycle, trade state, agreement and historical
+     * trade snapshots are left untouched.
+     */
+    public CorrectionResult correctCategory(long managerId, long productId, CorrectionCommand command,
+                                            ExecutionContext context) {
+        String reason = correctionReason(command.reason());
+        String basisType = command.basisType() == null ? "" : command.basisType().trim();
+        if (!"case".equals(basisType) || command.basisId() <= 0) {
+            throw new BusinessError("INPUT_INVALID", 422, "纠正依据无效");
+        }
+        long caseId = command.basisId();
+        Set<Long> replacement = parseIds(command.categoryIds());
+        if (replacement.isEmpty()) {
+            throw new BusinessError("CATEGORY_REQUIRED", 422, "商品至少需要一个分类");
+        }
+        ExecutionContext caller = context == null ? internalContext() : context;
+        return transaction.execute(status -> {
+            Product product = products.lockById(productId)
+                    .filter(found -> !found.deleted())
+                    .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
+            if (!cases.claimedForProduct(managerId, caseId, productId)) {
+                throw new BusinessError("ACTION_NOT_ALLOWED", 403, "只能纠正本人认领事项范围内的商品");
+            }
+            requireSelectable(replacement);
+            Instant now = Instant.now();
+            Set<Long> current = new LinkedHashSet<>(links.activeCategoryIds(productId));
+            if (current.equals(replacement)) {
+                return new CorrectionResult(detail(product, 0, null), categoryRefs(current), categoryRefs(current));
+            }
+            Map<String, Object> before = snapshot(product, current);
+            for (ProductCategory link : links.findByProductIdAndRemovedAtIsNullOrderByCategoryIdAsc(productId)) {
+                if (!replacement.contains(link.categoryId())) {
+                    link.remove(now, "admin", managerId);
+                    links.save(link);
+                }
+            }
+            for (Long categoryId : replacement) {
+                if (!current.contains(categoryId)) {
+                    links.save(ProductCategory.adminCorrection(productId, categoryId, managerId, basisType, caseId,
+                            now));
+                }
+            }
+            product.touchContentVersion(now);
+            products.save(product);
+            Set<Long> after = new LinkedHashSet<>(links.activeCategoryIds(productId));
+            ProductEditHistory edit = edits.save(ProductEditHistory.adminCorrection(productId, managerId, before,
+                    snapshot(product, after), reason, basisType, caseId, now));
+            correctionNotices.categoryCorrected(caller, product.sellerAccountId(), productId, edit.id(), caseId,
+                    product.title(), now);
+            return new CorrectionResult(detail(product, 0, null), categoryRefs(current), categoryRefs(after));
         });
     }
 
@@ -497,6 +558,12 @@ public class ProductService {
                 categoryApplication);
     }
 
+    private List<CategoryRef> categoryRefs(Collection<Long> categoryIds) {
+        Map<Long, String> names = directory.mainNames(categoryIds);
+        return categoryIds.stream().filter(names::containsKey)
+                .map(id -> new CategoryRef(Long.toString(id), names.get(id))).toList();
+    }
+
     /** Shared list projection for callers that already loaded product rows. */
     public List<ProductSummary> summaries(List<Product> page) {
         if (page.isEmpty()) {
@@ -728,6 +795,14 @@ public class ProductService {
         return value;
     }
 
+    private static String correctionReason(String value) {
+        String reason = value == null ? "" : value.trim();
+        if (reason.isEmpty() || reason.codePointCount(0, reason.length()) > 1000) {
+            throw new BusinessError("INPUT_INVALID", 422, "纠正理由无效");
+        }
+        return reason;
+    }
+
     private String proposedName(String value) {
         if (value == null) {
             return null;
@@ -773,6 +848,13 @@ public class ProductService {
 
     public record EditCommand(String title, String description, List<String> imageFileIds, Long priceCents,
                               List<String> categoryIds, String proposedCategoryName, Integer expectedVersion) {
+    }
+
+    public record CorrectionCommand(List<String> categoryIds, String reason, String basisType, long basisId) {
+    }
+
+    public record CorrectionResult(ProductDetail product, List<CategoryRef> previousCategories,
+                                   List<CategoryRef> currentCategories) {
     }
 
     public record CategoryRef(String id, String name) {

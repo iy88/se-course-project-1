@@ -63,7 +63,8 @@ class ProductServiceEditHistoryTests {
                 mock(AccountAvatarService.class),
                 mock(CategoryDirectory.class), new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class), tradeHistory,
-                (context, sellerId, productId, editId, title, visible, occurredAt) -> { }, environment,
+                (context, sellerId, productId, editId, title, visible, occurredAt) -> { },
+                mock(CaseCommentAccess.class), mock(ProductCorrectionNotices.class), environment,
                 mock(JdbcClient.class), manager);
     }
 

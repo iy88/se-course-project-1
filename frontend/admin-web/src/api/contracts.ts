@@ -190,3 +190,25 @@ export interface ReviewDecisionResult {
   reviewed_content_version: number;
   decided_at: string;
 }
+
+export interface CorrectionCategory {
+  id: string;
+  name: string;
+}
+
+/** API-PRD-032 request; the basis names the case the acting manager claimed. */
+export interface CategoryCorrectionRequest {
+  category_ids: string[];
+  reason: string;
+  basis_ref: { type: "case"; id: string };
+}
+
+export interface CategoryCorrectionResult {
+  product: {
+    id: string;
+    content_version: number;
+    categories: CorrectionCategory[];
+  };
+  previous_categories: CorrectionCategory[];
+  current_categories: CorrectionCategory[];
+}

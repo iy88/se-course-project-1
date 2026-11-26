@@ -42,6 +42,12 @@ public class ProductEditHistory {
     @Column(name = "reason")
     private String reason;
 
+    @Column(name = "basis_type")
+    private String basisType;
+
+    @Column(name = "basis_id")
+    private Long basisId;
+
     @Column(name = "edited_at", nullable = false)
     private Instant editedAt;
 
@@ -50,12 +56,30 @@ public class ProductEditHistory {
 
     public ProductEditHistory(long productId, long operatorAccountId, Map<String, Object> beforeContent,
                               Map<String, Object> afterContent, Instant now) {
+        this(productId, "seller", operatorAccountId, "content_edit", beforeContent, afterContent, null, null,
+                null, now);
+    }
+
+    /** Administrator category correction: the basis names the case the acting manager claimed. */
+    public static ProductEditHistory adminCorrection(long productId, long managerId, Map<String, Object> beforeContent,
+                                                     Map<String, Object> afterContent, String reason, String basisType,
+                                                     long basisId, Instant now) {
+        return new ProductEditHistory(productId, "admin", managerId, "category_correction", beforeContent,
+                afterContent, reason, basisType, basisId, now);
+    }
+
+    private ProductEditHistory(long productId, String operatorKind, long operatorAccountId, String editKind,
+                               Map<String, Object> beforeContent, Map<String, Object> afterContent, String reason,
+                               String basisType, Long basisId, Instant now) {
         this.productId = productId;
-        this.operatorKind = "seller";
+        this.operatorKind = operatorKind;
         this.operatorAccountId = operatorAccountId;
-        this.editKind = "content_edit";
+        this.editKind = editKind;
         this.beforeContent = beforeContent;
         this.afterContent = afterContent;
+        this.reason = reason;
+        this.basisType = basisType;
+        this.basisId = basisId;
         this.editedAt = now;
     }
 
