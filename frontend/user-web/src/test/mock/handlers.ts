@@ -518,7 +518,9 @@ const routes: Route[] = [
     handler: ({ accountId, body }) => {
       const account = accountById(accountId);
       const hasName = body.display_name !== undefined;
-      const hasAvatar = Object.prototype.hasOwnProperty.call(body, "avatar_file_id");
+      // Match the JSON wire: an undefined value is omitted, while an explicit null
+      // is a real value that clears the avatar.
+      const hasAvatar = body.avatar_file_id !== undefined;
       if (!hasName && !hasAvatar) {
         fail(422, "INPUT_INVALID", "请至少提交显示名称或头像。");
       }
@@ -528,10 +530,9 @@ const routes: Route[] = [
       if (hasAvatar) {
         const fileId = body.avatar_file_id;
         if (fileId === null) {
-          // The endpoint cannot tell an explicit null from an omitted field, so a
-          // null keeps the current avatar; removal is the "0" sentinel.
-        } else if (fileId === "" || fileId === "0") {
           account.avatar_file_id = null;
+        } else if (fileId === "" || fileId === "0") {
+          fail(422, "INPUT_INVALID", "头像标识无效。");
         } else {
           const id = typeof fileId === "string" ? fileId : "";
           const file = state.files.find((item) => item.file_id === id);

@@ -37,7 +37,8 @@ public class FileCleanup {
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var retryBefore = now.minusSeconds(rules.cleanupScanSeconds());
         var ids = files.cleanupCandidates(objects.bucket(), objects.purposePrefix(FilePurpose.PRODUCT_IMAGE),
-                objects.purposePrefix(FilePurpose.CASE_EVIDENCE), now, retryBefore, PageRequest.of(0, batchSize));
+                objects.purposePrefix(FilePurpose.CASE_EVIDENCE),
+                objects.purposePrefix(FilePurpose.ACCOUNT_AVATAR), now, retryBefore, PageRequest.of(0, batchSize));
         var failed = new ArrayList<FailedAttempt>();
         int deleted = 0;
         for (long id : ids) {

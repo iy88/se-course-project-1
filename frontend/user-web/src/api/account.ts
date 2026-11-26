@@ -120,13 +120,7 @@ export function setAvatar(fileId: string, idempotencyKey: string): Promise<Updat
   return updateProfile({ avatar_file_id: fileId }, idempotencyKey);
 }
 
-/**
- * Remove the current avatar; the interface then shows the default.
- *
- * The profile endpoint binds `avatar_file_id` to a plain string, so an explicit
- * `null` is indistinguishable from an omitted field and keeps the avatar; removal
- * is the `"0"` sentinel (see the S2-02 handoff). `null` therefore means "keep".
- */
+/** Remove the current avatar with an explicit `null`; the interface then shows the default. */
 export function removeAvatar(idempotencyKey: string): Promise<UpdateProfileResult> {
-  return updateProfile({ avatar_file_id: "0" }, idempotencyKey);
+  return updateProfile({ avatar_file_id: null }, idempotencyKey);
 }

@@ -29,14 +29,15 @@ interface FileRecordRepository extends Repository<FileRecord, Long> {
     @Query("""
             select f.id from FileRecord f
             where f.bucket = :bucket
-              and (locate(:images, f.objectKey) = 1 or locate(:evidence, f.objectKey) = 1)
+              and (locate(:images, f.objectKey) = 1 or locate(:evidence, f.objectKey) = 1
+                  or locate(:avatars, f.objectKey) = 1)
               and f.cleanupAfter <= :now and f.uploadExpiresAt < :now
               and (f.lastCleanupAt is null or f.lastCleanupAt <= :retryBefore)
               and not exists (select r.id from FileReference r where r.fileId = f.id)
             order by f.lastCleanupAt asc nulls first, f.id
             """)
-    List<Long> cleanupCandidates(String bucket, String images, String evidence, Instant now, Instant retryBefore,
-                                 Pageable page);
+    List<Long> cleanupCandidates(String bucket, String images, String evidence, String avatars, Instant now,
+                                 Instant retryBefore, Pageable page);
 
     Optional<FileRecord> findByIdAndOwnerAccountId(long id, long ownerAccountId);
 
