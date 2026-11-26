@@ -2,6 +2,7 @@ package io.github.iy88.project1.api.conversation;
 
 import io.github.iy88.project1.account.application.AccountQueries;
 import io.github.iy88.project1.conversation.application.AccountDirectory;
+import io.github.iy88.project1.conversation.application.CaseConversations;
 import io.github.iy88.project1.conversation.application.ConversationQueries;
 import io.github.iy88.project1.conversation.application.Conversations;
 import io.github.iy88.project1.conversation.application.TradeChats;
@@ -30,7 +31,9 @@ class ConversationHttpConfiguration {
     @Bean
     ConversationWriteCommands conversationWriteCommands(WriteExecutor writes, Conversations conversations,
                                                         TradeChats tradeChats, ConversationStore store,
-                                                        ObjectProvider<TradeParticipation> trades) {
-        return new WriteBackedConversationCommands(writes, conversations, tradeChats, store, trades.getIfAvailable());
+                                                        ObjectProvider<TradeParticipation> trades,
+                                                        CaseConversations caseConversations) {
+        return new WriteBackedConversationCommands(writes, conversations, tradeChats, store,
+                trades.getIfAvailable(), caseConversations);
     }
 }

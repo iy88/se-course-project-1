@@ -14,4 +14,8 @@ public interface ConversationWriteCommands {
 
     WriteResult<JsonNode> markRead(ExecutionContext context, String idempotencyKey, ConversationKind kind,
                                    long conversationId, long displayedSeq);
+
+    /** Case threads advance read progress through the related account's own thread. */
+    WriteResult<JsonNode> markCaseRead(ExecutionContext context, String idempotencyKey, long conversationId,
+                                       long displayedSeq);
 }

@@ -21,8 +21,8 @@ public class TradeTimeoutCases {
     public long open(long tradeId, String reason, Instant at) {
         return jdbc.sql("""
                 with created as (
-                    insert into moderation_case (case_type, created_at)
-                    values ('exception', :at)
+                    insert into moderation_case (case_type, created_at, updated_at, target_type, target_id, case_status)
+                    values ('exception', :at, :at, 'trade', :tradeId, 'pending')
                     returning id
                 )
                 insert into trade_timeout_case (case_id, trade_id, reason)
@@ -39,8 +39,8 @@ public class TradeTimeoutCases {
     public long openDispute(long tradeId, long disputeId, Instant at) {
         return jdbc.sql("""
                 with created as (
-                    insert into moderation_case (case_type, created_at)
-                    values ('dispute', :at)
+                    insert into moderation_case (case_type, created_at, updated_at, target_type, target_id, case_status)
+                    values ('dispute', :at, :at, 'trade', :tradeId, 'pending')
                     returning id
                 )
                 insert into trade_dispute_case (case_id, dispute_id, trade_id)

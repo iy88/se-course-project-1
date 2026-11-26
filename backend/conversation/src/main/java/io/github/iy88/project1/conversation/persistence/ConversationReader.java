@@ -56,6 +56,10 @@ public class ConversationReader {
         return tradeMessages.findById(messageId).filter(message -> message.conversationId() == conversationId);
     }
 
+    public Optional<CaseMessage> findCaseMessage(long conversationId, long messageId) {
+        return caseMessages.findById(messageId).filter(message -> message.conversationId() == conversationId);
+    }
+
     public Optional<ChatMessage> chatLastMessage(long conversationId) {
         return chatMessages.findTopByChatConversationIdOrderBySeqDesc(conversationId);
     }

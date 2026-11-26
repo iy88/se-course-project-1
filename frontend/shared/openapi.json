@@ -31,7 +31,7 @@
     "/api/v1/admin/cases/{case_id}/claim": {
       "post": {
         "operationId": "claimCase",
-        "summary": "Claim a product-review case",
+        "summary": "Claim a product-review or lifecycle case",
         "parameters": [
           {
             "name": "case_id",
@@ -132,7 +132,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Product-review cases use the review workflow. Other cases use the case lifecycle."
       }
     },
     "/api/v1/admin/product-reviews/{audit_id}": {
@@ -3817,6 +3818,1250 @@
           }
         }
       }
+    },
+    "/api/v1/cases": {
+      "get": {
+        "operationId": "listCases",
+        "summary": "本人举报与收到的事项",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["mine", "received"]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "claimed", "decided"]
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "page", "page_size", "total"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CaseListItem"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "page_size": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "submitReport",
+        "summary": "提交举报（同对象未结时转为补充）",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseSubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["case_id", "case_status", "reused"],
+                  "properties": {
+                    "case_id": {
+                      "type": "string"
+                    },
+                    "case_status": {
+                      "type": "string"
+                    },
+                    "reused": {
+                      "type": "boolean",
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["case_id", "case_status", "reused"],
+                  "properties": {
+                    "case_id": {
+                      "type": "string"
+                    },
+                    "case_status": {
+                      "type": "string"
+                    },
+                    "reused": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ACCOUNT_WRITE_RESTRICTED / CSRF_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CASE_CLOSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID / TARGET_INVALID / EVIDENCE_OUT_OF_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}": {
+      "get": {
+        "operationId": "getCase",
+        "summary": "事项详情与进度（按视角裁剪）",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_VISIBLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/supplements": {
+      "post": {
+        "operationId": "supplementCase",
+        "summary": "补充举报材料",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseSupplementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["case_id", "supplement_count", "updated_at"],
+                  "properties": {
+                    "case_id": {
+                      "type": "string"
+                    },
+                    "supplement_count": {
+                      "type": "integer"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_CASE_PARTICIPANT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CASE_CLOSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID / EVIDENCE_OUT_OF_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/messages": {
+      "post": {
+        "operationId": "postCaseMessage",
+        "summary": "提交说明、申辩或管理员回复",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseMessageView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ACTION_NOT_ALLOWED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PARTICIPANT_REQUIRED / NOT_CASE_MANAGER",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CASE_CLOSED / CASE_APPEAL_WINDOW_ENDED / STATE_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DEPENDENCY_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/case-results": {
+      "get": {
+        "operationId": "listCaseResults",
+        "summary": "匿名公开的举报结果",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "target_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "conversation_kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "page", "page_size", "total"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CaseResult"
+                      }
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "page_size": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/cases/{case_id}/inquiries": {
+      "post": {
+        "operationId": "inquireCase",
+        "summary": "向相关账户发起问询",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseInquiryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["inquiry_action_id", "case_message_id", "thread", "case_status"],
+                  "properties": {
+                    "inquiry_action_id": {
+                      "type": "string"
+                    },
+                    "case_message_id": {
+                      "type": "string"
+                    },
+                    "thread": {
+                      "$ref": "#/components/schemas/CaseThread"
+                    },
+                    "case_status": {
+                      "type": "string"
+                    },
+                    "notified_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_CASE_MANAGER",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CASE_CLOSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/cases/{case_id}/decisions": {
+      "post": {
+        "operationId": "decideCase",
+        "summary": "作出决定并按执行项处置",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "case_id",
+                    "decision_kind",
+                    "decided_at",
+                    "case_status",
+                    "enforcements",
+                    "notified_account_ids"
+                  ],
+                  "properties": {
+                    "case_id": {
+                      "type": "string"
+                    },
+                    "decision_kind": {
+                      "type": "string"
+                    },
+                    "decided_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "case_status": {
+                      "type": "string",
+                      "const": "decided"
+                    },
+                    "enforcements": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CaseEnforcementView"
+                      }
+                    },
+                    "notified_account_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ACTION_NOT_ALLOWED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_CASE_MANAGER",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "STATE_CONFLICT / CASE_CLOSED / TARGET_STATE_CONFLICT / TRADE_TERMINAL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID / BASIS_REQUIRED / TARGET_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DEPENDENCY_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/cases/{case_id}/close": {
+      "post": {
+        "operationId": "closeCase",
+        "summary": "结案并归档事项及各线程",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["case_id", "case_status", "archived_at"],
+                  "properties": {
+                    "case_id": {
+                      "type": "string"
+                    },
+                    "case_status": {
+                      "type": "string",
+                      "const": "decided"
+                    },
+                    "archived_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_CASE_MANAGER",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "STATE_CONFLICT / CASE_APPEAL_WINDOW_OPEN / CASE_APPEAL_PENDING",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/cases/{case_id}/publish-result": {
+      "post": {
+        "operationId": "publishCaseResult",
+        "summary": "确认并匿名公开举报结果",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CasePublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["case_id", "public_result_at"],
+                  "properties": {
+                    "case_id": {
+                      "type": "string"
+                    },
+                    "public_result_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_CASE_MANAGER",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "STATE_CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/cases/{case_id}/enforcements/{enforcement_id}/lift": {
+      "post": {
+        "operationId": "liftCaseEnforcement",
+        "summary": "解除事项执行限制（API-CASE-008）",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "enforcement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "enforcement_id",
+                    "lifted_at",
+                    "lifted_by",
+                    "restored_scope",
+                    "remaining_restrictions"
+                  ],
+                  "properties": {
+                    "enforcement_id": {
+                      "type": "string"
+                    },
+                    "lifted_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lifted_by": {
+                      "type": "string"
+                    },
+                    "restored_scope": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "remaining_restrictions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ACTION_NOT_ALLOWED / CSRF_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_CASE_MANAGER / RESOURCE_NOT_VISIBLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "RESTRICTION_NOT_ACTIVE / TRADE_FREEZE_NOT_ACTIVE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "BASIS_REQUIRED / INPUT_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DEPENDENCY_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5927,6 +7172,477 @@
           "todo_count": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "CaseTarget": {
+        "type": "object",
+        "required": ["target_type", "target_id"],
+        "additionalProperties": false,
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": ["product", "comment", "message", "evaluation", "account", "trade"]
+          },
+          "target_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "conversation_kind": {
+            "type": "string",
+            "enum": ["chat", "trade", "case"]
+          },
+          "conversation_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          }
+        }
+      },
+      "CaseThread": {
+        "type": "object",
+        "required": ["conversation_kind", "conversation_id"],
+        "properties": {
+          "conversation_kind": {
+            "type": "string",
+            "const": "case"
+          },
+          "conversation_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          }
+        }
+      },
+      "CaseActionView": {
+        "type": "object",
+        "required": ["action_kind", "occurred_at", "actor_kind"],
+        "properties": {
+          "action_kind": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor_kind": {
+            "type": "string",
+            "enum": ["account", "manager", "system"]
+          }
+        }
+      },
+      "CaseEnforcementView": {
+        "type": "object",
+        "required": ["enforcement_id", "action", "result_status"],
+        "properties": {
+          "enforcement_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "result_status": {
+            "type": "string",
+            "enum": ["applied", "replayed", "failed"]
+          },
+          "current_state": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "CasePendingInquiry": {
+        "type": "object",
+        "required": ["inquiry_action_id", "asked_at", "scope_text"],
+        "properties": {
+          "inquiry_action_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "asked_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scope_text": {
+            "type": "string"
+          },
+          "related_account_id": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "CaseListItem": {
+        "type": "object",
+        "required": ["case_id", "scope", "case_status", "updated_at"],
+        "properties": {
+          "case_id": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["mine", "received"]
+          },
+          "case_type": {
+            "type": "string"
+          },
+          "case_status": {
+            "type": "string",
+            "enum": ["pending", "claimed", "decided"]
+          },
+          "decision_kind": {
+            "type": ["string", "null"]
+          },
+          "archived_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "public_result_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseThread"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CaseDetail": {
+        "type": "object",
+        "required": ["case_id", "case_type", "case_status", "viewpoint", "available_actions"],
+        "properties": {
+          "case_id": {
+            "type": "string"
+          },
+          "case_type": {
+            "type": "string"
+          },
+          "case_status": {
+            "type": "string",
+            "enum": ["pending", "claimed", "decided"]
+          },
+          "decision_kind": {
+            "type": ["string", "null"]
+          },
+          "archived_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "public_result_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "reason_text": {
+            "type": ["string", "null"]
+          },
+          "reported_reason": {
+            "type": ["string", "null"]
+          },
+          "viewpoint": {
+            "type": "string",
+            "enum": ["reporter", "related_account", "manager"]
+          },
+          "appeal_deadline_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "available_actions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "supplement_evidence",
+                "respond_inquiry",
+                "submit_appeal",
+                "inquire",
+                "decide",
+                "resolve_appeal",
+                "close",
+                "publish_result"
+              ]
+            }
+          },
+          "pending_inquiries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CasePendingInquiry"
+            }
+          },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseThread"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["related_account_id", "conversation_kind", "conversation_id"],
+              "properties": {
+                "related_account_id": {
+                  "type": "string"
+                },
+                "conversation_kind": {
+                  "type": "string",
+                  "const": "case"
+                },
+                "conversation_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["evidence_id"],
+              "properties": {
+                "evidence_id": {
+                  "type": "string"
+                },
+                "file_id": {
+                  "type": ["string", "null"]
+                }
+              }
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaseActionView"
+            }
+          },
+          "enforcements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaseEnforcementView"
+            }
+          }
+        }
+      },
+      "CaseResult": {
+        "type": "object",
+        "required": ["case_id", "decision_kind", "public_summary", "public_reason", "published_at"],
+        "properties": {
+          "case_id": {
+            "type": "string"
+          },
+          "decision_kind": {
+            "type": "string"
+          },
+          "public_summary": {
+            "type": "string"
+          },
+          "public_reason": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CaseMessageView": {
+        "type": "object",
+        "required": ["case_message_id", "seq", "message_kind", "body", "created_at"],
+        "properties": {
+          "case_message_id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "message_kind": {
+            "type": "string",
+            "enum": ["inquiry", "statement", "appeal", "manager_reply", "system_notice"]
+          },
+          "body": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/CaseThread"
+          }
+        }
+      },
+      "CaseSubmitRequest": {
+        "type": "object",
+        "required": ["target", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/CaseTarget"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "note": {
+            "type": ["string", "null"],
+            "maxLength": 2000
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["file_id"],
+              "properties": {
+                "file_id": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CaseSupplementRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "type": ["string", "null"],
+            "maxLength": 2000
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["file_id"],
+              "properties": {
+                "file_id": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CaseMessageRequest": {
+        "type": "object",
+        "required": ["message_kind", "body"],
+        "additionalProperties": false,
+        "properties": {
+          "thread": {
+            "$ref": "#/components/schemas/CaseThread"
+          },
+          "message_kind": {
+            "type": "string",
+            "enum": ["statement", "appeal", "manager_reply"]
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "inquiry_action_id": {
+            "type": ["string", "null"]
+          },
+          "appeal_action_id": {
+            "type": ["string", "null"]
+          },
+          "resolution": {
+            "type": ["string", "null"],
+            "enum": ["uphold", "revoke", "adjust", null]
+          },
+          "basis_ref": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "CaseInquiryRequest": {
+        "type": "object",
+        "required": ["peer_account_id", "scope_text"],
+        "additionalProperties": false,
+        "properties": {
+          "peer_account_id": {
+            "type": "string"
+          },
+          "scope_text": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "CaseDecisionRequest": {
+        "type": "object",
+        "required": ["decision_kind", "reason", "basis_refs"],
+        "additionalProperties": false,
+        "properties": {
+          "decision_kind": {
+            "type": "string",
+            "enum": ["no_action", "not_actionable", "violation"]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "basis_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "enforcements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["action", "target_type", "target_id"],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "restrict_account",
+                    "lift_account_restriction",
+                    "withdraw_public_access",
+                    "restore_display",
+                    "remove_content",
+                    "freeze_trade",
+                    "lift_trade_freeze",
+                    "adjust_trade_status",
+                    "remove_evaluation_content"
+                  ]
+                },
+                "target_type": {
+                  "type": "string"
+                },
+                "target_id": {
+                  "type": "string"
+                },
+                "expected_result": {
+                  "type": ["string", "null"]
+                }
+              }
+            }
+          }
+        }
+      },
+      "CasePublishRequest": {
+        "type": "object",
+        "required": ["public_summary", "public_reason"],
+        "additionalProperties": false,
+        "properties": {
+          "public_summary": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "public_reason": {
+            "type": "string",
+            "maxLength": 2000
           }
         }
       }
