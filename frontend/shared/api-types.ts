@@ -1710,6 +1710,7 @@ export interface components {
         }[];
         attachments: {
           evidence_id: string;
+          content_type?: string;
           /** Format: date-time */
           submitted_at: string;
         }[];
@@ -1766,6 +1767,9 @@ export interface components {
         evidence_id: string;
         /** @enum {string} */
         evidence_kind?: "submitter_attachment" | "platform_record";
+        /** Format: date-time */
+        submitted_at?: string;
+        content_type?: string;
         decision_basis?: boolean;
         file_id?: string | null;
       }[];

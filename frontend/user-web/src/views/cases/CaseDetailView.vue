@@ -508,7 +508,20 @@ async function submitSupplement(): Promise<void> {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                打开附件 #{{ item.evidence_id }}
+                <img
+                  v-if="item.content_type?.startsWith('image/')"
+                  :src="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
+                  :alt="`已提交的图片 #${item.evidence_id}`"
+                  class="evidence-image"
+                  width="640"
+                  height="480"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <template v-else>
+                  {{ item.content_type === "application/pdf" ? "在新标签页查看 PDF" : "查看附件" }}
+                  #{{ item.evidence_id }}
+                </template>
               </a>
               <span class="muted"> · {{ formatDateTime(item.submitted_at) }}</span>
             </li>
@@ -706,6 +719,13 @@ async function submitSupplement(): Promise<void> {
 </template>
 
 <style scoped>
+.evidence-image {
+  display: block;
+  max-inline-size: min(100%, 32rem);
+  max-block-size: 24rem;
+  object-fit: contain;
+}
+
 .supplement-toggle {
   justify-self: start;
 }

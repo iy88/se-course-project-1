@@ -114,6 +114,8 @@ export interface ManagementCaseDetail {
     evidence_kind?: "submitter_attachment" | "platform_record";
     file_id: string | null;
     decision_basis?: boolean;
+    submitted_at?: string;
+    content_type?: string;
   }[];
   actions: { action_kind: string; occurred_at: string; actor_kind: string }[];
   enforcements: {

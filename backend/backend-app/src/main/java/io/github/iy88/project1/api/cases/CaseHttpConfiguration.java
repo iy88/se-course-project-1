@@ -137,8 +137,9 @@ public class CaseHttpConfiguration {
     @Bean
     CaseQueries caseQueries(org.springframework.jdbc.core.simple.JdbcClient jdbc, CaseLifecycleStore store,
                             CasePorts.Threads threads, CasePorts.Managers managers, CasePorts.Targets targets,
-                            CaseSettings settings, JsonMapper json, ObjectProvider<Clock> clocks) {
-        return new CaseQueries(jdbc, store, threads, managers, targets, settings, json,
+                            CasePorts.EvidenceFiles files, CaseSettings settings, JsonMapper json,
+                            ObjectProvider<Clock> clocks) {
+        return new CaseQueries(jdbc, store, threads, managers, targets, files, settings, json,
                 clocks.getIfAvailable(Clock::systemUTC));
     }
 
@@ -291,6 +292,11 @@ public class CaseHttpConfiguration {
     }
 
     private record CaseEvidenceAdapter(FileReferences files) implements CasePorts.EvidenceFiles {
+        @Override
+        public Optional<String> contentType(long caseId, long fileId) {
+            return files.referencedContentType(new UploadRegistration.Target("case", caseId), fileId);
+        }
+
         @Override
         public void lockFile(long fileId) {
             try {

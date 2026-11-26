@@ -37,7 +37,7 @@ class CaseQueriesTests {
     private final CasePorts.Managers managers = mock(CasePorts.Managers.class);
     private final CasePorts.Targets targets = mock(CasePorts.Targets.class);
     private final CaseQueries queries = new CaseQueries(mock(JdbcClient.class), store, threads, managers,
-            targets, new CaseSettings(), JSON, Clock.fixed(NOW, ZoneOffset.UTC));
+            targets, mock(CasePorts.EvidenceFiles.class), new CaseSettings(), JSON, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
     void theClaimedManagerSeesTheExactContentSnapshot() {

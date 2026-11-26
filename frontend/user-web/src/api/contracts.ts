@@ -889,7 +889,7 @@ export interface CaseDetail {
     original_note?: string | null;
     product?: { id: string; title: string };
     supplements: { action_id: string; note: string; occurred_at: string }[];
-    attachments: { evidence_id: string; submitted_at: string }[];
+    attachments: { evidence_id: string; submitted_at: string; content_type?: string }[];
   };
   case_id: string;
   case_type: CaseKind;

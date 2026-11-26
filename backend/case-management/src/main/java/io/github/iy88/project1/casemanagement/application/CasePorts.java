@@ -101,6 +101,10 @@ public final class CasePorts {
 
     /** Case evidence files, registered through the shared file service. */
     public interface EvidenceFiles {
+        default Optional<String> contentType(long caseId, long fileId) {
+            return Optional.empty();
+        }
+
         void lockFile(long fileId);
 
         /** Registers each verified file against the case and returns the file reference ids. */

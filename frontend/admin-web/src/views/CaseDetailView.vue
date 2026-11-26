@@ -101,6 +101,10 @@ const currentStatus = computed(() =>
   detail.value?.archived_at ? "已结案" : detail.value && statusLabels[detail.value.case_status],
 );
 const reportedObject = computed(() => detail.value?.reported_object);
+const submittedNotes = computed(
+  () =>
+    detail.value?.decision_basis_actions?.filter((item) => item.action_kind === "supplement") ?? [],
+);
 const relatedAccounts = computed(() => detail.value?.related_accounts ?? []);
 const eligibleAccounts = computed(() =>
   relatedAccounts.value.filter((account) => account.eligible),
@@ -432,7 +436,10 @@ onUnmounted(() => {
           <h2>{{ todoKindLabels[detail.case_type] }}</h2>
           <span class="chip">{{ currentStatus }}</span>
         </div>
-        <p v-if="detail.reported_reason" class="pre-line">{{ detail.reported_reason }}</p>
+        <div v-if="detail.reported_reason">
+          <h3>举报理由</h3>
+          <p class="pre-line">{{ detail.reported_reason }}</p>
+        </div>
         <div v-if="detail.decision_kind" class="stack">
           <h3>{{ decisionKindLabels[detail.decision_kind] }}</h3>
           <p v-if="detail.reason_text" class="pre-line">{{ detail.reason_text }}</p>
@@ -498,13 +505,24 @@ onUnmounted(() => {
       </section>
       <section v-if="reportedObject" class="card stack">
         <h2>举报对象</h2>
-        <p>{{ reportedKinds[reportedObject.target_type] }} #{{ reportedObject.target_id }}</p>
+        <dl class="case-fields">
+          <dt>对象类型</dt>
+          <dd>{{ reportedKinds[reportedObject.target_type] }}</dd>
+          <dt>对象编号</dt>
+          <dd>#{{ reportedObject.target_id }}</dd>
+        </dl>
         <details v-if="reportedObject.product">
           <summary>
-            查看{{ reportedObject.target_type === "account" ? "来源商品" : "商品" }}
-            {{ reportedObject.product.title }} #{{ reportedObject.product.id }}
+            查看{{ reportedObject.target_type === "account" ? "来源商品快照" : "商品快照" }}
           </summary>
-          <p class="pre-line">{{ reportedObject.product.description }}</p>
+          <dl class="case-fields">
+            <dt>商品名称</dt>
+            <dd>{{ reportedObject.product.title }}</dd>
+            <dt>商品编号</dt>
+            <dd>#{{ reportedObject.product.id }}</dd>
+            <dt>商品简介</dt>
+            <dd class="pre-line">{{ reportedObject.product.description || "未填写" }}</dd>
+          </dl>
         </details>
         <p v-else-if="reportedObject.target_type === 'account'" class="muted">未记录来源商品。</p>
         <p v-else-if="reportedObject.target_type === 'product'" class="muted">商品快照不可用。</p>
@@ -544,10 +562,23 @@ onUnmounted(() => {
         <p v-if="detail.target.created_at">发表于 {{ formatDateTime(detail.target.created_at) }}</p>
       </details>
       <section
-        v-if="detail.evidence?.length || (detail.reported_message && !detail.archived_at)"
+        v-if="
+          submittedNotes.length ||
+          detail.evidence?.length ||
+          (detail.reported_message && !detail.archived_at)
+        "
         class="card stack"
       >
-        <h2>证据引用</h2>
+        <h2>补充材料与证据</h2>
+        <div v-if="submittedNotes.length" class="stack stack--tight">
+          <h3>举报人补充说明</h3>
+          <ul class="stack stack--tight">
+            <li v-for="item in submittedNotes" :key="item.action_id">
+              <p class="muted">提交时间 {{ formatDateTime(item.occurred_at) }}</p>
+              <p class="pre-line">{{ item.note }}</p>
+            </li>
+          </ul>
+        </div>
         <button
           v-if="
             detail.reported_message &&
@@ -561,17 +592,44 @@ onUnmounted(() => {
         >
           引用被举报消息
         </button>
-        <ul v-if="detail.evidence?.length">
-          <li v-for="item in detail.evidence" :key="item.evidence_id">
-            证据 #{{ item.evidence_id
-            }}<template v-if="item.file_id"> · 文件 #{{ item.file_id }}</template>
+        <ul v-if="detail.evidence?.length" class="stack">
+          <li v-for="item in detail.evidence" :key="item.evidence_id" class="stack stack--tight">
+            <dl class="case-fields">
+              <dt>证据类型</dt>
+              <dd>
+                {{ item.evidence_kind === "platform_record" ? "被举报消息" : "用户上传附件" }}
+              </dd>
+              <template v-if="item.content_type">
+                <dt>附件格式</dt>
+                <dd>{{ item.content_type === "application/pdf" ? "PDF" : "图片" }}</dd>
+              </template>
+              <dt>证据编号</dt>
+              <dd>#{{ item.evidence_id }}</dd>
+              <template v-if="item.submitted_at">
+                <dt>{{ item.file_id ? "提交时间" : "引用时间" }}</dt>
+                <dd>{{ formatDateTime(item.submitted_at) }}</dd>
+              </template>
+            </dl>
             <a
               v-if="item.file_id"
               :href="caseEvidenceFileHref(caseId, item.evidence_id)"
               target="_blank"
               rel="noopener noreferrer"
-              >打开证据</a
             >
+              <img
+                v-if="item.content_type?.startsWith('image/')"
+                :src="caseEvidenceFileHref(caseId, item.evidence_id)"
+                :alt="`证据图片 #${item.evidence_id}`"
+                class="evidence-image"
+                width="640"
+                height="480"
+                loading="lazy"
+                decoding="async"
+              />
+              <template v-else>{{
+                item.content_type === "application/pdf" ? "在新标签页查看 PDF" : "查看附件"
+              }}</template>
+            </a>
             <button
               v-else-if="item.evidence_kind === 'platform_record'"
               type="button"
@@ -729,7 +787,8 @@ onUnmounted(() => {
           >
             <label>
               <input v-model="basis" type="checkbox" :value="`evidence:${item.evidence_id}`" />
-              用户附件 #{{ item.evidence_id }}
+              用户上传附件 · 证据 #{{ item.evidence_id }}
+              <span v-if="item.submitted_at"> · {{ formatDateTime(item.submitted_at) }}</span>
             </label>
             <a
               :href="caseEvidenceFileHref(caseId, item.evidence_id)"
@@ -1016,6 +1075,33 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.evidence-image {
+  display: block;
+  max-inline-size: min(100%, 32rem);
+  max-block-size: 24rem;
+  object-fit: contain;
+}
+
+.case-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+}
+
+details > .case-fields {
+  margin-block-start: var(--space-2);
+}
+
+.case-fields dt {
+  font-weight: 600;
+}
+
+.case-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .pre-line {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

@@ -544,7 +544,25 @@ class S4ProductionEnforcementIT {
         var redirect = URI.create(response.headers().firstValue("Location").orElseThrow());
         assertThat(redirect.getPath()).endsWith(location.key());
         assertThat(redirect.getRawQuery()).isNotEmpty();
+        var pdfLocation = new OssFileObjects.Location(location.bucket(),
+                env.getRequiredProperty("OSS_PREFIX") + "/case_evidence/" + UUID.randomUUID());
+        long pdfFile = registry.register(new UploadRegistration.Draft(owner, FilePurpose.CASE_EVIDENCE, null,
+                pdfLocation, 150, "application/pdf", "s4-fixture", now,
+                now.plusSeconds(60), now.plusSeconds(300))).fileId();
+        registry.markVerified(pdfFile, owner, "s4-pdf-etag", new VerifiedContent(150, "application/pdf"));
+        post(reporter, "/cases/" + caseId + "/supplements", """
+                {"attachments":[{"file_id":"%d"}]}
+                """.formatted(pdfFile), key(), 200);
+        long pdfEvidence = db.sql("select id from case_evidence where case_id = ? and file_id = ?")
+                .param(caseId).param(pdfFile).query(Long.class).single();
+        String pdfPath = "/cases/" + caseId + "/evidence/" + pdfEvidence + "/file";
+        var pdfResponse = http.send(request(reporter, pdfPath).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(pdfResponse.statusCode()).isEqualTo(302);
+        assertThat(URI.create(pdfResponse.headers().firstValue("Location").orElseThrow()).getQuery())
+                .contains("response-content-type=application/pdf", "response-content-disposition=inline");
         var ownDetail = get(reporter, "/cases/" + caseId, 200);
+        assertThat(ownDetail.at("/report_materials/attachments/0/content_type").asString()).isEqualTo("image/png");
+        assertThat(ownDetail.at("/report_materials/attachments/1/content_type").asString()).isEqualTo("application/pdf");
         assertThat(ownDetail.path("reported_reason").asString()).isEqualTo("请核实");
         assertThat(ownDetail.at("/report_materials/supplements/0/note").asString()).isEqualTo("补充图片说明");
         assertThat(ownDetail.at("/report_materials/attachments/0/evidence_id").asLong()).isEqualTo(evidence);

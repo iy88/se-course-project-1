@@ -8092,6 +8092,7 @@
                   "required": ["evidence_id", "submitted_at"],
                   "properties": {
                     "evidence_id": { "type": "string" },
+                    "content_type": { "type": "string" },
                     "submitted_at": { "type": "string", "format": "date-time" }
                   }
                 }
@@ -8252,6 +8253,8 @@
                   "type": "string",
                   "enum": ["submitter_attachment", "platform_record"]
                 },
+                "submitted_at": { "type": "string", "format": "date-time" },
+                "content_type": { "type": "string" },
                 "decision_basis": { "type": "boolean" },
                 "file_id": {
                   "type": ["string", "null"]

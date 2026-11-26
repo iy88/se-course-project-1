@@ -103,7 +103,7 @@ public final class OssFileObjects {
         var request = GetObjectRequest.newBuilder().bucket(location.bucket()).key(location.key())
                 .responseCacheControl("private, no-store");
         if ("application/pdf".equals(content.contentType())) {
-            request.responseContentDisposition("attachment");
+            request.responseContentType("application/pdf").responseContentDisposition("inline");
         }
         var result = call(() -> client.presign(request.build(),
                 PresignOptions.newBuilder().expiration(expiresAt).build()));

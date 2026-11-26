@@ -32,18 +32,20 @@ public class CaseQueries {
     private final CasePorts.Threads threads;
     private final CasePorts.Managers managers;
     private final CasePorts.Targets targets;
+    private final CasePorts.EvidenceFiles files;
     private final CaseSettings settings;
     private final Clock clock;
     private final JsonMapper json;
 
     public CaseQueries(JdbcClient jdbc, CaseLifecycleStore store, CasePorts.Threads threads,
-                       CasePorts.Managers managers, CasePorts.Targets targets, CaseSettings settings,
+                       CasePorts.Managers managers, CasePorts.Targets targets, CasePorts.EvidenceFiles files, CaseSettings settings,
                        JsonMapper json, Clock clock) {
         this.jdbc = jdbc;
         this.store = store;
         this.threads = threads;
         this.managers = managers;
         this.targets = targets;
+        this.files = files;
         this.settings = settings;
         this.clock = clock;
         this.json = json;
@@ -179,6 +181,7 @@ public class CaseQueries {
                     var item = attachments.addObject();
                     item.put("evidence_id", Long.toString(evidence.evidenceId()));
                     item.put("submitted_at", text(evidence.submittedAt()));
+                    files.contentType(caseId, evidence.fileId()).ifPresent(type -> item.put("content_type", type));
                 }
             }
         }
@@ -295,8 +298,12 @@ public class CaseQueries {
                     var entry = evidence.addObject();
                     entry.put("evidence_id", Long.toString(item.evidenceId()));
                     entry.put("evidence_kind", item.evidenceKind());
+                    entry.put("submitted_at", text(item.submittedAt()));
                     entry.put("decision_basis", item.decisionBasis());
                     entry.put("file_id", item.fileId() == null ? null : Long.toString(item.fileId()));
+                    if (item.fileId() != null) {
+                        files.contentType(caseId, item.fileId()).ifPresent(type -> entry.put("content_type", type));
+                    }
                 }
             }
         }
