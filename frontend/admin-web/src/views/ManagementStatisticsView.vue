@@ -28,7 +28,8 @@ const trendLoading = ref(false);
 let lastSelection: StatisticsSelection | undefined;
 let pending: AbortController | undefined;
 
-const dayStart = (value: Date): Date => new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+const dayStart = (value: Date): Date =>
+  new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 const toInput = (value: Date): string => value.toISOString().slice(0, 16);
 const dayLabel = (value: Date): string => `${value.getUTCMonth() + 1}/${value.getUTCDate()}`;
 
@@ -60,7 +61,12 @@ const donutSegments = computed(() => {
     .filter((item) => item.count > 0)
     .map((item) => {
       const fraction = total === 0 ? 0 : item.count / total;
-      const segment = { ...item, percent: Math.round(fraction * 100), dash: `${fraction * 100} ${100 - fraction * 100}`, offset };
+      const segment = {
+        ...item,
+        percent: Math.round(fraction * 100),
+        dash: `${fraction * 100} ${100 - fraction * 100}`,
+        offset,
+      };
       offset += fraction * 100;
       return segment;
     });
@@ -126,7 +132,11 @@ async function loadTrend(selection: StatisticsSelection): Promise<void> {
   const from = new Date(selection.start_at);
   const to = new Date(selection.end_at);
   const buckets: { label: string; start: Date; end: Date }[] = [];
-  for (let cursor = dayStart(from); cursor.getTime() < to.getTime() && buckets.length < 31; cursor = new Date(cursor.getTime() + DAY_MS)) {
+  for (
+    let cursor = dayStart(from);
+    cursor.getTime() < to.getTime() && buckets.length < 31;
+    cursor = new Date(cursor.getTime() + DAY_MS)
+  ) {
     const bucketEnd = new Date(Math.min(cursor.getTime() + DAY_MS, to.getTime()));
     buckets.push({ label: dayLabel(cursor), start: cursor, end: bucketEnd });
   }
@@ -134,12 +144,19 @@ async function loadTrend(selection: StatisticsSelection): Promise<void> {
   try {
     const results = await Promise.all(
       buckets.map((bucket) =>
-        readStatistics({ time_scope: "range", start_at: bucket.start.toISOString(), end_at: bucket.end.toISOString() })
+        readStatistics({
+          time_scope: "range",
+          start_at: bucket.start.toISOString(),
+          end_at: bucket.end.toISOString(),
+        })
           .then((value) => value.completed_in_selection)
           .catch(() => 0),
       ),
     );
-    trend.value = buckets.map((bucket, index) => ({ label: bucket.label, count: results[index] ?? 0 }));
+    trend.value = buckets.map((bucket, index) => ({
+      label: bucket.label,
+      count: results[index] ?? 0,
+    }));
   } finally {
     trendLoading.value = false;
   }
@@ -181,7 +198,11 @@ function submit(): void {
     endInput.value?.reportValidity();
     return;
   }
-  void load({ time_scope: "range", start_at: startTime.toISOString(), end_at: endTime.toISOString() });
+  void load({
+    time_scope: "range",
+    start_at: startTime.toISOString(),
+    end_at: endTime.toISOString(),
+  });
 }
 
 function onScopeChange(): void {
@@ -219,11 +240,26 @@ onUnmounted(() => pending?.abort());
       <template v-if="scope === 'custom'">
         <label class="filter-item">
           <span>开始（UTC，含）</span>
-          <input v-model="start" name="start_at" class="input" type="datetime-local" required @input="clearRangeError" />
+          <input
+            v-model="start"
+            name="start_at"
+            class="input"
+            type="datetime-local"
+            required
+            @input="clearRangeError"
+          />
         </label>
         <label class="filter-item">
           <span>结束（UTC，不含）</span>
-          <input ref="endInput" v-model="end" name="end_at" class="input" type="datetime-local" required @input="clearRangeError" />
+          <input
+            ref="endInput"
+            v-model="end"
+            name="end_at"
+            class="input"
+            type="datetime-local"
+            required
+            @input="clearRangeError"
+          />
         </label>
       </template>
       <button type="submit" class="btn btn--primary filter-submit" :disabled="loading">
@@ -249,12 +285,17 @@ onUnmounted(() => pending?.abort());
         <article class="card kpi">
           <p class="kpi-label">待处理事项</p>
           <strong class="kpi-value">{{ pendingTotal.toLocaleString() }}</strong>
-          <p class="muted kpi-note">审核 {{ data.pending.reviews }} · 举报 {{ data.pending.reports }}</p>
+          <p class="muted kpi-note">
+            审核 {{ data.pending.reviews }} · 举报 {{ data.pending.reports }}
+          </p>
         </article>
         <article class="card kpi">
           <p class="kpi-label">交易总数</p>
           <strong class="kpi-value">{{ tradeTotal.toLocaleString() }}</strong>
-          <p class="muted kpi-note">完成 {{ data.trades.completed }} · 终止 {{ data.trades.terminated }} · 争议 {{ data.trades.disputed }}</p>
+          <p class="muted kpi-note">
+            完成 {{ data.trades.completed }} · 终止 {{ data.trades.terminated }} · 争议
+            {{ data.trades.disputed }}
+          </p>
         </article>
       </section>
 
@@ -264,12 +305,29 @@ onUnmounted(() => pending?.abort());
             <h2 id="trend-title">完成交易趋势</h2>
             <span class="muted">{{ trendLoading ? "读取中…" : `${trend.length} 天` }}</span>
           </header>
-          <svg v-if="trend.length" class="trend" viewBox="0 0 336 112" role="img" :aria-label="`完成交易趋势：${trend.map((item) => `${item.label} ${item.count}`).join('，')}`">
+          <svg
+            v-if="trend.length"
+            class="trend"
+            viewBox="0 0 336 112"
+            role="img"
+            :aria-label="`完成交易趋势：${trend.map((item) => `${item.label} ${item.count}`).join('，')}`"
+          >
             <line x1="8" y1="96" x2="328" y2="96" class="axis" />
             <g v-for="(point, index) in trendPoints" :key="trend[index].label">
-              <rect :x="point.x - 8" :y="point.y" width="16" :height="Math.max(2, point.height)" rx="3" class="bar" />
-              <text :x="point.x" y="108" text-anchor="middle" class="axis-label">{{ trend[index].label }}</text>
-              <text :x="point.x" :y="point.y - 4" text-anchor="middle" class="value-label">{{ trend[index].count }}</text>
+              <rect
+                :x="point.x - 8"
+                :y="point.y"
+                width="16"
+                :height="Math.max(2, point.height)"
+                rx="3"
+                class="bar"
+              />
+              <text :x="point.x" y="108" text-anchor="middle" class="axis-label">
+                {{ trend[index].label }}
+              </text>
+              <text :x="point.x" :y="point.y - 4" text-anchor="middle" class="value-label">
+                {{ trend[index].count }}
+              </text>
             </g>
           </svg>
           <p v-else class="muted">全部时间不绘制按日趋势。</p>
@@ -281,8 +339,20 @@ onUnmounted(() => pending?.abort());
             <span class="muted">共 {{ productTotal }} 件</span>
           </header>
           <div class="donut-row">
-            <svg class="donut" viewBox="0 0 42 42" role="img" :aria-label="`商品状态：${productStates.map((item) => `${item.label} ${item.count}`).join('，')}`">
-              <circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--card-border, #e2e8f0)" stroke-width="6" />
+            <svg
+              class="donut"
+              viewBox="0 0 42 42"
+              role="img"
+              :aria-label="`商品状态：${productStates.map((item) => `${item.label} ${item.count}`).join('，')}`"
+            >
+              <circle
+                cx="21"
+                cy="21"
+                r="15.915"
+                fill="none"
+                stroke="var(--card-border, #e2e8f0)"
+                stroke-width="6"
+              />
               <circle
                 v-for="segment in donutSegments"
                 :key="segment.label"
@@ -313,11 +383,18 @@ onUnmounted(() => pending?.abort());
             <h2 id="trades-title">交易结果</h2>
             <span class="muted">共 {{ tradeTotal }} 笔</span>
           </header>
-          <div class="stack-bar" role="img" :aria-label="`交易结果：${tradeParts.map((item) => `${item.label} ${item.count}`).join('，')}`">
+          <div
+            class="stack-bar"
+            role="img"
+            :aria-label="`交易结果：${tradeParts.map((item) => `${item.label} ${item.count}`).join('，')}`"
+          >
             <span
               v-for="item in tradeParts"
               :key="item.label"
-              :style="{ width: tradeTotal === 0 ? '0%' : `${(item.count / tradeTotal) * 100}%`, background: item.color }"
+              :style="{
+                width: tradeTotal === 0 ? '0%' : `${(item.count / tradeTotal) * 100}%`,
+                background: item.color,
+              }"
             />
           </div>
           <ul class="legend legend--inline">
@@ -334,11 +411,18 @@ onUnmounted(() => pending?.abort());
             <h2 id="pending-title">待处理事项</h2>
             <span class="muted">共 {{ pendingTotal }} 项</span>
           </header>
-          <div class="stack-bar" role="img" :aria-label="`待处理事项：${pendingParts.map((item) => `${item.label} ${item.count}`).join('，')}`">
+          <div
+            class="stack-bar"
+            role="img"
+            :aria-label="`待处理事项：${pendingParts.map((item) => `${item.label} ${item.count}`).join('，')}`"
+          >
             <span
               v-for="item in pendingParts"
               :key="item.label"
-              :style="{ width: pendingTotal === 0 ? '0%' : `${(item.count / pendingTotal) * 100}%`, background: item.color }"
+              :style="{
+                width: pendingTotal === 0 ? '0%' : `${(item.count / pendingTotal) * 100}%`,
+                background: item.color,
+              }"
             />
           </div>
           <ul class="legend legend--inline">
