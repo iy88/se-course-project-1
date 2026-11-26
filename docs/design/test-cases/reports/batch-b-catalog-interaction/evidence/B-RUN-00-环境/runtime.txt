@@ -1,8 +1,8 @@
-# 运行时检查 2026-11-26T18:28:38+08:00
+# 运行时检查 2026-11-26T23:07:38+08:00
 
 $ docker ps
-project1-redis | redis:8 | Up 8 hours | 0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
-project1-pg | postgres:18 | Up 8 hours | 0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+project1-redis | redis:8 | Up 12 hours | 0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+project1-pg | postgres:18 | Up 12 hours | 0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
 
 $ docker exec project1-redis redis-cli ping
 PONG
@@ -11,8 +11,8 @@ $ docker exec project1-pg psql -U postgres -tAc 'select version()'
 PostgreSQL 18.7 (Debian 18.7-1.pgdg13+5) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
 
 $ flyway schema (project1_acceptance)
-24 migrations, max version 9
+25 migrations applied
 
-# OSS 隔离（2026-11-26T23:02:04+08:00）
+# OSS 隔离
 OSS_BUCKET=campus-market-v2-jwy (private)
 OSS_PREFIX=project1/acceptance/jwy
