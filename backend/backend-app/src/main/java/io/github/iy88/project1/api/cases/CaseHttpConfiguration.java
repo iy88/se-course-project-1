@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
@@ -358,8 +359,13 @@ public class CaseHttpConfiguration {
         @Override
         public void requireReportable(CaseCommands.Target target, long reporterAccountId) {
             switch (target.targetType()) {
-                case "product" -> products.findById(target.targetId())
-                        .orElseThrow(CaseTargetAdapter::targetInvalid);
+                case "product" -> {
+                    var product = products.findById(target.targetId())
+                            .orElseThrow(CaseTargetAdapter::targetInvalid);
+                    if (product.sellerAccountId() == reporterAccountId) {
+                        throw targetInvalid();
+                    }
+                }
                 case "account" -> {
                     accounts.findById(target.targetId()).orElseThrow(CaseTargetAdapter::targetInvalid);
                     if (target.targetId() == reporterAccountId) {
@@ -413,19 +419,28 @@ public class CaseHttpConfiguration {
             long conversationId = target.conversationId();
             boolean participant = switch (kind) {
                 case "chat" -> {
-                    reader.findChatMessage(conversationId, target.targetId())
+                    var message = reader.findChatMessage(conversationId, target.targetId())
                             .orElseThrow(CaseTargetAdapter::targetInvalid);
+                    if (message.senderAccountId() == reporterAccountId) {
+                        throw targetInvalid();
+                    }
                     yield conversations.chat(conversationId).involves(reporterAccountId);
                 }
                 case "trade" -> {
-                    reader.findTradeMessage(conversationId, target.targetId())
+                    var message = reader.findTradeMessage(conversationId, target.targetId())
                             .orElseThrow(CaseTargetAdapter::targetInvalid);
+                    if (Objects.equals(message.senderAccountId(), reporterAccountId)) {
+                        throw targetInvalid();
+                    }
                     var parties = tradeParties(conversations.trade(conversationId).tradeId());
                     yield parties.contains(reporterAccountId);
                 }
                 case "case" -> {
-                    reader.findCaseMessage(conversationId, target.targetId())
+                    var message = reader.findCaseMessage(conversationId, target.targetId())
                             .orElseThrow(CaseTargetAdapter::targetInvalid);
+                    if (Objects.equals(message.senderAccountId(), reporterAccountId)) {
+                        throw targetInvalid();
+                    }
                     yield conversations.caseConversation(conversationId).relatedAccountId() == reporterAccountId;
                 }
                 default -> false;

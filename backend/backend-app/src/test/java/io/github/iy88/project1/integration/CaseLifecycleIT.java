@@ -362,6 +362,7 @@ class CaseLifecycleIT {
         inquireAuthor(evaluationCase, author, "evaluation");
 
         var productTarget = new CaseCommands.Target("product", product, null, null);
+        assertInvalidReport(author, "own-product", productTarget);
         var productReport = cases.submit(context(reporter), "report-product-scope", reportFor(productTarget));
         long productCase = Long.parseLong(productReport.data().path("case_id").asString());
         long managerId = MANAGER_1.get();
@@ -376,6 +377,30 @@ class CaseLifecycleIT {
         db.sql("delete from trade where id = ?").param(trade).update();
         db.sql("delete from product_comment where comment_id = ?").param(comment).update();
         db.sql("delete from product where product_id = ?").param(product).update();
+    }
+
+    @Test
+    void reportsOnlyTheOtherParticipantsChatMessage() {
+        long sender = RELATED.get();
+        long recipient = REPORTER.get();
+        long conversation = db.sql("""
+                insert into chat_conversation (account_low_id, account_high_id, seq_head, created_at)
+                values (?, ?, 1, statement_timestamp()) returning chat_conversation_id
+                """).param(Math.min(sender, recipient)).param(Math.max(sender, recipient)).query(Long.class).single();
+        long message = db.sql("""
+                insert into chat_message (chat_conversation_id, seq, sender_account_id, body, created_at)
+                values (?, 1, ?, 'Fixture message', statement_timestamp()) returning chat_message_id
+                """).param(conversation).param(sender).query(Long.class).single();
+
+        var target = new CaseCommands.Target("message", message, "chat", conversation);
+        assertInvalidReport(sender, "own-chat-message", target);
+        assertInvalidReport(MANAGER_2.get(), "unrelated-chat-message", target);
+        var submitted = cases.submit(context(recipient), "received-chat-message", reportFor(target));
+        assertThat(submitted.status()).isEqualTo(201);
+        assertThat(db.sql("""
+                select reporter_account_id from moderation_case
+                where target_type = 'message' and target_id = ? and target_conversation_id = ?
+                """).param(message).param(conversation).query(Long.class).list()).containsExactly(recipient);
     }
 
     private static CaseCommands.Report reportFor(CaseCommands.Target target) {
