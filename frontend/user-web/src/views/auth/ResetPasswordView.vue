@@ -12,6 +12,11 @@ const router = useRouter();
 const email = ref("");
 const code = ref("");
 const password = ref("");
+const passwordConfirmation = ref("");
+const confirmationChecked = ref(false);
+const passwordsDiffer = computed(
+  () => confirmationChecked.value && passwordConfirmation.value !== password.value,
+);
 const ticket = ref<EmailVerificationTicket | null>(null);
 const sending = ref(false);
 const submitting = ref(false);
@@ -23,7 +28,8 @@ const canSubmit = computed(
     !submitting.value &&
     ticket.value !== null &&
     code.value.trim().length > 0 &&
-    password.value.length > 0,
+    password.value.length > 0 &&
+    passwordConfirmation.value.length > 0,
 );
 
 onMounted(() => {
@@ -52,6 +58,8 @@ async function sendCode(): Promise<void> {
 async function submit(): Promise<void> {
   if (!canSubmit.value || !ticket.value) return;
   error.value = null;
+  confirmationChecked.value = true;
+  if (passwordsDiffer.value) return;
   submitting.value = true;
   try {
     await resetPassword(
@@ -120,6 +128,28 @@ async function submit(): Promise<void> {
           required
         />
         <span class="field__hint">{{ passwordRuleText(entryLimits) }}</span>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="reset-password-confirmation">确认新密码</label>
+        <input
+          id="reset-password-confirmation"
+          v-model="passwordConfirmation"
+          class="input"
+          type="password"
+          autocomplete="new-password"
+          :aria-invalid="passwordsDiffer || undefined"
+          :aria-describedby="passwordsDiffer ? 'reset-password-confirmation-error' : undefined"
+          required
+        />
+        <p
+          v-if="passwordsDiffer"
+          id="reset-password-confirmation-error"
+          class="field__error"
+          role="alert"
+        >
+          两次输入的新密码不一致。
+        </p>
       </div>
 
       <p v-if="notice" class="banner banner--info">{{ notice }}</p>
