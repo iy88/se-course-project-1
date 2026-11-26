@@ -1,0 +1,10 @@
+2026-11-26 UTC+08:00
+Baseline 23d89def
+Parameter 15 of constructor in io.github.iy88.project1.product.application.ProductService required a bean of type 'io.github.iy88.project1.product.application.ProductEditNotices' that could not be found.
+
+Retest 2a877226
+2026-11-26T19:04:20.281+08:00 PostgreSQL schema validation and JPA query passed (probe row ID 1). Redis probe read, write and cleanup passed.
+2026-11-26T19:04:20.793+08:00 OSS private bucket, versioning, object write, read and cleanup passed.
+2026-11-26T19:04:21.766+08:00 SMTP server accepted test message 9acc09bf-edcb-4947-b3ad-41dcd3a37b58.
+
+User-supplied mailbox screenshot: received 2026-11-26 19:04, matched the same probe ID. Sender and recipient omitted.

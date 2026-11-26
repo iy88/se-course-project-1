@@ -1,0 +1,61 @@
+2026-11-26 UTC+08:00
+
+Runtime smoke check — application code from 23d89def; worktree metadata at ea2bb1e8
+python3 scripts/dev.py start --env-file=<primary worktree>/backend/.env.dev
+Supervisor listed API, scheduler, two workers, and frontend process.
+GET 127.0.0.1:8080/actuator/health: HTTP 200, status UP (liveness, readiness).
+GET 127.0.0.1:3000/: HTTP 200 (user web).
+GET 127.0.0.1:3001/: HTTP 200 (admin web).
+API, scheduler and both workers reported PostgreSQL schema/JPA and Redis write/read/cleanup success.
+
+Batch A backend regression
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.529 s -- in io.github.iy88.project1.account.application.AccountServiceTests
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in io.github.iy88.project1.account.application.AccountQueriesTests
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.135 s -- in io.github.iy88.project1.account.application.SessionServiceTests
+[INFO] Tests run: 42, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 38, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 56, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.047 s -- in io.github.iy88.project1.category.application.BannedScopeServiceTests
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.053 s -- in io.github.iy88.project1.product.application.ProductServiceLifecycleTests
+[INFO] Tests run: 70, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 23, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 61, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 146, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.804 s -- in io.github.iy88.project1.integration.S4ProductionEnforcementIT
+[INFO] Tests run: 97, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+[INFO] Finished at: 2026-11-26T19:10:07+08:00
+
+Batch A frontend test counts
+admin-web test: ℹ tests 28
+admin-web test: ℹ pass 28
+admin-web test: ℹ fail 0
+user-web test: ℹ tests 161
+user-web test: ℹ pass 161
+user-web test: ℹ fail 0
+
+Batch A frontend type checking
+admin-web typecheck: Done
+user-web typecheck: Done
+
+Script tests
+Ran 7 tests in 0.017s
+OK
+
+Required scope regression before repair
+[ERROR] Tests run: 4, Failures: 4, Errors: 0, Skipped: 0
+[ERROR] BUILD FAILURE
+
+Required scope regression with repair
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+
+Required scope full integration with repair
+[INFO] Tests run: 96, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+[INFO] Finished at: 2026-11-26T19:11:31+08:00
