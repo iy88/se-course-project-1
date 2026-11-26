@@ -385,7 +385,10 @@ async function submit(): Promise<void> {
               <span class="chip">{{ selectedCategoryIds.length }} 项</span>
             </div>
             <p class="muted">按本次认领的事项纠正商品当前分类，记录理由并通知卖方。</p>
-            <fieldset v-if="activeCategories.length" class="stack stack--tight correction-categories">
+            <fieldset
+              v-if="activeCategories.length"
+              class="stack stack--tight correction-categories"
+            >
               <legend class="visually-hidden">目标分类</legend>
               <label v-for="category in activeCategories" :key="category.id" class="inline">
                 <input
@@ -399,7 +402,9 @@ async function submit(): Promise<void> {
             </fieldset>
             <p v-else class="muted">分类目录不可用，暂不能纠正分类。</p>
             <p v-if="disabledCurrentCategories.length" class="muted">
-              当前分类已停用：{{ disabledCurrentCategories.map((item) => item.name).join("、") }}，请改选有效分类。
+              当前分类已停用：{{
+                disabledCurrentCategories.map((item) => item.name).join("、")
+              }}，请改选有效分类。
             </p>
             <label class="field">
               <span class="field__label">纠正理由</span>
@@ -422,8 +427,16 @@ async function submit(): Promise<void> {
             </button>
             <div v-if="correctionResult" class="correction-result">
               <p class="muted">上次纠正结果</p>
-              <p>原分类：{{ correctionResult.previous_categories.map((item) => item.name).join("、") || "—" }}</p>
-              <p>现分类：{{ correctionResult.current_categories.map((item) => item.name).join("、") || "—" }}</p>
+              <p>
+                原分类：{{
+                  correctionResult.previous_categories.map((item) => item.name).join("、") || "—"
+                }}
+              </p>
+              <p>
+                现分类：{{
+                  correctionResult.current_categories.map((item) => item.name).join("、") || "—"
+                }}
+              </p>
             </div>
           </section>
 
