@@ -276,6 +276,7 @@ public class CaseApplication {
                         new ResourceRef("case", facts.caseId()));
             }
             long caseId = opened;
+            targets.captureReportSnapshot(caseId, request.target());
             store.addAction(new CaseRecords.Action(0, caseId, CaseVocabulary.ACTION_SUBMIT,
                     CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null));
             attachEvidence(transaction, caseId, reporter, request.attachments());

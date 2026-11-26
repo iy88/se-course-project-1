@@ -22,6 +22,9 @@ public class BannedScopeService {
     private static final List<String> GROUPS = List.of("legal_prohibited", "dangerous_controlled", "live_animals",
             "medicine_device", "account_virtual", "service_promotion", "other");
 
+    private static final Set<String> REQUIRED_GROUPS = Set.copyOf(GROUPS.stream()
+            .filter(group -> !"other".equals(group)).toList());
+
     private final BannedItemRepository items;
     private final BannedScopeStateRepository states;
     private final CategorySettings settings;
@@ -55,6 +58,17 @@ public class BannedScopeService {
             throw new BusinessError("BANNED_SCOPE_INCOMPLETE", 422, "禁发范围不能为空");
         }
         List<Validated> validated = inputs.stream().map(this::validate).toList();
+        Set<String> suppliedGroups = new HashSet<>();
+        Set<Long> suppliedIds = new HashSet<>();
+        for (Validated input : validated) {
+            if (input.id != null && !suppliedIds.add(input.id)) {
+                throw new BusinessError("INPUT_INVALID", 422, "禁发条目标识重复");
+            }
+            suppliedGroups.add(input.group);
+        }
+        if (!suppliedGroups.containsAll(REQUIRED_GROUPS)) {
+            throw incompleteGroups();
+        }
         transaction.executeWithoutResult(status -> {
             BannedScopeState state = states.lock()
                     .orElseThrow(() -> new IllegalStateException("Banned scope state row is missing"));
@@ -107,6 +121,9 @@ public class BannedScopeService {
             BannedScopeState state = lockState();
             BannedItem item = requireCurrent(itemId);
             Instant now = Instant.now();
+            if (!item.group().equals(validated.group)) {
+                requireGroupRetained(item, items.findByDeletedAtIsNullOrderByDisplayOrderAscIdAsc());
+            }
             item.update(validated.group, validated.content, validated.displayOrder, adminId, now);
             items.save(item);
             state.touch(now);
@@ -119,9 +136,11 @@ public class BannedScopeService {
         return transaction.execute(status -> {
             BannedScopeState state = lockState();
             BannedItem item = requireCurrent(itemId);
-            if (items.findByDeletedAtIsNullOrderByDisplayOrderAscIdAsc().size() <= 1) {
+            List<BannedItem> current = items.findByDeletedAtIsNullOrderByDisplayOrderAscIdAsc();
+            if (current.size() <= 1) {
                 throw new BusinessError("BANNED_SCOPE_INCOMPLETE", 422, "禁发范围至少保留一条细目");
             }
+            requireGroupRetained(item, current);
             Instant now = Instant.now();
             item.delete(now);
             items.save(item);
@@ -129,6 +148,18 @@ public class BannedScopeService {
             states.save(state);
             return new ScopeMutation(now);
         });
+    }
+
+    private void requireGroupRetained(BannedItem removing, List<BannedItem> current) {
+        String group = removing.group();
+        if (REQUIRED_GROUPS.contains(group)
+                && current.stream().filter(item -> group.equals(item.group())).count() <= 1) {
+            throw incompleteGroups();
+        }
+    }
+
+    private static BusinessError incompleteGroups() {
+        return new BusinessError("BANNED_SCOPE_INCOMPLETE", 422, "禁发范围须覆盖所有必填分组");
     }
 
     private BannedScopeState lockState() {

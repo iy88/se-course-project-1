@@ -114,6 +114,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                     }
                     var now = now();
                     long tradeId = repository.insertTrade(state.productId(), buyer, state.sellerId(), note, now);
+                    repository.insertPurchaseProductSnapshot(tradeId, state.contentVersion(), state.title(),
+                            state.description(), state.priceCents(), now);
                     long conversationId = conversations.ensure(transaction, tradeId, state.productId(),
                             buyer, state.sellerId());
                     var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);

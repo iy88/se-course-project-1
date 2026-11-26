@@ -71,10 +71,23 @@ class ProductController {
     }
 
     @GetMapping("/{productId}")
-    ResponseEntity<ProductService.ProductDetail> detail(@PathVariable String productId, HttpServletRequest request) {
-        var identity = current.require(request);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(products.detail(identity.account().id(), id(productId)));
+    ResponseEntity<ProductService.ProductDetail> detail(@PathVariable String productId,
+            @RequestParam(value = "trade_id", required = false) String tradeId,
+            @RequestParam(value = "case_id", required = false) String caseId, HttpServletRequest request) {
+        long accountId = current.require(request).account().id();
+        long product = id(productId);
+        if (tradeId != null && caseId != null) {
+            throw new BusinessError("INPUT_INVALID", 422, "只能指定一种历史读取范围");
+        }
+        ProductService.ProductDetail detail;
+        if (caseId != null) {
+            detail = products.caseDetail(accountId, product, id(caseId));
+        } else if (tradeId != null) {
+            detail = products.purchaseDetail(accountId, product, id(tradeId));
+        } else {
+            detail = products.detail(accountId, product);
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(detail);
     }
 
     @PatchMapping("/{productId}")
@@ -150,11 +163,19 @@ class ProductController {
     ResponseEntity<ProductService.PageResult<ProductService.EditView>> editHistory(
             @PathVariable String productId, @RequestParam(required = false) Integer page,
             @RequestParam(value = "page_size", required = false) Integer pageSize,
-            @RequestParam(value = "trade_id", required = false) String tradeId, HttpServletRequest request) {
+            @RequestParam(value = "trade_id", required = false) String tradeId,
+            @RequestParam(value = "case_id", required = false) String caseId, HttpServletRequest request) {
         var identity = current.require(request);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(products.editHistory(identity.account().id(), id(productId),
-                        tradeId == null || tradeId.isBlank() ? null : id(tradeId), page, pageSize));
+        long accountId = identity.account().id();
+        long product = id(productId);
+        Long trade = tradeId == null || tradeId.isBlank() ? null : id(tradeId);
+        Long scope = caseId == null || caseId.isBlank() ? null : id(caseId);
+        if (trade != null && scope != null) {
+            throw new BusinessError("INPUT_INVALID", 422, "只能指定一种历史读取范围");
+        }
+        var history = scope == null ? products.editHistory(accountId, product, trade, page, pageSize)
+                : products.caseEditHistory(accountId, product, scope, page, pageSize);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(history);
     }
 
     private AuditContext writeContext(

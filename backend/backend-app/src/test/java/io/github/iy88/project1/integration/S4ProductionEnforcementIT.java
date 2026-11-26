@@ -307,6 +307,49 @@ class S4ProductionEnforcementIT {
     }
 
     @Test
+    void purchaseAndClaimedCaseKeepTheirOwnCapturedProductVersions() throws Exception {
+        var seller = login("snapshot-seller", "user");
+        var buyer = login("snapshot-buyer", "user");
+        var manager = login("snapshot-manager", "manager");
+        long product = publicProduct(seller);
+        String path = "/products/" + product;
+        long trade = post(buyer, path + "/purchase-requests", """
+                {"expected_product_version":1}
+                """, key(), 201).path("id").asLong();
+        db.sql("update product set title = ?, content_version = 2 where product_id = ?")
+                .param("Case version").param(product).update();
+        long caseId = claimedCase(buyer, manager, "product", product);
+        db.sql("update product set title = ?, content_version = 3 where product_id = ?")
+                .param("Current version").param(product).update();
+        post(seller, path + "/off-shelf", """
+                {"expected_version":3}
+                """, key(), 200);
+
+        var purchase = get(buyer, path + "?trade_id=" + trade, 200);
+        assertThat(purchase.path("title").asString()).isEqualTo("Trade fixture");
+        assertThat(purchase.path("content_version").asInt()).isEqualTo(1);
+        var report = get(manager, path + "?case_id=" + caseId, 200);
+        assertThat(report.path("title").asString()).isEqualTo("Case version");
+        assertThat(report.path("content_version").asInt()).isEqualTo(2);
+        assertThat(get(seller, path, 200).path("title").asString()).isEqualTo("Current version");
+        db.sql("""
+                insert into product_edit_history
+                       (product_id, operator_kind, operator_account_id, edit_kind, before_content, after_content,
+                        reason, basis_type, basis_id)
+                values (?, 'admin', ?, 'category_correction', '{"category_ids":["1"]}', '{"category_ids":["2"]}',
+                        'case correction', 'case', ?)
+                """).param(product).param(manager.account().id()).param(caseId).update();
+        db.sql("""
+                insert into product_edit_history
+                       (product_id, operator_kind, operator_account_id, edit_kind, before_content, after_content)
+                values (?, 'seller', ?, 'content_edit', '{"title":"Case version"}', '{"title":"Current version"}')
+                """).param(product).param(seller.account().id()).update();
+        var history = get(manager, path + "/edit-history?case_id=" + caseId, 200);
+        assertThat(history.path("total").asInt()).isEqualTo(1);
+        assertThat(history.at("/items/0/edit_kind").asString()).isEqualTo("category_correction");
+    }
+
+    @Test
     void sellerOffShelfClosesOnlyPendingRequestsForThatProduct() throws Exception {
         var seller = login("off-shelf-seller", "user");
         var first = login("off-shelf-first", "user");
