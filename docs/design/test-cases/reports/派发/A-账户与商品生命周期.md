@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.0
-Version-Datetime: 2026-11-26T16:33:00+08:00
+Version: 0.1.1
+Version-Datetime: 2026-11-26T21:30:33+08:00
 -->
 
 # [测试主验证][A] US-01／02／09 账户与商品生命周期
@@ -27,6 +27,8 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 设计映射和原 TC 对照逐项见[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md#批次-a账户与商品生命周期)。
 
 ## 真实环境
+
+- 本批负责人使用自己独立的 PostgreSQL 测试库、Redis 和私有 OSS，自行创建、维护和清理本 Issue 所需的全部数据。四个测试 Issue 可并行执行，彼此不依赖数据、对象 ID、导出数据或执行结果。
 
 1. 使用 `backend/.env.dev` 的真实 PostgreSQL、Redis、OSS、SMTP。
 2. 先运行 dependency probe，确认 OSS 写读删和真实邮件投递。
