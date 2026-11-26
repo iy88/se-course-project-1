@@ -21,6 +21,30 @@ describe("admin routes", () => {
     assert.deepEqual(parseHash("#/reviews/a%20b"), { name: "review", auditId: "a b" });
   });
 
+  it("reads the workbench scope, type and keyword", () => {
+    assert.deepEqual(parseHash("#/cases"), {
+      name: "cases",
+      ownership: "unclaimed",
+      kind: "all",
+      keyword: "",
+    });
+    assert.deepEqual(
+      parseHash("#/cases?ownership=completed_all&kind=report&keyword=%E6%97%A7%E4%B9%A6"),
+      {
+        name: "cases",
+        ownership: "completed_all",
+        kind: "report",
+        keyword: "旧书",
+      },
+    );
+    assert.deepEqual(parseHash("#/cases?ownership=bogus&kind=bogus"), {
+      name: "cases",
+      ownership: "unclaimed",
+      kind: "all",
+      keyword: "",
+    });
+  });
+
   it("recognises the maintenance pages", () => {
     assert.deepEqual(parseHash("#/categories"), { name: "categories" });
     assert.deepEqual(parseHash("#/banned"), { name: "banned" });
@@ -30,6 +54,9 @@ describe("admin routes", () => {
     const routes = [
       { name: "reviews", ownership: "mine" },
       { name: "review", auditId: "1001" },
+      { name: "cases", ownership: "completed_mine", kind: "report", keyword: "旧书" },
+      { name: "cases", ownership: "unclaimed", kind: "all", keyword: "" },
+      { name: "case", caseId: "422", ownership: "completed_mine", kind: "report", keyword: "旧书" },
       { name: "categories" },
       { name: "banned" },
     ] as const;
