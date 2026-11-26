@@ -19,6 +19,7 @@ import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -67,8 +68,10 @@ public class CategoryService {
         return views;
     }
 
-    public List<CategoryDetail> listAdmin() {
-        return categories.activeRecords().stream().map(this::detail).toList();
+    public CategoryPage listAdmin(int page, int pageSize) {
+        var result = categories.findByDeletedAtIsNullOrderByIdAsc(PageRequest.of(page - 1, pageSize));
+        return new CategoryPage(result.getContent().stream().map(this::detail).toList(),
+                page, pageSize, result.getTotalElements());
     }
 
     /**
@@ -293,6 +296,9 @@ public class CategoryService {
 
     public record CategoryDetail(String id, String state, String mainName, List<NameView> names,
                                  long associatedProductCount, Instant createdAt, Instant disabledAt) {
+    }
+
+    public record CategoryPage(List<CategoryDetail> items, int page, int pageSize, long total) {
     }
 
     public record AliasCreated(String categoryNameId, String name) {

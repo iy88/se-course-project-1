@@ -1,13 +1,13 @@
 package io.github.iy88.project1.api.category;
 
 import io.github.iy88.project1.api.ApiRequestContext;
+import io.github.iy88.project1.api.PageSettings;
 import io.github.iy88.project1.api.account.CurrentAccount;
 import io.github.iy88.project1.category.application.CategoryService;
 import io.github.iy88.project1.core.AuditContext;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.List;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -27,18 +28,29 @@ class AdminCategoryController {
     private final CategoryService categories;
     private final CurrentAccount current;
     private final ApiRequestContext requestContext;
+    private final PageSettings pages;
 
-    AdminCategoryController(CategoryService categories, CurrentAccount current, ApiRequestContext requestContext) {
+    AdminCategoryController(CategoryService categories, CurrentAccount current, ApiRequestContext requestContext,
+                            PageSettings pages) {
         this.categories = categories;
         this.current = current;
         this.requestContext = requestContext;
+        this.pages = pages;
     }
 
     @GetMapping
-    ResponseEntity<Items> list(HttpServletRequest request) {
+    ResponseEntity<CategoryService.CategoryPage> list(
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "page_size", required = false) Integer pageSize,
+            HttpServletRequest request) {
         CategoryController.manager(current, request);
+        int resolvedPage = page == null ? 1 : page;
+        int resolvedSize = pageSize == null ? pages.pageSizeDefault() : pageSize;
+        if (resolvedPage <= 0 || resolvedSize <= 0 || resolvedSize > pages.pageSizeMax()) {
+            throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
+        }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(new Items(categories.listAdmin()));
+                .body(categories.listAdmin(resolvedPage, resolvedSize));
     }
 
     @PostMapping
@@ -107,9 +119,6 @@ class AdminCategoryController {
             // Fall through to the shared invalid identifier error.
         }
         throw new BusinessError("INPUT_INVALID", 422, "标识无效");
-    }
-
-    record Items(List<CategoryService.CategoryDetail> items) {
     }
 
     record NameRequest(String name) {
