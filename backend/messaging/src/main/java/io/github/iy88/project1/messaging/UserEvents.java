@@ -14,6 +14,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -29,14 +30,18 @@ public class UserEvents implements EventIntent.Writer {
     private final JdbcClient jdbc;
     private final DeliverySettings settings;
 
-    public UserEvents(JdbcClient jdbc, DeliverySettings settings) {
+    private final ApplicationEventPublisher publisher;
+
+    public UserEvents(JdbcClient jdbc, DeliverySettings settings, ApplicationEventPublisher publisher) {
         this.jdbc = jdbc;
         this.settings = settings;
+        this.publisher = publisher;
     }
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void persist(ExecutionContext context, List<EventIntent> intents) {
+        if (intents.isEmpty()) return;
         var groups = intents.stream().collect(Collectors.groupingBy(EventIntent::recipientAccountId,
                 TreeMap::new, Collectors.toList()));
         try {
@@ -44,6 +49,7 @@ public class UserEvents implements EventIntent.Writer {
         } catch (DuplicateKeyException conflict) {
             throw new BusinessError("EVENT_INTENT_CONFLICT", 409, "事件意图重复");
         }
+        publisher.publishEvent(OutboxUpdated.INSTANCE);
     }
 
     private void append(long account, List<EventIntent> events, UUID originConnection) {
@@ -154,6 +160,8 @@ public class UserEvents implements EventIntent.Writer {
                 row.getObject("source_sequence", Long.class), row.getObject("origin_connection_id", UUID.class),
                 row.getObject("occurred_at", OffsetDateTime.class).toInstant());
     }
+
+    enum OutboxUpdated { INSTANCE }
 
     public record Head(UUID epoch, long headSequence, long replayFloor) {}
     public record Event(UUID eventId, long sequence, String type, int schemaVersion, ResourceRef source,

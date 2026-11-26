@@ -64,10 +64,10 @@ class NotificationControllerTests {
             var queries = mock(NotificationQueries.class);
             when(queries.list(any(), any())).thenReturn(new NotificationPage(
                     List.of(new NotificationView(11L, "product_audit.passed", OCCURRED, null,
-                            "商品《高等数学》已通过审核", new ResourceRef("product", 42L))),
+                            "商品审核通过", new ResourceRef("product", 42L), "高等数学", "可以查看商品状态。")),
                     2, 20, 21, 3));
             when(queries.get(any(), eq(11L))).thenReturn(new NotificationView(11L, "product_audit.passed",
-                    OCCURRED, READ_AT, "商品《高等数学》已通过审核", new ResourceRef("product", 42L)));
+                    OCCURRED, READ_AT, "商品审核通过", new ResourceRef("product", 42L), "高等数学", "可以查看商品状态。"));
             when(queries.get(any(), eq(99L)))
                     .thenThrow(new BusinessError("RESOURCE_NOT_VISIBLE", 404, "通知不存在"));
             return queries;
@@ -110,6 +110,9 @@ class NotificationControllerTests {
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.items[0].notification_id").value("11"))
                 .andExpect(jsonPath("$.items[0].event_type").value("product_audit.passed"))
+                .andExpect(jsonPath("$.items[0].summary").value("商品审核通过"))
+                .andExpect(jsonPath("$.items[0].subject").value("高等数学"))
+                .andExpect(jsonPath("$.items[0].body").doesNotExist())
                 .andExpect(jsonPath("$.items[0].read_at").value(nullValue()))
                 .andExpect(jsonPath("$.items[0].source.resource_type").value("product"))
                 .andExpect(jsonPath("$.items[0].source.resource_id").value("42"))
@@ -139,7 +142,9 @@ class NotificationControllerTests {
         mvc.perform(get("/api/v1/account/notifications/11").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.notification_id").value("11"))
-                .andExpect(jsonPath("$.summary").value("商品《高等数学》已通过审核"))
+                .andExpect(jsonPath("$.summary").value("商品审核通过"))
+                .andExpect(jsonPath("$.subject").value("高等数学"))
+                .andExpect(jsonPath("$.body").value("可以查看商品状态。"))
                 .andExpect(jsonPath("$.read_at").exists());
     }
 

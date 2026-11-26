@@ -58,17 +58,6 @@
   font-weight: 500;
 }
 
-.admin-brand__logo {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 2rem;
-  block-size: 2rem;
-  border-radius: var(--radius-sm);
-  background: var(--brand-soft);
-  color: var(--brand-ink);
-  font-size: 0.875rem;
-}
-
 .admin-nav {
   display: flex;
   align-self: stretch;

@@ -37,6 +37,7 @@ import LoadingBlock from "../../components/LoadingBlock.vue";
 import StateBadge from "../../components/StateBadge.vue";
 import ProductCommentSection from "../../components/interaction/ProductCommentSection.vue";
 import ProductFavoriteControl from "../../components/interaction/ProductFavoriteControl.vue";
+import StartChatButton from "../../components/interaction/StartChatButton.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -48,6 +49,9 @@ const keys = new IdempotencyKeys();
 const purchaseNote = ref("");
 const purchaseOpen = ref(false);
 const cancelOpen = ref(false);
+const relistOpen = ref(false);
+const relistPending = ref(false);
+const relistError = ref<string | null>(null);
 const purchaseError = ref<string | null>(null);
 const purchasePending = ref(false);
 
@@ -82,6 +86,7 @@ const ownerGuidance = computed(() => {
 });
 
 watch(productId, () => {
+  relistOpen.value = false;
   activeImageIndex.value = 0;
   void product.run();
 });
@@ -156,11 +161,43 @@ async function submitPurchase(): Promise<void> {
     keys.rotate("purchase");
     purchaseOpen.value = false;
     notify.success("购买请求已提交，等待卖方接受。");
-    await router.push({ name: "trade-detail", params: { tradeId: trade.id } });
+    if (trade.trade_conversation_id) {
+      await router.push({
+        name: "conversation",
+        params: { kind: "trade", conversationId: trade.trade_conversation_id },
+      });
+    } else {
+      await router.push({ name: "trade-detail", params: { tradeId: trade.id } });
+    }
   } catch (caught) {
     purchaseError.value = problemMessage(caught);
   } finally {
     purchasePending.value = false;
+  }
+}
+
+function openRelist(): void {
+  relistError.value = null;
+  relistOpen.value = true;
+}
+
+async function confirmRelist(): Promise<void> {
+  const detail = product.data.value;
+  if (!relistOpen.value || relistPending.value || detail?.id !== productId.value) return;
+  if (!detail.permissions?.can_relist) return;
+
+  relistPending.value = true;
+  relistError.value = null;
+  try {
+    await runAction("on-shelf", async () => {
+      await putOnShelf(detail.id, detail.content_version, keys.current("on-shelf"));
+      relistOpen.value = false;
+      notify.success("商品已重新上架。");
+    });
+  } catch (caught) {
+    relistError.value = problemMessage(caught);
+  } finally {
+    relistPending.value = false;
   }
 }
 
@@ -304,11 +341,24 @@ async function confirmOffShelf(): Promise<void> {
             </p>
 
             <div class="seller">
-              <AvatarBadge :display-name="product.data.value.seller.display_name" size="sm" />
+              <AvatarBadge
+                :display-name="product.data.value.seller.display_name"
+                :url="product.data.value.seller.avatar_url"
+                size="sm"
+              />
               <span class="seller__copy">
                 <span>卖家</span>
                 <strong>{{ product.data.value.seller.display_name }}</strong>
               </span>
+            </div>
+            <div v-if="!isOwner" class="seller-contact">
+              <p class="muted">有疑问可直接私聊卖家；这里不会自动发送消息或创建购买请求。</p>
+              <StartChatButton
+                :target-account-id="product.data.value.seller.id"
+                :target-name="product.data.value.seller.display_name"
+                label="联系卖家"
+                variant="ghost"
+              />
             </div>
 
             <div class="summary__description">
@@ -409,23 +459,15 @@ async function confirmOffShelf(): Promise<void> {
                   }
                 "
               />
-              <ActionButton
+              <button
                 v-if="permissions?.can_relist"
-                label="重新上架"
-                variant="primary"
-                :task="
-                  async () => {
-                    await runAction('on-shelf', async () => {
-                      await putOnShelf(
-                        product.data.value!.id,
-                        product.data.value!.content_version,
-                        keys.current('on-shelf'),
-                      );
-                      notify.success('商品已重新上架。');
-                    });
-                  }
-                "
-              />
+                type="button"
+                class="btn btn--primary"
+                :disabled="relistPending"
+                @click="openRelist"
+              >
+                重新上架
+              </button>
               <ActionButton
                 v-if="permissions?.can_submit_review"
                 label="重新提交审核"
@@ -489,6 +531,18 @@ async function confirmOffShelf(): Promise<void> {
       @cancel="cancelOpen = false"
       @confirm="confirmOffShelf"
     />
+
+    <ConfirmDialog
+      :open="relistOpen"
+      title="重新上架该商品？"
+      description="确认后，商品将重新公开展示，其他用户可以浏览并发起购买请求。"
+      :confirm-label="relistPending ? '正在上架…' : '确认上架'"
+      :confirm-disabled="relistPending"
+      @cancel="relistOpen = false"
+      @confirm="confirmRelist"
+    >
+      <p v-if="relistError" class="field__error" role="alert">{{ relistError }}</p>
+    </ConfirmDialog>
 
     <ConfirmDialog
       :open="purchaseOpen"
@@ -819,6 +873,20 @@ async function confirmOffShelf(): Promise<void> {
   font-size: 0.875rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.seller-contact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+}
+
+.seller-contact p {
+  max-inline-size: 34ch;
+  margin: 0;
 }
 
 .product-body {

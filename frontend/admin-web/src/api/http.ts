@@ -23,6 +23,7 @@ export interface RequestOptions {
   query?: Record<string, string | number | boolean | null | undefined>;
   body?: unknown;
   idempotencyKey?: string;
+  csrfToken?: string;
   signal?: AbortSignal;
 }
 
@@ -82,7 +83,7 @@ export async function request<T>(
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
   if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
   if (UNSAFE_METHODS.has(method)) {
-    const token = readCsrfToken();
+    const token = options.csrfToken ?? readCsrfToken();
     if (token) headers.set("X-CSRF-Token", token);
   }
 

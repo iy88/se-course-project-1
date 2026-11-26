@@ -107,13 +107,11 @@ export const tradeActionLabels: Record<TradeAction, string> = {
   withdraw: "撤回请求",
   propose_agreement: "提出约定",
   decide_agreement: "回应约定",
-  submit_completion: "提交完成确认",
+  submit_confirmation: "提交完成确认",
   propose_cancellation: "申请取消",
   decide_cancellation: "回应取消申请",
   open_dispute: "发起争议",
   confirm_dispute_resolution: "确认争议已解决",
-  submit_review: "评价对方",
-  open_trade_conversation: "进入交易会话",
 };
 
 export const bannedGroupLabels: Record<BannedGroup, string> = {
@@ -164,6 +162,7 @@ export function notificationTypeLabel(eventType: string): string {
   const groups: Record<string, string> = {
     trade: "交易",
     product_audit: "商品审核",
+    product_comment: "商品评论",
     case: "事项",
     account: "账户",
     conversation: "会话",

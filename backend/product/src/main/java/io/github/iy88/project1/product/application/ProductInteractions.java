@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -43,6 +44,7 @@ public class ProductInteractions {
     private final CaseCommentAccess cases;
     private final CommentAccountAccess accounts;
     private final ProductSettings settings;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
     private final TransactionTemplate transaction;
 
@@ -50,20 +52,23 @@ public class ProductInteractions {
     public ProductInteractions(ProductRepository products, ProductService productDetails,
                                ProductInteractionStore store, CaseCommentAccess cases,
                                CommentAccountAccess accounts, ProductSettings settings,
-                               PlatformTransactionManager transactionManager, ObjectProvider<Clock> clocks) {
-        this(products, productDetails, store, cases, accounts, settings, transactionManager,
+                               ApplicationEventPublisher events, PlatformTransactionManager transactionManager,
+                               ObjectProvider<Clock> clocks) {
+        this(products, productDetails, store, cases, accounts, settings, events, transactionManager,
                 clocks.getIfAvailable(Clock::systemUTC));
     }
 
     ProductInteractions(ProductRepository products, ProductService productDetails,
                         ProductInteractionStore store, CaseCommentAccess cases, CommentAccountAccess accounts,
-                        ProductSettings settings, PlatformTransactionManager transactionManager, Clock clock) {
+                        ProductSettings settings, ApplicationEventPublisher events,
+                        PlatformTransactionManager transactionManager, Clock clock) {
         this.products = products;
         this.productDetails = productDetails;
         this.store = store;
         this.cases = cases;
         this.accounts = accounts;
         this.settings = settings;
+        this.events = events;
         this.clock = clock;
         this.transaction = new TransactionTemplate(transactionManager);
     }
@@ -71,9 +76,31 @@ public class ProductInteractions {
     // ------------------------------------------------------------------ comments
 
     public CommentPage listComments(long viewerId, long productId, Integer page, Integer pageSize, Long caseId) {
+        return listComments(viewerId, productId, page, pageSize, caseId, null);
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public CommentPage listComments(long viewerId, long productId, Integer page, Integer pageSize, Long caseId,
+                                    Long anchorId) {
         Product product = requireProduct(productId);
         int[] paging = paging(page, pageSize);
         ProductInteractionStore.Scope scope = readScope(product, viewerId, caseId);
+        if (anchorId != null) {
+            var anchor = store.comment(anchorId).filter(comment -> comment.productId() == productId);
+            if (scope != ProductInteractionStore.Scope.CASE) {
+                anchor = anchor.filter(ProductComment::published);
+            }
+            var thread = anchor.flatMap(comment -> comment.topLevel() ? Optional.of(comment)
+                    : store.comment(comment.parentCommentId()));
+            paging[0] = thread.filter(root -> root.productId() == productId && root.topLevel())
+                    .filter(root -> switch (scope) {
+                        case PUBLIC -> root.published();
+                        case AUTHOR -> root.authorAccountId() == viewerId;
+                        case CASE -> true;
+                    })
+                    .map(root -> Math.toIntExact(store.countNewerTopLevelComments(root, scope, viewerId)
+                            / paging[1] + 1)).orElse(paging[0]);
+        }
         long offset = (long) (paging[0] - 1) * paging[1];
         List<ProductComment> topLevel = store.topLevelComments(productId, scope, viewerId, paging[1], offset);
         long total = store.countTopLevelComments(productId, scope, viewerId);
@@ -84,7 +111,7 @@ public class ProductInteractions {
         Set<Long> authorIds = new java.util.LinkedHashSet<>();
         topLevel.forEach(comment -> authorIds.add(comment.authorAccountId()));
         replies.values().forEach(list -> list.forEach(reply -> authorIds.add(reply.authorAccountId())));
-        Map<Long, String> profiles = accounts.displayNames(authorIds);
+        Map<Long, CommentAccountAccess.Profile> profiles = accounts.profiles(authorIds);
         List<CommentView> items = new ArrayList<>();
         for (ProductComment comment : topLevel) {
             List<CommentView> thread = replies.getOrDefault(comment.commentId(), List.of()).stream()
@@ -112,7 +139,11 @@ public class ProductInteractions {
             long commentId = store.insertComment(productId, viewerId, null, text, now);
             ProductComment comment = store.comment(commentId)
                     .orElseThrow(() -> new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "评论写入失败"));
-            return view(comment, accounts.displayNames(Set.of(viewerId)), List.of());
+            if (!seller) {
+                events.publishEvent(new ProductCommentNotice(product.sellerAccountId(), productId, commentId,
+                        false, now));
+            }
+            return view(comment, accounts.profiles(Set.of(viewerId)), List.of());
         });
     }
 
@@ -136,8 +167,24 @@ public class ProductInteractions {
             long replyId = store.insertComment(productId, viewerId, parent.commentId(), text, now);
             ProductComment reply = store.comment(replyId)
                     .orElseThrow(() -> new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "回复写入失败"));
-            return view(reply, accounts.displayNames(Set.of(viewerId)), List.of());
+            if (parent.authorAccountId() != viewerId) {
+                events.publishEvent(new ProductCommentNotice(parent.authorAccountId(), productId, replyId,
+                        true, now));
+            }
+            return view(reply, accounts.profiles(Set.of(viewerId)), List.of());
         });
+    }
+
+    /** Returns the content of a published comment or of a published reply to the recipient. */
+    public Optional<String> notificationCommentBody(long viewerId, long productId, long commentId, boolean reply) {
+        return store.comment(commentId)
+                .filter(comment -> comment.productId() == productId && comment.published())
+                .filter(comment -> reply
+                        ? !comment.topLevel() && store.comment(comment.parentCommentId())
+                                .filter(parent -> parent.productId() == productId && parent.topLevel()
+                                        && parent.published() && parent.authorAccountId() == viewerId).isPresent()
+                        : comment.topLevel())
+                .map(ProductComment::body);
     }
 
     public void deleteComment(long viewerId, long productId, long commentId) {
@@ -213,6 +260,13 @@ public class ProductInteractions {
                 row.item().favoritedAt(), row.item().status(), row.item().product())).toList();
         return new FavoriteResources("favorite", items, result.page(), result.pageSize(), result.total(),
                 clock.instant());
+    }
+
+    /** Overview counts use the same validity predicate as the favourite list. */
+    public FavoriteCounts favoriteCounts(long accountId) {
+        long total = store.countFavorites(accountId, null);
+        long valid = store.countFavorites(accountId, "valid");
+        return new FavoriteCounts(total, valid, total - valid);
     }
 
     private FavoriteSelection readFavorites(long accountId, String state, Integer page, Integer pageSize) {
@@ -363,11 +417,14 @@ public class ProductInteractions {
         return new int[]{current, size};
     }
 
-    private static CommentView view(ProductComment comment, Map<Long, String> profiles,
+    private static CommentView view(ProductComment comment,
+                                    Map<Long, CommentAccountAccess.Profile> profiles,
                                     List<CommentView> replies) {
-        String authorName = profiles.getOrDefault(comment.authorAccountId(), "");
+        CommentAccountAccess.Profile profile = profiles.get(comment.authorAccountId());
+        String authorName = profile == null ? "" : profile.displayName();
         return new CommentView(Long.toString(comment.commentId()), Long.toString(comment.productId()),
-                new AuthorRef(Long.toString(comment.authorAccountId()), authorName),
+                new AuthorRef(Long.toString(comment.authorAccountId()), authorName,
+                        profile == null ? null : profile.avatarUrl()),
                 comment.body(), comment.state(),
                 comment.parentCommentId() == null ? null : Long.toString(comment.parentCommentId()),
                 comment.createdAt(), replies);
@@ -377,7 +434,7 @@ public class ProductInteractions {
         return new BusinessError(NOT_VISIBLE, 404, "商品不存在");
     }
 
-    public record AuthorRef(String id, String displayName) {
+    public record AuthorRef(String id, String displayName, String avatarUrl) {
     }
 
     public record CommentView(String id, String productId, AuthorRef author, String body, String status,
@@ -400,6 +457,9 @@ public class ProductInteractions {
 
     public record FavoriteResources(String kind, List<FavoriteResourceItem> items, int page, int pageSize,
                                     long total, Instant asOf) {
+    }
+
+    public record FavoriteCounts(long total, long valid, long invalid) {
     }
 
     private record OwnedFavorite(long favoriteId, FavoriteItem item) {

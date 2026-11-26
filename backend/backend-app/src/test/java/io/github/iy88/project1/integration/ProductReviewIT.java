@@ -121,7 +121,8 @@ class ProductReviewIT {
                 "SET search_path TO " + FIXTURE_SCHEMA + ", public");
         properties.setProperty("spring.jpa.properties.hibernate.default_schema", "public");
 
-        var application = new SpringApplication(BackendAppApplication.class, Fixtures.class);
+        var application = new SpringApplication(BackendAppApplication.class,
+                InfrastructureIT.Fixtures.class, Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("review-it", properties)));
         app = application.run("--spring.profiles.active=infrastructure", "--server.port=0",

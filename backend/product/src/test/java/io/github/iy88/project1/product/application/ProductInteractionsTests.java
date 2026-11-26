@@ -25,6 +25,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
@@ -50,11 +51,12 @@ class ProductInteractionsTests {
     void setUp() {
         PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
         when(manager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
-        interactions = new ProductInteractions(products, details, store, cases, accounts, settings, manager,
+        interactions = new ProductInteractions(products, details, store, cases, accounts, settings,
+                mock(ApplicationEventPublisher.class), manager,
                 Clock.fixed(NOW, ZoneOffset.UTC));
-        when(accounts.displayNames(any())).thenReturn(Map.of(
-                VIEWER, "Viewer",
-                SELLER, "Seller"));
+        when(accounts.profiles(any())).thenReturn(Map.of(
+                VIEWER, new CommentAccountAccess.Profile("Viewer", "https://img.example/viewer.png"),
+                SELLER, new CommentAccountAccess.Profile("Seller", "https://img.example/seller.png")));
     }
 
     @Test
@@ -122,6 +124,7 @@ class ProductInteractionsTests {
             assertThat(item.replies()).singleElement().satisfies(sellerReply -> {
                 assertThat(sellerReply.replyToCommentId()).isEqualTo("500");
                 assertThat(sellerReply.author().displayName()).isEqualTo("Seller");
+                assertThat(sellerReply.author().avatarUrl()).isEqualTo("https://img.example/seller.png");
             });
         });
     }
@@ -177,6 +180,7 @@ class ProductInteractionsTests {
         assertThat(view.status()).isEqualTo(ProductComment.PUBLISHED);
         assertThat(view.body()).isEqualTo("Hello");
         assertThat(view.author().displayName()).isEqualTo("Viewer");
+        assertThat(view.author().avatarUrl()).isEqualTo("https://img.example/viewer.png");
     }
 
     @Test

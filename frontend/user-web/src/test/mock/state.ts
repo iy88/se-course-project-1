@@ -217,6 +217,8 @@ export interface MockNotification {
   occurred_at: string;
   read_at: string | null;
   summary: string;
+  subject?: string;
+  body?: string;
   source: { resource_type: string; resource_id: string } | null;
 }
 
@@ -1006,7 +1008,16 @@ export function createSeedState(): MockState {
       version: 9,
       created_at: iso(-9 * DAY),
       updated_at: iso(-8 * DAY),
-      reviews: [],
+      reviews: [
+        {
+          review_id: "1",
+          reviewer_id: "2",
+          rating: 5,
+          content: "教材与描述一致，交易顺利。",
+          created_at: iso(-7 * DAY),
+          visible: true,
+        },
+      ],
     },
     {
       id: "4",
@@ -1044,6 +1055,7 @@ export function createSeedState(): MockState {
   state.sequences.trades = 4;
   state.sequences.agreements = 3;
   state.sequences.confirmations = 3;
+  state.sequences.reviews = 1;
 
   state.notifications = [
     {
@@ -1052,7 +1064,9 @@ export function createSeedState(): MockState {
       event_type: "product_audit.passed",
       occurred_at: iso(-7 * DAY),
       read_at: iso(-6 * DAY),
-      summary: "商品《高等数学》第七版 上下册已通过审核，现已公开可交易。",
+      summary: "商品审核通过",
+      subject: "《高等数学》第七版 上下册",
+      body: "该商品已通过审核。你可以前往商品详情查看当前展示状态。",
       source: { resource_type: "product", resource_id: "1" },
     },
     {
@@ -1061,7 +1075,9 @@ export function createSeedState(): MockState {
       event_type: "product_audit.rejected",
       occurred_at: iso(-4 * DAY),
       read_at: null,
-      summary: "商品《线性代数》同济版 笔记齐全未通过审核：封面图片含盗版影印页面。",
+      summary: "商品审核未通过",
+      subject: "《线性代数》同济版 笔记齐全",
+      body: "审核意见\n封面图片含盗版影印页面。\n\n你可以根据审核意见修改商品内容，再提交审核。",
       source: { resource_type: "product", resource_id: "4" },
     },
     {
@@ -1070,7 +1086,9 @@ export function createSeedState(): MockState {
       event_type: "trade.request_accepted",
       occurred_at: iso(-2 * DAY),
       read_at: null,
-      summary: "赵同学已接受《校园通勤自行车 26 寸》的交易请求，请在交易详情中提出约定。",
+      summary: "购买请求已接受",
+      subject: "校园通勤自行车 26 寸",
+      body: "赵同学接受了你的购买请求。你可以在交易详情提出见面或交付约定。",
       source: { resource_type: "trade", resource_id: "1" },
     },
     {
@@ -1079,16 +1097,20 @@ export function createSeedState(): MockState {
       event_type: "case.inquiry_created",
       occurred_at: iso(-1 * DAY),
       read_at: null,
-      summary: "管理员就《护眼台灯（暖光可调）》发起问询，请在「我的事项」中回复。",
+      summary: "收到管理员问询",
+      subject: "护眼台灯（暖光可调）",
+      body: "管理员就该商品发起问询，请在「我的事项」中查看并回复。",
       source: { resource_type: "case", resource_id: "6" },
     },
     {
       notification_id: "5",
       recipient_id: "1",
-      event_type: "trade.completion_submitted",
+      event_type: "trade.agreement_proposed",
       occurred_at: iso(-1 * DAY + HOUR),
       read_at: iso(-1 * DAY + 2 * HOUR),
-      summary: "钱同学已提交《护眼台灯（暖光可调）》的约定，等待你回应。",
+      summary: "收到交易约定",
+      subject: "护眼台灯（暖光可调）",
+      body: "钱同学提出了交易约定。前往交易详情可查看约定的时间、地点、交付和付款方式。",
       source: { resource_type: "trade", resource_id: "2" },
     },
   ];
@@ -1265,7 +1287,7 @@ export function tradeActions(trade: MockTrade, viewerId: string): TradeAction[] 
       if (pending && pending.proposed_by !== viewerId) actions.push("decide_agreement");
       if (pending && pending.proposed_by === viewerId) actions.push("decide_agreement");
       if (trade.phase === "awaiting_completion" && !viewerConfirmed) {
-        actions.push("submit_completion");
+        actions.push("submit_confirmation");
       }
       if (!trade.cancellation) actions.push("propose_cancellation");
       if (trade.cancellation && trade.cancellation.proposed_by !== viewerId) {
@@ -1275,23 +1297,14 @@ export function tradeActions(trade: MockTrade, viewerId: string): TradeAction[] 
         actions.push("decide_cancellation");
       }
       if (current && !trade.dispute) actions.push("open_dispute");
-      actions.push("open_trade_conversation");
       break;
     case "disputed":
       if (trade.dispute?.status === "resolved") actions.push("confirm_dispute_resolution");
-      actions.push("open_trade_conversation");
       break;
     case "completed":
-      if (!trade.reviews.some((review) => review.reviewer_id === viewerId)) {
-        actions.push("submit_review");
-      }
       break;
     default:
       break;
-  }
-
-  if (trade.trade_conversation_id && trade.status !== "completed") {
-    if (!actions.includes("open_trade_conversation")) actions.push("open_trade_conversation");
   }
 
   return actions;

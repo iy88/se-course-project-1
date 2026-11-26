@@ -83,6 +83,8 @@ class NotificationQueriesTests {
 
         assertThat(view.summary()).isEqualTo(NotificationQueries.HIDDEN_SOURCE_SUMMARY);
         assertThat(view.source()).isNull();
+        assertThat(view.subject()).isNull();
+        assertThat(view.body()).isNull();
     }
 
     @Test

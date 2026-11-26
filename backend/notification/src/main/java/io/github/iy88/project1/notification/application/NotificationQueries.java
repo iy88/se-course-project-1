@@ -32,7 +32,7 @@ public class NotificationQueries {
                 query.pageSize());
         long total = store.count(accountId, query.read(), query.eventType());
         long unread = store.unreadCount(accountId);
-        return new NotificationPage(rows.stream().map(row -> project(context, row)).toList(), query.page(),
+        return new NotificationPage(rows.stream().map(row -> project(context, row, false)).toList(), query.page(),
                 query.pageSize(), total, unread);
     }
 
@@ -40,22 +40,28 @@ public class NotificationQueries {
         long accountId = recipientOf(context);
         var row = store.findForRecipient(notificationId, accountId)
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "通知不存在"));
-        return project(context, row);
+        return project(context, row, true);
     }
 
-    private NotificationView project(ExecutionContext context, NotificationStore.Stored row) {
-        var projected = sources.flatMap(port -> port.project(context, facts(row)));
+    /** Recipient-scoped transport metadata; the source module is not consulted. */
+    public Optional<NotificationItem> findRecipientItem(ExecutionContext context, long notificationId) {
+        long accountId = recipientOf(context);
+        return store.findForRecipient(notificationId, accountId).map(NotificationStore.Stored::item);
+    }
+
+    private NotificationView project(ExecutionContext context, NotificationStore.Stored row, boolean includeBody) {
+        var projected = sources.flatMap(port -> port.project(context, facts(row, includeBody)));
         return projected
                 .map(view -> new NotificationView(row.notificationId(), row.eventType(), row.occurredAt(),
-                        row.readAt(), view.summary(), view.source()))
+                        row.readAt(), view.summary(), view.source(), view.subject(), view.body(), view.commentId()))
                 .orElseGet(() -> new NotificationView(row.notificationId(), row.eventType(), row.occurredAt(),
-                        row.readAt(), HIDDEN_SOURCE_SUMMARY, null));
+                        row.readAt(), HIDDEN_SOURCE_SUMMARY, null, null, null));
     }
 
-    private static NotificationSourcePort.NotificationFacts facts(NotificationStore.Stored row) {
+    private static NotificationSourcePort.NotificationFacts facts(NotificationStore.Stored row, boolean includeBody) {
         return new NotificationSourcePort.NotificationFacts(row.notificationId(), row.recipientAccountId(),
                 row.eventType(), row.source(), row.templateKey(), row.templateVersion(), row.displayParams(),
-                row.occurredAt(), row.readAt());
+                row.occurredAt(), row.readAt(), row.intentKey(), includeBody);
     }
 
     /** The actor of a read is always an account; a guest cannot read notifications. */

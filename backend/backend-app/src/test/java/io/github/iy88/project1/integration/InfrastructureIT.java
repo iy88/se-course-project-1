@@ -46,6 +46,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -103,7 +104,7 @@ class InfrastructureIT {
         var application = new SpringApplication(BackendAppApplication.class, Fixtures.class);
         application.addInitializers(context -> context.getEnvironment().getPropertySources()
                 .addFirst(new PropertiesPropertySource("integration", properties)));
-        app = application.run("--spring.profiles.active=infrastructure,realtime-api",
+        app = application.run("--spring.profiles.active=infrastructure",
                 "--server.port=0", "--server.address=127.0.0.1", "--spring.main.banner-mode=off");
         db = app.getBean(JdbcClient.class);
         redis = app.getBean(StringRedisTemplate.class);
@@ -369,7 +370,8 @@ class InfrastructureIT {
     @TestConfiguration(proxyBeanMethods = false)
     public static class Fixtures {
         @Bean
-        public RealtimeAccess realtimeAccess() {
+        @Primary
+        public RealtimeAccess infrastructureRealtimeAccess() {
             return new RealtimeAccess() {
                 @Override
                 public Session authenticate(HttpServletRequest request) {

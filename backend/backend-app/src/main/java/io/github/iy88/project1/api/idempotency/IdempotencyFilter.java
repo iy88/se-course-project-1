@@ -49,6 +49,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     private static final Set<String> SAFE = Set.of("GET", "HEAD", "OPTIONS", "TRACE");
     private static final Pattern REVIEW_WRITES = Pattern.compile(
             "/api/v1/admin/(cases/[^/]+/claim|product-reviews/[^/]+/decision)");
+    private static final Pattern TRADE_REVIEW_WRITE = Pattern.compile("/api/v1/trades/[^/]+/reviews");
     private static final Pattern NOTIFICATION_READ = Pattern.compile("/api/v1/account/notifications/[^/]+/read");
     private static final String DIGEST_VERSION = "s2-v1";
 
@@ -79,7 +80,8 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         // Review and notification commands authorize replays inside their own write transaction.
         return !path.startsWith("/api/v1/")
                 || SAFE.contains(method)
-                || ("POST".equals(method) && REVIEW_WRITES.matcher(path).matches())
+                || ("POST".equals(method) && (REVIEW_WRITES.matcher(path).matches()
+                        || TRADE_REVIEW_WRITE.matcher(path).matches()))
                 || ("PUT".equals(method) && NOTIFICATION_READ.matcher(path).matches());
     }
 

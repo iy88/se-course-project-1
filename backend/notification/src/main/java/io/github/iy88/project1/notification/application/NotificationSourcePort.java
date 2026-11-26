@@ -22,12 +22,21 @@ public interface NotificationSourcePort {
     /** Everything the source module needs to render one entry for one reader. */
     record NotificationFacts(long notificationId, long recipientAccountId, String eventType,
                              ResourceRef source, String templateKey, String templateVersion,
-                             Map<String, String> displayParams, Instant occurredAt, Instant readAt) {}
+                             Map<String, String> displayParams, Instant occurredAt, Instant readAt,
+                             String intentKey, boolean includeBody) {}
 
     /**
      * @param summary approved text for the current reader; must not contain
      *                fields the reader is no longer allowed to see
      * @param source  the object the reader may open, or null to hide the jump
      */
-    record NotificationSourceView(String summary, ResourceRef source) {}
+    record NotificationSourceView(String summary, ResourceRef source, String subject, String body, Long commentId) {
+        public NotificationSourceView(String summary, ResourceRef source, String subject, String body) {
+            this(summary, source, subject, body, null);
+        }
+
+        public NotificationSourceView(String summary, ResourceRef source) {
+            this(summary, source, null, null);
+        }
+    }
 }
