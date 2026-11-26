@@ -10,6 +10,12 @@ import java.util.Optional;
  * module dependency; the application assembly provides the trade read-model implementation.
  */
 public interface ProductTradeHistory {
+    record PurchaseSnapshot(int contentVersion, String title, String description, long priceCents, Instant capturedAt) {}
+
+    default Optional<PurchaseSnapshot> purchaseSnapshot(long productId, long buyerId, long tradeId) {
+        return Optional.empty();
+    }
+
     record BuyerScope(Instant requestedAt) {
     }
 

@@ -232,6 +232,21 @@ public class TradeOwnedReadModel {
                 .optional();
     }
 
+    public record PurchaseProductSnapshot(int contentVersion, String title, String description,
+                                          long priceCents, Instant capturedAt) {}
+
+    public Optional<PurchaseProductSnapshot> buyerPurchaseProduct(long productId, long buyerId, long tradeId) {
+        return jdbc.sql("""
+                        select s.content_version, s.title, s.description, s.price_cents, s.captured_at
+                          from trade_purchase_product_snapshot s
+                          join trade t on t.id = s.trade_id
+                         where t.id = :trade and t.product_id = :product and t.buyer_id = :buyer
+                        """).param("trade", tradeId).param("product", productId).param("buyer", buyerId)
+                .query((row, index) -> new PurchaseProductSnapshot(row.getInt("content_version"),
+                        row.getString("title"), row.getString("description"), row.getLong("price_cents"),
+                        row.getTimestamp("captured_at").toInstant())).optional();
+    }
+
     /**
      * Start of the product-edit range a buyer may read.
      *
