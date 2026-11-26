@@ -1701,6 +1701,7 @@ export interface components {
         product?: {
           id: string;
           title: string;
+          description?: string | null;
         };
         supplements: {
           action_id: string;

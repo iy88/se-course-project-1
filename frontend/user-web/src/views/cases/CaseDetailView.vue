@@ -71,6 +71,23 @@ const pendingInquiryIds = ref<string[]>([]);
 const supplementDialog = ref<HTMLDialogElement | null>(null);
 const supplementOpen = ref(false);
 const reportMaterials = computed(() => detail.data.value?.report_materials);
+const caseTypeLabel = computed(() => {
+  const kind = detail.data.value?.case_type;
+  if (kind === "report") return "举报";
+  if (kind === "product_review") return "商品审核";
+  return "异常交易";
+});
+const pageDescription = computed(() =>
+  detail.data.value
+    ? `${caseTypeLabel.value} · 当前进度：${caseStatusLabels[detail.data.value.case_status]}`
+    : "查看事项进度与材料。",
+);
+
+function attachmentKindLabel(contentType?: string): string {
+  if (contentType === "application/pdf") return "PDF 附件";
+  if (contentType?.startsWith("image/")) return "图片附件";
+  return "附件";
+}
 
 function toggleSupplement(): void {
   const dialog = supplementDialog.value;
@@ -403,54 +420,51 @@ async function submitSupplement(): Promise<void> {
       <PageHeader
         eyebrow="事项"
         :title="`事项 #${detail.data.value.case_id}`"
-        :description="`当前进度：${caseStatusLabels[detail.data.value.case_status]}`"
+        :description="pageDescription"
       >
         <template #actions>
           <RouterLink to="/me/cases" class="btn btn--ghost">返回事项列表</RouterLink>
         </template>
       </PageHeader>
 
-      <section class="card stack">
-        <div class="inline">
-          <StateBadge
-            :label="
-              detail.data.value.archived_at
-                ? '已结案'
-                : caseStatusLabels[detail.data.value.case_status]
-            "
-            :tone="
-              detail.data.value.archived_at
-                ? 'neutral'
-                : caseStatusTones[detail.data.value.case_status]
-            "
-          />
-          <span class="chip">{{
-            detail.data.value.case_type === "report"
-              ? "举报"
-              : detail.data.value.case_type === "product_review"
-                ? "商品审核"
-                : "异常交易"
-          }}</span>
-          <span v-if="detail.data.value.decision_kind" class="chip chip--active">
-            {{ caseDecisionLabels[detail.data.value.decision_kind] }}
-          </span>
+      <section class="card case-summary">
+        <div class="case-summary__top">
+          <div class="inline">
+            <StateBadge
+              :label="
+                detail.data.value.archived_at
+                  ? '已结案'
+                  : caseStatusLabels[detail.data.value.case_status]
+              "
+              :tone="
+                detail.data.value.archived_at
+                  ? 'neutral'
+                  : caseStatusTones[detail.data.value.case_status]
+              "
+            />
+            <span class="chip">{{ caseTypeLabel }}</span>
+            <span v-if="detail.data.value.decision_kind" class="chip chip--active">
+              {{ caseDecisionLabels[detail.data.value.decision_kind] }}
+            </span>
+          </div>
+
+          <button
+            v-if="canSupplement"
+            type="button"
+            class="btn btn--small btn--ghost supplement-toggle"
+            aria-haspopup="dialog"
+            aria-controls="case-supplement"
+            :aria-expanded="supplementOpen"
+            @click="toggleSupplement"
+          >
+            补充材料
+          </button>
         </div>
 
-        <button
-          v-if="canSupplement"
-          type="button"
-          class="btn btn--primary supplement-toggle"
-          aria-haspopup="dialog"
-          aria-controls="case-supplement"
-          :aria-expanded="supplementOpen"
-          @click="toggleSupplement"
-        >
-          补充材料
-        </button>
-
-        <p v-if="detail.data.value.reason_text" class="reason pre-line break-anywhere">
-          {{ detail.data.value.reason_text }}
-        </p>
+        <div v-if="detail.data.value.reason_text" class="summary-copy">
+          <span class="field__label">处理说明</span>
+          <p class="reason pre-line break-anywhere">{{ detail.data.value.reason_text }}</p>
+        </div>
 
         <p v-if="appealDeadline" class="banner banner--warn">
           申辩截止：{{ formatDateTime(appealDeadline) }}
@@ -458,7 +472,7 @@ async function submitSupplement(): Promise<void> {
           <template v-else>· 申辩期已结束</template>
         </p>
 
-        <div v-if="detail.data.value.enforcements.length" class="stack stack--tight">
+        <div v-if="detail.data.value.enforcements.length" class="summary-enforcements">
           <span class="field__label">处置结果</span>
           <ul class="plain-list">
             <li v-for="(item, index) in detail.data.value.enforcements" :key="index">
@@ -473,69 +487,138 @@ async function submitSupplement(): Promise<void> {
         </div>
       </section>
 
-      <section v-if="isReporterView" class="card stack">
-        <div class="card__head"><h2>我的举报材料</h2></div>
-        <div v-if="detail.data.value.reported_reason || reportMaterials?.original_note">
-          <h3>举报说明</h3>
-          <p class="pre-line break-anywhere">{{ detail.data.value.reported_reason }}</p>
-          <p v-if="reportMaterials?.original_note" class="pre-line break-anywhere">
-            {{ reportMaterials.original_note }}
-          </p>
+      <section v-if="isReporterView" class="card materials-card">
+        <div class="card__head">
+          <div>
+            <p class="section-kicker">举报记录</p>
+            <h2>我的举报材料</h2>
+          </div>
+          <span class="chip">
+            {{ reportMaterials?.supplements.length ?? 0 }} 次补充 ·
+            {{ reportMaterials?.attachments.length ?? 0 }} 个附件
+          </span>
         </div>
-        <div v-if="reportMaterials?.product">
-          <h3>关联商品</h3>
-          <RouterLink
-            :to="{ name: 'product-detail', params: { productId: reportMaterials.product.id } }"
+
+        <div class="material-overview">
+          <section
+            v-if="detail.data.value.reported_reason || reportMaterials?.original_note"
+            class="material-block"
           >
-            {{ reportMaterials.product.title }} #{{ reportMaterials.product.id }}
-          </RouterLink>
+            <h3>举报说明</h3>
+            <p
+              v-if="detail.data.value.reported_reason"
+              class="pre-line break-anywhere material-copy"
+            >
+              {{ detail.data.value.reported_reason }}
+            </p>
+            <p v-if="reportMaterials?.original_note" class="pre-line break-anywhere">
+              {{ reportMaterials.original_note }}
+            </p>
+          </section>
+
+          <section v-if="reportMaterials?.product" class="material-block">
+            <div class="section-heading">
+              <h3>关联商品快照</h3>
+              <span class="muted">举报提交时</span>
+            </div>
+            <dl class="case-fields">
+              <dt>商品名称</dt>
+              <dd>{{ reportMaterials.product.title || "未填写" }}</dd>
+              <dt>商品编号</dt>
+              <dd>#{{ reportMaterials.product.id }}</dd>
+              <dt>商品简介</dt>
+              <dd class="pre-line">{{ reportMaterials.product.description || "未填写" }}</dd>
+            </dl>
+            <RouterLink
+              class="text-link"
+              :to="{ name: 'product-detail', params: { productId: reportMaterials.product.id } }"
+            >
+              查看当前商品页
+            </RouterLink>
+          </section>
         </div>
-        <div v-if="reportMaterials?.supplements.length">
-          <h3>已提交的补充说明</h3>
-          <ul class="plain-list stack stack--tight">
-            <li v-for="item in reportMaterials.supplements" :key="item.action_id">
-              <p class="muted">{{ formatDateTime(item.occurred_at) }}</p>
-              <p class="pre-line break-anywhere">{{ item.note }}</p>
-            </li>
-          </ul>
-        </div>
-        <div v-if="reportMaterials?.attachments.length">
-          <h3>已提交的附件</h3>
-          <ul class="plain-list stack stack--tight">
-            <li v-for="item in reportMaterials.attachments" :key="item.evidence_id">
-              <a
-                :href="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
-                target="_blank"
-                rel="noopener noreferrer"
+
+        <div class="material-streams">
+          <section v-if="reportMaterials?.supplements.length" class="material-block">
+            <div class="section-heading">
+              <h3>补充说明</h3>
+              <span class="muted">{{ reportMaterials.supplements.length }} 条</span>
+            </div>
+            <ol class="note-list">
+              <li
+                v-for="item in reportMaterials.supplements"
+                :key="item.action_id"
+                class="note-item"
               >
-                <img
-                  v-if="item.content_type?.startsWith('image/')"
-                  :src="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
-                  :alt="`已提交的图片 #${item.evidence_id}`"
-                  class="evidence-image"
-                  width="640"
-                  height="480"
-                  loading="lazy"
-                  decoding="async"
-                />
-                <template v-else>
-                  {{ item.content_type === "application/pdf" ? "在新标签页查看 PDF" : "查看附件" }}
-                  #{{ item.evidence_id }}
-                </template>
-              </a>
-              <span class="muted"> · {{ formatDateTime(item.submitted_at) }}</span>
-            </li>
-          </ul>
+                <div class="record-meta">
+                  <span class="record-type">补充说明</span>
+                  <time :datetime="item.occurred_at">{{ formatDateTime(item.occurred_at) }}</time>
+                </div>
+                <p class="pre-line break-anywhere">{{ item.note }}</p>
+              </li>
+            </ol>
+          </section>
+
+          <section v-if="reportMaterials?.attachments.length" class="material-block">
+            <div class="section-heading">
+              <h3>附件</h3>
+              <span class="muted">{{ reportMaterials.attachments.length }} 项</span>
+            </div>
+            <ul class="attachment-list">
+              <li v-for="item in reportMaterials.attachments" :key="item.evidence_id">
+                <div class="record-meta">
+                  <span class="record-type">{{ attachmentKindLabel(item.content_type) }}</span>
+                  <span class="mono">证据 #{{ item.evidence_id }}</span>
+                  <time :datetime="item.submitted_at"
+                    >提交于 {{ formatDateTime(item.submitted_at) }}</time
+                  >
+                </div>
+                <a
+                  class="evidence-link"
+                  :href="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :aria-label="`在新标签页打开${attachmentKindLabel(item.content_type)} #${item.evidence_id}`"
+                >
+                  <img
+                    v-if="item.content_type?.startsWith('image/')"
+                    :src="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
+                    :alt="`已提交的图片 #${item.evidence_id}`"
+                    class="evidence-image"
+                    width="640"
+                    height="480"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <span v-else class="file-link">
+                    <span class="file-type">{{ attachmentKindLabel(item.content_type) }}</span>
+                    <span>{{
+                      item.content_type === "application/pdf" ? "在浏览器中查看 PDF" : "查看附件"
+                    }}</span>
+                  </span>
+                  <span v-if="item.content_type?.startsWith('image/')" class="evidence-link__label">
+                    在新标签页打开原图
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </section>
         </div>
       </section>
 
-      <section class="card">
-        <div class="card__head"><h2>进度</h2></div>
+      <section class="card progress-card">
+        <div class="card__head">
+          <div>
+            <p class="section-kicker">处理轨迹</p>
+            <h2>进度</h2>
+          </div>
+          <span class="chip">{{ detail.data.value.actions.length }} 条</span>
+        </div>
         <ol class="timeline">
           <li v-for="(action, index) in detail.data.value.actions" :key="index">
             <span class="timeline__dot" aria-hidden="true" />
             <span class="timeline__body">
-              <span>{{ caseActionKindText(action.action_kind) }}</span>
+              <strong>{{ caseActionKindText(action.action_kind) }}</strong>
               <span class="muted">
                 {{ formatDateTime(action.occurred_at) }} ·
                 {{ caseActorKindText(action.actor_kind) }}
@@ -719,15 +802,206 @@ async function submitSupplement(): Promise<void> {
 </template>
 
 <style scoped>
+.section-kicker {
+  margin: 0;
+  color: var(--info);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.case-summary {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.case-summary__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.case-summary__top > .inline {
+  flex: 1 1 20rem;
+}
+
+.summary-copy,
+.summary-enforcements {
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--line);
+}
+
+.summary-copy {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.materials-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.material-overview,
+.material-streams {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.material-block {
+  min-inline-size: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, #fff, #fbfcfb);
+}
+
+.material-block h3,
+.material-block > h3 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.material-copy {
+  margin-block-start: var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-block-end: var(--space-2);
+}
+
+.case-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.case-fields dt {
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.case-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.text-link {
+  display: inline-flex;
+  margin-block-start: var(--space-2);
+  color: var(--info);
+  font-size: 0.8125rem;
+}
+
+.note-list,
+.attachment-list,
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.note-list,
+.attachment-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.note-item,
+.attachment-list > li {
+  min-inline-size: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fbfcfb;
+}
+
+.note-item > p {
+  margin-block-start: var(--space-2);
+  font-size: 0.875rem;
+}
+
+.record-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.record-meta time {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.record-type,
+.file-type {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cad9eb;
+  border-radius: 999px;
+  padding: 0.06rem 0.48rem;
+  color: var(--info);
+  background: var(--info-soft);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.evidence-link {
+  display: block;
+  margin-block-start: var(--space-2);
+  color: inherit;
+  text-decoration: none;
+}
+
+.evidence-link:where(:hover, :focus-visible) .evidence-link__label {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.evidence-link__label {
+  display: inline-flex;
+  margin-block-start: var(--space-2);
+  color: var(--info);
+  font-size: 0.8125rem;
+}
+
+.file-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 0.8125rem;
+}
+
 .evidence-image {
   display: block;
+  inline-size: min(100%, 32rem);
+  block-size: auto;
   max-inline-size: min(100%, 32rem);
   max-block-size: 24rem;
+  aspect-ratio: 4 / 3;
   object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
 }
 
 .supplement-toggle {
-  justify-self: start;
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 
 .supplement-dialog {
@@ -766,22 +1040,37 @@ async function submitSupplement(): Promise<void> {
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 0;
 }
 
 .timeline li {
+  position: relative;
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
+  padding-block: var(--space-2);
+}
+
+.timeline li:not(:last-child)::before {
+  position: absolute;
+  inset-block: 1.15rem calc(-0.1rem);
+  inset-inline-start: 0.22rem;
+  inline-size: 1px;
+  background: var(--line);
+  content: "";
 }
 
 .timeline__dot {
+  position: relative;
+  z-index: 1;
   inline-size: 0.5rem;
   block-size: 0.5rem;
-  margin-block-start: 0.5rem;
+  margin-block-start: 0.42rem;
+  border: 2px solid var(--panel);
   border-radius: 50%;
   background: var(--brand);
   flex: 0 0 auto;
+  box-shadow: 0 0 0 1px var(--brand);
 }
 
 .timeline__body {

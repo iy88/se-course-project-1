@@ -147,9 +147,14 @@ export interface CaseEnforcementInput {
 export interface CaseThreadPage {
   items: {
     case_message_id: string;
+    seq: number;
     message_kind: string;
     body: string;
-    sender: { display_name: string };
+    sender: {
+      account_id: string | null;
+      display_name: string;
+      sender_kind: string | null;
+    };
     created_at: string;
   }[];
   next_before_seq: number | null;

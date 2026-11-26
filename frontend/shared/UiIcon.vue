@@ -17,6 +17,7 @@ const paths = {
   check: "m5 12 5 5 9-10",
   mail: "M6 5h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z M4 8l6.8 5a2 2 0 0 0 2.4 0L20 8",
   settings: "M4 7h16 M4 17h16 M8 4v6 M16 14v6",
+  menu: "M4 7h16 M4 12h16 M4 17h16",
   login: "M14 4h5v16h-5 M4 12h11 M11 8l4 4-4 4",
   logout: "M10 4H5v16h5 M9 12h11 M16 8l4 4-4 4",
   reset: "M4 6v5h5 M4 11a8 8 0 1 1 2 7",

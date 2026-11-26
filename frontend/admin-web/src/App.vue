@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* Administration shell: identity gate, navigation and the active page. */
-import { computed, onMounted } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import BrandMark from "../../shared/BrandMark.vue";
 import MobileBackButton from "../../shared/MobileBackButton.vue";
 import PageFeedback from "../../shared/PageFeedback.vue";
@@ -55,6 +55,7 @@ const navItems = [
 ] as const;
 
 const page = computed(() => route.value.name);
+const mobileNavOpen = ref(false);
 const activeKey = computed(() => {
   if (page.value === "review") return "reviews";
   if (page.value === "case") return "cases";
@@ -77,10 +78,33 @@ const backLabel = computed(() => {
 
 onMounted(() => {
   void session.load();
+  document.addEventListener("keydown", closeNavOnEscape);
 });
+
+onUnmounted(() => {
+  document.removeEventListener("keydown", closeNavOnEscape);
+});
+
+watch(
+  () => route.value.name,
+  () => {
+    mobileNavOpen.value = false;
+  },
+);
+
+watch(
+  () => session.state.value,
+  (state) => {
+    if (state !== "signed-in") mobileNavOpen.value = false;
+  },
+);
 
 async function signOut(): Promise<void> {
   await session.signOut();
+}
+
+function closeNavOnEscape(event: KeyboardEvent): void {
+  if (event.key === "Escape") mobileNavOpen.value = false;
 }
 
 function goBack(): void {
@@ -119,12 +143,18 @@ function goBack(): void {
             </span>
           </a>
         </div>
-        <nav class="admin-nav" aria-label="管理导航">
+        <nav
+          id="admin-navigation"
+          class="admin-nav"
+          :class="{ 'admin-nav--open': mobileNavOpen }"
+          aria-label="管理导航"
+        >
           <a
             v-for="item in navItems"
             :key="item.key"
             :href="item.href"
             :aria-current="activeKey === item.key ? 'page' : undefined"
+            @click="mobileNavOpen = false"
           >
             <UiIcon :name="item.icon" />
             {{ item.label }}
@@ -132,6 +162,17 @@ function goBack(): void {
         </nav>
         <div class="admin-account">
           <span class="admin-account__name">{{ session.displayName.value }}</span>
+          <button
+            type="button"
+            class="btn btn--ghost admin-menu-toggle"
+            aria-controls="admin-navigation"
+            :aria-expanded="mobileNavOpen"
+            :aria-label="mobileNavOpen ? '关闭管理导航' : '打开管理导航'"
+            @click="mobileNavOpen = !mobileNavOpen"
+          >
+            <UiIcon :name="mobileNavOpen ? 'close' : 'menu'" />
+            <span>{{ mobileNavOpen ? "关闭" : "菜单" }}</span>
+          </button>
           <button type="button" class="btn btn--danger" @click="signOut">
             <UiIcon name="logout" />退出
           </button>

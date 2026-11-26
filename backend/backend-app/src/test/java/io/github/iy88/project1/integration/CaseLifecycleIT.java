@@ -418,6 +418,8 @@ class CaseLifecycleIT {
         assertThat(ownDetail.has("reported_object")).isFalse();
         assertThat(ownDetail.at("/report_materials/product/title").asString()).isEqualTo("来源商品");
         assertThat(ownDetail.at("/report_materials/product/id").asLong()).isEqualTo(product);
+        assertThat(ownDetail.at("/report_materials/product/description").asString())
+                .isEqualTo("举报时的描述");
         assertThatThrownBy(() -> queries.detail(context(MANAGER_2.get()), caseId))
                 .isInstanceOfSatisfying(BusinessError.class,
                         failure -> assertThat(failure.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));

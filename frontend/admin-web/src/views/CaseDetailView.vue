@@ -100,6 +100,14 @@ const statusLabels = { pending: "待认领", claimed: "处理中", decided: "已
 const currentStatus = computed(() =>
   detail.value?.archived_at ? "已结案" : detail.value && statusLabels[detail.value.case_status],
 );
+const caseTypeLabel = computed(() =>
+  detail.value ? todoKindLabels[detail.value.case_type] : "事项",
+);
+const pageDescription = computed(() =>
+  detail.value
+    ? `${caseTypeLabel.value}处理 · ${currentStatus.value} · ${relatedAccounts.value.length} 个相关账户`
+    : "读取事项摘要、材料、会话与处置操作。",
+);
 const reportedObject = computed(() => detail.value?.reported_object);
 const submittedNotes = computed(
   () =>
@@ -108,6 +116,9 @@ const submittedNotes = computed(
 const relatedAccounts = computed(() => detail.value?.related_accounts ?? []);
 const eligibleAccounts = computed(() =>
   relatedAccounts.value.filter((account) => account.eligible),
+);
+const selectedThreadTitle = computed(() =>
+  selectedThread.value ? accountDisplayName(selectedThread.value.related_account_id) : "事项会话",
 );
 const reportedKinds = {
   account: "账户",
@@ -131,7 +142,67 @@ function accountLabel(account: CaseRelatedAccount): string {
   return `${role} · ${account.display_name ?? "账户"} #${account.account_id}`;
 }
 
+function accountDisplayName(accountId: string): string {
+  const account = relatedAccounts.value.find((item) => item.account_id === accountId);
+  return account?.display_name ?? `账户 #${accountId}`;
+}
+
+function accountInitial(accountId: string): string {
+  return accountDisplayName(accountId).trim().slice(0, 1).toUpperCase() || "#";
+}
+
+function threadTabLabel(accountId: string): string {
+  const account = relatedAccounts.value.find((item) => item.account_id === accountId);
+  return account ? accountLabel(account) : `相关账户 #${accountId}`;
+}
+
+function messageSide(senderKind: string | null): "manager" | "account" | "system" {
+  if (senderKind === "manager") return "manager";
+  if (senderKind === "system") return "system";
+  return "account";
+}
+
+function attachmentKindLabel(contentType?: string): string {
+  if (contentType === "application/pdf") return "PDF 附件";
+  if (contentType?.startsWith("image/")) return "图片附件";
+  return "附件";
+}
+
+function userProductHref(productId: string): string {
+  const path = `/products/${encodeURIComponent(productId)}`;
+  if (typeof window === "undefined") return path;
+  const target = new URL(window.location.href);
+  if (target.port === "3001") {
+    target.port = "3000";
+  } else if (target.hostname.startsWith("admin.")) {
+    target.hostname = `mobile.${target.hostname.slice("admin.".length)}`;
+  }
+  target.pathname = path;
+  target.search = "";
+  target.hash = "";
+  return target.toString();
+}
+
 const actions = computed(() => new Set(detail.value?.available_actions ?? []));
+
+function selectThreadFor(next: ManagementCaseDetail): void {
+  const threads = next.threads ?? [];
+  const chosen =
+    threads.find((item) => item.conversation_id === selectedThread.value?.conversation_id) ??
+    threads[0];
+  if (chosen) {
+    void loadThread(chosen);
+    return;
+  }
+  selectedThread.value = undefined;
+  thread.value = undefined;
+}
+
+function selectDefaultPeer(next: ManagementCaseDetail): void {
+  const candidates = (next.related_accounts ?? []).filter((account) => account.eligible);
+  if (candidates.some((account) => account.account_id === peer.value)) return;
+  peer.value = candidates[0]?.account_id ?? "";
+}
 
 async function load(): Promise<void> {
   detailRequest?.abort();
@@ -141,7 +212,11 @@ async function load(): Promise<void> {
   error.value = undefined;
   try {
     const next = await readCase(props.caseId, controller.signal);
-    if (detailRequest === controller) detail.value = next;
+    if (detailRequest === controller) {
+      detail.value = next;
+      selectDefaultPeer(next);
+      selectThreadFor(next);
+    }
   } catch (caught) {
     if (detailRequest === controller && !(caught instanceof AbortedError)) {
       detail.value = undefined;
@@ -423,7 +498,7 @@ onUnmounted(() => {
 
 <template>
   <div class="stack stack--loose">
-    <PageHeader :title="`事项 #${caseId}`">
+    <PageHeader eyebrow="治理事项" :title="`事项 #${caseId}`" :description="pageDescription">
       <template #actions>
         <a :href="backHref" class="btn btn--ghost">返回事项工作台</a>
       </template>
@@ -431,119 +506,197 @@ onUnmounted(() => {
     <LoadingBlock v-if="loading && !detail" label="正在读取事项…" />
     <ErrorNotice v-else-if="error" :error="error" @retry="load" />
     <template v-else-if="detail">
-      <section class="card stack">
-        <div class="spread">
-          <h2>{{ todoKindLabels[detail.case_type] }}</h2>
-          <span class="chip">{{ currentStatus }}</span>
-        </div>
-        <div v-if="detail.reported_reason">
-          <h3>举报理由</h3>
-          <p class="pre-line">{{ detail.reported_reason }}</p>
-        </div>
-        <div v-if="detail.decision_kind" class="stack">
-          <h3>{{ decisionKindLabels[detail.decision_kind] }}</h3>
-          <p v-if="detail.reason_text" class="pre-line">{{ detail.reason_text }}</p>
-          <p v-if="detail.archived_at">结案于 {{ formatDateTime(detail.archived_at) }}</p>
-          <p v-if="detail.public_result_at">公开于 {{ formatDateTime(detail.public_result_at) }}</p>
-        </div>
-        <ul v-if="detail.enforcements.length" class="stack">
-          <li
-            v-for="item in detail.enforcements"
-            :key="item.enforcement_id"
-            class="stack stack--tight"
+      <section class="card case-overview">
+        <header class="case-overview__header">
+          <div>
+            <p class="section-kicker">事项概览</p>
+            <h2>{{ todoKindLabels[detail.case_type] }}</h2>
+          </div>
+          <span
+            class="case-status"
+            :class="[
+              `case-status--${detail.case_status}`,
+              { 'case-status--archived': detail.archived_at },
+            ]"
           >
-            <div class="spread">
-              <span>
-                {{
-                  enforcementOptions.find((option) => option.action === item.action)?.label ??
-                  "处置"
-                }}
-                {{ item.result_status === "failed" ? "失败" : "已记录" }}
-                <span v-if="item.current_state"> · {{ item.current_state }}</span>
-              </span>
-              <button
-                v-if="item.can_lift"
-                type="button"
-                class="btn"
-                @click="openLift(item.enforcement_id)"
-              >
-                解除处置
-              </button>
-            </div>
-            <form
-              v-if="item.can_lift && liftDraft?.enforcementId === item.enforcement_id"
-              class="stack"
-              :aria-labelledby="`${ids}-lift`"
-              @submit.prevent="submitLift"
-            >
-              <h3 :id="`${ids}-lift`">解除处置</h3>
-              <label class="field" :for="`${ids}-lift-reason`">
-                <span>解除原因</span>
-                <textarea
-                  :id="`${ids}-lift-reason`"
-                  v-model="liftDraft.reason"
-                  name="reason"
-                  class="textarea"
-                  required
-                />
-              </label>
-              <div class="inline">
-                <button type="button" class="btn" @click="cancelLift">取消</button>
-                <button type="submit" class="btn btn--primary" :disabled="writing">确认解除</button>
+            {{ currentStatus }}
+          </span>
+        </header>
+
+        <div class="case-overview__layout">
+          <div class="stack stack--tight">
+            <section v-if="detail.reported_reason" class="info-block">
+              <h3>举报理由</h3>
+              <p class="body-copy pre-line">{{ detail.reported_reason }}</p>
+            </section>
+
+            <section v-if="reportedObject" class="info-block">
+              <h3>举报对象</h3>
+              <dl class="case-fields">
+                <dt>对象类型</dt>
+                <dd>{{ reportedKinds[reportedObject.target_type] }}</dd>
+                <dt>对象编号</dt>
+                <dd>#{{ reportedObject.target_id }}</dd>
+              </dl>
+              <div v-if="reportedObject.product" class="snapshot-panel">
+                <div class="section-heading">
+                  <h4>商品快照</h4>
+                  <span class="muted">
+                    {{ reportedObject.product.title }} #{{ reportedObject.product.id }}
+                  </span>
+                </div>
+                <dl class="case-fields">
+                  <dt>商品名称</dt>
+                  <dd>{{ reportedObject.product.title || "未填写" }}</dd>
+                  <dt>商品编号</dt>
+                  <dd>#{{ reportedObject.product.id }}</dd>
+                  <dt>商品简介</dt>
+                  <dd class="pre-line">{{ reportedObject.product.description || "未填写" }}</dd>
+                </dl>
+                <a
+                  class="text-link"
+                  :href="userProductHref(reportedObject.product.id)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  在新标签页打开商品
+                </a>
               </div>
-            </form>
-          </li>
-        </ul>
-      </section>
-      <section v-if="relatedAccounts.length" class="card stack">
-        <h2>相关账户</h2>
-        <ul>
-          <li v-for="account in relatedAccounts" :key="account.account_id">
-            {{ accountLabel(account) }}
-          </li>
-        </ul>
-      </section>
-      <section v-if="reportedObject" class="card stack">
-        <h2>举报对象</h2>
-        <dl class="case-fields">
-          <dt>对象类型</dt>
-          <dd>{{ reportedKinds[reportedObject.target_type] }}</dd>
-          <dt>对象编号</dt>
-          <dd>#{{ reportedObject.target_id }}</dd>
-        </dl>
-        <details v-if="reportedObject.product">
-          <summary>
-            查看{{ reportedObject.target_type === "account" ? "来源商品快照" : "商品快照" }}
-          </summary>
-          <dl class="case-fields">
-            <dt>商品名称</dt>
-            <dd>{{ reportedObject.product.title }}</dd>
-            <dt>商品编号</dt>
-            <dd>#{{ reportedObject.product.id }}</dd>
-            <dt>商品简介</dt>
-            <dd class="pre-line">{{ reportedObject.product.description || "未填写" }}</dd>
-          </dl>
-        </details>
-        <p v-else-if="reportedObject.target_type === 'account'" class="muted">未记录来源商品。</p>
-        <p v-else-if="reportedObject.target_type === 'product'" class="muted">商品快照不可用。</p>
-        <p
-          v-else-if="
-            ['comment', 'evaluation'].includes(reportedObject.target_type) && !detail.target
-          "
-          class="muted"
-        >
-          原记录不可用。
-        </p>
-        <p v-if="detail.reported_message">
-          {{
-            detail.reported_message.conversation_kind === "chat"
-              ? "私聊"
-              : detail.reported_message.conversation_kind === "trade"
-                ? "交易会话"
-                : "事项会话"
-          }}
-          #{{ detail.reported_message.conversation_id }}
-        </p>
+              <a
+                v-else-if="reportedObject.target_type === 'product'"
+                class="text-link"
+                :href="userProductHref(reportedObject.target_id)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                在新标签页打开商品
+              </a>
+              <p v-else-if="reportedObject.target_type === 'account'" class="muted">
+                未记录来源商品。
+              </p>
+              <p
+                v-else-if="
+                  ['comment', 'evaluation'].includes(reportedObject.target_type) && !detail.target
+                "
+                class="muted"
+              >
+                原记录不可用。
+              </p>
+              <dl v-if="detail.reported_message" class="case-fields">
+                <dt>举报消息位置</dt>
+                <dd>
+                  {{
+                    detail.reported_message.conversation_kind === "chat"
+                      ? "私聊"
+                      : detail.reported_message.conversation_kind === "trade"
+                        ? "交易会话"
+                        : "事项会话"
+                  }}
+                  #{{ detail.reported_message.conversation_id }}
+                </dd>
+              </dl>
+            </section>
+
+            <section v-if="detail.decision_kind" class="info-block">
+              <div class="section-heading">
+                <h3>{{ decisionKindLabels[detail.decision_kind] }}</h3>
+                <span v-if="detail.decision_kind" class="chip">{{
+                  decisionKindLabels[detail.decision_kind]
+                }}</span>
+              </div>
+              <p v-if="detail.reason_text" class="pre-line">{{ detail.reason_text }}</p>
+              <p v-if="detail.archived_at" class="muted">
+                结案于 {{ formatDateTime(detail.archived_at) }}
+              </p>
+              <p v-if="detail.public_result_at" class="muted">
+                公开于 {{ formatDateTime(detail.public_result_at) }}
+              </p>
+            </section>
+
+            <section v-if="detail.enforcements.length" class="info-block">
+              <div class="section-heading">
+                <h3>处置结果</h3>
+                <span class="muted">{{ detail.enforcements.length }} 项</span>
+              </div>
+              <ul class="enforcement-list">
+                <li
+                  v-for="item in detail.enforcements"
+                  :key="item.enforcement_id"
+                  class="enforcement-item"
+                >
+                  <div class="spread">
+                    <span>
+                      <strong>{{
+                        enforcementOptions.find((option) => option.action === item.action)?.label ??
+                        "处置"
+                      }}</strong>
+                      <span class="muted">
+                        {{ item.result_status === "failed" ? "失败" : "已记录" }}
+                        <template v-if="item.current_state"> · {{ item.current_state }}</template>
+                      </span>
+                    </span>
+                    <button
+                      v-if="item.can_lift"
+                      type="button"
+                      class="btn btn--small"
+                      @click="openLift(item.enforcement_id)"
+                    >
+                      解除处置
+                    </button>
+                  </div>
+                  <form
+                    v-if="item.can_lift && liftDraft?.enforcementId === item.enforcement_id"
+                    class="stack stack--tight nested-form"
+                    :aria-labelledby="`${ids}-lift`"
+                    @submit.prevent="submitLift"
+                  >
+                    <h4 :id="`${ids}-lift`">解除处置</h4>
+                    <label class="field" :for="`${ids}-lift-reason`">
+                      <span>解除原因</span>
+                      <textarea
+                        :id="`${ids}-lift-reason`"
+                        v-model="liftDraft.reason"
+                        name="reason"
+                        class="textarea"
+                        required
+                      />
+                    </label>
+                    <div class="inline">
+                      <button type="button" class="btn btn--small" @click="cancelLift">取消</button>
+                      <button type="submit" class="btn btn--primary btn--small" :disabled="writing">
+                        确认解除
+                      </button>
+                    </div>
+                  </form>
+                </li>
+              </ul>
+            </section>
+          </div>
+
+          <aside class="case-overview__aside">
+            <section v-if="relatedAccounts.length" class="info-block">
+              <div class="section-heading">
+                <h3>相关账户</h3>
+                <span class="muted">{{ relatedAccounts.length }} 方</span>
+              </div>
+              <ul class="account-list">
+                <li
+                  v-for="account in relatedAccounts"
+                  :key="account.account_id"
+                  class="account-row"
+                >
+                  <span class="account-avatar" aria-hidden="true">{{
+                    accountInitial(account.account_id)
+                  }}</span>
+                  <span class="account-copy">
+                    <strong>{{ account.display_name ?? "账户" }}</strong>
+                    <small>{{ accountLabel(account) }}</small>
+                  </span>
+                </li>
+              </ul>
+            </section>
+          </aside>
+        </div>
       </section>
       <details v-if="detail.target" class="card stack">
         <summary>查看被举报{{ detail.target.target_type === "comment" ? "评论" : "评价" }}</summary>
@@ -561,127 +714,197 @@ onUnmounted(() => {
         <p class="pre-line">{{ detail.target.body }}</p>
         <p v-if="detail.target.created_at">发表于 {{ formatDateTime(detail.target.created_at) }}</p>
       </details>
-      <section
-        v-if="
-          submittedNotes.length ||
-          detail.evidence?.length ||
-          (detail.reported_message && !detail.archived_at)
-        "
-        class="card stack"
-      >
-        <h2>补充材料与证据</h2>
-        <div v-if="submittedNotes.length" class="stack stack--tight">
-          <h3>举报人补充说明</h3>
-          <ul class="stack stack--tight">
-            <li v-for="item in submittedNotes" :key="item.action_id">
-              <p class="muted">提交时间 {{ formatDateTime(item.occurred_at) }}</p>
-              <p class="pre-line">{{ item.note }}</p>
-            </li>
-          </ul>
-        </div>
-        <button
+      <div class="record-layout">
+        <section
           v-if="
-            detail.reported_message &&
-            !detail.archived_at &&
-            !detail.evidence?.some((item) => item.evidence_kind === 'platform_record')
+            submittedNotes.length ||
+            detail.evidence?.length ||
+            (detail.reported_message && !detail.archived_at)
           "
-          type="button"
-          class="btn"
-          :disabled="evidenceLoading"
-          @click="citeMessage"
+          class="card record-card"
         >
-          引用被举报消息
-        </button>
-        <ul v-if="detail.evidence?.length" class="stack">
-          <li v-for="item in detail.evidence" :key="item.evidence_id" class="stack stack--tight">
-            <dl class="case-fields">
-              <dt>证据类型</dt>
-              <dd>
-                {{ item.evidence_kind === "platform_record" ? "被举报消息" : "用户上传附件" }}
-              </dd>
-              <template v-if="item.content_type">
-                <dt>附件格式</dt>
-                <dd>{{ item.content_type === "application/pdf" ? "PDF" : "图片" }}</dd>
-              </template>
-              <dt>证据编号</dt>
-              <dd>#{{ item.evidence_id }}</dd>
-              <template v-if="item.submitted_at">
-                <dt>{{ item.file_id ? "提交时间" : "引用时间" }}</dt>
-                <dd>{{ formatDateTime(item.submitted_at) }}</dd>
-              </template>
-            </dl>
-            <a
-              v-if="item.file_id"
-              :href="caseEvidenceFileHref(caseId, item.evidence_id)"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <img
-                v-if="item.content_type?.startsWith('image/')"
-                :src="caseEvidenceFileHref(caseId, item.evidence_id)"
-                :alt="`证据图片 #${item.evidence_id}`"
-                class="evidence-image"
-                width="640"
-                height="480"
-                loading="lazy"
-                decoding="async"
-              />
-              <template v-else>{{
-                item.content_type === "application/pdf" ? "在新标签页查看 PDF" : "查看附件"
-              }}</template>
-            </a>
+          <div class="card__head">
+            <div>
+              <p class="section-kicker">材料与依据</p>
+              <h2>补充材料与证据</h2>
+            </div>
             <button
-              v-else-if="item.evidence_kind === 'platform_record'"
+              v-if="
+                detail.reported_message &&
+                !detail.archived_at &&
+                !detail.evidence?.some((item) => item.evidence_kind === 'platform_record')
+              "
               type="button"
-              class="btn"
+              class="btn btn--small btn--ghost"
               :disabled="evidenceLoading"
-              @click="openMessageEvidence(item.evidence_id)"
+              @click="citeMessage"
             >
-              读取引用消息
+              引用被举报消息
             </button>
-          </li>
-        </ul>
-        <p v-if="evidenceError" class="error-text" role="alert">{{ evidenceError }}</p>
-        <div v-if="messageEvidence" class="stack">
-          <p>
-            消息 #{{ messageEvidence.message.message_id }}
-            <template v-if="messageEvidence.message.sender_account_id">
-              · 账户 #{{ messageEvidence.message.sender_account_id }}
-            </template>
-            · {{ formatDateTime(messageEvidence.message.created_at) }}
-          </p>
-          <p class="pre-line">{{ messageEvidence.message.body }}</p>
+          </div>
+
+          <section v-if="submittedNotes.length" class="record-section">
+            <div class="section-heading">
+              <h3>举报人补充说明</h3>
+              <span class="muted">{{ submittedNotes.length }} 条</span>
+            </div>
+            <ol class="note-list">
+              <li v-for="item in submittedNotes" :key="item.action_id" class="note-item">
+                <div class="record-meta">
+                  <span class="record-type">补充说明</span>
+                  <time :datetime="item.occurred_at">{{ formatDateTime(item.occurred_at) }}</time>
+                </div>
+                <p class="pre-line">{{ item.note }}</p>
+              </li>
+            </ol>
+          </section>
+
+          <section v-if="detail.evidence?.length" class="record-section">
+            <div class="section-heading">
+              <h3>证据与附件</h3>
+              <span class="muted">{{ detail.evidence.length }} 项</span>
+            </div>
+            <ul class="evidence-list">
+              <li v-for="item in detail.evidence" :key="item.evidence_id" class="evidence-item">
+                <div class="record-meta">
+                  <span class="record-type">
+                    {{
+                      item.evidence_kind === "platform_record"
+                        ? "平台记录"
+                        : attachmentKindLabel(item.content_type)
+                    }}
+                  </span>
+                  <span class="mono">证据 #{{ item.evidence_id }}</span>
+                  <time v-if="item.submitted_at" :datetime="item.submitted_at">
+                    {{ item.file_id ? "提交于" : "引用于" }}
+                    {{ formatDateTime(item.submitted_at) }}
+                  </time>
+                </div>
+                <a
+                  v-if="item.file_id"
+                  class="evidence-link"
+                  :href="caseEvidenceFileHref(caseId, item.evidence_id)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :aria-label="`在新标签页打开${attachmentKindLabel(item.content_type)} #${item.evidence_id}`"
+                >
+                  <img
+                    v-if="item.content_type?.startsWith('image/')"
+                    :src="caseEvidenceFileHref(caseId, item.evidence_id)"
+                    :alt="`证据图片 #${item.evidence_id}`"
+                    class="evidence-image"
+                    width="640"
+                    height="480"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <span v-else class="file-link">
+                    <span class="file-type">{{ attachmentKindLabel(item.content_type) }}</span>
+                    <span>
+                      {{
+                        item.content_type === "application/pdf" ? "在浏览器中查看 PDF" : "查看附件"
+                      }}
+                    </span>
+                  </span>
+                  <span v-if="item.content_type?.startsWith('image/')" class="evidence-link__label">
+                    在新标签页打开原图
+                  </span>
+                </a>
+                <button
+                  v-else-if="item.evidence_kind === 'platform_record'"
+                  type="button"
+                  class="btn btn--small"
+                  :disabled="evidenceLoading"
+                  @click="openMessageEvidence(item.evidence_id)"
+                >
+                  读取引用消息
+                </button>
+              </li>
+            </ul>
+          </section>
+
+          <p v-if="evidenceError" class="field__error" role="alert">{{ evidenceError }}</p>
+          <div v-if="messageEvidence" class="quoted-message">
+            <div class="record-meta">
+              <span class="record-type">被举报消息</span>
+              <span class="mono">#{{ messageEvidence.message.message_id }}</span>
+              <time :datetime="messageEvidence.message.created_at">{{
+                formatDateTime(messageEvidence.message.created_at)
+              }}</time>
+            </div>
+            <p class="pre-line">{{ messageEvidence.message.body }}</p>
+          </div>
+        </section>
+
+        <section v-if="detail.actions.length" class="card record-card">
+          <div class="card__head">
+            <div>
+              <p class="section-kicker">处理轨迹</p>
+              <h2>处理记录</h2>
+            </div>
+            <span class="chip">{{ detail.actions.length }} 条</span>
+          </div>
+          <ol class="activity-list">
+            <li v-for="(item, index) in detail.actions" :key="index" class="activity-item">
+              <span class="activity-marker" aria-hidden="true" />
+              <span class="activity-copy">
+                <strong>{{ messages[item.action_kind] ?? "事项更新" }}</strong>
+                <time :datetime="item.occurred_at">{{ formatDateTime(item.occurred_at) }}</time>
+              </span>
+            </li>
+          </ol>
+        </section>
+      </div>
+
+      <section v-if="detail.threads?.length" class="card thread-card">
+        <div class="card__head">
+          <div>
+            <p class="section-kicker">问询与回复</p>
+            <h2>事项会话</h2>
+          </div>
+          <span v-if="thread" class="chip">{{ thread.items.length }} 条</span>
         </div>
-      </section>
-      <section v-if="detail.actions.length" class="card stack">
-        <h2>处理记录</h2>
-        <ol>
-          <li v-for="(item, index) in detail.actions" :key="index">
-            {{ messages[item.action_kind] ?? "事项更新" }} · {{ formatDateTime(item.occurred_at) }}
-          </li>
-        </ol>
-      </section>
-      <section v-if="detail.threads?.length" class="card stack">
-        <h2>事项会话</h2>
-        <div class="inline">
+
+        <div
+          v-if="detail.threads.length > 1"
+          class="thread-picker"
+          role="group"
+          aria-label="选择事项会话对象"
+        >
           <button
             v-for="item in detail.threads"
             :key="item.conversation_id"
             type="button"
-            class="btn"
+            class="thread-picker__item"
             :aria-pressed="selectedThread?.conversation_id === item.conversation_id"
             @click="loadThread(item)"
           >
-            账户 #{{ item.related_account_id }}
+            <span class="account-avatar" aria-hidden="true">{{
+              accountInitial(item.related_account_id)
+            }}</span>
+            <span>
+              <strong>{{ accountDisplayName(item.related_account_id) }}</strong>
+              <small>{{ threadTabLabel(item.related_account_id) }}</small>
+            </span>
           </button>
         </div>
+
         <LoadingBlock v-if="threadLoading && !thread" label="正在读取会话…" />
         <ErrorNotice
           v-else-if="threadError"
           :error="threadError"
           @retry="selectedThread && loadThread(selectedThread, Boolean(thread))"
         />
-        <template v-if="thread">
+        <template v-else-if="thread">
+          <header v-if="selectedThread" class="thread-header">
+            <span class="account-avatar account-avatar--large" aria-hidden="true">{{
+              accountInitial(selectedThread.related_account_id)
+            }}</span>
+            <span>
+              <strong>{{ selectedThreadTitle }}</strong>
+              <small>管理员与相关方之间的事项沟通</small>
+            </span>
+          </header>
           <button
             v-if="
               thread.items.length >= 20 &&
@@ -690,22 +913,29 @@ onUnmounted(() => {
               selectedThread
             "
             type="button"
-            class="btn"
+            class="btn btn--small btn--ghost thread-load-older"
             :disabled="threadLoading"
             @click="loadThread(selectedThread, true)"
           >
             加载更早消息
           </button>
-          <ol class="stack">
-            <li v-for="message in thread.items" :key="message.case_message_id">
-              <p>
-                {{ message.sender.display_name }} · {{ messages[message.message_kind] ?? "消息" }} ·
-                {{ formatDateTime(message.created_at) }}
-              </p>
+          <ol class="thread-bubbles">
+            <li
+              v-for="message in thread.items"
+              :key="message.case_message_id"
+              class="thread-bubble"
+              :class="`thread-bubble--${messageSide(message.sender.sender_kind)}`"
+            >
+              <div class="thread-bubble__meta">
+                <strong>{{ message.sender.display_name }}</strong>
+                <span>{{ messages[message.message_kind] ?? "消息" }}</span>
+                <time :datetime="message.created_at">{{ formatDateTime(message.created_at) }}</time>
+              </div>
               <p class="pre-line">{{ message.body }}</p>
             </li>
           </ol>
         </template>
+        <p v-else class="muted">暂无沟通记录。</p>
       </section>
 
       <form
@@ -719,7 +949,16 @@ onUnmounted(() => {
         <h2 :id="`${ids}-inquire`">发起问询</h2>
         <label class="field"
           ><span>相关账户</span>
-          <select v-model="peer" name="peer_account_id" class="select" required>
+          <select
+            v-model="peer"
+            name="peer_account_id"
+            class="select"
+            required
+            :disabled="eligibleAccounts.length <= 1"
+            :aria-describedby="
+              eligibleAccounts.length === 1 ? `${ids}-inquire-single-peer` : undefined
+            "
+          >
             <option value="" disabled>请选择相关账户</option>
             <option
               v-for="account in eligibleAccounts"
@@ -729,6 +968,13 @@ onUnmounted(() => {
               {{ accountLabel(account) }}
             </option>
           </select>
+          <span
+            v-if="eligibleAccounts.length === 1"
+            :id="`${ids}-inquire-single-peer`"
+            class="field__hint"
+          >
+            该事项只有一名可问询对象，已默认选中。
+          </span>
         </label>
         <label class="field"
           ><span>问询内容</span>
@@ -1075,11 +1321,199 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.section-kicker {
+  margin: 0;
+  color: var(--info);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.case-overview {
+  container-type: inline-size;
+}
+
+.case-overview__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--line);
+}
+
+.case-overview__header h2 {
+  margin-block-start: var(--space-1);
+  font-size: 1.125rem;
+}
+
+.case-status {
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 0.18rem 0.62rem;
+  color: var(--ink-soft);
+  background: var(--panel-soft);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.case-status--pending {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: #e6d3ad;
+}
+
+.case-status--claimed {
+  color: var(--info);
+  background: var(--info-soft);
+  border-color: #cad9eb;
+}
+
+.case-status--decided,
+.case-status--archived {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: #c9dfd1;
+}
+
+.case-overview__layout {
+  display: grid;
+  gap: var(--space-4);
+  margin-block-start: var(--space-3);
+}
+
+.case-overview__aside {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+
+.info-block {
+  min-inline-size: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, #fff, #fbfcfb);
+}
+
+.info-block h3,
+.record-section h3 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.body-copy {
+  margin-block-start: var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-block-end: var(--space-2);
+}
+
+.account-list,
+.enforcement-list,
+.note-list,
+.evidence-list,
+.activity-list,
+.thread-bubbles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.account-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.account-row + .account-row {
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--line);
+}
+
+.account-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.account-avatar--large {
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+}
+
+.account-copy,
+.activity-copy,
+.thread-header > span:last-child {
+  display: grid;
+  min-inline-size: 0;
+  gap: 0.1rem;
+}
+
+.account-copy small,
+.thread-header small,
+.thread-picker__item small {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.enforcement-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.enforcement-item {
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.enforcement-item strong {
+  margin-inline-end: var(--space-2);
+}
+
+.nested-form {
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-2);
+  border-block-start: 1px dashed var(--line-strong);
+}
+
+.nested-form h4 {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
 .evidence-image {
   display: block;
+  inline-size: min(100%, 32rem);
+  block-size: auto;
   max-inline-size: min(100%, 32rem);
   max-block-size: 24rem;
+  aspect-ratio: 4 / 3;
   object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
 }
 
 .case-fields {
@@ -1087,6 +1521,7 @@ onUnmounted(() => {
   grid-template-columns: max-content minmax(0, 1fr);
   gap: var(--space-1) var(--space-3);
   margin: 0;
+  font-size: 0.8125rem;
 }
 
 details > .case-fields {
@@ -1102,10 +1537,295 @@ details > .case-fields {
   overflow-wrap: anywhere;
 }
 
+.snapshot-panel {
+  margin-block-start: var(--space-3);
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--line);
+}
+
+.snapshot-panel h4 {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.text-link {
+  display: inline-flex;
+  margin-block-start: var(--space-2);
+  color: var(--info);
+  font-size: 0.8125rem;
+}
+
+.record-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.record-card {
+  min-inline-size: 0;
+}
+
+.record-section + .record-section {
+  margin-block-start: var(--space-4);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--line);
+}
+
+.note-list,
+.evidence-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.note-item,
+.evidence-item,
+.quoted-message {
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fbfcfb;
+}
+
+.note-item > p,
+.quoted-message > p {
+  margin-block-start: var(--space-2);
+  font-size: 0.875rem;
+}
+
+.record-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.record-meta time {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.record-type,
+.file-type {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cad9eb;
+  border-radius: 999px;
+  padding: 0.06rem 0.48rem;
+  color: var(--info);
+  background: var(--info-soft);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.evidence-link {
+  display: block;
+  margin-block-start: var(--space-2);
+  color: inherit;
+  text-decoration: none;
+}
+
+.evidence-link:where(:hover, :focus-visible) .evidence-link__label {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.evidence-link__label {
+  display: inline-flex;
+  margin-block-start: var(--space-2);
+  color: var(--info);
+  font-size: 0.8125rem;
+}
+
+.file-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 0.8125rem;
+}
+
+.quoted-message {
+  margin-block-start: var(--space-3);
+  border-inline-start: 3px solid var(--info);
+}
+
+.activity-list {
+  display: grid;
+}
+
+.activity-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 0.65rem minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-block: 0.55rem;
+}
+
+.activity-item:not(:last-child)::before {
+  position: absolute;
+  inset-block: 1rem calc(-0.55rem);
+  inset-inline-start: 0.28rem;
+  inline-size: 1px;
+  background: var(--line);
+  content: "";
+}
+
+.activity-marker {
+  position: relative;
+  z-index: 1;
+  inline-size: 0.65rem;
+  block-size: 0.65rem;
+  margin-block-start: 0.24rem;
+  border: 2px solid var(--panel);
+  border-radius: 999px;
+  background: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+.activity-copy {
+  gap: 0.15rem;
+  font-size: 0.8125rem;
+}
+
+.activity-copy time {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.thread-card {
+  container-type: inline-size;
+}
+
+.thread-picker {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-block-end: var(--space-3);
+}
+
+.thread-picker__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-min-block);
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  background: var(--panel);
+  text-align: start;
+  cursor: pointer;
+}
+
+.thread-picker__item[aria-pressed="true"] {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.thread-picker__item > span:last-child {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.thread-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--line);
+}
+
+.thread-load-older {
+  align-self: flex-start;
+  margin-block-end: var(--space-3);
+}
+
+.thread-bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.thread-bubble {
+  max-inline-size: min(88%, 42rem);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfcfb;
+}
+
+.thread-bubble--manager {
+  align-self: flex-end;
+  border-color: #cbe3d4;
+  background: var(--brand-soft);
+}
+
+.thread-bubble--account {
+  align-self: flex-start;
+}
+
+.thread-bubble--system {
+  align-self: center;
+  max-inline-size: 36rem;
+  border-style: dashed;
+  background: var(--panel-soft);
+  text-align: center;
+}
+
+.thread-bubble__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  color: var(--ink-faint);
+  font-size: 0.72rem;
+}
+
+.thread-bubble__meta strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.thread-bubble__meta time {
+  margin-inline-start: auto;
+}
+
+.thread-bubble > p {
+  margin-block-start: var(--space-1);
+  font-size: 0.875rem;
+}
+
+@container (min-width: 50rem) {
+  .case-overview__layout {
+    grid-template-columns: minmax(0, 1.2fr) minmax(19rem, 0.8fr);
+  }
+}
+
+@media (width < 40rem) {
+  .case-overview__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .thread-bubble {
+    max-inline-size: 96%;
+  }
+
+  .thread-bubble__meta time {
+    margin-inline-start: 0;
+  }
+}
+
 .pre-line {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
 fieldset {
   border: 1px solid var(--line);
   padding: var(--space-3);

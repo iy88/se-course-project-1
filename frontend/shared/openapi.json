@@ -8071,7 +8071,11 @@
               "product": {
                 "type": "object",
                 "required": ["id", "title"],
-                "properties": { "id": { "type": "string" }, "title": { "type": "string" } }
+                "properties": {
+                  "id": { "type": "string" },
+                  "title": { "type": "string" },
+                  "description": { "type": ["string", "null"] }
+                }
               },
               "supplements": {
                 "type": "array",

@@ -887,7 +887,7 @@ export interface CaseDetail {
   reported_reason?: string | null;
   report_materials?: {
     original_note?: string | null;
-    product?: { id: string; title: string };
+    product?: { id: string; title: string; description?: string | null };
     supplements: { action_id: string; note: string; occurred_at: string }[];
     attachments: { evidence_id: string; submitted_at: string; content_type?: string }[];
   };

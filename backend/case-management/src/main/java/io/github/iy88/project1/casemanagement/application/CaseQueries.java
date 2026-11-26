@@ -160,6 +160,7 @@ public class CaseQueries {
                 var product = materials.putObject("product");
                 product.put("id", Long.toString(snapshot.id()));
                 product.put("title", snapshot.title());
+                product.put("description", snapshot.description());
             });
             var supplements = materials.putArray("supplements");
             for (var action : actions) {
