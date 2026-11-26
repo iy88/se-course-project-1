@@ -97,7 +97,14 @@ export async function uploadToOss(upload: CreateUploadResult["upload"], file: Fi
   try {
     response = await fetch(upload.url, { method: upload.method, body: form });
   } catch {
-    throw new ApiError(0, "UPLOAD_TRANSFER_FAILED", "无法连接对象存储，请检查网络后重试。");
+    // The browser reports both an unreachable host and a blocked CORS preflight as
+    // the same TypeError, so the message names both causes instead of blaming the
+    // network alone; otherwise a missing bucket CORS entry looks like a bad link.
+    throw new ApiError(
+      0,
+      "UPLOAD_TRANSFER_FAILED",
+      "上传未完成：可能是网络不可达，或对象存储未放行当前访问地址；请检查网络后重试，仍失败请联系管理员。",
+    );
   }
   if (response.status === 204 || response.ok) return;
   if (response.status === 409) return;

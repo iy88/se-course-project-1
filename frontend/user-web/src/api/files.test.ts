@@ -51,6 +51,10 @@ describe("upload transfer", () => {
         assert.ok(error instanceof ApiError, `expected ApiError, got ${String(error)}`);
         assert.equal(error.code, "UPLOAD_TRANSFER_FAILED");
         assert.doesNotMatch(error.message, /Failed to fetch/);
+        // 浏览器把「网络不可达」和「跨域预检被拦」都报成 TypeError，文案必须同时提示两者，
+        // 否则桶的 CORS 白名单缺失会被误判成断网。
+        assert.match(error.message, /网络不可达/);
+        assert.match(error.message, /对象存储未放行当前访问地址/);
         return true;
       },
     );
