@@ -10,7 +10,7 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 | 负责人 | 孙含佳（`shjj11`） |
 | 审查人 | 袁尚峰（`iy88`） |
 | 分支 | `test/evidence-trade-exception-shjj11` |
-| 基线 | `main` 提交 `23d89def`；[执行测试项](../../执行测试项.md) |
+| 基线 | `main` 提交 `23d89def`；[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md) |
 | 人工执行项 | C01—C18 |
 | 设计依据 | US-05／06／14 验收条件；TRD-IF、TRD-KD、R1、C1、CASE-IF、CASE-KD、R2B、CONV-KD |
 
@@ -24,7 +24,7 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 - US-06：C10—C12。
 - US-14：C13—C18。
 
-逐项设计依据见[执行测试项](../../执行测试项.md#批次-c交易与异常处理)。
+逐项设计依据见[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md#批次-c交易与异常处理)。
 
 ## 真实环境与准备
 

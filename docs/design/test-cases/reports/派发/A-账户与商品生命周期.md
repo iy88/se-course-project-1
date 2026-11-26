@@ -10,7 +10,7 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 | 负责人 | 袁尚峰（`iy88`） |
 | 审查人 | 金婉怡（`GALAXY-JIN`） |
 | 分支 | `test/evidence-account-product-iy88` |
-| 基线 | `main` 提交 `23d89def`；[执行测试项](../../执行测试项.md) |
+| 基线 | `main` 提交 `23d89def`；[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md) |
 | 人工执行项 | A01—A18 |
 | 设计依据 | US-01／02／09 验收条件；ACC-IF、ACC-KD、PRD-IF、PRD-KD、FILE-IF、FILE-KD、R1、CASE-IF |
 
@@ -24,7 +24,7 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 - US-02：A07—A13（禁发范围、发布审核、编辑、撤回下架、重上架）。
 - US-09：A14—A18（状态可见性、交易中、结束下架、历史权限）。
 
-设计映射和原 TC 对照逐项见[执行测试项](../../执行测试项.md#批次-a账户与商品生命周期)。
+设计映射和原 TC 对照逐项见[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md#批次-a账户与商品生命周期)。
 
 ## 真实环境
 

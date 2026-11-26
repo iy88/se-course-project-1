@@ -10,7 +10,7 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 | 负责人 | 金婉怡（`GALAXY-JIN`） |
 | 审查人 | 袁尚峰（`iy88`） |
 | 分支 | `test/evidence-catalog-interaction-galaxy-jin` |
-| 基线 | `main` 提交 `23d89def`；[执行测试项](../../执行测试项.md) |
+| 基线 | `main` 提交 `23d89def`；[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md) |
 | 人工执行项 | B01—B18 |
 | 设计依据 | US-03／04／13 验收条件；PRD-IF、PRD-KD、CAT-KD、CONV-IF、CONV-KD、FILE-KD、RT-KD |
 
@@ -24,7 +24,7 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 - US-04：B05—B11。
 - US-13：B12—B18。
 
-每项设计依据、原 TC 和前端操作见[执行测试项](../../执行测试项.md#批次-b目录互动与会话)。
+每项设计依据、原 TC 和前端操作见[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md#批次-b目录互动与会话)。
 
 ## 真实环境与准备
 

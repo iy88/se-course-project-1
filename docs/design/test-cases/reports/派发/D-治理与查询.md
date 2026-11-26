@@ -10,7 +10,7 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 | 负责人 | 张新悦（`sourmoon-peekaboo`） |
 | 审查人 | 袁尚峰（`iy88`） |
 | 分支 | `test/evidence-governance-query-sourmoon` |
-| 基线 | `main` 提交 `23d89def`；[执行测试项](../../执行测试项.md) |
+| 基线 | `main` 提交 `23d89def`；[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md) |
 | 人工执行项 | D01—D18 |
 | 设计依据 | US-07／08／10／11／12 验收条件；TRD-IF、TRD-KD、CASE-IF、CASE-KD、R2B、FILE-IF、FILE-KD、QUERY-IF、RT-KD |
 
@@ -26,7 +26,7 @@ Version-Datetime: 2026-11-26T16:33:00+08:00
 - US-11：D14—D16。
 - US-12：D17—D18。
 
-逐项设计依据见[执行测试项](../../执行测试项.md#批次-d治理通知与本人数据)。
+逐项设计依据见[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md#批次-d治理通知与本人数据)。
 
 ## 真实环境与准备
 
