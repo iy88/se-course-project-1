@@ -117,6 +117,9 @@ const relatedAccounts = computed(() => detail.value?.related_accounts ?? []);
 const eligibleAccounts = computed(() =>
   relatedAccounts.value.filter((account) => account.eligible),
 );
+const soleEligibleAccountId = computed(() =>
+  eligibleAccounts.value.length === 1 ? eligibleAccounts.value[0].account_id : undefined,
+);
 const selectedThreadTitle = computed(() =>
   selectedThread.value ? accountDisplayName(selectedThread.value.related_account_id) : "事项会话",
 );
@@ -472,7 +475,9 @@ function submitDecision(): void {
           return {
             action: option.action,
             target_type: option.target,
-            target_id: entry.targetId.trim(),
+            target_id:
+              (option.target === "account" ? soleEligibleAccountId.value : undefined) ??
+              entry.targetId.trim(),
             expected_result: option.action === "adjust_trade_status" ? entry.expected : undefined,
           };
         })
@@ -1063,7 +1068,9 @@ onUnmounted(() => {
             <label v-if="enforcementOptions[instruction.option].target === 'account'" class="field">
               <span>处置账户</span>
               <select
-                v-model="instruction.targetId"
+                :value="soleEligibleAccountId ?? instruction.targetId"
+                :disabled="soleEligibleAccountId !== undefined"
+                @change="instruction.targetId = ($event.target as HTMLSelectElement).value"
                 :name="`target-${instruction.id}`"
                 class="select"
                 required
