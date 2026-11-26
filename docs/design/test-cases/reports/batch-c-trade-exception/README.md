@@ -104,8 +104,8 @@ Version-Datetime: 2026-11-26T23:30:00+08:00
 | C10 | 无有效约定时提交完成确认被拒 |TC-TRD-010；TC-COM-001 | 通过 | 无有效约定时 409 AGREEMENT_REQUIRED，交易仍待约定 | [证据](evidence/RUN-C1/RUN-C1c-steps.md) |
 | C11 | 单方确认只记进度，双方确认完成 |TC-TRD-010、015、016 | 通过 | 单方确认只记进度；双方确认后 completed，确认条目含用户、说明与约定版本 | [证据](evidence/RUN-C1/RUN-C1c-steps.md) |
 | C12 | 确认历史可见性与管理员范围 |TC-TRD-010、011、016 | 通过 | 无关用户与未参与管理员均返回 404 RESOURCE_NOT_VISIBLE | [证据](evidence/RUN-C1/RUN-C1c-steps.md) |
-| C13 | 受控时钟推进 7 天触发异常与事项 | TC-TRD-006；TC-CASE-001 | 未执行 | | |
-| C14 | 等待中争议被视为回应 | TC-TRD-008、011；TC-COM-010 | 未执行 | | |
+| C13 | 受控时钟推进 7 天触发异常与事项 |TC-TRD-006；TC-CASE-001 | 阻塞 | 受控时钟推进后未触发超时（`trade.timeout` 任务未被调度器消费），交易仍 in_progress | [证据](evidence/RUN-C1/RUN-C1d-steps.md) |
+| C14 | 等待中争议被视为回应 |TC-TRD-008、011；TC-COM-010 | 通过 | 等待中争议被视为回应：`confirmation_wait` 结束（`end_reason=disputed`），交易 `disputed` | [证据](evidence/RUN-C1/RUN-C1d-steps.md) |
 | C15 | 管理员认领共享池异常事项 | TC-CASE-001、005 | 未执行 | | |
 | C16 | 冻结期间操作与消息被拒 | TC-TRD-006、007；TC-COM-003 | 未执行 | | |
 | C17 | 解冻恢复不重启计时 | TC-TRD-011；TC-CASE-007 | 未执行 | | |
@@ -136,6 +136,6 @@ Version-Datetime: 2026-11-26T23:30:00+08:00
 
 ## 状态
 
-- 执行进度：C01—C12 已通过；C13—C18（受控时钟、冻结与恢复）待执行。
+- 执行进度：C01—C12、C14 通过；C13 阻塞于超时调度触发方式；C15—C18 依赖 C13。
 - 本分支已提交环境与账号准备、报告骨架，以及 RUN-C1 的步骤、网络、DB 证据；后续按 RUN 逐步补齐页面截图与 OSS／Redis 结果。
 - 完成后请求 `iy88` 审查，并在 #138 说明通过／失败项与复测结论。
