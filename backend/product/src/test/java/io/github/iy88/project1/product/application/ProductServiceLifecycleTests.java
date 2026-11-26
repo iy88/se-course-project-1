@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -77,6 +79,7 @@ class ProductServiceLifecycleTests {
     private final ProductDisplayRestrictions displayRestrictions = mock(ProductDisplayRestrictions.class);
     private final ProductTradeFreeze freeze = mock(ProductTradeFreeze.class);
     private final ProductReviewCaseLifecycle reviewCases = mock(ProductReviewCaseLifecycle.class);
+    private final JdbcClient jdbc = mock(JdbcClient.class);
     private final AuditStore auditRecords = mock(AuditStore.class);
     private final AtomicReference<CategoryApplication> savedApplication = new AtomicReference<>();
     private ProductService service;
@@ -144,7 +147,7 @@ class ProductServiceLifecycleTests {
                 new CategorySettings(50, 100), fileReferences, mock(FileRead.class),
                 mock(ProductTradeHistory.class), editNotices, mock(CaseCommentAccess.class),
                 mock(ProductCorrectionNotices.class), displayRestrictions, freezeProvider, environment,
-                mock(JdbcClient.class), manager, auditRecords);
+                jdbc, manager, auditRecords);
     }
 
     @Test
@@ -159,6 +162,9 @@ class ProductServiceLifecycleTests {
 
     @Test
     void createOpensPendingReviewAndRegistersCategoryApplicationAndImageReference() {
+        var snapshotInsert = mock(JdbcClient.StatementSpec.class, RETURNS_SELF);
+        when(jdbc.sql(contains("insert into product_case_snapshot")))
+                .thenReturn(snapshotInsert);
         when(links.activeCategoryIds(anyLong())).thenReturn(List.of());
         ProductService.ProductDetail created = service.create(SELLER, new ProductService.CreateCommand(
                 "Book", "Used book", List.of("501"), 1_000L, List.of(String.valueOf(CATEGORY)),
