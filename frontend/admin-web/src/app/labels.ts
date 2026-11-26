@@ -1,5 +1,5 @@
 /* Copy for the administrative enumerations shown in the interface. */
-import type { BannedGroupKey } from "../api/contracts";
+import type { BannedGroupKey, TodoKind, WorkbenchOwnership } from "../api/contracts";
 
 export const bannedGroupLabels: Record<BannedGroupKey, string> = {
   legal_prohibited: "法律法规禁止",
@@ -47,7 +47,29 @@ export const categoryStateLabels: Record<string, string> = {
   disabled: "已停用",
 };
 
-export const ownershipLabels: Record<"unclaimed" | "mine", string> = {
+export const ownershipLabels: Record<WorkbenchOwnership, string> = {
   unclaimed: "待认领",
   mine: "我的认领",
+  completed_mine: "我已完成",
+  completed_all: "全部已完成",
+};
+
+export const todoKindLabels: Record<Exclude<TodoKind, "all">, string> = {
+  product_review: "商品审核",
+  report: "举报",
+  dispute: "交易争议",
+  exception: "异常事项",
+};
+
+export const todoKindOptions: { value: TodoKind; label: string }[] = [
+  { value: "all", label: "全部类型" },
+  { value: "product_review", label: todoKindLabels.product_review },
+  { value: "report", label: todoKindLabels.report },
+  { value: "dispute", label: todoKindLabels.dispute },
+  { value: "exception", label: todoKindLabels.exception },
+];
+
+export const decisionKindLabels: Record<string, string> = {
+  approved: "通过",
+  rejected: "不通过",
 };
