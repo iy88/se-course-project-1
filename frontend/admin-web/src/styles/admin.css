@@ -116,8 +116,30 @@
   white-space: nowrap;
 }
 
-.admin-menu-toggle {
+.admin-menu-toggle,
+.admin-nav__sign-out {
   display: none;
+}
+
+.admin-sign-out-dialog {
+  inline-size: min(28rem, calc(100% - 2rem));
+  margin: auto;
+  color: var(--ink);
+  overscroll-behavior: contain;
+}
+
+.admin-sign-out-dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgb(24 36 32 / 45%);
+}
+
+.admin-sign-out-dialog h1 {
+  font-size: 1.125rem;
+}
+
+.admin-sign-out-dialog__actions {
+  justify-content: flex-end;
 }
 
 .admin-main {
@@ -230,6 +252,16 @@
 
   .admin-menu-toggle {
     display: inline-flex;
+  }
+
+  .admin-account__sign-out {
+    display: none;
+  }
+
+  .admin-nav__sign-out {
+    display: inline-flex;
+    justify-self: start;
+    margin-block-start: var(--space-2);
   }
 }
 

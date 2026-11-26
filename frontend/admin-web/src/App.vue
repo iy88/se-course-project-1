@@ -56,6 +56,7 @@ const navItems = [
 
 const page = computed(() => route.value.name);
 const mobileNavOpen = ref(false);
+const signOutDialog = ref<HTMLDialogElement | null>(null);
 const activeKey = computed(() => {
   if (page.value === "review") return "reviews";
   if (page.value === "case") return "cases";
@@ -103,8 +104,15 @@ async function signOut(): Promise<void> {
   await session.signOut();
 }
 
+function confirmSignOut(event: Event): void {
+  const dialog = event.currentTarget as HTMLDialogElement;
+  const confirmed = dialog.returnValue === "sign-out";
+  dialog.returnValue = "";
+  if (confirmed) void signOut();
+}
+
 function closeNavOnEscape(event: KeyboardEvent): void {
-  if (event.key === "Escape") mobileNavOpen.value = false;
+  if (event.key === "Escape" && !signOutDialog.value?.open) mobileNavOpen.value = false;
 }
 
 function goBack(): void {
@@ -159,6 +167,13 @@ function goBack(): void {
             <UiIcon :name="item.icon" />
             {{ item.label }}
           </a>
+          <button
+            type="button"
+            class="btn btn--danger admin-nav__sign-out"
+            @click="signOutDialog?.showModal()"
+          >
+            <UiIcon name="logout" />退出
+          </button>
         </nav>
         <div class="admin-account">
           <span class="admin-account__name">{{ session.displayName.value }}</span>
@@ -173,11 +188,29 @@ function goBack(): void {
             <UiIcon :name="mobileNavOpen ? 'close' : 'menu'" />
             <span>{{ mobileNavOpen ? "关闭" : "菜单" }}</span>
           </button>
-          <button type="button" class="btn btn--danger" @click="signOut">
+          <button
+            type="button"
+            class="btn btn--danger admin-account__sign-out"
+            @click="signOutDialog?.showModal()"
+          >
             <UiIcon name="logout" />退出
           </button>
         </div>
       </div>
+      <dialog
+        ref="signOutDialog"
+        class="card admin-sign-out-dialog"
+        aria-labelledby="admin-sign-out-title"
+        @close="confirmSignOut"
+      >
+        <form method="dialog" class="stack">
+          <h1 id="admin-sign-out-title">确认退出管理端？</h1>
+          <div class="inline admin-sign-out-dialog__actions">
+            <button type="submit" value="cancel" class="btn btn--ghost" autofocus>取消</button>
+            <button type="submit" value="sign-out" class="btn btn--danger">确认退出</button>
+          </div>
+        </form>
+      </dialog>
     </header>
 
     <PageFeedback :messages="toasts" @dismiss="dismiss" />
