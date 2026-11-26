@@ -26,6 +26,8 @@ public final class CasePorts {
         /** Rejects unknown, missing, self or unauthorized targets with the named case errors. */
         void requireReportable(CaseCommands.Target target, long reporterAccountId);
 
+        default void captureReportSnapshot(long caseId, CaseCommands.Target target) {}
+
         /** Accounts that may be inquired and disposed for this case. */
         Set<Long> relatedAccountIds(CaseRecords.Facts facts);
 

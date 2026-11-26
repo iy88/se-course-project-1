@@ -213,6 +213,18 @@ public class TradeRepository {
         return new ReviewPage(reviews, total);
     }
 
+    public void insertPurchaseProductSnapshot(long tradeId, long contentVersion, String title,
+                                              String description, long priceCents, Instant capturedAt) {
+        jdbc.sql("""
+                insert into trade_purchase_product_snapshot
+                       (trade_id, content_version, title, description, price_cents, captured_at)
+                values (:trade, :version, :title, :description, :price, :captured)
+                """).param("trade", tradeId).param("version", contentVersion)
+                .param("title", title).param("description", description)
+                .param("price", priceCents).param("captured", time(capturedAt))
+                .update();
+    }
+
     public Optional<TradeModels.Snapshot> snapshot(long tradeId) {
         return jdbc.sql("SELECT * FROM trade_item_snapshot WHERE trade_id = :trade").param("trade", tradeId)
                 .query((row, index) -> new TradeModels.Snapshot(row.getLong("trade_id"), row.getLong("product_id"),

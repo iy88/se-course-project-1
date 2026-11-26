@@ -17,6 +17,13 @@ class TradeProductHistoryAdapter implements ProductTradeHistory {
     }
 
     @Override
+    public Optional<PurchaseSnapshot> purchaseSnapshot(long productId, long buyerId, long tradeId) {
+        return trades.buyerPurchaseProduct(productId, buyerId, tradeId)
+                .map(snapshot -> new PurchaseSnapshot(snapshot.contentVersion(), snapshot.title(),
+                        snapshot.description(), snapshot.priceCents(), snapshot.capturedAt()));
+    }
+
+    @Override
     public Optional<BuyerScope> buyerScope(long productId, long buyerId, Long tradeId) {
         return trades.buyerHistoryStart(productId, buyerId, tradeId).map(BuyerScope::new);
     }
