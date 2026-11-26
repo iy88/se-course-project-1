@@ -6,7 +6,7 @@
  */
 import { computed, onMounted, ref } from "vue";
 import type { CategoryCorrectionResult, CategoryDetail, ReviewDetail } from "../api/contracts";
-import { listAdminCategories } from "../api/categories";
+import { listAllAdminCategories } from "../api/categories";
 import { AbortedError } from "../api/errors";
 import { correctProductCategory } from "../api/products";
 import { decideReview, readReviewDetail } from "../api/reviews";
@@ -64,7 +64,7 @@ function syncCategorySelection(): void {
 
 async function loadCategories(): Promise<void> {
   try {
-    categories.value = (await listAdminCategories()).items;
+    categories.value = await listAllAdminCategories();
   } catch {
     // Without the directory the correction panel stays unavailable; the review flow is unaffected.
     categories.value = [];

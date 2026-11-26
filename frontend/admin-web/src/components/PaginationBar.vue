@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-const props = defineProps<{ page: number; pageSize: number; total: number }>();
+const props = defineProps<{
+  page: number;
+  pageSize: number;
+  total: number;
+  label?: string;
+}>();
 const emit = defineEmits<{ change: [page: number] }>();
 
 const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)));
 </script>
 
 <template>
-  <nav v-if="total > pageSize" class="pager" aria-label="分页">
+  <nav v-if="total > pageSize" class="pager" :aria-label="label ?? '分页'">
     <button
       type="button"
       class="btn btn--small"
