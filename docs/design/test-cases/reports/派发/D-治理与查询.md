@@ -1,0 +1,51 @@
+<!--
+Version: 0.1.0
+Version-Datetime: 2026-11-26T16:33:00+08:00
+-->
+
+# [测试主验证][D] US-07／08／10／11／12 治理与查询
+
+| 字段 | 内容 |
+|---|---|
+| 负责人 | 张新悦（`sourmoon-peekaboo`） |
+| 审查人 | 袁尚峰（`iy88`） |
+| 分支 | `test/evidence-governance-query-sourmoon` |
+| 基线 | `main` 提交 `23d89def`；[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md) |
+| 人工执行项 | D01—D18 |
+| 设计依据 | US-07／08／10／11／12 验收条件；TRD-IF、TRD-KD、CASE-IF、CASE-KD、R2B、FILE-IF、FILE-KD、QUERY-IF、RT-KD |
+
+## 目标
+
+从真实用户端和管理端完成评价、举报、事项认领、问询、处置、申辩、结案、通知、本人业务聚合和管理统计。按 D-RUN-01—03 覆盖 18 项。
+
+## 执行范围
+
+- US-07：D01—D04。
+- US-08：D05—D11。
+- US-10：D12—D13。
+- US-11：D14—D16。
+- US-12：D17—D18。
+
+逐项设计依据见[执行测试项](https://github.com/iy88/se-course-project-1/blob/docs/test-case-alignment/docs/design/test-cases/执行测试项.md#批次-d治理通知与本人数据)。
+
+## 真实环境与准备
+
+- 使用真实 SMTP 注册的所有角色账户，并使用真实 OSS 上传举报／处置证据。
+- 从交易链生成可评价交易；从商品、评论、私聊和评价生成举报对象。
+- 两名管理员使用独立浏览器，验证认领竞争和非认领人隔离。
+- Redis／实时用于双设备通知、断线和补取；数据库核对事项、处置、待办、统计和聚合。
+
+## 交付
+
+- 一份批次报告，按 RUN 覆盖 D01—D18。
+- 用户端／管理端截图、测试邮件、OSS 和实时日志、数据库核对结果。
+- 自动测试补充；单测允许 Mock，事项锁序、聚合计数和真实依赖使用真实集成测试。
+- Issue 和 Draft PR；发现问题单独建缺陷 Issue 与修复 PR。
+
+## 完成标准
+
+- [ ] 每项先写明 design 文档、接口和关键设计依据。
+- [ ] 评价、举报、处置、申辩、匿名结果均从真实页面完成。
+- [ ] 通知、实时、本人聚合和统计由真实 DB／Redis 核对。
+- [ ] 单测 Mock 边界与真实依赖证据分开记录。
+- [ ] 报告、证据、缺陷和复测完整，请求 `iy88` 审查。
