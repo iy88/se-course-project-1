@@ -10,13 +10,14 @@ import {
 import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { routeHref } from "../app/routes";
+import ContentState from "../../../shared/ContentState.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
-import PageHeader from "../components/PageHeader.vue";
+import PaginationBar from "../components/PaginationBar.vue";
 
 const props = defineProps<{ notificationId?: string }>();
 const emit = defineEmits<{ unreadChanged: [] }>();
-const pageSize = 20;
+const pageSize = 10;
 const page = ref(1);
 const total = ref(0);
 const unread = ref(0);
@@ -99,9 +100,14 @@ async function load(): Promise<void> {
     } else {
       const result = await listNotifications(page.value, pageSize, filter.value, signal);
       if (signal.aborted) return;
-      items.value = result.items;
       total.value = result.total;
       unread.value = result.unread_count;
+      const lastPage = Math.max(1, Math.ceil(result.total / pageSize));
+      if (page.value > lastPage) {
+        page.value = lastPage;
+        return;
+      }
+      items.value = result.items;
     }
   } catch (caught) {
     if (!signal.aborted) error.value = caught;
@@ -125,27 +131,30 @@ onUnmounted(() => pending?.abort());
 
 <template>
   <div class="stack stack--loose">
-    <PageHeader :title="notificationId ? '通知详情' : '通知'">
-      <template #actions>
-        <a v-if="notificationId" href="/notifications" data-admin-route class="btn btn--ghost"
-          >返回通知列表</a
-        >
-        <template v-else>
-          <span v-if="unread" class="chip">{{ unread }} 条未读</span>
-          <button type="button" class="btn btn--ghost" :disabled="loading" @click="load">
-            刷新
-          </button>
-        </template>
-      </template>
-    </PageHeader>
+    <header class="page-header">
+      <p v-if="notificationId" class="page-header__eyebrow">通知</p>
+      <div class="page-header__row">
+        <h1>{{ notificationId ? (detail?.summary ?? "通知详情") : "通知" }}</h1>
+        <div class="page-header__actions">
+          <a v-if="notificationId" href="/notifications" data-admin-route class="btn btn--ghost">
+            返回通知列表
+          </a>
+          <span v-else-if="unread" class="chip chip--active">{{ unread }} 条未读</span>
+        </div>
+      </div>
+    </header>
 
-    <div v-if="!notificationId" class="inline" role="group" aria-label="按已读状态筛选">
+    <div
+      v-if="!notificationId"
+      class="status-filter notification-filters"
+      role="group"
+      aria-label="按已读状态筛选"
+    >
       <button
         v-for="(label, option) in filters"
         :key="option"
         type="button"
-        class="btn"
-        :class="option === filter ? 'btn--primary' : 'btn--ghost'"
+        class="status-filter__option"
         :aria-pressed="option === filter"
         @click="selectFilter(option)"
       >
@@ -157,73 +166,75 @@ onUnmounted(() => pending?.abort());
     <ErrorNotice v-else-if="error" :error="error" @retry="load" />
     <template v-else-if="notificationId && detail">
       <article class="card stack">
-        <h2>{{ detail.summary }}</h2>
-        <p v-if="detail.subject">{{ detail.subject }}</p>
-        <time class="muted" :datetime="detail.occurred_at">{{
-          formatDateTime(detail.occurred_at)
-        }}</time>
-        <p v-if="detail.body">{{ detail.body }}</p>
+        <div class="inline">
+          <span class="chip">事项</span>
+          <time class="muted" :datetime="detail.occurred_at">{{
+            formatDateTime(detail.occurred_at)
+          }}</time>
+        </div>
+        <dl v-if="detail.subject" class="context">
+          <div>
+            <dt>关联事项</dt>
+            <dd class="break-anywhere">{{ detail.subject }}</dd>
+          </div>
+        </dl>
+        <p v-if="detail.body" class="body pre-line break-anywhere">{{ detail.body }}</p>
         <div v-if="destination" class="inline">
           <a class="btn btn--primary" :href="destination.href" data-admin-route>{{
             destination.label
           }}</a>
         </div>
-        <p v-if="detail.read_at" class="muted">首次已读 {{ formatDateTime(detail.read_at) }}</p>
+        <p v-if="detail.read_at" class="muted read-time">
+          首次已读 <time :datetime="detail.read_at">{{ formatDateTime(detail.read_at) }}</time>
+        </p>
         <ErrorNotice v-if="readError" :error="readError" @retry="retryRead" />
       </article>
     </template>
     <template v-else-if="!notificationId">
-      <p v-if="!items.length" class="card muted">
-        {{ filter === "unread" ? "没有未读通知" : "暂无通知" }}
-      </p>
-      <ul v-else class="notification-list stack">
+      <ContentState
+        v-if="!items.length"
+        kind="empty"
+        :title="filter === 'unread' ? '没有未读通知' : '暂无通知'"
+      />
+      <ul v-else class="rows">
         <li v-for="item in items" :key="item.notification_id">
           <a
-            class="notification-row card"
-            :class="{ 'notification-row--unread': !item.read_at }"
+            class="row"
+            :class="{ 'row--unread': !item.read_at }"
             :href="routeHref({ name: 'notifications', notificationId: item.notification_id })"
             data-admin-route
           >
-            <div class="stack stack--tight">
-              <strong>{{ item.summary }}</strong>
-              <span v-if="item.subject" class="muted">{{ item.subject }}</span>
-            </div>
-            <div class="inline">
-              <span v-if="!item.read_at" class="chip">未读</span>
-              <time class="muted" :datetime="item.occurred_at">{{
-                formatDateTime(item.occurred_at)
-              }}</time>
-            </div>
+            <span class="row__main">
+              <span class="row__meta">
+                <span class="row__type">事项</span>
+                <strong class="row__summary break-anywhere">{{ item.summary }}</strong>
+                <span v-if="!item.read_at" class="row__unread">未读</span>
+                <time class="row__time muted" :datetime="item.occurred_at">{{
+                  formatDateTime(item.occurred_at)
+                }}</time>
+              </span>
+              <span v-if="item.subject" class="row__details muted break-anywhere">{{
+                item.subject
+              }}</span>
+            </span>
+            <span class="row__go" aria-hidden="true">›</span>
           </a>
         </li>
       </ul>
-      <nav v-if="total > pageSize" class="inline" aria-label="通知分页">
-        <button type="button" class="btn" :disabled="page <= 1" @click="page--">上一页</button>
-        <span>第 {{ page }} 页</span>
-        <button type="button" class="btn" :disabled="page * pageSize >= total" @click="page++">
-          下一页
-        </button>
-      </nav>
     </template>
+    <PaginationBar
+      v-if="!notificationId && !error"
+      :page="page"
+      :page-size="pageSize"
+      :total="total"
+      label="通知分页"
+      show-single-page
+      @change="page = $event"
+    />
   </div>
 </template>
 
-<style scoped>
-.notification-list {
-  padding: 0;
-  list-style: none;
-}
-
-.notification-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  color: var(--ink);
-}
-
-.notification-row--unread {
-  border-inline-start: 0.25rem solid var(--brand-ink);
-}
-</style>
+<style scoped src="../../../shared/notification-page-header.css"></style>
+<style scoped src="../../../shared/status-filter.css"></style>
+<style scoped src="../../../shared/notification-list.css"></style>
+<style scoped src="../../../shared/notification-detail.css"></style>

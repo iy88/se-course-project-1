@@ -191,33 +191,4 @@ onBeforeUnmount(() => {
   </div>
 </template>
 
-<style scoped>
-.context {
-  display: grid;
-  gap: var(--space-2);
-  padding-block-end: var(--space-3);
-  border-block-end: 1px solid var(--line);
-}
-
-.context > div {
-  display: grid;
-  grid-template-columns: 5em minmax(0, 1fr);
-  gap: var(--space-2);
-}
-
-.context dt {
-  color: var(--ink-faint);
-}
-
-.context dd {
-  margin: 0;
-}
-
-.body {
-  line-height: 1.7;
-}
-
-.read-time {
-  font-size: 0.8125rem;
-}
-</style>
+<style scoped src="../../../../shared/notification-detail.css"></style>
