@@ -25,12 +25,14 @@ import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.notification.application.NotificationApplication;
 import io.github.iy88.project1.notification.application.NotificationIntent;
+import io.github.iy88.project1.product.application.ProductInteractions;
 import io.github.iy88.project1.product.persistence.ProductRepository;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.persistence.FileReferences;
 import io.github.iy88.project1.storage.persistence.FileRegistry;
 import io.github.iy88.project1.storage.persistence.UploadRegistration;
 import io.github.iy88.project1.trade.application.TradePorts;
+import io.github.iy88.project1.trade.application.TradeReviewReadModel;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -60,8 +62,9 @@ public class CaseHttpConfiguration {
     @Bean
     CasePorts.Targets caseTargets(ProductRepository products, AccountRepository accounts,
                                   ConversationReader reader, ConversationStore conversations,
-                                  TradePorts.Participation trades) {
-        return new CaseTargetAdapter(products, accounts, reader, conversations, trades);
+                                  TradePorts.Participation trades, ProductInteractions comments,
+                                  TradeReviewReadModel reviews) {
+        return new CaseTargetAdapter(products, accounts, reader, conversations, trades, comments, reviews);
     }
 
     @Bean
@@ -350,7 +353,8 @@ public class CaseHttpConfiguration {
 
     private record CaseTargetAdapter(ProductRepository products, AccountRepository accounts,
                                      ConversationReader reader, ConversationStore conversations,
-                                     TradePorts.Participation trades) implements CasePorts.Targets {
+                                     TradePorts.Participation trades, ProductInteractions comments,
+                                     TradeReviewReadModel reviews) implements CasePorts.Targets {
         @Override
         public void requireReportable(CaseCommands.Target target, long reporterAccountId) {
             switch (target.targetType()) {
@@ -369,6 +373,10 @@ public class CaseHttpConfiguration {
                         throw targetInvalid();
                     }
                 }
+                case "comment" -> comments.reportableCommentAuthor(reporterAccountId, target.targetId())
+                        .orElseThrow(CaseTargetAdapter::targetInvalid);
+                case "evaluation" -> reviews.reportableReviewAuthor(reporterAccountId, target.targetId())
+                        .orElseThrow(CaseTargetAdapter::targetInvalid);
                 case "message" -> requireMessageTarget(target, reporterAccountId);
                 default -> throw targetInvalid();
             }
@@ -383,6 +391,8 @@ public class CaseHttpConfiguration {
                 case "product" -> products.findById(facts.targetId())
                         .map(product -> Set.of(product.sellerAccountId())).orElse(Set.of());
                 case "account" -> Set.of(facts.targetId());
+                case "comment" -> comments.commentAuthor(facts.targetId()).map(Set::of).orElse(Set.of());
+                case "evaluation" -> reviews.reviewAuthor(facts.targetId()).map(Set::of).orElse(Set.of());
                 case "trade" -> tradeParties(facts.targetId());
                 case "message" -> messageParticipants(facts.conversationKind(), facts.conversationId());
                 default -> Set.of();

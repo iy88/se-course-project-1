@@ -4,6 +4,7 @@ import io.github.iy88.project1.core.BusinessError;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -74,6 +75,21 @@ public class TradeReviewReadModel {
                 .param("account", accountId)
                 .query(Long.class).single();
         return new EvaluationPage(items, total);
+    }
+
+    /** A received evaluation is reportable while its content remains visible to the recipient. */
+    public Optional<Long> reportableReviewAuthor(long accountId, long reviewId) {
+        requireAvailable();
+        return jdbc.sql("select r.reviewer_id from trade_review r join trade t on t.id = r.trade_id"
+                        + " where r.id = :review and r.visible and " + RECEIVED)
+                .param("review", reviewId).param("account", accountId).query(Long.class).optional();
+    }
+
+    /** Resolves the author for a previously accepted report, even after moderation. */
+    public Optional<Long> reviewAuthor(long reviewId) {
+        requireAvailable();
+        return jdbc.sql("select reviewer_id from trade_review where id = :review")
+                .param("review", reviewId).query(Long.class).optional();
     }
 
     private static String predicate(String direction) {

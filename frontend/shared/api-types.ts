@@ -1532,6 +1532,14 @@ export interface components {
         | "publish_result"
       )[];
       pending_inquiries?: components["schemas"]["CasePendingInquiry"][];
+      /** @description Only the assigned manager receives unresolved appeals. Use each item with the original thread when submitting manager_reply. */
+      pending_appeals?: {
+        appeal_action_id: string;
+        related_account_id: string;
+        /** Format: date-time */
+        submitted_at: string;
+        thread: components["schemas"]["CaseThread"];
+      }[];
       thread?: components["schemas"]["CaseThread"] | null;
       threads?: {
         related_account_id: string;

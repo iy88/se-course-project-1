@@ -7417,6 +7417,20 @@
               "$ref": "#/components/schemas/CasePendingInquiry"
             }
           },
+          "pending_appeals": {
+            "type": "array",
+            "description": "Only the assigned manager receives unresolved appeals. Use each item with the original thread when submitting manager_reply.",
+            "items": {
+              "type": "object",
+              "required": ["appeal_action_id", "related_account_id", "submitted_at", "thread"],
+              "properties": {
+                "appeal_action_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "related_account_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+                "submitted_at": { "type": "string", "format": "date-time" },
+                "thread": { "$ref": "#/components/schemas/CaseThread" }
+              }
+            }
+          },
           "thread": {
             "anyOf": [
               {

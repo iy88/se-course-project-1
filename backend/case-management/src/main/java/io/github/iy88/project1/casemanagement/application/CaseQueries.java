@@ -185,6 +185,26 @@ public class CaseQueries {
             }
         }
         if (manager) {
+            var appeals = body.putArray("pending_appeals");
+            if (!facts.archived()) {
+                var resolved = actions.stream()
+                        .filter(action -> CaseVocabulary.ACTION_MANAGER_REPLY.equals(action.actionKind())
+                                && action.appealActionId() != null)
+                        .map(CaseRecords.Action::appealActionId).collect(java.util.stream.Collectors.toSet());
+                for (var action : actions) {
+                    if (!CaseVocabulary.ACTION_APPEAL.equals(action.actionKind())
+                            || action.relatedAccountId() == null || resolved.contains(action.actionId())) {
+                        continue;
+                    }
+                    threads.findConversation(caseId, action.relatedAccountId()).ifPresent(conversationId -> {
+                        var appeal = appeals.addObject();
+                        appeal.put("appeal_action_id", Long.toString(action.actionId()));
+                        appeal.put("related_account_id", Long.toString(action.relatedAccountId()));
+                        appeal.put("submitted_at", text(action.occurredAt()));
+                        appeal.set("thread", thread(conversationId));
+                    });
+                }
+            }
             var threadsArray = body.putArray("threads");
             for (long accountId : store.relatedAccountIds(caseId)) {
                 var conversation = threads.findConversation(caseId, accountId);

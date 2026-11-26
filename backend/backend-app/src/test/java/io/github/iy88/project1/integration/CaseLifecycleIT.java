@@ -17,6 +17,7 @@ import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.LockPlan;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteTransaction;
+import io.github.iy88.project1.product.application.CaseCommentAccess;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -193,11 +194,20 @@ class CaseLifecycleIT {
                 new CaseCommands.Message(threadId, CaseVocabulary.KIND_APPEAL, "请求复核", null, null, null, null));
         assertThat(appeal.status()).isEqualTo(201);
         long appealActionId = store.appealOf(caseId, related).orElseThrow().actionId();
+        assertThat(queries.detail(context(manager), caseId).path("pending_appeals"))
+                .singleElement().satisfies(item -> {
+                    assertThat(item.path("appeal_action_id").asString()).isEqualTo(Long.toString(appealActionId));
+                    assertThat(item.path("related_account_id").asString()).isEqualTo(Long.toString(related));
+                    assertThat(item.path("thread").path("conversation_id").asString()).isEqualTo(Long.toString(threadId));
+                });
+        assertThat(queries.detail(context(reporter), caseId).has("pending_appeals")).isFalse();
+        assertThat(queries.detail(context(related), caseId).has("pending_appeals")).isFalse();
 
         var resolution = cases.postMessage(context(manager), "resolve-1", caseId,
                 new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "维持原决定", null,
                         appealActionId, CaseVocabulary.RESOLUTION_UPHOLD, "依据"));
         assertThat(resolution.status()).isEqualTo(201);
+        assertThat(queries.detail(context(manager), caseId).path("pending_appeals")).isEmpty();
 
         // A resolved appeal no longer blocks, but the deadline still does.
         assertThatThrownBy(() -> cases.close(context(manager), "close-2", caseId))
@@ -285,8 +295,9 @@ class CaseLifecycleIT {
     }
 
     @Test
-    void closedReportRejectsANewSubmissionForTheSameObject() {        long reporter = REPORTER.get();
-        long related = RELATED.get();
+    void closedReportRejectsANewSubmissionForTheSameObject() {
+        long reporter = REPORTER.get();
+        long related = account("closed-report-" + RUN_ID, "已结案目标", "user");
         var target = new CaseCommands.Target("account", related, null, null);
         long closedCase = db.sql("""
                         insert into moderation_case (case_type, created_at, updated_at, target_type, target_id,
@@ -304,6 +315,85 @@ class CaseLifecycleIT {
         // The archived row is still readable through the reporter viewpoint.
         assertThat(queries.detail(context(reporter), closedCase).get("case_id").asString())
                 .isEqualTo(Long.toString(closedCase));
+    }
+
+    @Test
+    void reportsVisibleCommentsAndReceivedEvaluationsAndKeepsTheirAuthorsForInquiry() {
+        long reporter = REPORTER.get();
+        long author = account("report-author-" + RUN_ID, "举报事项作者", "user");
+        long outsider = account("report-outsider-" + RUN_ID, "旁观者", "user");
+        long product = db.sql("""
+                insert into product (seller_account_id, title, description, price_cents, lifecycle_state)
+                values (?, '举报测试商品', 'Fixture', 100, 'public') returning product_id
+                """).param(author).query(Long.class).single();
+        long comment = db.sql("""
+                insert into product_comment (product_id, author_account_id, body)
+                values (?, ?, '举报测试评论') returning comment_id
+                """).param(product).param(author).query(Long.class).single();
+
+        var commentTarget = new CaseCommands.Target("comment", comment, null, null);
+        assertInvalidReport(author, "own-comment", commentTarget);
+        var commentReport = cases.submit(context(reporter), "report-comment", reportFor(commentTarget));
+        assertThat(commentReport.status()).isEqualTo(201);
+        long commentCase = Long.parseLong(commentReport.data().path("case_id").asString());
+        db.sql("update product_comment set deleted_at = statement_timestamp() where comment_id = ?")
+                .param(comment).update();
+        assertInvalidReport(outsider, "removed-comment", commentTarget);
+        inquireAuthor(commentCase, author, "comment");
+
+        long trade = db.sql("""
+                insert into trade (product_id, buyer_id, seller_id, status, terminal_reason,
+                                   requested_at, ended_at, created_at, updated_at)
+                values (?, ?, ?, 'completed', 'completed', now(), now(), now(), now()) returning id
+                """).param(product).param(reporter).param(author).query(Long.class).single();
+        long review = db.sql("""
+                insert into trade_review (trade_id, reviewer_id, reviewee_id, rating, content, created_at)
+                values (?, ?, ?, 3, '举报测试评价', now()) returning id
+                """).param(trade).param(author).param(reporter).query(Long.class).single();
+
+        var evaluationTarget = new CaseCommands.Target("evaluation", review, null, null);
+        assertInvalidReport(outsider, "other-evaluation", evaluationTarget);
+        assertInvalidReport(author, "own-evaluation", evaluationTarget);
+        var evaluationReport = cases.submit(context(reporter), "report-evaluation", reportFor(evaluationTarget));
+        assertThat(evaluationReport.status()).isEqualTo(201);
+        long evaluationCase = Long.parseLong(evaluationReport.data().path("case_id").asString());
+        db.sql("update trade_review set visible = false where id = ?").param(review).update();
+        assertInvalidReport(reporter, "removed-evaluation", evaluationTarget);
+        inquireAuthor(evaluationCase, author, "evaluation");
+
+        var productTarget = new CaseCommands.Target("product", product, null, null);
+        var productReport = cases.submit(context(reporter), "report-product-scope", reportFor(productTarget));
+        long productCase = Long.parseLong(productReport.data().path("case_id").asString());
+        long managerId = MANAGER_1.get();
+        var caseAccess = app.getBean(CaseCommentAccess.class);
+        assertThat(caseAccess.claimedForProduct(managerId, productCase, product)).isFalse();
+        cases.claim(context(managerId), "claim-product-scope", productCase);
+        assertThat(caseAccess.claimedForProduct(managerId, productCase, product)).isTrue();
+        assertThat(caseAccess.claimedForProduct(MANAGER_2.get(), productCase, product)).isFalse();
+        assertThat(caseAccess.claimedForProduct(managerId, commentCase, product)).isFalse();
+
+        db.sql("delete from trade_review where id = ?").param(review).update();
+        db.sql("delete from trade where id = ?").param(trade).update();
+        db.sql("delete from product_comment where comment_id = ?").param(comment).update();
+        db.sql("delete from product where product_id = ?").param(product).update();
+    }
+
+    private static CaseCommands.Report reportFor(CaseCommands.Target target) {
+        return new CaseCommands.Report(target, "请核实内容", null, List.of());
+    }
+
+    private static void assertInvalidReport(long reporter, String key, CaseCommands.Target target) {
+        assertThatThrownBy(() -> cases.submit(context(reporter), key, reportFor(target)))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TARGET_INVALID"));
+    }
+
+    private static void inquireAuthor(long caseId, long author, String kind) {
+        var manager = context(MANAGER_1.get());
+        cases.claim(manager, "claim-" + kind, caseId);
+        var inquiry = cases.inquire(manager, "inquire-" + kind, caseId, new CaseCommands.Inquiry(author, "请说明内容来源"));
+        assertThat(inquiry.status()).isEqualTo(201);
+        assertThat(store.find(caseId).orElseThrow().targetType()).isEqualTo(kind);
     }
 
     @Test

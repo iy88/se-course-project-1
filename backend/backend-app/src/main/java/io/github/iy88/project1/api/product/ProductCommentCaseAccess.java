@@ -5,15 +5,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
-/**
- * Resolves the claimed manager's necessary scope for a product by reading the case row and the
- * review audit that links it to the product. The case module owns claims; the product module only
- * asks whether the product is covered.
- *
- * <p>On the S2 baseline a case reaches a product through its review audit. Cases that target a
- * comment directly arrive with the case lifecycle work package (S4-04); until then this adapter
- * covers review cases only.
- */
+/** Resolves product scope using the claimed review or a report targeting that product. */
 @Component
 @Profile("infrastructure")
 class ProductCommentCaseAccess implements CaseCommentAccess {
@@ -29,11 +21,16 @@ class ProductCommentCaseAccess implements CaseCommentAccess {
                         select exists (
                             select 1
                               from moderation_case c
-                              join product_audit a on a.case_id = c.id
-                             where c.id = ? and c.claimed_manager_id = ? and a.product_id = ?)
+                              join account manager on manager.account_id = c.claimed_manager_id
+                                  and manager.role = 'manager'
+                              left join product_audit a on a.case_id = c.id
+                             where c.id = ? and c.claimed_manager_id = ?
+                               and ((c.case_type = 'product_review' and a.product_id = ?)
+                                    or (c.case_type = 'report' and c.target_type = 'product' and c.target_id = ?)))
                         """)
                 .param(caseId)
                 .param(managerId)
+                .param(productId)
                 .param(productId)
                 .query(Boolean.class)
                 .single();
