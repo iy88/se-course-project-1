@@ -49,6 +49,26 @@ class TradeReviewModerationTests {
     }
 
     @Test
+    void snapshotKeepsTheRetainedBodyForTheCaseTargetRead() {
+        when(repository.reviewSnapshot(REVIEW)).thenReturn(Optional.of(
+                new TradeRepository.ReviewSnapshot(REVIEW, TRADE, AUTHOR, "评价正文", 5,
+                        "removed_by_admin", NOW, NOW)));
+
+        var snapshot = moderation.snapshot(REVIEW);
+
+        assertThat(snapshot).get().satisfies(fact -> {
+            assertThat(fact.reviewId()).isEqualTo(REVIEW);
+            assertThat(fact.tradeId()).isEqualTo(TRADE);
+            assertThat(fact.authorAccountId()).isEqualTo(AUTHOR);
+            assertThat(fact.body()).isEqualTo("评价正文");
+            assertThat(fact.rating()).isEqualTo(5);
+            assertThat(fact.state()).isEqualTo(TradeReviewModeration.REMOVED_BY_ADMIN);
+            assertThat(fact.removedAt()).isEqualTo(NOW);
+        });
+        verify(repository, never()).markReviewRemoved(anyLong(), anyLong(), anyLong(), any(), any(), any());
+    }
+
+    @Test
     void removalRequiresTheTradeLockAndRecordsOnlyModerationFields() {
         var transaction = mock(WriteTransaction.class);
         when(transaction.context()).thenReturn(context(MANAGER));

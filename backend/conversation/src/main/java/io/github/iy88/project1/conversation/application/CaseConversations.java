@@ -34,7 +34,7 @@ public class CaseConversations {
     public record Message(long messageId, long seq, Instant createdAt) {
     }
 
-    public record ReadProgress(long lastReadSeq, long unreadCount, Instant updatedAt) {
+    public record ReadProgress(long lastReadSeq, long unreadCount, Instant updatedAt, boolean advanced) {
     }
 
     public Ensured ensure(WriteTransaction transaction, long caseId, long relatedAccountId) {
@@ -72,18 +72,21 @@ public class CaseConversations {
         return store.archiveCase(transaction, conversation);
     }
 
-    /** Moves the related account's read cursor forward; the thread must belong to that account. */
+    /**
+     * Moves the reader's read cursor forward. The related account and the current claimant manager
+     * share the thread, but each persists progress under its own account id; the case qualification
+     * rechecks the claim and current role after the thread lock. Archived threads remain readable.
+     */
     public ReadProgress advanceRead(WriteTransaction transaction, long conversationId, long accountId,
-                                    long displayedSeq) {
-        var conversation = store.caseConversation(conversationId);
-        if (conversation.relatedAccountId() != accountId) {
+                                    long displayedSeq, CaseParticipation participation) {
+        var locked = store.lockCase(transaction, conversationId);
+        if (!participation.canAccess(locked.caseId(), locked.relatedAccountId(), accountId)) {
             throw new io.github.iy88.project1.core.BusinessError("PARTICIPANT_REQUIRED", 404,
                     "会话不存在或无权访问");
         }
-        var locked = store.lockCase(transaction, conversationId);
-        var progress = store.advanceCaseRead(transaction, locked, accountId, displayedSeq);
-        return new ReadProgress(progress.lastReadSeq(), store.caseUnread(locked, accountId),
-                progress.lastReadAt());
+        var advance = store.advanceCaseRead(transaction, locked, accountId, displayedSeq);
+        return new ReadProgress(advance.progress().lastReadSeq(), store.caseUnread(locked, accountId),
+                advance.progress().lastReadAt(), advance.advanced());
     }
 
     private static Conversation view(CaseConversation conversation) {

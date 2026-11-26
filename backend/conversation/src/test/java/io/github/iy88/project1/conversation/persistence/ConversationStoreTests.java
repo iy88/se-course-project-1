@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -125,6 +126,57 @@ class ConversationStoreTests {
         var conversation = persisted(new ChatConversation(7L, 42L, NOW), 1L);
 
         assertThatThrownBy(() -> store.advanceChatRead(transaction, conversation, 7L, 1L))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("INPUT_INVALID"));
+    }
+
+
+    @Test
+    void caseReadCreatesTheReadersOwnRowAndReportsOnlyRealProgress() {
+        var conversation = persisted(new CaseConversation(9L, 7L, NOW), 3L);
+        conversation.allocateSeq();
+        conversation.allocateSeq();
+        conversation.allocateSeq();
+        var stored = new AtomicReference<CaseReadProgress>();
+        when(caseProgress.lockByConversationAndAccount(3L, 31L))
+                .thenAnswer(call -> Optional.ofNullable(stored.get()));
+        when(caseProgress.save(any())).thenAnswer(call -> {
+            var progress = (CaseReadProgress) call.getArgument(0);
+            stored.set(progress);
+            return progress;
+        });
+
+        var first = store.advanceCaseRead(transaction, conversation, 31L, 2L);
+        var repeated = store.advanceCaseRead(transaction, conversation, 31L, 1L);
+
+        assertThat(first.advanced()).isTrue();
+        assertThat(first.progress().accountId()).isEqualTo(31L);
+        assertThat(first.progress().lastReadSeq()).isEqualTo(2L);
+        assertThat(first.progress().lastReadAt()).isEqualTo(NOW);
+        assertThat(repeated.advanced()).isFalse();
+        assertThat(repeated.progress().lastReadSeq()).isEqualTo(2L);
+    }
+
+    @Test
+    void caseReadStaysAvailableAfterArchive() {
+        var conversation = persisted(new CaseConversation(9L, 7L, NOW), 3L);
+        conversation.allocateSeq();
+        conversation.archive(NOW);
+        var progress = new CaseReadProgress(3L, 7L);
+        when(caseProgress.lockByConversationAndAccount(3L, 7L)).thenReturn(Optional.of(progress));
+        when(caseProgress.save(any())).thenAnswer(call -> call.getArgument(0));
+
+        var advance = store.advanceCaseRead(transaction, conversation, 7L, 1L);
+
+        assertThat(advance.advanced()).isTrue();
+        assertThat(advance.progress().lastReadSeq()).isEqualTo(1L);
+    }
+
+    @Test
+    void caseReadRejectsASequenceBeyondTheThreadHead() {
+        var conversation = persisted(new CaseConversation(9L, 7L, NOW), 3L);
+
+        assertThatThrownBy(() -> store.advanceCaseRead(transaction, conversation, 7L, 1L))
                 .isInstanceOfSatisfying(BusinessError.class,
                         failure -> assertThat(failure.code()).isEqualTo("INPUT_INVALID"));
     }

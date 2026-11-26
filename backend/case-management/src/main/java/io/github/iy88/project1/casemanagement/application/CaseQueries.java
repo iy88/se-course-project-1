@@ -31,16 +31,19 @@ public class CaseQueries {
     private final CaseLifecycleStore store;
     private final CasePorts.Threads threads;
     private final CasePorts.Managers managers;
+    private final CasePorts.Targets targets;
     private final CaseSettings settings;
     private final Clock clock;
     private final JsonMapper json;
 
     public CaseQueries(JdbcClient jdbc, CaseLifecycleStore store, CasePorts.Threads threads,
-                       CasePorts.Managers managers, CaseSettings settings, JsonMapper json, Clock clock) {
+                       CasePorts.Managers managers, CasePorts.Targets targets, CaseSettings settings,
+                       JsonMapper json, Clock clock) {
         this.jdbc = jdbc;
         this.store = store;
         this.threads = threads;
         this.managers = managers;
+        this.targets = targets;
         this.settings = settings;
         this.clock = clock;
         this.json = json;
@@ -149,6 +152,28 @@ public class CaseQueries {
                 : relatedView ? CaseVocabulary.VIEWPOINT_RELATED : CaseVocabulary.VIEWPOINT_MANAGER);
         body.put("reason_text", reasonText(facts, reporter, related, manager));
         body.put("reported_reason", reporter || manager ? facts.reportedReason() : null);
+        if (managerView) {
+            if ("message".equals(facts.targetType()) && facts.targetId() != null
+                    && facts.conversationId() != null && facts.conversationKind() != null) {
+                var message = body.putObject("reported_message");
+                message.put("conversation_kind", facts.conversationKind());
+                message.put("conversation_id", Long.toString(facts.conversationId()));
+                message.put("message_id", Long.toString(facts.targetId()));
+            }
+            targets.contentTarget(facts).ifPresent(snapshot -> {
+                var target = body.putObject("target");
+                target.put("target_type", snapshot.targetType());
+                target.put("target_id", Long.toString(snapshot.targetId()));
+                target.put("author_account_id", Long.toString(snapshot.authorAccountId()));
+                if (snapshot.parentId() != null) {
+                    target.put("parent_id", Long.toString(snapshot.parentId()));
+                }
+                target.put("body", snapshot.body());
+                target.put("state", snapshot.state());
+                target.put("created_at", text(snapshot.createdAt()));
+                target.put("removed", snapshot.removed());
+            });
+        }
         var available = body.putArray("available_actions");
         var availableList = availableActions(facts, reporterView, relatedView, managerView, actor, inquiries, now);
         availableList.forEach(available::add);
@@ -197,6 +222,7 @@ public class CaseQueries {
                 for (var item : store.evidence(caseId)) {
                     var entry = evidence.addObject();
                     entry.put("evidence_id", Long.toString(item.evidenceId()));
+                    entry.put("evidence_kind", item.evidenceKind());
                     entry.put("file_id", item.fileId() == null ? null : Long.toString(item.fileId()));
                 }
             }
@@ -218,6 +244,15 @@ public class CaseQueries {
                         appeal.put("appeal_action_id", Long.toString(action.actionId()));
                         appeal.put("related_account_id", Long.toString(action.relatedAccountId()));
                         appeal.put("submitted_at", text(action.occurredAt()));
+                        var eligible = appeal.putArray("original_enforcements");
+                        for (var enforcement : eligibleOriginalEnforcements(caseId, action.relatedAccountId(),
+                                enforcements)) {
+                            var item = eligible.addObject();
+                            item.put("enforcement_id", enforcement.enforcementId());
+                            item.put("action", enforcement.action());
+                            item.put("target_type", enforcement.targetType());
+                            item.put("target_id", Long.toString(enforcement.targetId()));
+                        }
                         appeal.set("thread", thread(conversationId));
                     });
                 }
@@ -233,6 +268,60 @@ public class CaseQueries {
                 }
             }
         }
+        return body;
+    }
+
+    /**
+     * Reads one platform-record evidence body. Only the fixed claimant manager sees it, and the
+     * stored scope plus the live message row must still agree with the reported target. Non-message
+     * evidence, other managers, reporters and related accounts are all hidden as 404.
+     */
+    public ObjectNode referencedEvidence(ExecutionContext context, long caseId, long evidenceId) {
+        long actor = actor(context);
+        var facts = store.find(caseId).orElseThrow(CaseQueries::notVisible);
+        if (!facts.lifecycle() || !facts.claimedBy(actor) || !managerRole(context)) {
+            throw notVisible();
+        }
+        var evidence = store.evidence(caseId, evidenceId).orElseThrow(CaseQueries::notVisible);
+        if (!CaseVocabulary.EVIDENCE_PLATFORM_RECORD.equals(evidence.evidenceKind())
+                || !CaseVocabulary.SOURCE_MESSAGE.equals(evidence.sourceRefType())
+                || evidence.sourceRefId() == null) {
+            throw notVisible();
+        }
+        var scope = CaseRecords.MessageScope.parse(evidence.requiredScope())
+                .orElseThrow(CaseQueries::notVisible);
+        if (!CaseVocabulary.SOURCE_MESSAGE.equals(facts.targetType()) || facts.targetId() == null
+                || !facts.targetId().equals(evidence.sourceRefId())
+                || !scope.conversationKind().equals(facts.conversationKind())
+                || facts.conversationId() == null || facts.conversationId() != scope.conversationId()) {
+            throw notVisible();
+        }
+        CaseRecords.ReferencedMessage message;
+        try {
+            message = targets.requireReportedMessage(facts, scope.conversationKind(), scope.conversationId(),
+                    evidence.sourceRefId());
+        } catch (BusinessError denied) {
+            throw notVisible();
+        }
+        var body = json.createObjectNode();
+        body.put("evidence_id", Long.toString(evidence.evidenceId()));
+        body.put("case_id", Long.toString(facts.caseId()));
+        var source = body.putObject("source_ref");
+        source.put("resource_type", CaseVocabulary.SOURCE_MESSAGE);
+        source.put("resource_id", Long.toString(evidence.sourceRefId()));
+        var conversation = body.putObject("conversation");
+        conversation.put("conversation_kind", scope.conversationKind());
+        conversation.put("conversation_id", Long.toString(scope.conversationId()));
+        var item = body.putObject("message");
+        item.put("message_id", Long.toString(message.messageId()));
+        item.put("sender_kind", message.senderKind());
+        if (message.senderAccountId() == null) {
+            item.putNull("sender_account_id");
+        } else {
+            item.put("sender_account_id", Long.toString(message.senderAccountId()));
+        }
+        item.put("created_at", message.createdAt().toString());
+        item.put("body", message.body());
         return body;
     }
 
@@ -288,6 +377,22 @@ public class CaseQueries {
         body.put("page_size", pageSize);
         body.put("total", total);
         return body;
+    }
+
+    /**
+     * Active applied original executions that affected the appealing account. Reversal records,
+     * already lifted records and terminal trade adjustments are not offered because they cannot be
+     * revoked or adjusted again.
+     */
+    private List<CaseRecords.Enforcement> eligibleOriginalEnforcements(long caseId, long accountId,
+                                                                       List<CaseRecords.Enforcement> enforcements) {
+        return enforcements.stream()
+                .filter(item -> item.affectedAccountIds().contains(accountId))
+                .filter(item -> "applied".equals(item.resultStatus()))
+                .filter(item -> LIFTABLE_ACTIONS.contains(item.action()))
+                .filter(item -> item.basisRef() == null || !item.basisRef().contains(":replacement"))
+                .filter(item -> store.lift(caseId, item.enforcementId()).isEmpty())
+                .toList();
     }
 
     private List<CaseRecords.Action> pendingInquiries(long caseId) {

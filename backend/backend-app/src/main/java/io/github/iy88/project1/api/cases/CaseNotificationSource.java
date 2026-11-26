@@ -31,7 +31,9 @@ class CaseNotificationSource implements NotificationSourcePort {
             CaseVocabulary.EVENT_RESULT_PUBLISHED,
             CaseVocabulary.EVENT_TRADE_FROZEN,
             CaseVocabulary.EVENT_TRADE_UNFROZEN,
-            CaseVocabulary.EVENT_TRADE_ADJUSTED);
+            CaseVocabulary.EVENT_TRADE_ADJUSTED,
+            CaseVocabulary.EVENT_CONTENT_REMOVED,
+            CaseVocabulary.EVENT_EVALUATION_REMOVED);
 
     private final CaseLifecycleStore cases;
     private final CasePorts.Threads threads;
@@ -108,6 +110,10 @@ class CaseNotificationSource implements NotificationSourcePort {
                     "相关冻结处置已解除。你可以前往事项详情查看处理记录。");
             case CaseVocabulary.EVENT_TRADE_ADJUSTED -> new CaseNotice("事项处置：调整",
                     "相关交易状态已按处置结果调整。你可以前往事项详情查看处理记录。");
+            case CaseVocabulary.EVENT_CONTENT_REMOVED -> new CaseNotice("事项处置：内容移除",
+                    "相关内容已按处置结果移除。你可以前往事项详情查看处理记录。");
+            case CaseVocabulary.EVENT_EVALUATION_REMOVED -> new CaseNotice("事项处置：评价移除",
+                    "相关评价已按处置结果移除。你可以前往事项详情查看处理记录。");
             default -> new CaseNotice("事项处置结果",
                     "事项已完成处置。你可以前往事项详情查看处理记录。");
         };

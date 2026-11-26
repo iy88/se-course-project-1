@@ -112,6 +112,8 @@ class ConversationQueriesTests {
         assertThat(summary.peer().avatarUrl()).isEqualTo("https://img.example/peer.png");
         assertThat(summary.branches()).hasSize(2);
         assertThat(summary.branches().getFirst().conversationKind()).isEqualTo("trade");
+        assertThat(summary.branches()).extracting(ConversationViews.Branch::sourceRef)
+                .containsExactly("trade:9", null);
         assertThat(summary.branches()).extracting(ConversationViews.Branch::unreadCount)
                 .containsExactly(1L, 2L);
     }

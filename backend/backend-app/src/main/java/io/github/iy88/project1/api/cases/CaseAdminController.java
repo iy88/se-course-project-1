@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -64,6 +65,25 @@ public class CaseAdminController {
             return write(review.claim(identity.context(request), idempotency, id));
         }
         return write(support.application().claim(support.context(request), idempotency, id));
+    }
+
+    @PostMapping("/{case_id}/evidence")
+    ResponseEntity<JsonNode> referenceEvidence(HttpServletRequest request,
+                                               @PathVariable("case_id") String caseId,
+                                               @RequestBody(required = false) CaseRequests.EvidenceReference body,
+                                               @RequestHeader(name = IDEMPOTENCY_HEADER, required = false) String key) {
+        var context = support.context(request);
+        return write(support.application().referenceEvidence(context, idempotency(key), CaseIds.path(caseId),
+                CaseIds.evidenceReference(body)));
+    }
+
+    @GetMapping("/{case_id}/evidence/{evidence_id}")
+    ResponseEntity<JsonNode> referencedEvidence(HttpServletRequest request,
+                                                @PathVariable("case_id") String caseId,
+                                                @PathVariable("evidence_id") String evidenceId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(support.queries().referencedEvidence(support.context(request), CaseIds.path(caseId),
+                        CaseIds.path(evidenceId)));
     }
 
     @PostMapping("/{case_id}/inquiries")

@@ -74,6 +74,14 @@ final class CaseIds {
         return new CaseCommands.Inquiry(body(body.peerAccountId(), "peer_account_id"), body.scopeText());
     }
 
+    static CaseCommands.EvidenceReference evidenceReference(CaseRequests.EvidenceReference body) {
+        if (body == null) {
+            throw new BusinessError("INPUT_INVALID", 422, "请求体不能为空");
+        }
+        return new CaseCommands.EvidenceReference(body.conversationKind(),
+                body(body.conversationId(), "conversation_id"), body(body.messageId(), "message_id"));
+    }
+
     static CaseCommands.Message message(CaseRequests.Message body) {
         if (body == null) {
             throw new BusinessError("INPUT_INVALID", 422, "请求体不能为空");
@@ -89,17 +97,44 @@ final class CaseIds {
         }
         return new CaseCommands.Message(conversationId, body.messageKind(), body.body(),
                 optionalId(body.inquiryActionId(), "inquiry_action_id"),
-                optionalId(body.appealActionId(), "appeal_action_id"), body.resolution(), body.basisRef());
+                optionalId(body.appealActionId(), "appeal_action_id"), body.resolution(), body.basisRef(),
+                enforcementId(body.originalEnforcementId()), enforcements(body.replacementEnforcements()));
     }
 
     static CaseCommands.Decision decision(CaseRequests.Decision body) {
         if (body == null) {
             throw new BusinessError("INPUT_INVALID", 422, "请求体不能为空");
         }
-        var enforcements = body.enforcements() == null ? List.<CaseCommands.Enforcement>of()
-                : body.enforcements().stream().map(item -> new CaseCommands.Enforcement(item.action(),
-                        item.targetType(), body(item.targetId(), "target_id"), item.expectedResult())).toList();
-        return new CaseCommands.Decision(body.decisionKind(), body.reason(), body.basisRefs(), enforcements);
+        return new CaseCommands.Decision(body.decisionKind(), body.reason(), body.basisRefs(),
+                enforcements(body.enforcements()));
+    }
+
+    /**
+     * The selected original execution is a case-stable opaque string, not a numeric resource id.
+     * A blank value is treated as absent so the use case can name the missing field.
+     */
+    static String enforcementId(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > 128) {
+            throw new BusinessError("INPUT_INVALID", 422, "original_enforcement_id 无效");
+        }
+        return trimmed;
+    }
+
+    static List<CaseCommands.Enforcement> enforcements(List<CaseRequests.Enforcement> items) {
+        if (items == null) {
+            return List.of();
+        }
+        return items.stream().map(item -> {
+            if (item == null) {
+                throw new BusinessError("INPUT_INVALID", 422, "执行项不能为空");
+            }
+            return new CaseCommands.Enforcement(item.action(), item.targetType(),
+                    body(item.targetId(), "target_id"), item.expectedResult());
+        }).toList();
     }
 
     static CaseCommands.Publish publish(CaseRequests.Publish body) {

@@ -23,6 +23,8 @@ import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteExecutor;
 import io.github.iy88.project1.core.WriteTransaction;
+import io.github.iy88.project1.messaging.BusinessEventIntents;
+import io.github.iy88.project1.messaging.RealtimeEventSources;
 import io.github.iy88.project1.notification.application.NotificationApplication;
 import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.product.application.ProductDisplayRestrictions;
@@ -33,6 +35,7 @@ import io.github.iy88.project1.storage.persistence.FileReferences;
 import io.github.iy88.project1.storage.persistence.FileRegistry;
 import io.github.iy88.project1.storage.persistence.UploadRegistration;
 import io.github.iy88.project1.trade.application.TradePorts;
+import io.github.iy88.project1.trade.application.TradeReviewModeration;
 import io.github.iy88.project1.trade.application.TradeReviewReadModel;
 import java.time.Clock;
 import java.time.Instant;
@@ -40,6 +43,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
@@ -64,8 +68,9 @@ public class CaseHttpConfiguration {
     CasePorts.Targets caseTargets(ProductRepository products, AccountRepository accounts,
                                   ConversationReader reader, ConversationStore conversations,
                                   TradePorts.Participation trades, ProductInteractions comments,
-                                  TradeReviewReadModel reviews) {
-        return new CaseTargetAdapter(products, accounts, reader, conversations, trades, comments, reviews);
+                                  TradeReviewReadModel reviews, TradeReviewModeration moderation) {
+        return new CaseTargetAdapter(products, accounts, reader, conversations, trades, comments, reviews,
+                moderation);
     }
 
     @Bean
@@ -94,8 +99,9 @@ public class CaseHttpConfiguration {
     }
 
     @Bean
-    CasePorts.Threads caseThreads(ConversationStore conversations) {
-        return new CaseThreadAdapter(conversations);
+    CasePorts.Threads caseThreads(ConversationStore conversations, CaseLifecycleStore store,
+                                  CaseParticipation participation) {
+        return new CaseThreadAdapter(conversations, store, participation);
     }
 
     @Bean
@@ -107,12 +113,14 @@ public class CaseHttpConfiguration {
     CasePorts.Enforcement caseEnforcement(CaseLifecycleStore cases, CasePorts.Targets targets,
                                           AccountRestrictions accounts, ProductDisplayRestrictions displays,
                                           ProductRepository products, ProductInteractions comments,
-                                          TradePorts.Closure closures, TradePorts.CaseEnforcement trades,
-                                          TradePorts.Participation participation, ObjectProvider<Clock> clocks) {
+                                          TradeReviewModeration reviews, TradePorts.Closure closures,
+                                          TradePorts.CaseEnforcement trades, TradePorts.Participation participation,
+                                          ObjectProvider<Clock> clocks) {
         var tradeHandler = new TradeCaseEnforcement(trades, participation);
         var subjectHandler = new SubjectCaseEnforcement(cases, targets, accounts, displays, products, comments,
                 closures, trades, participation, clocks.getIfAvailable(Clock::systemUTC));
-        return new CoordinatingCaseEnforcement(tradeHandler, subjectHandler);
+        var contentHandler = new ContentCaseEnforcement(cases, targets, products, comments, reviews, trades);
+        return new CoordinatingCaseEnforcement(tradeHandler, subjectHandler, contentHandler);
     }
 
     @Bean
@@ -127,9 +135,9 @@ public class CaseHttpConfiguration {
 
     @Bean
     CaseQueries caseQueries(org.springframework.jdbc.core.simple.JdbcClient jdbc, CaseLifecycleStore store,
-                            CasePorts.Threads threads, CasePorts.Managers managers, CaseSettings settings,
-                            JsonMapper json, ObjectProvider<Clock> clocks) {
-        return new CaseQueries(jdbc, store, threads, managers, settings, json,
+                            CasePorts.Threads threads, CasePorts.Managers managers, CasePorts.Targets targets,
+                            CaseSettings settings, JsonMapper json, ObjectProvider<Clock> clocks) {
+        return new CaseQueries(jdbc, store, threads, managers, targets, settings, json,
                 clocks.getIfAvailable(Clock::systemUTC));
     }
 
@@ -199,7 +207,8 @@ public class CaseHttpConfiguration {
         }
     }
 
-    private record CaseThreadAdapter(ConversationStore conversations) implements CasePorts.Threads {
+    record CaseThreadAdapter(ConversationStore conversations, CaseLifecycleStore store,
+                             CaseParticipation participation) implements CasePorts.Threads {
         @Override
         public long ensure(WriteTransaction transaction, long caseId, long relatedAccountId) {
             return conversations.ensureCase(transaction, caseId, relatedAccountId).id();
@@ -211,14 +220,32 @@ public class CaseHttpConfiguration {
                                                 String body) {
             var conversation = conversations.findCase(caseId, relatedAccountId)
                     .orElseThrow(CaseThreadAdapter::participantRequired);
-            if (CaseVocabulary.KIND_SYSTEM_NOTICE.equals(messageKind)) {
-                var message = conversations.appendCaseSystemEvent(transaction, conversation,
-                        UUID.randomUUID(), "case_system_notice", body);
-                return message(conversation.id(), message);
-            }
-            var message = conversations.appendCaseMessage(transaction, conversation, kind(messageKind),
+            var message = CaseVocabulary.KIND_SYSTEM_NOTICE.equals(messageKind)
+                    ? conversations.appendCaseSystemEvent(transaction, conversation,
+                    UUID.randomUUID(), "case_system_notice", body)
+                    : conversations.appendCaseMessage(transaction, conversation, kind(messageKind),
                     sender(senderKind), senderAccountId, body);
+            publishMessageCreated(transaction, caseId, relatedAccountId, conversation.id(), message);
             return message(conversation.id(), message);
+        }
+
+        /**
+         * Registers one transport hint per newly persisted case message. Only the thread's related
+         * account and the current claimant manager are recipients; the manager is rechecked against
+         * the current claim and role. The payload is the conversation and message id only, so the
+         * receiver still needs the case read qualification to fetch any body.
+         */
+        private void publishMessageCreated(WriteTransaction transaction, long caseId, long relatedAccountId,
+                                           long conversationId, CaseMessage message) {
+            var recipients = new TreeSet<Long>();
+            recipients.add(relatedAccountId);
+            store.find(caseId)
+                    .map(CaseRecords.Facts::claimedManagerId)
+                    .filter(manager -> participation.canAccess(caseId, relatedAccountId, manager))
+                    .ifPresent(recipients::add);
+            BusinessEventIntents.messageCreated(transaction, recipients,
+                    new RealtimeEventSources.ConversationRef(RealtimeEventSources.ConversationKind.CASE,
+                            conversationId), message.id(), "message_created:case:" + message.id());
         }
 
         @Override
@@ -301,7 +328,8 @@ public class CaseHttpConfiguration {
     private record CaseTargetAdapter(ProductRepository products, AccountRepository accounts,
                                      ConversationReader reader, ConversationStore conversations,
                                      TradePorts.Participation trades, ProductInteractions comments,
-                                     TradeReviewReadModel reviews) implements CasePorts.Targets {
+                                     TradeReviewReadModel reviews,
+                                     TradeReviewModeration moderation) implements CasePorts.Targets {
         @Override
         public void requireReportable(CaseCommands.Target target, long reporterAccountId) {
             switch (target.targetType()) {
@@ -335,6 +363,24 @@ public class CaseHttpConfiguration {
         }
 
         @Override
+        public Optional<CasePorts.Targets.TargetSnapshot> contentTarget(CaseRecords.Facts facts) {
+            if (facts.targetId() == null) {
+                return Optional.empty();
+            }
+            return switch (facts.targetType() == null ? "" : facts.targetType()) {
+                case "comment" -> comments.commentSnapshot(facts.targetId())
+                        .map(fact -> new CasePorts.Targets.TargetSnapshot("comment", fact.commentId(),
+                                fact.authorAccountId(), fact.parentCommentId(), fact.body(), fact.state(),
+                                fact.createdAt(), fact.removedAt() != null));
+                case "evaluation" -> moderation.snapshot(facts.targetId())
+                        .map(fact -> new CasePorts.Targets.TargetSnapshot("evaluation", fact.reviewId(),
+                                fact.authorAccountId(), null, fact.body(), fact.state(),
+                                fact.createdAt(), fact.removedAt() != null));
+                default -> Optional.empty();
+            };
+        }
+
+        @Override
         public Set<Long> relatedAccountIds(CaseRecords.Facts facts) {
             if (facts.targetId() == null) {
                 return Set.of();
@@ -358,6 +404,39 @@ public class CaseHttpConfiguration {
                 return Set.of();
             }
             return new TreeSet<>(List.of(access.get().buyerId(), access.get().sellerId()));
+        }
+
+        @Override
+        public CaseRecords.ReferencedMessage requireReportedMessage(CaseRecords.Facts facts, String conversationKind,
+                                                                    long conversationId, long messageId) {
+            if (!"message".equals(facts.targetType()) || facts.targetId() == null
+                    || facts.targetId() != messageId
+                    || !Objects.equals(facts.conversationKind(), conversationKind)
+                    || facts.conversationId() == null || facts.conversationId() != conversationId) {
+                throw evidenceOutOfScope();
+            }
+            return switch (conversationKind) {
+                case "chat" -> reader.findChatMessage(conversationId, messageId)
+                        .map(message -> new CaseRecords.ReferencedMessage(message.id(), "chat",
+                                message.conversationId(), "account", message.senderAccountId(),
+                                message.body(), message.createdAt()))
+                        .orElseThrow(CaseTargetAdapter::evidenceOutOfScope);
+                case "trade" -> reader.findTradeMessage(conversationId, messageId)
+                        .map(message -> new CaseRecords.ReferencedMessage(message.id(), "trade",
+                                message.conversationId(), message.senderKind(), message.senderAccountId(),
+                                message.body(), message.createdAt()))
+                        .orElseThrow(CaseTargetAdapter::evidenceOutOfScope);
+                case "case" -> reader.findCaseMessage(conversationId, messageId)
+                        .map(message -> new CaseRecords.ReferencedMessage(message.id(), "case",
+                                message.conversationId(), message.senderKind(), message.senderAccountId(),
+                                message.body(), message.createdAt()))
+                        .orElseThrow(CaseTargetAdapter::evidenceOutOfScope);
+                default -> throw evidenceOutOfScope();
+            };
+        }
+
+        private static BusinessError evidenceOutOfScope() {
+            return new BusinessError("EVIDENCE_OUT_OF_SCOPE", 422, "证据引用不在事项范围内");
         }
 
         private void requireMessageTarget(CaseCommands.Target target, long reporterAccountId) {

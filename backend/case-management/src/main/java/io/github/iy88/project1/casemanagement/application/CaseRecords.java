@@ -3,6 +3,7 @@ package io.github.iy88.project1.casemanagement.application;
 import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /** Immutable lifecycle records shared by the store, the use cases and the query side. */
 public final class CaseRecords {
@@ -46,6 +47,47 @@ public final class CaseRecords {
     public record Evidence(long evidenceId, long caseId, String evidenceKind, Long fileId, Long referenceId,
                            String sourceRefType, Long sourceRefId, String requiredScope, Long submittedBy,
                            Instant submittedAt) {
+    }
+
+    /** Minimal message facts returned for one manager-authorised platform-record reference. */
+    public record ReferencedMessage(long messageId, String conversationKind, long conversationId,
+                                    String senderKind, Long senderAccountId, String body, Instant createdAt) {
+    }
+
+    /**
+     * The branch scope stored with a message reference. The scope is the only location hint kept
+     * beside the source resource id, so reading always re-checks the real message against it.
+     */
+    public record MessageScope(String conversationKind, long conversationId) {
+        public MessageScope {
+            if (!CaseVocabulary.CONVERSATION_KINDS.contains(conversationKind) || conversationId <= 0) {
+                throw new IllegalArgumentException("Invalid message scope");
+            }
+        }
+
+        public static String format(String conversationKind, long conversationId) {
+            return new MessageScope(conversationKind, conversationId).value();
+        }
+
+        public static Optional<MessageScope> parse(String value) {
+            if (value == null) {
+                return Optional.empty();
+            }
+            int separator = value.indexOf(':');
+            if (separator <= 0 || separator == value.length() - 1) {
+                return Optional.empty();
+            }
+            try {
+                return Optional.of(new MessageScope(value.substring(0, separator),
+                        Long.parseLong(value.substring(separator + 1))));
+            } catch (IllegalArgumentException invalid) {
+                return Optional.empty();
+            }
+        }
+
+        public String value() {
+            return conversationKind + ":" + conversationId;
+        }
     }
 
     public record AppealEligibility(long caseId, long accountId, Instant appealDeadlineAt, String basisRef) {

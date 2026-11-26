@@ -63,13 +63,22 @@ final class TradeCaseEnforcement implements CasePorts.Enforcement {
         var outcomes = new ArrayList<CaseRecords.EnforcementOutcome>();
         for (var item : items) {
             requireSupported(item);
+            String publishAction = item.action();
             var outcome = switch (item.action()) {
                 case "freeze_trade" -> trades.freezeLocked(transaction, caseId, item.targetId(), basisRef, reason);
-                case "adjust_trade_status" -> trades.adjustStatusLocked(transaction, caseId, item.targetId(),
-                        item.expectedResult(), basisRef, reason);
+                case "adjust_trade_status" -> {
+                    // API-CASE-007 keeps one adjust action; T2-29 is its in_progress target for an
+                    // abnormal trade. It reuses the locked restore path instead of duplicating it.
+                    if (restore(item)) {
+                        publishAction = "restore_trade";
+                        yield trades.restoreLocked(transaction, caseId, item.targetId(), basisRef, reason);
+                    }
+                    yield trades.adjustStatusLocked(transaction, caseId, item.targetId(),
+                            item.expectedResult(), basisRef, reason);
+                }
                 default -> throw unavailable();
             };
-            trades.publishLocked(transaction, caseId, item.targetId(), item.action(), outcome, reason);
+            trades.publishLocked(transaction, caseId, item.targetId(), publishAction, outcome, reason);
             outcomes.add(new CaseRecords.EnforcementOutcome(item.enforcementId(), item.action(), "trade",
                     item.targetId(), "trade_transition", outcome.transitionId(), "applied",
                     state(outcome.previousStatus(), outcome.previousPhase(), outcome.frozenBefore()),
@@ -85,6 +94,9 @@ final class TradeCaseEnforcement implements CasePorts.Enforcement {
                                                         String resolution, String basisRef, String reason,
                                                         Instant occurredAt) {
         if (!reverseSupported(recorded)) {
+            if ("adjust_trade_status".equals(recorded.action())) {
+                throw new BusinessError("TRADE_TERMINAL", 409, "已结束交易保持终态，不能撤销");
+            }
             throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "该处置动作的反向执行尚未启用");
         }
         long transitionId;
@@ -149,6 +161,11 @@ final class TradeCaseEnforcement implements CasePorts.Enforcement {
         return subjects;
     }
 
+    long productForTrade(long tradeId) {
+        return participation.productId(tradeId)
+                .orElseThrow(() -> new BusinessError("TARGET_STATE_CONFLICT", 409, "交易未关联商品"));
+    }
+
     private List<Long> parties(long tradeId) {
         return participation.findConversationAccess(tradeId)
                 .map(access -> new TreeSet<>(List.of(access.buyerId(), access.sellerId())).stream().toList())
@@ -161,7 +178,14 @@ final class TradeCaseEnforcement implements CasePorts.Enforcement {
     }
 
     private static boolean adjust(CaseRecords.EnforcementInstruction item) {
-        return "adjust_trade_status".equals(item.action());
+        // Only a terminal adjustment releases occupancy and needs the product row. A restore keeps
+        // the original occupancy, so it follows the freeze plan (trade, case, conversation only).
+        return "adjust_trade_status".equals(item.action()) && !restore(item);
+    }
+
+    private static boolean restore(CaseRecords.EnforcementInstruction item) {
+        return "adjust_trade_status".equals(item.action())
+                && "in_progress".equalsIgnoreCase(item.expectedResult());
     }
 
     private static boolean reverseSupported(CaseRecords.Enforcement recorded) {

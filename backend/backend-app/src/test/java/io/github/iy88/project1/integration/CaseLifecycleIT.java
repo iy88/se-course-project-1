@@ -276,6 +276,56 @@ class CaseLifecycleIT {
     }
 
     @Test
+    void appealRevocationSelectsTheAffectedOriginalAndReplaysUnchanged() {
+        long related = account("appeal-selection-" + RUN_ID, "申诉选择目标", "user");
+        var submitted = cases.submit(context(REPORTER.get()), "submit-appeal-selection-" + RUN_ID,
+                new CaseCommands.Report(new CaseCommands.Target("account", related, null, null),
+                        "虚假信息", null, List.of()));
+        long caseId = Long.parseLong(submitted.data().path("case_id").asString());
+        cases.claim(context(MANAGER_1.get()), "claim-appeal-selection-" + RUN_ID, caseId);
+        var decision = cases.decide(context(MANAGER_1.get()), "decision-appeal-selection-" + RUN_ID, caseId,
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:" + caseId),
+                        List.of(new CaseCommands.Enforcement("restrict_account", "account", related, null))));
+        String enforcementId = decision.data().path("enforcements").get(0).path("enforcement_id").asString();
+        long threadId = storeThread(caseId, related);
+
+        cases.postMessage(context(related), "appeal-selection-" + RUN_ID, caseId,
+                new CaseCommands.Message(threadId, CaseVocabulary.KIND_APPEAL, "请求复核", null, null, null, null));
+        long appealActionId = store.appealOf(caseId, related).orElseThrow().actionId();
+        var pending = queries.detail(context(MANAGER_1.get()), caseId).path("pending_appeals");
+        assertThat(pending).singleElement().satisfies(item -> {
+            assertThat(item.path("appeal_action_id").asString()).isEqualTo(Long.toString(appealActionId));
+            assertThat(item.path("original_enforcements")).singleElement().satisfies(enforcement -> {
+                assertThat(enforcement.path("enforcement_id").asString()).isEqualTo(enforcementId);
+                assertThat(enforcement.path("action").asString()).isEqualTo("restrict_account");
+                assertThat(enforcement.path("target_type").asString()).isEqualTo("account");
+                assertThat(enforcement.path("target_id").asString()).isEqualTo(Long.toString(related));
+            });
+        });
+
+        assertThatThrownBy(() -> cases.postMessage(context(MANAGER_1.get()), "revoke-no-selection-" + RUN_ID,
+                caseId, new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "撤销处置", null,
+                        appealActionId, CaseVocabulary.RESOLUTION_REVOKE, "依据")))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("INPUT_INVALID"));
+
+        var request = new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "撤销处置", null,
+                appealActionId, CaseVocabulary.RESOLUTION_REVOKE, "依据", enforcementId);
+        var resolved = cases.postMessage(context(MANAGER_1.get()), "revoke-selection-" + RUN_ID, caseId, request);
+        assertThat(resolved.status()).isEqualTo(201);
+        assertThat(db.sql("select lifted_at from case_enforcement where case_id = ? and enforcement_id = ?")
+                .param(caseId).param(enforcementId).query(OffsetDateTime.class).single()).isNotNull();
+        assertThat(db.sql("select count(*) from case_enforcement where case_id = ?").param(caseId)
+                .query(Long.class).single()).isEqualTo(2);
+
+        var replay = cases.postMessage(context(MANAGER_1.get()), "revoke-selection-" + RUN_ID, caseId, request);
+        assertThat(replay.data().path("case_action_id").asString())
+                .isEqualTo(resolved.data().path("case_action_id").asString());
+        assertThat(db.sql("select count(*) from case_enforcement where case_id = ?").param(caseId)
+                .query(Long.class).single()).isEqualTo(2);
+    }
+
+    @Test
     void failedExecutionKeepsAFailureTrailWithoutSubjectChanges() {
         long related3 = account("related3-" + RUN_ID, "相关用户三", "user");
         var submitted = cases.submit(context(REPORTER.get()), "submit-fail-" + RUN_ID, new CaseCommands.Report(
@@ -403,6 +453,101 @@ class CaseLifecycleIT {
                 select reporter_account_id from moderation_case
                 where target_type = 'message' and target_id = ? and target_conversation_id = ?
                 """).param(message).param(conversation).query(Long.class).list()).containsExactly(recipient);
+    }
+
+    @Test
+    void referencesOnlyTheReportedChatMessageAndKeepsItReadableAfterClose() throws Exception {
+        long sender = account("evidence-sender-" + RUN_ID, "证据发送者", "user");
+        long reporter = REPORTER.get();
+        long manager = MANAGER_1.get();
+        long conversation = db.sql("""
+                insert into chat_conversation (account_low_id, account_high_id, seq_head, created_at)
+                values (?, ?, 2, statement_timestamp()) returning chat_conversation_id
+                """).param(Math.min(sender, reporter)).param(Math.max(sender, reporter))
+                .query(Long.class).single();
+        long reported = db.sql("""
+                insert into chat_message (chat_conversation_id, seq, sender_account_id, body, created_at)
+                values (?, 1, ?, 'reported private body', statement_timestamp()) returning chat_message_id
+                """).param(conversation).param(sender).query(Long.class).single();
+        long adjacent = db.sql("""
+                insert into chat_message (chat_conversation_id, seq, sender_account_id, body, created_at)
+                values (?, 2, ?, 'adjacent private body', statement_timestamp()) returning chat_message_id
+                """).param(conversation).param(sender).query(Long.class).single();
+
+        var submitted = cases.submit(context(reporter), "evidence-submit-" + RUN_ID,
+                reportFor(new CaseCommands.Target("message", reported, "chat", conversation)));
+        long caseId = Long.parseLong(submitted.data().path("case_id").asString());
+        cases.claim(context(manager), "evidence-claim-" + RUN_ID, caseId);
+        var reference = new CaseCommands.EvidenceReference("chat", conversation, reported);
+
+        var created = cases.referenceEvidence(context(manager), "evidence-1-" + RUN_ID, caseId, reference);
+        assertThat(created.status()).isEqualTo(201);
+        long evidenceId = Long.parseLong(created.data().path("evidence_id").asString());
+        assertThat(db.sql("""
+                        select evidence_kind, source_ref_type, source_ref_id, required_scope, submitted_by
+                          from case_evidence where id = ?
+                        """).param(evidenceId)
+                .query((rs, row) -> List.of(rs.getString("evidence_kind"), rs.getString("source_ref_type"),
+                        rs.getString("source_ref_id"), rs.getString("required_scope"),
+                        rs.getString("submitted_by"))).single())
+                .containsExactly("platform_record", "message", Long.toString(reported),
+                        "chat:" + conversation, Long.toString(manager));
+
+        var read = queries.referencedEvidence(context(manager), caseId, evidenceId);
+        assertThat(read.at("/message/body").asString()).isEqualTo("reported private body");
+        assertThat(read.at("/message/sender_account_id").asString()).isEqualTo(Long.toString(sender));
+        assertThat(read.at("/conversation/conversation_kind").asString()).isEqualTo("chat");
+        assertThat(read.at("/message/body").asString()).doesNotContain("adjacent private body");
+        assertThatThrownBy(() -> queries.referencedEvidence(context(reporter), caseId, evidenceId))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+        assertThatThrownBy(() -> queries.referencedEvidence(context(MANAGER_2.get()), caseId, evidenceId))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+
+        var accounts = app.getBean(AccountService.class);
+        var sessions = app.getBean(SessionService.class);
+        var managerSession = accounts.login("manager1-" + RUN_ID + "@example.invalid", PASSWORD);
+        var otherManagerSession = accounts.login("manager2-" + RUN_ID + "@example.invalid", PASSWORD);
+        var reporterSession = accounts.login("reporter-" + RUN_ID + "@example.invalid", PASSWORD);
+        String path = "/admin/cases/" + caseId + "/evidence/" + evidenceId;
+        try (var http = HttpClient.newHttpClient()) {
+            assertThat(read(http, managerSession, path, 200).at("/message/body").asString())
+                    .isEqualTo("reported private body");
+            read(http, reporterSession, path, 404);
+            read(http, otherManagerSession, path, 404);
+        } finally {
+            sessions.revoke(sessions.authenticate(managerSession.token()));
+            sessions.revoke(sessions.authenticate(otherManagerSession.token()));
+            sessions.revoke(sessions.authenticate(reporterSession.token()));
+        }
+
+        var sameKey = cases.referenceEvidence(context(manager), "evidence-1-" + RUN_ID, caseId, reference);
+        assertThat(sameKey.status()).isEqualTo(201);
+        assertThat(sameKey.data().path("evidence_id").asString()).isEqualTo(Long.toString(evidenceId));
+        assertThat(db.sql("select count(*) from case_evidence where case_id = ?").param(caseId)
+                .query(Long.class).single()).isEqualTo(1);
+
+        var duplicate = cases.referenceEvidence(context(manager), "evidence-2-" + RUN_ID, caseId, reference);
+        assertThat(duplicate.status()).isEqualTo(200);
+        assertThat(duplicate.data().path("reused").asBoolean()).isTrue();
+        assertThat(duplicate.data().path("evidence_id").asString()).isEqualTo(Long.toString(evidenceId));
+        assertThat(db.sql("select count(*) from case_evidence where case_id = ?").param(caseId)
+                .query(Long.class).single()).isEqualTo(1);
+        assertThatThrownBy(() -> cases.referenceEvidence(context(manager), "evidence-3-" + RUN_ID, caseId,
+                new CaseCommands.EvidenceReference("chat", conversation, adjacent)))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("EVIDENCE_OUT_OF_SCOPE"));
+
+        cases.decide(context(manager), "evidence-decide-" + RUN_ID, caseId, new CaseCommands.Decision(
+                CaseVocabulary.NO_ACTION, "不予处理", List.of("case:" + caseId), List.of()));
+        cases.close(context(manager), "evidence-close-" + RUN_ID, caseId);
+        assertThat(queries.referencedEvidence(context(manager), caseId, evidenceId)
+                .at("/message/body").asString()).isEqualTo("reported private body");
+        assertThatThrownBy(() -> cases.referenceEvidence(context(manager), "evidence-4-" + RUN_ID, caseId,
+                reference))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("CASE_CLOSED"));
     }
 
     @Test

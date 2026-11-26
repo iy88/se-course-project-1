@@ -30,6 +30,11 @@ public class TradeReviewModeration {
     public record ReviewTarget(long reviewId, long tradeId, long authorAccountId) {
     }
 
+    /** Exact review content for the claimed manager's case target. */
+    public record ReviewSnapshot(long reviewId, long tradeId, long authorAccountId, String body, int rating,
+                                 String state, Instant createdAt, Instant removedAt) {
+    }
+
     /** A removed review with the retained author and named before/after states. */
     public record RemovedReview(String reviewId, long authorAccountId, String previousState,
                                 String currentState) {
@@ -61,6 +66,17 @@ public class TradeReviewModeration {
     /** Descriptive alias for {@link #target(long)}. */
     public Optional<ReviewTarget> reviewTarget(long reviewId) {
         return target(reviewId);
+    }
+
+    /**
+     * Read-only snapshot for a caller that has already authorized the exact case target. The body
+     * is retained after moderation so the claimed manager can review it without widening trade
+     * conversation access.
+     */
+    public Optional<ReviewSnapshot> snapshot(long reviewId) {
+        return reviews.reviewSnapshot(reviewId)
+                .map(fact -> new ReviewSnapshot(fact.reviewId(), fact.tradeId(), fact.authorAccountId(),
+                        fact.body(), fact.rating(), fact.state(), fact.createdAt(), fact.removedAt()));
     }
 
     /**

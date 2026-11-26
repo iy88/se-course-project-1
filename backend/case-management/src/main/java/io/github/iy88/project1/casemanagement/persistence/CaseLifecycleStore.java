@@ -22,6 +22,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Case-owned persistence for the report/dispute/exception lifecycle. The product-review rows keep
@@ -51,6 +52,8 @@ public class CaseLifecycleStore {
                    source_ref_id, required_scope, submitted_by, submitted_at
             from case_evidence
             """;
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final JdbcClient jdbc;
 
@@ -349,7 +352,7 @@ public class CaseLifecycleStore {
     public long addEvidence(long caseId, long fileId, Long referenceId, long submittedBy, Instant at) {
         var values = new LinkedHashMap<String, Object>();
         values.put("case_id", caseId);
-        values.put("evidence_kind", "submitter_attachment");
+        values.put("evidence_kind", CaseVocabulary.EVIDENCE_SUBMITTER_ATTACHMENT);
         values.put("file_id", fileId);
         if (referenceId != null) {
             values.put("file_reference_id", referenceId);
@@ -368,6 +371,31 @@ public class CaseLifecycleStore {
     public Optional<CaseRecords.Evidence> evidence(long caseId, long evidenceId) {
         return jdbc.sql(EVIDENCE + " where case_id = ? and id = ?")
                 .param(caseId).param(evidenceId).query(this::evidenceRow).optional();
+    }
+
+    /** One platform-record reference is reused for the same case, source and branch scope. */
+    public Optional<CaseRecords.Evidence> platformEvidence(long caseId, String sourceRefType, long sourceRefId,
+                                                           String requiredScope) {
+        return jdbc.sql(EVIDENCE + """
+                         where case_id = ? and evidence_kind = 'platform_record'
+                           and source_ref_type = ? and source_ref_id = ? and required_scope = ?
+                         order by id limit 1
+                        """).param(caseId).param(sourceRefType).param(sourceRefId).param(requiredScope)
+                .query(this::evidenceRow).optional();
+    }
+
+    /** Platform records reuse the existing submitted_by/submitted_at columns as referenced_by/at. */
+    public long addPlatformEvidence(long caseId, String sourceRefType, long sourceRefId, String requiredScope,
+                                    long referencedBy, Instant at) {
+        var values = new LinkedHashMap<String, Object>();
+        values.put("case_id", caseId);
+        values.put("evidence_kind", CaseVocabulary.EVIDENCE_PLATFORM_RECORD);
+        values.put("source_ref_type", sourceRefType);
+        values.put("source_ref_id", sourceRefId);
+        values.put("required_scope", requiredScope);
+        values.put("submitted_by", referencedBy);
+        values.put("submitted_at", stamp(at));
+        return insert("case_evidence", values, "id");
     }
 
     public void addAppealEligibility(long caseId, long accountId, Instant deadline, String basisRef, Instant at) {
@@ -576,16 +604,16 @@ public class CaseLifecycleStore {
                 rs.getString("failure_reason"), instant(rs, "occurred_at"), instant(rs, "lifted_at"));
     }
 
-    private static List<Long> affectedAccounts(String scope) {
+    static List<Long> affectedAccounts(String scope) {
         if (scope == null || scope.isBlank()) {
             return List.of();
         }
-        var matcher = java.util.regex.Pattern.compile("\\\"resource_id\\\":\\\"(\\d+)\\\"").matcher(scope);
-        var ids = new java.util.ArrayList<Long>();
-        while (matcher.find()) {
-            ids.add(Long.parseLong(matcher.group(1)));
-        }
-        return ids;
+        return JSON.readTree(scope).valueStream()
+                .filter(resource -> "account".equals(resource.path("resource_type").asString()))
+                .map(resource -> resource.path("resource_id").asLong(0L))
+                .filter(id -> id > 0)
+                .distinct()
+                .toList();
     }
 
     private static OffsetDateTime stamp(Instant at) {

@@ -22,11 +22,29 @@ public final class CaseRequests {
     public record Inquiry(String peerAccountId, String scopeText) {
     }
 
+    public record EvidenceReference(String conversationKind, String conversationId, String messageId) {
+    }
+
     public record ThreadRef(String conversationKind, String conversationId) {
     }
 
     public record Message(ThreadRef thread, String messageKind, String body, String inquiryActionId,
-                          String appealActionId, String resolution, String basisRef) {
+                          String appealActionId, String resolution, String basisRef,
+                          String originalEnforcementId, List<Enforcement> replacementEnforcements) {
+        /** Compatibility constructor for existing callers that do not select an execution. */
+        public Message(ThreadRef thread, String messageKind, String body, String inquiryActionId,
+                       String appealActionId, String resolution, String basisRef) {
+            this(thread, messageKind, body, inquiryActionId, appealActionId, resolution, basisRef, null,
+                    List.of());
+        }
+
+        /** Convenience constructor for a revoke that selects only the original execution. */
+        public Message(ThreadRef thread, String messageKind, String body, String inquiryActionId,
+                       String appealActionId, String resolution, String basisRef,
+                       String originalEnforcementId) {
+            this(thread, messageKind, body, inquiryActionId, appealActionId, resolution, basisRef,
+                    originalEnforcementId, List.of());
+        }
     }
 
     public record Enforcement(String action, String targetType, String targetId, String expectedResult) {

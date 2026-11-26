@@ -149,7 +149,7 @@ class S4ProductionEnforcementIT {
         long trade = activeTrade(buyer, seller);
         long caseId = claimedTradeCase(buyer, manager, trade);
         String invalid = """
-                {"action":"adjust_trade_status","target_type":"trade","target_id":"%d","expected_result":"rejected"}
+                {"action":"adjust_trade_status","target_type":"trade","target_id":"%d","expected_result":"in_progress"}
                 """.formatted(trade);
         var rejected = post(manager, decisionPath(caseId), decision(caseId, freeze(trade) + "," + invalid),
                 key(), 409);
@@ -161,6 +161,149 @@ class S4ProductionEnforcementIT {
                 .query(Long.class).single()).isZero();
         assertThat(db.sql("select count(*) from notification where source_type = 'case' and source_id = ?")
                 .param(caseId).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void appealReversalRequiresAnExplicitOriginalAndPreservesTheOtherDisposition() throws Exception {
+        var buyer = login("appeal-buyer", "user");
+        var seller = login("appeal-seller", "user");
+        var manager = login("appeal-manager", "manager");
+        var otherManager = login("appeal-other", "manager");
+        long trade = activeTrade(buyer, seller);
+        long product = db.sql("select product_id from trade where id = ?")
+                .param(trade).query(Long.class).single();
+        long caseId = claimedTradeCase(buyer, manager, trade);
+        String withdraw = """
+                {"action":"withdraw_public_access","target_type":"product","target_id":"%d"}
+                """.formatted(product);
+        var decided = post(manager, decisionPath(caseId), decision(caseId, freeze(trade) + "," + withdraw), key(), 201);
+        var enforcements = decided.path("enforcements");
+        String freezeId = enforcements.path(0).path("enforcement_id").asString();
+        String displayId = enforcements.path(1).path("enforcement_id").asString();
+        String casePath = "/cases/" + caseId;
+        String messagePath = casePath + "/messages";
+        var appealBody = json.createObjectNode().put("message_kind", "appeal").put("body", "请复核该处置");
+        var thread = get(seller, casePath, 200).path("thread");
+        appealBody.set("thread", thread);
+        var appeal = post(seller, messagePath, appealBody.toString(), key(), 201);
+        String appealId = appeal.path("case_action_id").asString();
+        var pending = get(manager, casePath, 200).at("/pending_appeals/0/original_enforcements");
+        assertThat(pending.valueStream().map(item -> item.path("enforcement_id").asString()).toList())
+                .containsExactlyInAnyOrder(freezeId, displayId);
+        assertThat(get(seller, casePath, 200).path("pending_appeals").isMissingNode()).isTrue();
+        var reply = json.createObjectNode().put("message_kind", "manager_reply").put("body", "已复核")
+                .put("appeal_action_id", appealId).put("resolution", "revoke").put("basis_ref", "case:" + caseId);
+        reply.set("thread", thread);
+        post(manager, messagePath, reply.toString(), key(), 422);
+        reply.put("original_enforcement_id", freezeId);
+        post(otherManager, messagePath, reply.toString(), key(), 404);
+
+        reply.put("resolution", "adjust");
+        reply.putArray("replacement_enforcements").addObject().put("action", "adjust_trade_status")
+                .put("target_type", "trade").put("target_id", Long.toString(trade)).put("expected_result", "in_progress");
+        post(manager, messagePath, reply.toString(), key(), 409);
+        assertThat(activeSources(trade)).containsExactly(caseId);
+        assertThat(get(manager, casePath, 200).path("pending_appeals").size()).isEqualTo(1);
+        assertThat(db.sql("select lifted_at is null from case_enforcement where enforcement_id = ?")
+                .param(freezeId).query(Boolean.class).single()).isTrue();
+        assertThat(db.sql("""
+                        select count(*) from moderation_case_action
+                        where case_id = ? and action_kind = 'manager_reply'
+                        """).param(caseId).query(Long.class).single()).isZero();
+        assertThat(db.sql("""
+                        select count(*) from case_enforcement
+                        where case_id = ? and action = 'lift_trade_freeze'
+                        """).param(caseId).query(Long.class).single()).isZero();
+        assertThat(db.sql("""
+                        select count(*) from notification
+                        where source_type = 'case' and source_id = ?
+                          and event_type in ('case.trade_unfrozen', 'case.appeal_resolved')
+                        """).param(caseId).query(Long.class).single()).isZero();
+
+        reply.put("resolution", "revoke");
+        reply.remove("replacement_enforcements");
+        String idempotencyKey = key();
+        var resolved = post(manager, messagePath, reply.toString(), idempotencyKey, 201);
+        assertThat(post(manager, messagePath, reply.toString(), idempotencyKey, 201)).isEqualTo(resolved);
+        assertThat(activeSources(trade)).isEmpty();
+        assertThat(get(manager, casePath, 200).path("pending_appeals").isEmpty()).isTrue();
+        assertThat(db.sql("select lifted_at is null from case_enforcement where enforcement_id = ?")
+                .param(displayId).query(Boolean.class).single()).isTrue();
+        get(buyer, "/products/" + product, 404);
+    }
+
+    @Test
+    void contentRemovalUsesTheExactReportedCommentAndOnlyNotifiesItsAuthor() throws Exception {
+        var seller = login("content-seller", "user");
+        var reporter = login("content-reporter", "user");
+        var author = login("content-author", "user");
+        var manager = login("content-manager", "manager");
+        long product = publicProduct(seller);
+        String comments = "/products/" + product + "/comments";
+        long reported = post(author, comments, "{\"body\":\"需要核实的评论原文\"}", key(), 201).path("id").asLong();
+        long other = post(author, comments, "{\"body\":\"同商品的其他评论\"}", key(), 201).path("id").asLong();
+        long caseId = claimedCase(reporter, manager, "comment", reported);
+        String remove = "{\"action\":\"remove_content\",\"target_type\":\"comment\",\"target_id\":\"%d\"}";
+        post(manager, decisionPath(caseId), decision(caseId, remove.formatted(other)), key(), 403);
+        var decided = post(manager, decisionPath(caseId), decision(caseId, remove.formatted(reported)), key(), 201);
+        assertThat(decided.at("/enforcements/0/result_ref").asString()).isEqualTo("product_comment:" + reported);
+        assertThat(get(reporter, comments, 200).toString()).contains("同商品的其他评论").doesNotContain("需要核实的评论原文");
+        assertThat(db.sql("select body from product_comment where comment_id = ?")
+                .param(reported).query(String.class).single()).isEqualTo("需要核实的评论原文");
+        assertThat(db.sql("""
+                        select recipient_account_id from notification
+                        where source_type = 'case' and source_id = ? and event_type = 'case.content_removed'
+                        """).param(caseId).query(Long.class).list()).containsExactly(author.account().id());
+    }
+
+    @Test
+    void claimedManagerRestoresAbnormalTradeWithoutChangingOccupancy() throws Exception {
+        var buyer = login("restore-buyer", "user");
+        var seller = login("restore-seller", "user");
+        var manager = login("restore-manager", "manager");
+        long trade = activeTrade(buyer, seller);
+        db.sql("update trade set status = 'abnormal' where id = ?").param(trade).update();
+        long caseId = claimedTradeCase(buyer, manager, trade);
+        var result = post(manager, decisionPath(caseId), decision(caseId, """
+                {"action":"adjust_trade_status","target_type":"trade","target_id":"%d","expected_result":"in_progress"}
+                """.formatted(trade)), key(), 201);
+        assertThat(result.at("/enforcements/0/result_ref").asString()).startsWith("trade_transition:");
+        assertThat(result.path("decided_at").asString()).isNotBlank();
+        assertThat(result.at("/enforcements/0/affected_scope").isArray()).isTrue();
+        assertThat(db.sql("select status from trade where id = ?").param(trade).query(String.class).single())
+                .isEqualTo("in_progress");
+        assertThat(db.sql("""
+                select p.occupied_by_trade_id from product p join trade t on t.product_id = p.product_id where t.id = ?
+                """).param(trade).query(Long.class).single()).isEqualTo(trade);
+        assertThat(db.sql("""
+                select recipient_account_id from notification where source_type = 'trade' and source_id = ?
+                  and event_type = 'trade.restored'
+                """).param(trade).query(Long.class).list()).containsExactlyInAnyOrder(
+                        buyer.account().id(), seller.account().id());
+        assertThat(db.sql("select count(*) from notification where source_type = 'case' and source_id = ?")
+                .param(caseId).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void evaluationRemovalHidesContentAndKeepsTheExactSnapshotForTheClaimant() throws Exception {
+        var buyer = login("review-buyer", "user");
+        var seller = login("review-seller", "user");
+        var manager = login("review-manager", "manager");
+        long trade = activeTrade(buyer, seller);
+        db.sql("update trade set status = 'completed', terminal_reason = 'completed', ended_at = now() where id = ?")
+                .param(trade).update();
+        String reviews = "/trades/" + trade + "/reviews";
+        long review = post(buyer, reviews, "{\"rating\":3,\"content\":\"仅承办可读的评价原文\"}", key(), 201)
+                .at("/review/review_id").asLong();
+        assertThat(get(seller, reviews, 200).toString()).contains("仅承办可读的评价原文");
+        long caseId = claimedCase(seller, manager, "evaluation", review);
+        var decision = post(manager, decisionPath(caseId), decision(caseId, """
+                {"action":"remove_evaluation_content","target_type":"evaluation","target_id":"%d"}
+                """.formatted(review)), key(), 201);
+        assertThat(decision.at("/enforcements/0/result_ref").asString()).isEqualTo("trade_review:" + review);
+        assertThat(get(seller, reviews, 200).toString()).doesNotContain("仅承办可读的评价原文");
+        assertThat(get(seller, "/cases/" + caseId, 200).path("target").isMissingNode()).isTrue();
+        assertThat(get(manager, "/cases/" + caseId, 200).at("/target/body").asString()).isEqualTo("仅承办可读的评价原文");
     }
 
     @Test
@@ -184,6 +327,10 @@ class S4ProductionEnforcementIT {
         var response = post(seller, path, expected, idempotencyKey, 200);
         assertThat(response.path("closed_pending_request_count").asInt()).isEqualTo(2);
         assertThat(post(seller, path, expected, idempotencyKey, 200)).isEqualTo(response);
+        assertThat(db.sql("""
+                        select count(*) from audit_record
+                        where action = 'product.off_shelf' and target_type = 'product' and target_id = ?
+                        """).param(product).query(Long.class).single()).isEqualTo(1);
         assertThat(db.sql("select lifecycle_state from product where product_id = ?")
                 .param(product).query(String.class).single()).isEqualTo("off_shelf");
         assertThat(db.sql("""
@@ -376,11 +523,28 @@ class S4ProductionEnforcementIT {
         assertThat(get(reporter, todos, 200).path("total").asLong()).isZero();
         assertThat(get(recipient, "/account/overview", 200).path("todo_count").asLong()).isEqualTo(1);
         assertThat(get(recipient, "/account/overview", 200).at("/reports/received").asLong()).isZero();
-        post(recipient, "/cases/" + caseId + "/messages", """
+        var statement = post(recipient, "/cases/" + caseId + "/messages", """
                 {"thread":%s,"message_kind":"statement","body":"说明第一项","inquiry_action_id":"%s"}
                 """.formatted(first.path("thread"), first.path("inquiry_action_id").asString()), key(), 201);
         assertThat(get(recipient, todos, 200).at("/items/0/source/inquiry_action_ids")
                 .valueStream().map(JsonNode::asString).toList()).containsExactly(second.path("inquiry_action_id").asString());
+        long branch = statement.at("/thread/conversation_id").asLong();
+        long message = statement.path("case_message_id").asLong();
+        assertThat(db.sql("""
+                select recipient_account_id from user_event
+                where event_type = 'message_created' and source_type = 'case_conversation'
+                  and source_id = ? and payload_id = ?
+                """).param(branch).param(message).query(Long.class).list()).containsExactlyInAnyOrder(
+                        recipient.account().id(), manager.account().id());
+        var otherManager = login("todo-other-manager", "manager");
+        String read = "/conversations/case/" + branch + "/read-progress";
+        String atSeq = "{\"displayed_seq\":" + statement.path("seq").asLong() + "}";
+        post(otherManager, read, atSeq, key(), 404);
+        post(manager, read, atSeq, key(), 200);
+        assertThat(db.sql("""
+                select recipient_account_id from user_event
+                where event_type = 'message_read' and source_type = 'case_conversation' and source_id = ?
+                """).param(branch).query(Long.class).list()).containsExactly(manager.account().id());
     }
 
     private static String tradeVersion(JsonNode response) {

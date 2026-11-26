@@ -8,6 +8,7 @@ import io.github.iy88.project1.core.WriteTransaction;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 
@@ -30,6 +31,27 @@ public final class CasePorts {
 
         /** Buyer and seller of one trade, or an empty set when it does not exist. */
         Set<Long> tradeParties(long tradeId);
+
+        /**
+         * Read-only snapshot of the case's exact comment or evaluation target. The caller must have
+         * checked that the reader is the case's current manager; this method never resolves another
+         * case's content. A missing snapshot means the target is not a readable content target.
+         */
+        default Optional<TargetSnapshot> contentTarget(CaseRecords.Facts facts) {
+            return Optional.empty();
+        }
+
+        record TargetSnapshot(String targetType, long targetId, long authorAccountId, Long parentId,
+                              String body, String state, Instant createdAt, boolean removed) {
+        }
+
+        /**
+         * Re-reads exactly the message that this case reports as its target. A message that is not
+         * the reported target, or a branch/message identity that does not match the real row, is
+         * {@code EVIDENCE_OUT_OF_SCOPE}; no arbitrary message id is ever read.
+         */
+        CaseRecords.ReferencedMessage requireReportedMessage(CaseRecords.Facts facts, String conversationKind,
+                                                             long conversationId, long messageId);
     }
 
     /** Account-owned management qualification. */

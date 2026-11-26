@@ -12,6 +12,8 @@ import io.github.iy88.project1.account.application.SessionService;
 import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import io.github.iy88.project1.category.application.CategoryService;
+import io.github.iy88.project1.core.AuditContext;
+import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.product.application.ProductService;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -87,13 +89,16 @@ class S2CoreIT {
         sessions.revoke(identity);
 
         try {
-            var category = app.getBean(CategoryService.class).create(account.id(), "Core " + suffix);
+            var auditContext = new AuditContext(new ExecutionContext(UUID.randomUUID(),
+                    ExecutionContext.ActorKind.ACCOUNT, Long.toString(account.id()), UUID.randomUUID(), null, 1L,
+                    "s2-core-it"), UUID.randomUUID());
+            var category = app.getBean(CategoryService.class).create(account.id(), "Core " + suffix, auditContext);
             long categoryId = Long.parseLong(category.id());
             var products = app.getBean(ProductService.class);
             var proposedCategoryName = "Applied core " + suffix;
             var created = products.create(account.id(), new ProductService.CreateCommand(
                     "Core product " + suffix, "Integration product", List.of(), 1_200L,
-                    List.of(category.id()), proposedCategoryName));
+                    List.of(category.id()), proposedCategoryName), auditContext);
             long productId = Long.parseLong(created.id());
             assertThat(created.lifecycleState()).isEqualTo("pending_review");
             assertThat(created.categoryApplication()).isNotNull();

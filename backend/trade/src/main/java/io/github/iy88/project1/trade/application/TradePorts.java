@@ -318,6 +318,17 @@ public final class TradePorts {
         int removeAccountBanLocked(WriteTransaction transaction, long accountId, long restrictionId,
                                    String basisRef);
 
+        /**
+         * Whether an unended freeze still applies to this account as a party of a trade. The freeze
+         * may be sourced by a timeout, an admin case or an account ban; every source freezes the
+         * trade's buyer and seller, so both parties are restricted until that exact freeze ends.
+         *
+         * <p>This is a party qualification, not an account-ban read: it is used for starting a new
+         * trade and for publishing, listing or actively delisting products. It must be read after
+         * the caller holds the account qualification lock and in the caller's write transaction.</p>
+         */
+        boolean hasActivePartyFreeze(long accountId);
+
         /** Whether any trade involving the account still carries an active freeze. */
         boolean hasActiveAccountFreeze(long accountId);
     }

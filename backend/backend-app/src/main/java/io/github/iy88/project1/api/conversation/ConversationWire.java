@@ -98,9 +98,22 @@ final class ConversationWire {
             body.put("event_type", message.eventType());
         }
         if (message.sourceRef() != null) {
-            body.put("source_ref", message.sourceRef());
+            var source = sourceRef(message.sourceRef());
+            if (source != null) {
+                body.put("source_ref", source);
+            }
         }
         return body;
+    }
+
+    /** Expands the internal {@code type:id} projection into the public ResourceRef object. */
+    private static Map<String, Object> sourceRef(String value) {
+        int separator = value.indexOf(':');
+        if (separator <= 0 || separator == value.length() - 1) {
+            return null;
+        }
+        return Map.of("resource_type", value.substring(0, separator),
+                "resource_id", value.substring(separator + 1));
     }
 
     private static Map<String, Object> peer(long accountId, String displayName, String avatarUrl) {

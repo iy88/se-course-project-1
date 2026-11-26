@@ -96,6 +96,11 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                     var preview = product.read(request.productId()).orElseThrow(() -> productUnavailable());
                     requireWrite(buyer);
                     requireWrite(preview.sellerId());
+                    // A new purchase has no trade row yet, so per-trade requireNotFrozen cannot see
+                    // a freeze from another trade of either party. Read the party-level fact under
+                    // the account locks already held by this write.
+                    requireNoActivePartyFreeze(buyer);
+                    requireNoActivePartyFreeze(preview.sellerId());
                     var state = lockProduct(transaction, request.productId());
                     if (state.sellerId() == buyer) {
                         throw new BusinessError("ACTION_NOT_ALLOWED", 403, "不能购买自己的商品");
@@ -113,9 +118,9 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                             buyer, state.sellerId());
                     var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
                     UUID eventId = UUID.randomUUID();
-                    history(transaction, trade, trade, "request.create", ActorKind.BUYER, buyer, note, null, null, eventId, now);
+                    long transitionId = history(transaction, trade, trade, "request.create", ActorKind.BUYER, buyer, note, null, null, eventId, now);
                     conversations.append(transaction, conversationId, eventId, "request_created",
-                            "买方提交了购买请求", null);
+                            "买方提交了购买请求", new ResourceRef("trade_transition", transitionId));
                     notify(transaction, trade, Set.of(trade.sellerId()), "trade.request_created", eventId);
                     audit(transaction, "trade.request.create", tradeId, null);
                     return new WriteResult.Response<>(201, view(tradeId, buyer, conversationId),
@@ -158,9 +163,9 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                     repository.save(accepted);
                     repository.insertSnapshot(state.snapshot(trade.id(), now));
                     UUID acceptedEvent = UUID.randomUUID();
-                    history(transaction, trade, accepted, "request.accept", ActorKind.SELLER, seller, null, null, null, acceptedEvent, now);
+                    long transitionId = history(transaction, trade, accepted, "request.accept", ActorKind.SELLER, seller, null, null, null, acceptedEvent, now);
                     conversations.append(transaction, conversationId, acceptedEvent, "request_accepted",
-                            "卖方已接受购买请求", null);
+                            "卖方已接受购买请求", new ResourceRef("trade_transition", transitionId));
                     notify(transaction, trade, Set.of(trade.buyerId()), "trade.request_accepted", acceptedEvent);
                     for (var other : pending) {
                         if (other.id() != trade.id()) {
@@ -194,9 +199,9 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                             now, null, now);
                     repository.save(rejected);
                     UUID eventId = UUID.randomUUID();
-                    history(transaction, trade, rejected, "request.reject", ActorKind.SELLER, seller, reason, null, null, eventId, now);
+                    long transitionId = history(transaction, trade, rejected, "request.reject", ActorKind.SELLER, seller, reason, null, null, eventId, now);
                     conversations.append(transaction, conversationId, eventId, "request_rejected",
-                            "卖方拒绝了购买请求", null);
+                            "卖方拒绝了购买请求", new ResourceRef("trade_transition", transitionId));
                     notify(transaction, trade, Set.of(trade.buyerId()), "trade.request_rejected", eventId);
                     archive(transaction, conversationId, trade.id(), "request_rejected");
                     audit(transaction, "trade.request.reject", trade.id(), null);
@@ -224,9 +229,9 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                             now, null, now);
                     repository.save(withdrawn);
                     UUID eventId = UUID.randomUUID();
-                    history(transaction, trade, withdrawn, "request.withdraw", ActorKind.BUYER, buyer, null, null, null, eventId, now);
+                    long transitionId = history(transaction, trade, withdrawn, "request.withdraw", ActorKind.BUYER, buyer, null, null, null, eventId, now);
                     conversations.append(transaction, conversationId, eventId, "request_withdrawn",
-                            "买方撤回了购买请求", null);
+                            "买方撤回了购买请求", new ResourceRef("trade_transition", transitionId));
                     notify(transaction, trade, Set.of(trade.sellerId()), "trade.request_withdrawn", eventId);
                     archive(transaction, conversationId, trade.id(), "request_withdrawn");
                     audit(transaction, "trade.request.withdraw", trade.id(), null);
@@ -824,7 +829,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     public WriteResult<JsonNode> freeze(ExecutionContext context, String key, TradeCommands.Freeze command) {
         long manager = actor(context);
         return run(context, "trade.freeze", key, command,
-                (ctx, request) -> prepareGovernance(manager, request.tradeId(), request.caseId(), false),
+                (ctx, request) -> prepareFreezeChange(manager, request.tradeId(), request.caseId()),
                 (ctx, request) -> qualifyGovernance(ctx, request.tradeId()),
                 this::replayGovernance,
                 (transaction, request, qualification) -> {
@@ -844,7 +849,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     public TradePorts.CaseEnforcementPlan prepare(long managerId, long tradeId, long caseId, boolean product) {
         var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
         long conversationId = requireConversationId(tradeId);
-        var accountsSet = new TreeSet<Long>(List.of(managerId, trade.buyerId(), trade.sellerId()));
         var resources = new TreeSet<LockPlan.Key>();
         if (product) {
             resources.add(productKey(trade.productId()));
@@ -852,7 +856,9 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         resources.add(tradeKey(tradeId));
         resources.add(caseKey(caseId));
         resources.add(conversationKey(conversationId));
-        return new TradePorts.CaseEnforcementPlan(new LockPlan(sharedAccounts(accountsSet), resources),
+        // Freeze/lift/adjust changes a party's qualification, so both trade parties take the
+        // exclusive account lock while the manager remains shared.
+        return new TradePorts.CaseEnforcementPlan(new LockPlan(partyAccounts(managerId, trade, true), resources),
                 conversationId, product ? trade.productId() : null);
     }
 
@@ -895,6 +901,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         long manager = actor(transaction.context());
         String validatedReason = requiredText(reason, 500, "冻结原因");
         requireWrite(manager);
+        requirePartyFreezeLocks(transaction, trade);
         requireFreezable(trade);
         return freezeFacts(transaction, trade, caseId, manager, basisRef, validatedReason, now(),
                 UUID.randomUUID()).orElseThrow(() -> new BusinessError(
@@ -909,6 +916,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         String validatedReason = requiredText(reason, 500, "冻结原因");
         requireWrite(manager);
         var trade = repository.lockTrade(transaction, tradeId);
+        requirePartyFreezeLocks(transaction, trade);
         requireFreezable(trade);
         lockCase(transaction, caseId, manager, trade.id(), basisRef);
         long conversationId = requireConversation(transaction, trade.id());
@@ -924,7 +932,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                                             TradeCommands.LiftFreeze command) {
         long manager = actor(context);
         return run(context, "trade.freeze.lift", key, command,
-                (ctx, request) -> prepareGovernance(manager, request.tradeId(), request.caseId(), false),
+                (ctx, request) -> prepareFreezeChange(manager, request.tradeId(), request.caseId()),
                 (ctx, request) -> qualifyGovernance(ctx, request.tradeId()),
                 this::replayGovernance,
                 (transaction, request, qualification) -> {
@@ -943,6 +951,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         long manager = actor(transaction.context());
         String validatedReason = requiredText(reason, 500, "解除原因");
         requireWrite(manager);
+        requirePartyFreezeLocks(transaction, trade);
         if (trade.status().isTerminal()) {
             throw freezeNotActive();
         }
@@ -966,6 +975,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         String validatedReason = requiredText(reason, 500, "解除原因");
         requireWrite(manager);
         var trade = repository.lockTrade(transaction, tradeId);
+        requirePartyFreezeLocks(transaction, trade);
         trade.requireNotTerminal();
         lockCase(transaction, caseId, manager, trade.id(), basisRef);
         long conversationId = requireConversation(transaction, trade.id());
@@ -1188,7 +1198,10 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
 
     @Override
     public LockPlan accountBanPlan(long accountId) {
-        return closurePlan(accountTradeIds(accountId));
+        // An account ban freezes every affected trade for both parties (BR-33). Taking the
+        // exclusive party locks makes product/new-trade qualification reads observe the freeze
+        // before they can start, not only the banned account's own qualification.
+        return closurePlan(accountTradeIds(accountId), LockPlan.AccountMode.EXCLUSIVE);
     }
 
     @Override
@@ -1221,6 +1234,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     @Override
     public int applyAccountBanLocked(WriteTransaction transaction, long accountId, long restrictionId,
                                      String reason, String basisRef) {
+        transaction.requireExclusiveAccount(accountId);
         var trades = acquiredTrades(transaction, accountTradeIds(accountId)).stream()
                 .filter(TradeApplication::accountBanCandidate).toList();
         var branches = acquiredBranches(transaction, trades);
@@ -1239,10 +1253,16 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     @Override
     public int removeAccountBanLocked(WriteTransaction transaction, long accountId, long restrictionId,
                                       String basisRef) {
+        transaction.requireExclusiveAccount(accountId);
         var trades = acquiredTrades(transaction, repository.activeTradeIdsForAccount(accountId)).stream()
                 .filter(trade -> trade.status().isActive()).toList();
         var branches = acquiredBranches(transaction, trades);
         return removeAccountBan(transaction, restrictionId, basisRef, trades, branches, now());
+    }
+
+    @Override
+    public boolean hasActivePartyFreeze(long accountId) {
+        return repository.hasActivePartyFreeze(accountId);
     }
 
     @Override
@@ -1270,6 +1290,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                                 List<Trade> trades, Map<Long, Long> branches, Instant now) {
         int changed = 0;
         for (var trade : trades) {
+            requirePartyFreezeLocks(transaction, trade);
             long branch = branches.get(trade.id());
             var parties = Set.of(trade.buyerId(), trade.sellerId());
             if (trade.status() == TradeStatus.PENDING_ACCEPTANCE) {
@@ -1299,6 +1320,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
             if (freeze.isEmpty()) {
                 continue;
             }
+            requirePartyFreezeLocks(transaction, trade);
             repository.endFreeze(freeze.orElseThrow().id(), null, now);
             repository.touch(trade.id(), now);
             resumeWaitIfPossible(transaction, trade, now);
@@ -1326,6 +1348,10 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private LockPlan closurePlan(Collection<Long> tradeIds) {
+        return closurePlan(tradeIds, LockPlan.AccountMode.SHARED);
+    }
+
+    private LockPlan closurePlan(Collection<Long> tradeIds, LockPlan.AccountMode partyMode) {
         var accounts = new TreeSet<Long>();
         var resources = new TreeSet<LockPlan.Key>();
         for (long id : tradeIds) {
@@ -1335,7 +1361,9 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
             resources.add(tradeKey(id));
             conversations.find(id).ifPresent(conversationId -> resources.add(conversationKey(conversationId)));
         }
-        return new LockPlan(sharedAccounts(accounts), resources);
+        var modes = new TreeMap<Long, LockPlan.AccountMode>();
+        accounts.forEach(id -> modes.put(id, partyMode));
+        return new LockPlan(modes, resources);
     }
 
     private List<Trade> lockAffected(WriteTransaction transaction, LockPlan plan, Collection<Long> ids) {
@@ -1406,7 +1434,9 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         var resources = new TreeSet<LockPlan.Key>();
         resources.add(tradeKey(trade.id()));
         conversations.find(tradeId).ifPresent(id -> resources.add(conversationKey(id)));
-        return new LockPlan(Map.of(), resources);
+        // The timeout freeze is a real freeze source for both parties, so it takes the same
+        // exclusive party locks as an admin-case freeze before inserting the freeze row.
+        return new LockPlan(partyAccounts(trade, true), resources);
     }
 
     public void lockForTimeout(WriteTransaction transaction, long tradeId) {
@@ -1438,6 +1468,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         if (!timeoutApplicable(tradeId, sourceVersion)) {
             return;
         }
+        requirePartyFreezeLocks(transaction, trade);
         var now = now();
         var wait = repository.waitFor(tradeId).orElseThrow();
         if (wait.elapsedSeconds(now) < wait.waitSeconds()) {
@@ -1681,8 +1712,12 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private LockPlan prepareGovernance(long manager, long tradeId, long caseId, boolean product) {
+        return prepareGovernance(manager, tradeId, caseId, product, false);
+    }
+
+    private LockPlan prepareGovernance(long manager, long tradeId, long caseId, boolean product,
+                                       boolean exclusiveParties) {
         var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        var accountsSet = new TreeSet<Long>(List.of(manager, trade.buyerId(), trade.sellerId()));
         var resources = new TreeSet<LockPlan.Key>();
         if (product) {
             resources.add(productKey(trade.productId()));
@@ -1690,7 +1725,11 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         resources.add(tradeKey(tradeId));
         resources.add(caseKey(caseId));
         conversations.find(tradeId).ifPresent(id -> resources.add(conversationKey(id)));
-        return new LockPlan(sharedAccounts(accountsSet), resources);
+        return new LockPlan(partyAccounts(manager, trade, exclusiveParties), resources);
+    }
+
+    private LockPlan prepareFreezeChange(long manager, long tradeId, long caseId) {
+        return prepareGovernance(manager, tradeId, caseId, false, true);
     }
 
     private Void qualifyTrade(ExecutionContext context, long tradeId) {
@@ -1725,6 +1764,27 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
             map.put(id, LockPlan.AccountMode.SHARED);
         }
         return map;
+    }
+
+    /**
+     * Manager plus both trade parties. A qualification-changing action takes the exclusive lock
+     * for the parties, so product writes and new purchases that read the party freeze under their
+     * shared account lock either finish before the freeze or observe it after it commits.
+     */
+    private static Map<Long, LockPlan.AccountMode> partyAccounts(long managerId, Trade trade,
+                                                                 boolean exclusiveParties) {
+        var accounts = partyAccounts(trade, exclusiveParties);
+        // A manager who is also a party keeps the stronger party mode.
+        accounts.putIfAbsent(managerId, LockPlan.AccountMode.SHARED);
+        return accounts;
+    }
+
+    private static Map<Long, LockPlan.AccountMode> partyAccounts(Trade trade, boolean exclusiveParties) {
+        var accounts = new TreeMap<Long, LockPlan.AccountMode>();
+        var partyMode = exclusiveParties ? LockPlan.AccountMode.EXCLUSIVE : LockPlan.AccountMode.SHARED;
+        accounts.put(trade.buyerId(), partyMode);
+        accounts.put(trade.sellerId(), partyMode);
+        return accounts;
     }
 
     private void requireWrite(long accountId) {
@@ -2156,6 +2216,27 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         if (!repository.activeFreezes(tradeId).isEmpty()) {
             throw new BusinessError("TRADE_FROZEN", 409, "交易已冻结");
         }
+    }
+
+    /**
+     * Rejects a new trade when either role is still covered by an unended trade freeze. This is
+     * deliberately separate from {@link #requireNotFrozen}: a trade that does not exist yet has no
+     * freeze row of its own, so the fact belongs to the account's existing frozen trades.
+     */
+    private void requireNoActivePartyFreeze(long accountId) {
+        if (repository.hasActivePartyFreeze(accountId)) {
+            throw new BusinessError("TRADE_FROZEN", 409, "交易冻结期间不能发起新交易");
+        }
+    }
+
+    /**
+     * Freeze and unfreeze are qualification changes for both parties, so their authors must hold
+     * the exclusive account lock before they read or write the freeze fact. The write executor
+     * replans with the stronger mode if a caller still prepared a shared lock.
+     */
+    private static void requirePartyFreezeLocks(WriteTransaction transaction, Trade trade) {
+        transaction.requireExclusiveAccount(trade.buyerId());
+        transaction.requireExclusiveAccount(trade.sellerId());
     }
 
     private long actor(ExecutionContext context) {

@@ -2,6 +2,7 @@ package io.github.iy88.project1.api.conversation;
 
 import io.github.iy88.project1.conversation.ConversationKind;
 import io.github.iy88.project1.conversation.application.CaseConversations;
+import io.github.iy88.project1.conversation.application.CaseParticipation;
 import io.github.iy88.project1.conversation.application.ConversationViews;
 import io.github.iy88.project1.conversation.application.Conversations;
 import io.github.iy88.project1.conversation.application.TradeChats;
@@ -36,16 +37,19 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
     private final ConversationStore store;
     private final TradeParticipation trades;
     private final CaseConversations caseConversations;
+    private final CaseParticipation caseParticipation;
 
     public WriteBackedConversationCommands(WriteExecutor writes, Conversations conversations, TradeChats tradeChats,
                                            ConversationStore store, TradeParticipation trades,
-                                           CaseConversations caseConversations) {
+                                           CaseConversations caseConversations,
+                                           CaseParticipation caseParticipation) {
         this.writes = writes;
         this.conversations = conversations;
         this.tradeChats = tradeChats;
         this.store = store;
         this.trades = trades;
         this.caseConversations = caseConversations;
+        this.caseParticipation = caseParticipation;
     }
 
     @Override
@@ -85,8 +89,7 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
                                               long displayedSeq) {
         return writes.run(context, "conversation.mark_case_read", idempotencyKey,
                 new CaseReadRequest(conversationId, displayedSeq),
-                new CaseReadUseCase(caseConversations));
-
+                new CaseReadUseCase(caseConversations, caseParticipation));
     }
 
     private record StartRequest(long targetAccountId) {
@@ -98,7 +101,7 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
     private record ReadRequest(ConversationKind kind, long conversationId, long displayedSeq) {
     }
 
-    private record CaseReadRequest(long conversationId, long displayedSeq) {
+    record CaseReadRequest(long conversationId, long displayedSeq) {
     }
 
     private static final class StartUseCase implements WriteExecutor.UseCase<StartRequest, StartRequest> {
@@ -270,11 +273,13 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
         return new RealtimeEventSources.ConversationRef(RealtimeEventSources.ConversationKind.valueOf(kind.name()), id);
     }
 
-    private static final class CaseReadUseCase implements WriteExecutor.UseCase<CaseReadRequest, CaseReadRequest> {
+    static final class CaseReadUseCase implements WriteExecutor.UseCase<CaseReadRequest, CaseReadRequest> {
         private final CaseConversations cases;
+        private final CaseParticipation participation;
 
-        private CaseReadUseCase(CaseConversations cases) {
+        CaseReadUseCase(CaseConversations cases, CaseParticipation participation) {
             this.cases = cases;
+            this.participation = participation;
         }
 
         @Override
@@ -287,8 +292,11 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
 
         @Override
         public LockPlan prepare(ExecutionContext context, CaseReadRequest request) {
+            long actor = Long.parseLong(context.actorId());
             return new LockPlan(Map.of(), Set.of(
-                    new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION, List.of(request.conversationId()))));
+                    new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION, List.of(request.conversationId())),
+                    new LockPlan.Key(LockPlan.Domain.READ_PROGRESS,
+                            List.of(request.conversationId(), actor))));
         }
 
         @Override
@@ -307,9 +315,14 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
         public WriteResult.Response<?> write(WriteTransaction transaction, CaseReadRequest request,
                                              CaseReadRequest qualification, LockPlan plan) {
             var progress = cases.advanceRead(transaction, request.conversationId(),
-                    Long.parseLong(transaction.context().actorId()), request.displayedSeq());
+                    Long.parseLong(transaction.context().actorId()), request.displayedSeq(), participation);
             var body = ConversationWire.read(new ConversationViews.ReadProgress(progress.lastReadSeq(),
                     progress.unreadCount(), progress.updatedAt()));
+            if (progress.advanced()) {
+                BusinessEventIntents.messageRead(transaction,
+                        realtimeReference(ConversationKind.CASE, request.conversationId()),
+                        progress.lastReadSeq(), "message_read:" + transaction.operationId());
+            }
             return new WriteResult.Response<>(200, body,
                     new ResourceRef("case_conversation", request.conversationId()));
         }

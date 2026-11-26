@@ -160,6 +160,28 @@ public class TradeRepository {
                 .optional();
     }
 
+    /** Read-only review snapshot for a caller that has already authorized the exact case target. */
+    public record ReviewSnapshot(long reviewId, long tradeId, long authorAccountId, String body, int rating,
+                                 String state, Instant createdAt, Instant removedAt) {
+    }
+
+    public Optional<ReviewSnapshot> reviewSnapshot(long reviewId) {
+        return jdbc.sql("""
+                        SELECT id, trade_id, reviewer_id, content, rating, visible, removed_at, created_at
+                          FROM trade_review WHERE id = :review
+                        """)
+                .param("review", reviewId)
+                .query((row, index) -> {
+                    Instant removedAt = instant(row, "removed_at");
+                    String state = removedAt != null ? "removed_by_admin"
+                            : row.getBoolean("visible") ? "published" : "hidden";
+                    return new ReviewSnapshot(row.getLong("id"), row.getLong("trade_id"),
+                            row.getLong("reviewer_id"), row.getString("content"), row.getInt("rating"),
+                            state, instant(row, "created_at"), removedAt);
+                })
+                .optional();
+    }
+
     /**
      * Hides one review and records the moderation facts without touching the rating or body.
      * Returns false when the review was already removed.
@@ -435,6 +457,22 @@ public class TradeRepository {
                 .query((row, index) -> freezeRow(row)).optional();
     }
 
+    /**
+     * Party-level freeze qualification: an unended freeze row on any trade where the account is
+     * the buyer or seller. Freeze rows are ended with the trade, so a terminal trade does not keep
+     * restricting its parties. All freeze sources freeze both parties under BR-33; this query does
+     * not try to map an {@code account_ban} source back to only the banned account.
+     */
+    public boolean hasActivePartyFreeze(long accountId) {
+        return jdbc.sql("""
+                SELECT EXISTS (
+                    SELECT 1 FROM trade t JOIN trade_freeze f ON f.trade_id = t.id
+                    WHERE f.ended_at IS NULL
+                      AND (t.buyer_id = :account OR t.seller_id = :account)
+                )
+                """).param("account", accountId).query(Boolean.class).single();
+    }
+
     public boolean pairFrozen(long firstAccountId, long secondAccountId) {
         return jdbc.sql("""
                 SELECT EXISTS (
@@ -504,6 +542,42 @@ public class TradeRepository {
     public List<TradeModels.History> history(long tradeId, int limit) {
         return histories.findByTradeIdOrderById(tradeId, PageRequest.of(0, limit))
                 .stream().map(TradeHistoryRow::toHistory).toList();
+    }
+
+    /**
+     * Verifies that an immutable trade-owned record belongs to the trade. Unknown source types and
+     * records belonging to another trade are rejected; the caller decides whether the reference is
+     * public enough to project.
+     */
+    public boolean sourceRefBelongsToTrade(long tradeId, String sourceType, long sourceId) {
+        String sql = switch (sourceType) {
+            case "agreement_proposal" ->
+                    "SELECT EXISTS (SELECT 1 FROM agreement_version WHERE id = :source AND trade_id = :trade)";
+            case "agreement_decision" ->
+                    "SELECT EXISTS (SELECT 1 FROM agreement_decision d "
+                            + "JOIN agreement_version a ON a.id = d.agreement_id "
+                            + "WHERE d.id = :source AND a.trade_id = :trade)";
+            case "completion_confirmation" ->
+                    "SELECT EXISTS (SELECT 1 FROM trade_confirmation WHERE id = :source AND trade_id = :trade)";
+            case "cancellation_request" ->
+                    "SELECT EXISTS (SELECT 1 FROM cancellation_proposal WHERE id = :source AND trade_id = :trade)";
+            case "cancellation_decision" ->
+                    "SELECT EXISTS (SELECT 1 FROM cancellation_decision d "
+                            + "JOIN cancellation_proposal c ON c.id = d.cancellation_id "
+                            + "WHERE d.id = :source AND c.trade_id = :trade)";
+            case "dispute_resolution_confirmation" ->
+                    "SELECT EXISTS (SELECT 1 FROM dispute_resolution_confirmation c "
+                            + "JOIN trade_dispute d ON d.id = c.dispute_id "
+                            + "WHERE c.id = :source AND d.trade_id = :trade)";
+            case "trade_transition" ->
+                    "SELECT EXISTS (SELECT 1 FROM trade_state_history WHERE id = :source AND trade_id = :trade)";
+            default -> null;
+        };
+        if (sql == null) {
+            return false;
+        }
+        return jdbc.sql(sql).param("source", sourceId).param("trade", tradeId)
+                .query(Boolean.class).single();
     }
 
     public Instant databaseNow() {

@@ -71,8 +71,14 @@ public final class CaseVocabulary {
     public static final String EVENT_TRADE_FROZEN = "case.trade_frozen";
     public static final String EVENT_TRADE_UNFROZEN = "case.trade_unfrozen";
     public static final String EVENT_TRADE_ADJUSTED = "case.trade_adjusted";
+    public static final String EVENT_CONTENT_REMOVED = "case.content_removed";
+    public static final String EVENT_EVALUATION_REMOVED = "case.evaluation_removed";
 
     public static final String SOURCE_CASE = "case";
+    public static final String SOURCE_MESSAGE = "message";
+    public static final String EVIDENCE_PLATFORM_RECORD = "platform_record";
+    public static final String EVIDENCE_SUBMITTER_ATTACHMENT = "submitter_attachment";
+    public static final List<String> CONVERSATION_KINDS = List.of("chat", "trade", "case");
 
     public static boolean isLifecycle(String caseType) {
         return !PRODUCT_REVIEW.equals(caseType);

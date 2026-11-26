@@ -15,15 +15,17 @@ import org.springframework.stereotype.Service;
 public class ConversationReader {
     private final ChatConversationRepository chats;
     private final TradeConversationRepository trades;
+    private final CaseConversationRepository cases;
     private final ChatMessageRepository chatMessages;
     private final TradeMessageRepository tradeMessages;
     private final CaseMessageRepository caseMessages;
 
     public ConversationReader(ChatConversationRepository chats, TradeConversationRepository trades,
-                              ChatMessageRepository chatMessages, TradeMessageRepository tradeMessages,
-                              CaseMessageRepository caseMessages) {
+                              CaseConversationRepository cases, ChatMessageRepository chatMessages,
+                              TradeMessageRepository tradeMessages, CaseMessageRepository caseMessages) {
         this.chats = chats;
         this.trades = trades;
+        this.cases = cases;
         this.chatMessages = chatMessages;
         this.tradeMessages = tradeMessages;
         this.caseMessages = caseMessages;
@@ -46,6 +48,10 @@ public class ConversationReader {
 
     public Optional<TradeConversation> findTrade(long conversationId) {
         return trades.findById(conversationId);
+    }
+
+    public Optional<CaseConversation> findCase(long conversationId) {
+        return cases.findById(conversationId);
     }
 
     public Optional<ChatMessage> findChatMessage(long conversationId, long messageId) {

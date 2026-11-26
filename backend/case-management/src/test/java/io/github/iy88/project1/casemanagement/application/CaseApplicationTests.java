@@ -26,6 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -42,6 +43,7 @@ class CaseApplicationTests {
     private static final long OTHER_MANAGER = 32L;
     private static final long CASE_ID = 41L;
     private static final long THREAD_ID = 71L;
+    private static final long TRADE_ID = 900L;
     private static final Instant NOW = Instant.parse("2026-11-24T00:00:00Z");
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -199,6 +201,32 @@ class CaseApplicationTests {
     }
 
     @Test
+    void contentRemovalDecisionNotifiesOnlyTheExactAuthor() {
+        var enforcement = mock(CasePorts.Enforcement.class);
+        var outcome = new CaseRecords.EnforcementOutcome("enf-1", "remove_content", "comment", 500L,
+                "product_comment", 500L, "applied", "published", "removed_by_admin", List.of(RELATED), NOW);
+        when(enforcement.plan(any(), anyLong(), anyList())).thenReturn(new LockPlan(Map.of(), Set.of()));
+        when(enforcement.lockCallbacks(any(), anyLong(), anyList())).thenReturn(SubjectPlan.empty());
+        when(enforcement.execute(any(), any(), anyLong(), anyString(), anyString(), anyList(), any()))
+                .thenReturn(List.of(outcome));
+        var harness = harness(claimed(), enforcement);
+        when(harness.store.decideIfClaimed(anyLong(), anyString(), anyString(), anyLong(), any()))
+                .thenAnswer(invocation -> {
+                    harness.facts.set(decide(harness.facts.get()));
+                    return true;
+                });
+
+        var result = harness.application.decide(context(MANAGER), "decide-content", CASE_ID,
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:41"),
+                        List.of(new CaseCommands.Enforcement("remove_content", "comment", 500L, null))));
+
+        assertThat(result.status()).isEqualTo(201);
+        verify(harness.notifications).create(eq(harness.transaction), eq(CaseVocabulary.EVENT_CONTENT_REMOVED),
+                eq("case:41:enf-1:removed"), any(), eq(Set.of(RELATED)), any(), eq(NOW));
+        verify(harness.threads).ensure(harness.transaction, CASE_ID, RELATED);
+    }
+
+    @Test
     void appealRevocationUsesTheExecutionPortAndLiftsTheRecordedEnforcement() {
         var recorded = new CaseRecords.Enforcement("enf-1", CASE_ID, "freeze_trade", "trade", 900L, "case:41",
                 MANAGER, NOW, "trade", 900L, "applied", "active", "frozen", List.of(RELATED), null, null, NOW, null);
@@ -229,7 +257,7 @@ class CaseApplicationTests {
             }
         };
         var harness = harness(decided(), reversing);
-        when(harness.store.enforcements(CASE_ID)).thenReturn(List.of(recorded));
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recorded));
         when(harness.store.appealOf(CASE_ID, RELATED)).thenReturn(Optional.of(new CaseRecords.Action(102,
                 CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
                 RELATED, null, null, null, null, null)));
@@ -239,7 +267,7 @@ class CaseApplicationTests {
 
         var resolved = harness.application.postMessage(context(MANAGER), "revoke-1", CASE_ID,
                 new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "撤销处置", null, 102L,
-                        CaseVocabulary.RESOLUTION_REVOKE, "依据"));
+                        CaseVocabulary.RESOLUTION_REVOKE, "依据", "enf-1"));
         assertThat(resolved.status()).isEqualTo(201);
         verify(harness.store).markEnforcementLifted(eq(CASE_ID), eq("enf-1"), eq(MANAGER), eq("依据"), eq(NOW));
         verify(harness.store, org.mockito.Mockito.times(1)).addEnforcement(any());
@@ -248,9 +276,9 @@ class CaseApplicationTests {
     @Test
     void appealRevocationWithoutAnExecutionPortFailsClosed() {
         var harness = harness(decided());
-        when(harness.store.enforcements(CASE_ID)).thenReturn(List.of(new CaseRecords.Enforcement("enf-1",
-                CASE_ID, "freeze_trade", "trade", 900L, "case:41", MANAGER, NOW, "trade", 900L, "applied",
-                "active", "frozen", List.of(RELATED), null, null, NOW, null)));
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(new CaseRecords.Enforcement(
+                "enf-1", CASE_ID, "freeze_trade", "trade", 900L, "case:41", MANAGER, NOW, "trade", 900L,
+                "applied", "active", "frozen", List.of(RELATED), null, null, NOW, null)));
         when(harness.store.appealOf(CASE_ID, RELATED)).thenReturn(Optional.of(new CaseRecords.Action(102,
                 CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
                 RELATED, null, null, null, null, null)));
@@ -259,9 +287,287 @@ class CaseApplicationTests {
                 RELATED, null, null, null, null, null)));
         assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "revoke-2", CASE_ID,
                 new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "撤销处置", null, 102L,
-                        CaseVocabulary.RESOLUTION_REVOKE, "依据")))
+                        CaseVocabulary.RESOLUTION_REVOKE, "依据", "enf-1")))
                 .isInstanceOfSatisfying(BusinessError.class,
                         error -> assertThat(error.code()).isEqualTo("DEPENDENCY_UNAVAILABLE"));
+    }
+
+    @Test
+    void revokeRequiresTheExplicitOriginalEnforcementSelection() {
+        var harness = harness(decided());
+        stubAppeal(harness);
+
+        assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "revoke-no-id", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "撤销处置", null, 102L,
+                        CaseVocabulary.RESOLUTION_REVOKE, "依据")))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("INPUT_INVALID"));
+        verify(harness.store, never()).markEnforcementLifted(anyLong(), anyString(), anyLong(), anyString(), any());
+    }
+
+    @Test
+    void selectedOriginalMustBelongToTheAppellantAndStillBeActive() {
+        var recorded = recordedEnforcement();
+        var harness = harness(decided(), adjusting());
+        stubAppeal(harness);
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(new CaseRecords.Enforcement(
+                "enf-1", CASE_ID, "restrict_account", "account", RELATED, "case:41", MANAGER, NOW,
+                "account_restriction", RELATED, "applied", "active", "restricted", List.of(99L), null, null,
+                NOW, null)));
+
+        assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "revoke-other", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "撤销处置", null, 102L,
+                        CaseVocabulary.RESOLUTION_REVOKE, "依据", "enf-1")))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recorded));
+        when(harness.store.lift(CASE_ID, "enf-1")).thenReturn(Optional.of(new CaseRecords.Lift(NOW, MANAGER)));
+        assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "revoke-lifted", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "撤销处置", null, 102L,
+                        CaseVocabulary.RESOLUTION_REVOKE, "依据", "enf-1")))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("STATE_CONFLICT"));
+    }
+
+    @Test
+    void revokeOnlyLiftsTheSelectedOriginalAndLeavesOtherEnforcementsActive() {
+        var harness = harness(decided(), adjusting());
+        stubAppeal(harness);
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recordedEnforcement()));
+        when(harness.store.enforcement(CASE_ID, "enf-2")).thenReturn(Optional.of(new CaseRecords.Enforcement(
+                "enf-2", CASE_ID, "withdraw_public_access", "product", 500L, "case:41", MANAGER, NOW,
+                "product", 500L, "applied", "public", "restricted", List.of(RELATED), null, null, NOW, null)));
+
+        var result = harness.application.postMessage(context(MANAGER), "revoke-selected", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "只撤销冻结", null, 102L,
+                        CaseVocabulary.RESOLUTION_REVOKE, "依据", "enf-1"));
+
+        assertThat(result.status()).isEqualTo(201);
+        verify(harness.store).markEnforcementLifted(eq(CASE_ID), eq("enf-1"), eq(MANAGER), eq("依据"), eq(NOW));
+        verify(harness.store, never()).markEnforcementLifted(eq(CASE_ID), eq("enf-2"), anyLong(), anyString(), any());
+        verify(harness.store, org.mockito.Mockito.times(1)).addEnforcement(any());
+    }
+
+    @Test
+    void selectedOriginalFromAnotherCaseIsHiddenAndNeverReversed() {
+        var enforcement = mock(CasePorts.Enforcement.class);
+        var harness = harness(decided(), enforcement);
+        stubAppeal(harness);
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(new CaseRecords.Enforcement(
+                "enf-1", CASE_ID + 1, "freeze_trade", "trade", 900L, "case:42", MANAGER, NOW,
+                "trade_transition", 55L, "applied", "active", "frozen", List.of(RELATED), null, null, NOW, null)));
+
+        assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "revoke-cross-case", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "撤销处置", null, 102L,
+                        CaseVocabulary.RESOLUTION_REVOKE, "依据", "enf-1")))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+        verify(enforcement, never()).reverse(any(), any(), anyLong(), any(), anyString(), anyString(), anyString(),
+                any());
+        verify(harness.store, never()).markEnforcementLifted(anyLong(), anyString(), anyLong(), anyString(), any());
+        verify(harness.store, never()).addAction(any());
+        verify(harness.threads, never()).append(any(), anyLong(), anyLong(), anyString(), anyString(), anyLong(),
+                anyString());
+    }
+
+    @Test
+    void failedAdjustmentKeepsTheOriginalAndDoesNotWriteTheManagerReply() {
+        var enforcement = mock(CasePorts.Enforcement.class);
+        when(enforcement.plan(any(), eq(CASE_ID), any())).thenReturn(casePlan());
+        when(enforcement.lockCallbacks(any(), eq(CASE_ID), any())).thenReturn(SubjectPlan.empty());
+        when(enforcement.reverseLockCallbacks(any(), eq(CASE_ID), any(), anyString()))
+                .thenReturn(SubjectPlan.empty());
+        when(enforcement.reverse(any(), any(), eq(CASE_ID), any(), anyString(), anyString(), anyString(), any()))
+                .thenReturn(List.of(new CaseRecords.EnforcementOutcome("enf-1-reversed", "lift_trade_freeze",
+                        "trade", 900L, "trade_transition", 55L, "applied", "frozen", "active", List.of(), NOW)));
+        when(enforcement.execute(any(), any(), eq(CASE_ID), anyString(), anyString(), any(), any()))
+                .thenThrow(new BusinessError("TRADE_TERMINAL", 409, "已结束交易保持终态"));
+        var harness = harness(decided(), enforcement);
+        stubAppeal(harness);
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(new CaseRecords.Enforcement(
+                "enf-1", CASE_ID, "freeze_trade", "trade", 900L, "case:41", MANAGER, NOW,
+                "trade_transition", 55L, "applied", "frozen", "frozen", List.of(RELATED), null, null, NOW, null)));
+
+        assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "adjust-fails", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "调整处置", null, 102L,
+                        CaseVocabulary.RESOLUTION_ADJUST, "依据", "enf-1",
+                        List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", 900L, "in_progress")))))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TRADE_TERMINAL"));
+
+        // The compensating row is written through the same transaction. Its absence from the final
+        // state is proven by the rollback integration case; here the original must stay active and
+        // no reply/lift fact may be committed.
+        verify(enforcement).reverse(any(), any(), eq(CASE_ID), any(), anyString(), anyString(), anyString(), any());
+        verify(enforcement).execute(any(), any(), eq(CASE_ID), anyString(), anyString(), any(), any());
+        verify(harness.store, never()).markEnforcementLifted(anyLong(), anyString(), anyLong(), anyString(), any());
+        verify(harness.store, never()).addAction(any());
+        verify(harness.threads, never()).append(any(), anyLong(), anyLong(), anyString(), anyString(), anyLong(),
+                anyString());
+        verify(harness.notifications, never()).create(any(), anyString(), anyString(), any(), any(), any(), any());
+    }
+
+    @Test
+    void upholdRejectsARevocationSelection() {
+        var harness = harness(decided());
+        stubAppeal(harness);
+        assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "uphold-fields", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "维持原决定", null, 102L,
+                        CaseVocabulary.RESOLUTION_UPHOLD, "依据", "enf-1")))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("INPUT_INVALID"));
+    }
+
+    @Test
+    void adjustReversesThenAppliesTheConcreteReplacementInOneTransaction() {
+        var recorded = new CaseRecords.Enforcement("enf-1", CASE_ID, "freeze_trade", "trade", 900L, "case:41",
+                MANAGER, NOW, "trade_transition", 55L, "applied", "frozen", "frozen", List.of(RELATED), null,
+                null, NOW, null);
+        var harness = harness(decided(), adjusting());
+        stubAppeal(harness);
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recorded));
+
+        var result = harness.application.postMessage(context(MANAGER), "adjust-1", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "调整处置", null, 102L,
+                        CaseVocabulary.RESOLUTION_ADJUST, "依据", "enf-1",
+                        List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", 900L, "terminated"))));
+
+        assertThat(result.status()).isEqualTo(201);
+        verify(harness.store).markEnforcementLifted(eq(CASE_ID), eq("enf-1"), eq(MANAGER), eq("依据"), eq(NOW));
+        verify(harness.store, org.mockito.Mockito.times(2)).addEnforcement(any());
+        verify(harness.store, org.mockito.Mockito.times(2)).addAction(any());
+    }
+
+    @Test
+    void adjustRequiresAReplacementAndRejectsTerminalOriginals() {
+        var harness = harness(decided(), adjusting());
+        stubAppeal(harness);
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recordedEnforcement()));
+
+        assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "adjust-empty", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "调整处置", null, 102L,
+                        CaseVocabulary.RESOLUTION_ADJUST, "依据", "enf-1")))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("INPUT_INVALID"));
+
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(new CaseRecords.Enforcement(
+                "enf-1", CASE_ID, "adjust_trade_status", "trade", 900L, "case:41", MANAGER, NOW,
+                "trade_transition", 55L, "applied", "completed", "completed", List.of(RELATED), null, null,
+                NOW, null)));
+        assertThatThrownBy(() -> harness.application.postMessage(context(MANAGER), "adjust-terminal", CASE_ID,
+                new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_MANAGER_REPLY, "调整处置", null, 102L,
+                        CaseVocabulary.RESOLUTION_ADJUST, "依据", "enf-1",
+                        List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", 900L, "terminated")))))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TRADE_TERMINAL"));
+    }
+
+    private static void stubAppeal(Harness harness) {
+        when(harness.store.appealOf(CASE_ID, RELATED)).thenReturn(Optional.of(new CaseRecords.Action(102,
+                CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
+                RELATED, null, null, null, null, null)));
+        when(harness.store.action(CASE_ID, 102L)).thenReturn(Optional.of(new CaseRecords.Action(102,
+                CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
+                RELATED, null, null, null, null, null)));
+    }
+
+    private static CasePorts.Enforcement adjusting() {
+        return new CasePorts.Enforcement() {
+            @Override
+            public LockPlan plan(ExecutionContext context, long caseId,
+                                 List<CaseRecords.EnforcementInstruction> instructions) {
+                return new LockPlan(Map.of(), Set.of());
+            }
+
+            @Override
+            public List<CaseRecords.EnforcementOutcome> execute(WriteTransaction transaction,
+                                                                ExecutionContext context, long caseId,
+                                                                String reason, String basisRef,
+                                                                List<CaseRecords.EnforcementInstruction> instructions,
+                                                                Instant occurredAt) {
+                return instructions.stream().map(item -> new CaseRecords.EnforcementOutcome(
+                        item.enforcementId(), item.action(), item.targetType(), item.targetId(),
+                        "trade_transition", 56L, "applied", "frozen", "completed", List.of(RELATED),
+                        occurredAt)).toList();
+            }
+
+            @Override
+            public List<CaseRecords.EnforcementOutcome> reverse(WriteTransaction transaction,
+                                                                ExecutionContext context, long caseId,
+                                                                CaseRecords.Enforcement enforcement,
+                                                                String resolution, String basisRef, String reason,
+                                                                Instant occurredAt) {
+                return List.of(new CaseRecords.EnforcementOutcome(enforcement.enforcementId() + "-lift",
+                        "lift_trade_freeze", "trade", enforcement.targetId(), "trade_transition", 55L,
+                        "applied", "frozen", "frozen", List.of(RELATED), occurredAt));
+            }
+        };
+    }
+
+    // ------------------------------------------------------------------ platform record evidence
+
+    @Test
+    void referencesTheReportedMessageWithoutDuplicatingOrReturningItsBody() {
+        var harness = harness(messageCase());
+        var reference = new CaseCommands.EvidenceReference("chat", 77L, 55L);
+        when(harness.targets.requireReportedMessage(any(), eq("chat"), eq(77L), eq(55L)))
+                .thenReturn(new CaseRecords.ReferencedMessage(55L, "chat", 77L, "account", RELATED,
+                        "private message", NOW));
+        when(harness.store.platformEvidence(CASE_ID, "message", 55L, "chat:77"))
+                .thenReturn(Optional.empty());
+        when(harness.store.addPlatformEvidence(CASE_ID, "message", 55L, "chat:77", MANAGER, NOW))
+                .thenReturn(301L);
+
+        var created = harness.application.referenceEvidence(context(MANAGER), "evidence-1", CASE_ID, reference);
+
+        assertThat(created.status()).isEqualTo(201);
+        assertThat(created.data().get("evidence_id").asString()).isEqualTo("301");
+        assertThat(created.data().get("evidence_kind").asString()).isEqualTo("platform_record");
+        assertThat(created.data().get("source_ref").get("resource_type").asString()).isEqualTo("message");
+        assertThat(created.data().get("source_ref").get("resource_id").asString()).isEqualTo("55");
+        assertThat(created.data().has("body")).isFalse();
+        assertThat(created.data().has("message")).isFalse();
+        verify(harness.store).addPlatformEvidence(CASE_ID, "message", 55L, "chat:77", MANAGER, NOW);
+
+        when(harness.store.platformEvidence(CASE_ID, "message", 55L, "chat:77"))
+                .thenReturn(Optional.of(new CaseRecords.Evidence(301L, CASE_ID,
+                        CaseVocabulary.EVIDENCE_PLATFORM_RECORD, null, null, "message", 55L,
+                        "chat:77", MANAGER, NOW)));
+        var replay = harness.application.referenceEvidence(context(MANAGER), "evidence-2", CASE_ID, reference);
+        assertThat(replay.status()).isEqualTo(200);
+        assertThat(replay.data().get("reused").asBoolean()).isTrue();
+        assertThat(replay.data().get("evidence_id").asString()).isEqualTo("301");
+        verify(harness.store, org.mockito.Mockito.times(1))
+                .addPlatformEvidence(CASE_ID, "message", 55L, "chat:77", MANAGER, NOW);
+    }
+
+    @Test
+    void evidenceReferenceHidesOtherClaimantsAndRejectsOutOfScopeMessages() {
+        var command = new CaseCommands.EvidenceReference("chat", 77L, 55L);
+        var unclaimed = harness(claimedBy(OTHER_MANAGER));
+        assertThatThrownBy(() -> unclaimed.application.referenceEvidence(context(MANAGER), "evidence-1",
+                CASE_ID, command))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+        verify(unclaimed.store, never()).addPlatformEvidence(anyLong(), anyString(), anyLong(), anyString(),
+                anyLong(), any());
+
+        var denied = harness(claimedBy(REPORTER));
+        org.mockito.Mockito.doThrow(new BusinessError("ACTION_NOT_ALLOWED", 403, "无管理资格"))
+                .when(denied.managers).requireManagerForWrite(any());
+        assertThatThrownBy(() -> denied.application.referenceEvidence(context(REPORTER), "evidence-role",
+                CASE_ID, command))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+
+        var wrongScope = harness(messageCase());
+        when(wrongScope.targets.requireReportedMessage(any(), anyString(), anyLong(), anyLong()))
+                .thenThrow(new BusinessError("EVIDENCE_OUT_OF_SCOPE", 422, "超出范围"));
+        assertThatThrownBy(() -> wrongScope.application.referenceEvidence(context(MANAGER), "evidence-2",
+                CASE_ID, command))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("EVIDENCE_OUT_OF_SCOPE"));
     }
 
     // ------------------------------------------------------------------ lift
@@ -314,6 +620,78 @@ class CaseApplicationTests {
         assertThatThrownBy(() -> harness.application.lift(context(MANAGER), "lift-2", CASE_ID, "enf-1", "解除"))
                 .isInstanceOfSatisfying(BusinessError.class,
                         error -> assertThat(error.code()).isEqualTo("DEPENDENCY_UNAVAILABLE"));
+    }
+
+    @Test
+    void restoreDecisionUsesAdjustInProgressAndReturnsStructuredScopeWithoutADuplicateNotice() {
+        var enforcement = mock(CasePorts.Enforcement.class);
+        var decidedAt = NOW.plusSeconds(42);
+        when(enforcement.plan(any(), eq(CASE_ID), any())).thenReturn(casePlan());
+        when(enforcement.lockCallbacks(any(), eq(CASE_ID), any())).thenReturn(SubjectPlan.empty());
+        var outcome = new CaseRecords.EnforcementOutcome("enf-1", "adjust_trade_status", "trade", TRADE_ID,
+                "trade_transition", 55L, "applied",
+                "status=abnormal,phase=awaiting_completion,frozen=true",
+                "status=in_progress,phase=awaiting_completion,frozen=true",
+                List.of(RELATED, REPORTER), NOW);
+        when(enforcement.execute(any(), any(), eq(CASE_ID), anyString(), anyString(), any(), any()))
+                .thenReturn(List.of(outcome));
+        var harness = harness(claimedTrade(), enforcement);
+        when(harness.store.decideIfClaimed(anyLong(), anyString(), anyString(), anyLong(), any()))
+                .thenAnswer(invocation -> {
+                    harness.facts().set(decide(harness.facts().get(), decidedAt));
+                    return true;
+                });
+        when(harness.store.enforcements(CASE_ID)).thenReturn(List.of(new CaseRecords.Enforcement("enf-1",
+                CASE_ID, "adjust_trade_status", "trade", TRADE_ID, "case:41", MANAGER, NOW,
+                "trade_transition", 55L, "applied",
+                "status=abnormal,phase=awaiting_completion,frozen=true",
+                "status=in_progress,phase=awaiting_completion,frozen=true",
+                List.of(RELATED, REPORTER), null, null, NOW, null)));
+        when(harness.store.appealEligibility(anyLong(), anyLong())).thenReturn(Optional.empty());
+
+        var result = harness.application.decide(context(MANAGER), "restore-1", CASE_ID,
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                        List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID,
+                                "in_progress"))));
+
+        assertThat(result.status()).isEqualTo(201);
+        assertThat(result.data().get("decided_at").asString()).isEqualTo(decidedAt.toString());
+        var item = result.data().get("enforcements").get(0);
+        assertThat(item.get("result_ref").asString()).isEqualTo("trade_transition:55");
+        var scope = item.get("affected_scope");
+        assertThat(scope.isArray()).isTrue();
+        var scopeRefs = new java.util.ArrayList<String>();
+        for (JsonNode ref : scope) {
+            scopeRefs.add(ref.get("resource_type").asString() + ":" + ref.get("resource_id").asString());
+        }
+        assertThat(scopeRefs).containsExactly("trade:900", "account:21", "account:11");
+        // publishRestore already sends one trade.restored notice per participant.
+        verify(harness.notifications, never()).create(any(), anyString(), anyString(), any(), any(), any(),
+                any());
+    }
+
+    @Test
+    void restoreDecisionRequiresTheClaimingManagerAndTheExactCaseTrade() {
+        var enforcement = mock(CasePorts.Enforcement.class);
+        when(enforcement.plan(any(), eq(CASE_ID), any())).thenReturn(casePlan());
+        when(enforcement.lockCallbacks(any(), eq(CASE_ID), any())).thenReturn(SubjectPlan.empty());
+        var otherManager = harness(claimedTrade(OTHER_MANAGER), enforcement);
+
+        assertThatThrownBy(() -> otherManager.application.decide(context(MANAGER), "restore-2", CASE_ID,
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                        List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID,
+                                "in_progress")))))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("NOT_CASE_MANAGER"));
+
+        var harness = harness(claimedTrade(), enforcement);
+        assertThatThrownBy(() -> harness.application.decide(context(MANAGER), "restore-3", CASE_ID,
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                        List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID + 1,
+                                "in_progress")))))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TARGET_STATE_CONFLICT"));
+        verify(enforcement, never()).execute(any(), any(), anyLong(), anyString(), anyString(), any(), any());
     }
 
     private static CaseRecords.Enforcement recordedEnforcement() {
@@ -408,6 +786,12 @@ class CaseApplicationTests {
                 null, null, null, NOW, NOW);
     }
 
+    private static CaseRecords.Facts messageCase() {
+        return new CaseRecords.Facts(CASE_ID, CaseVocabulary.REPORT, "message", 55L, "chat", 77L,
+                REPORTER, "虚假信息", MANAGER, NOW, CaseVocabulary.CLAIMED, null, null, null, null, null,
+                null, null, null, NOW, NOW);
+    }
+
     private static CaseRecords.Facts claimed() {
         return claimedBy(MANAGER);
     }
@@ -416,6 +800,21 @@ class CaseApplicationTests {
         return new CaseRecords.Facts(CASE_ID, CaseVocabulary.REPORT, "account", RELATED, null, null,
                 REPORTER, "虚假信息", manager, NOW, CaseVocabulary.CLAIMED, null, null, null, null, null,
                 null, null, null, NOW, NOW);
+    }
+
+    private static CaseRecords.Facts claimedTrade() {
+        return claimedTrade(MANAGER);
+    }
+
+    private static CaseRecords.Facts claimedTrade(long manager) {
+        return new CaseRecords.Facts(CASE_ID, CaseVocabulary.EXCEPTION, "trade", TRADE_ID, null, null,
+                REPORTER, "单方确认超时", manager, NOW, CaseVocabulary.CLAIMED, null, null, null, null, null,
+                null, null, null, NOW, NOW);
+    }
+
+    private static LockPlan casePlan() {
+        return new LockPlan(Map.of(MANAGER, LockPlan.AccountMode.SHARED),
+                Set.of(new LockPlan.Key(LockPlan.Domain.CASE, List.of(CASE_ID))));
     }
 
     private static CaseRecords.Facts decided() {
@@ -431,10 +830,14 @@ class CaseApplicationTests {
     }
 
     private static CaseRecords.Facts decide(CaseRecords.Facts facts) {
+        return decide(facts, NOW);
+    }
+
+    private static CaseRecords.Facts decide(CaseRecords.Facts facts, Instant decidedAt) {
         return new CaseRecords.Facts(facts.caseId(), facts.caseType(), facts.targetType(), facts.targetId(),
                 facts.conversationKind(), facts.conversationId(), facts.reporterAccountId(),
                 facts.reportedReason(), facts.claimedManagerId(), facts.claimedAt(), CaseVocabulary.DECIDED,
-                CaseVocabulary.VIOLATION, "认定违规", facts.claimedManagerId(), NOW, null, null, null,
+                CaseVocabulary.VIOLATION, "认定违规", facts.claimedManagerId(), decidedAt, null, null, null,
                 null, facts.createdAt(), NOW);
     }
 

@@ -10,6 +10,8 @@ import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import io.github.iy88.project1.api.account.AccountCookies;
 import io.github.iy88.project1.category.application.CategoryService;
+import io.github.iy88.project1.core.AuditContext;
+import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.OssFileObjects;
 import io.github.iy88.project1.storage.content.FileContentVerifier.VerifiedContent;
@@ -122,9 +124,8 @@ class S2ProductionReviewIT {
         var buyer = login("buyer", false);
         var manager = login("manager", true);
         var secondManager = login("other", true);
-        var categories = app.getBean(CategoryService.class);
-        String firstCategory = categories.create(manager.account().id(), "Lit " + RUN).id();
-        String secondCategory = categories.create(manager.account().id(), "Course " + RUN).id();
+        String firstCategory = createCategory(manager, "Lit " + RUN);
+        String secondCategory = createCategory(manager, "Course " + RUN);
         CATEGORY_IDS.addAll(List.of(Long.parseLong(firstCategory), Long.parseLong(secondCategory)));
 
         long image = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
@@ -132,8 +133,14 @@ class S2ProductionReviewIT {
                 {"title":"Book %s", "description":"First edition", "price_cents":1500,
                  "category_ids":["%s","%s"], "image_file_ids":["%s"]}
                 """.formatted(RUN, firstCategory, secondCategory, image);
-        var product = write(seller, "POST", "/products", createBody, key(), 201);
+        String createKey = key();
+        var product = write(seller, "POST", "/products", createBody, createKey, 201);
+        assertThat(write(seller, "POST", "/products", createBody, createKey, 201)).isEqualTo(product);
         String productId = text(product, "id");
+        assertThat(db.sql("""
+                        select count(*) from audit_record
+                        where action = 'product.submitted' and target_type = 'product' and target_id = ?
+                        """).param(Long.parseLong(productId)).query(Long.class).single()).isEqualTo(1);
         var pending = product.path("pending_review");
         String caseId = text(pending, "case_id");
         String auditId = text(pending, "audit_id");
@@ -253,10 +260,26 @@ class S2ProductionReviewIT {
     }
 
     @Test
+    void categoryCreateReplayWritesExactlyOneBusinessAudit() throws Exception {
+        var manager = login("category-audit", true);
+        String body = "{\"name\":\"Audit " + RUN + "\"}";
+        String idempotencyKey = key();
+
+        var created = write(manager, "POST", "/admin/categories", body, idempotencyKey, 201);
+        assertThat(write(manager, "POST", "/admin/categories", body, idempotencyKey, 201)).isEqualTo(created);
+        String categoryId = text(created, "id");
+        CATEGORY_IDS.add(Long.parseLong(categoryId));
+        assertThat(db.sql("""
+                        select count(*) from audit_record
+                        where action = 'category.created' and target_type = 'category' and target_id = ?
+                        """).param(Long.parseLong(categoryId)).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
     void withdrawingAnUnclaimedReviewAllowsImageEditingAndResubmission() throws Exception {
         var seller = login("withdrawn-seller", false);
         var manager = login("withdrawn-manager", true);
-        String category = app.getBean(CategoryService.class).create(manager.account().id(), "Draft " + RUN).id();
+        String category = createCategory(manager, "Draft " + RUN);
         CATEGORY_IDS.add(Long.parseLong(category));
         long firstImage = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
         long nextImage = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
@@ -363,8 +386,14 @@ class S2ProductionReviewIT {
                 .param(accountId).query(Long.class).list();
     }
 
-    private static SessionService.Issued login(String name, boolean manager) {
-        var email = name + "-" + RUN + "@s2-review.example";
+    private static String createCategory(SessionService.Issued manager, String name) {
+        var auditContext = new AuditContext(new ExecutionContext(UUID.randomUUID(),
+                ExecutionContext.ActorKind.ACCOUNT, Long.toString(manager.account().id()), UUID.randomUUID(), null,
+                1L, "s2-review-it"), UUID.randomUUID());
+        return app.getBean(CategoryService.class).create(manager.account().id(), name, auditContext).id();
+    }
+
+    private static SessionService.Issued login(String name, boolean manager) {        var email = name + "-" + RUN + "@s2-review.example";
         var digest = app.getBean(PasswordHasher.class).hash(PASSWORD);
         var account = app.getBean(AccountRepository.class).save(new Account(email, name, digest, Instant.now()));
         ACCOUNT_IDS.add(account.id());
