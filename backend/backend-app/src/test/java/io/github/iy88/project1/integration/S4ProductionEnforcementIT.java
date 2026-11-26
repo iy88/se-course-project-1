@@ -343,6 +343,47 @@ class S4ProductionEnforcementIT {
     }
 
     @Test
+    void relistingAfterCancellationCreatesAnIndependentTradeConversation() throws Exception {
+        var seller = login("relist-seller", "user");
+        var buyer = login("relist-buyer", "user");
+        var manager = login("relist-manager", "manager");
+        long product = publicProduct(seller);
+        db.sql("""
+                insert into product_audit (product_id, sequence_no, status, decided_by_admin_id, decided_at)
+                values (?, 1, 'passed', ?, now())
+                """).param(product).param(manager.account().id()).update();
+
+        String path = "/products/" + product;
+        String purchase = "{\"expected_product_version\":1}";
+        long oldTrade = post(buyer, path + "/purchase-requests", purchase, key(), 201).path("id").asLong();
+        String tradePath = "/trades/" + oldTrade;
+        var accepted = post(seller, tradePath + "/accept", "{\"expected_version\":1}", key(), 200);
+        var proposal = post(seller, tradePath + "/cancellation-proposals", """
+                {"expected_version":%d,"reason":"agreed to cancel"}
+                """.formatted(accepted.path("version").asInt()), key(), 201);
+        var terminated = post(buyer, tradePath + "/cancellation-proposals/"
+                + proposal.at("/proposal/id").asString() + "/decisions", """
+                {"expected_version":%d,"decision":"accept"}
+                """.formatted(proposal.at("/trade/version").asInt()), key(), 200);
+
+        assertThat(terminated.at("/trade/status").asString()).isEqualTo("terminated");
+        var delisted = get(seller, path, 200);
+        assertThat(delisted.path("lifecycle_state").asString()).isEqualTo("off_shelf");
+        var relisted = post(seller, path + "/on-shelf", """
+                {"expected_version":%d}
+                """.formatted(delisted.path("content_version").asInt()), key(), 200);
+        assertThat(relisted.path("lifecycle_state").asString()).isEqualTo("public");
+        long newTrade = post(buyer, path + "/purchase-requests", """
+                {"expected_product_version":%d}
+                """.formatted(relisted.path("content_version").asInt()), key(), 201).path("id").asLong();
+        assertThat(newTrade).isPositive().isNotEqualTo(oldTrade);
+        assertThat(db.sql("""
+                select archived_at is not null from trade_conversation
+                where trade_id in (?, ?) order by trade_id
+                """).param(oldTrade).param(newTrade).query(Boolean.class).list()).containsExactly(true, false);
+    }
+
+    @Test
     void passwordResetUsesTheSamePublicBudgetForKnownAndUnknownAddresses() throws Exception {
         var account = login("reset-known", "user");
         String knownEmail = account.account().email();
