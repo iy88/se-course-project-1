@@ -257,6 +257,10 @@ public class ProductService {
                                             AuditContext auditContext) {
         String reason = correctionReason(command.reason());
         String basisType = command.basisType() == null ? "" : command.basisType().trim();
+        // TC-PRD-035 treats a missing basis as an authority failure, not a malformed request.
+        if (basisType.isEmpty() && command.basisId() <= 0) {
+            throw new BusinessError("ACTION_NOT_ALLOWED", 403, "需要认领事项作为纠正依据");
+        }
         if (!"case".equals(basisType) || command.basisId() <= 0) {
             throw new BusinessError("INPUT_INVALID", 422, "纠正依据无效");
         }
