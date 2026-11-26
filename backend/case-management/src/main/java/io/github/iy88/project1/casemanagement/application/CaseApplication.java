@@ -645,8 +645,8 @@ public class CaseApplication {
             if (now.isAfter(eligibility.appealDeadlineAt())) {
                 throw new BusinessError("CASE_APPEAL_WINDOW_ENDED", 409, "申辩期已结束");
             }
-            if (store.appealOf(facts.caseId(), actor).isPresent()) {
-                throw new BusinessError("STATE_CONFLICT", 409, "申辩已提交");
+            if (store.hasPendingAppeal(facts.caseId(), actor)) {
+                throw new BusinessError("STATE_CONFLICT", 409, "上一条申辩仍待处理");
             }
             long conversationId = requireThread(facts.caseId(), actor, message.conversationId());
             var appended = threads.append(transaction, facts.caseId(), actor, CaseVocabulary.KIND_APPEAL,

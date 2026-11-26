@@ -505,7 +505,7 @@ public class CaseQueries {
             var eligibility = store.appealEligibility(facts.caseId(), actor);
             if (eligibility.isPresent() && !facts.archived() && facts.decided()
                     && !now.isAfter(eligibility.get().appealDeadlineAt())
-                    && store.appealOf(facts.caseId(), actor).isEmpty()) {
+                    && !store.hasPendingAppeal(facts.caseId(), actor)) {
                 actions.add(CaseVocabulary.SUBMIT_APPEAL);
             }
         }

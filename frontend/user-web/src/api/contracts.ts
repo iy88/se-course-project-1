@@ -45,6 +45,7 @@ export interface AccountProfile {
   display_name: string;
   email: string;
   roles: AccountRole[];
+  write_restricted?: boolean;
   avatar_url?: string | null;
 }
 

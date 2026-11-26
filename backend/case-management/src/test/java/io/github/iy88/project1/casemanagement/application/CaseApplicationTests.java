@@ -132,9 +132,7 @@ class CaseApplicationTests {
                 new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_APPEAL, "请求复核", null, null, null, null));
         assertThat(submitted.status()).isEqualTo(201);
 
-        when(harness.store.appealOf(CASE_ID, RELATED)).thenReturn(Optional.of(new CaseRecords.Action(102,
-                CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
-                RELATED, null, null, null, null, null)));
+        when(harness.store.hasPendingAppeal(CASE_ID, RELATED)).thenReturn(true);
         when(harness.store.action(CASE_ID, 102L)).thenReturn(Optional.of(new CaseRecords.Action(102,
                 CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
                 RELATED, null, null, null, null, null)));

@@ -437,12 +437,14 @@ class S4ProductionEnforcementIT {
         var pending = post(buyer, "/products/" + product + "/purchase-requests",
                 "{\"expected_product_version\":1}", key(), 201).path("id").asLong();
         long initialBanned = bannedAccounts(manager);
+        assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean(true)).isFalse();
         String ban = """
                 {"action":"restrict_account","target_type":"account","target_id":"%d"}
                 """.formatted(sellerId);
 
         long firstCase = claimedCase(buyer, manager, "account", sellerId);
         var first = post(manager, decisionPath(firstCase), decision(ban), key(), 201);
+        assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean()).isTrue();
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         assertThat(get(seller, "/account/overview", 200).at("/reports/received").asLong()).isEqualTo(1);
         var report = get(seller, "/account/resources?kind=report&direction=received", 200).at("/items/0");
@@ -464,11 +466,13 @@ class S4ProductionEnforcementIT {
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         assertThat(activeSources(active)).hasSize(2);
         lift(manager, firstCase, first);
+        assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean()).isTrue();
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         get(buyer, "/products/" + product, 404);
         assertThat(activeSources(active)).hasSize(1);
 
         lift(otherManager, secondCase, second);
+        assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean(true)).isFalse();
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned);
         assertThat(activeSources(active)).isEmpty();
         var publicProduct = get(buyer, "/products/" + product, 200);

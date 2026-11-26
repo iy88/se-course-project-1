@@ -341,8 +341,14 @@ public class CaseLifecycleStore {
 
     public Optional<CaseRecords.Action> appealOf(long caseId, long accountId) {
         return jdbc.sql(ACTIONS + " where case_id = ? and action_kind = 'appeal' and actor_account_id = ?"
-                        + " order by id limit 1")
+                        + " order by id desc limit 1")
                 .param(caseId).param(accountId).query(this::action).optional();
+    }
+
+    public boolean hasPendingAppeal(long caseId, long accountId) {
+        return appealOf(caseId, accountId)
+                .filter(appeal -> !appealResolved(caseId, appeal.actionId()))
+                .isPresent();
     }
 
     public Optional<CaseRecords.Action> latestPendingAppeal(long caseId) {

@@ -1856,7 +1856,10 @@ export interface components {
       appeal_action_id?: string | null;
       /** @enum {string|null} */
       resolution?: "uphold" | "revoke" | "adjust" | null;
+      /** @description Legacy appeal basis text. Supply either this field or basis_refs. */
       basis_ref?: string | null;
+      /** @description Selected case materials or the current appeal. Only valid for a manager's appeal resolution. */
+      basis_refs?: string[];
       /** @description Required for revoke or adjust: the manager-selected original execution from pending_appeals[].original_enforcements. Omit for statement, appeal and uphold. */
       original_enforcement_id?: string | null;
       /** @description Only valid for adjust. Requires a concrete action on the same target as the selected original execution; omit for revoke, uphold, statement and appeal. */

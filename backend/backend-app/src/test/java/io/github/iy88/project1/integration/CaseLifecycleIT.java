@@ -255,6 +255,24 @@ class CaseLifecycleIT {
         assertThat(recordedBasis).extracting(JsonNode::asString).containsExactlyElementsOf(basisRefs);
         assertThat(queries.detail(context(manager), caseId).path("pending_appeals")).isEmpty();
 
+        var repeat = new CaseCommands.Message(threadId, CaseVocabulary.KIND_APPEAL,
+                "补充申辩理由", null, null, null, null);
+        assertThat(queries.detail(context(related), caseId).path("available_actions"))
+                .extracting(JsonNode::asString).contains(CaseVocabulary.SUBMIT_APPEAL);
+        var secondAppeal = cases.postMessage(context(related), "appeal-second", caseId, repeat);
+        assertThat(secondAppeal.status()).isEqualTo(201);
+        long secondAppealId = secondAppeal.data().path("case_action_id").asLong();
+        assertThat(secondAppealId).isNotEqualTo(appealActionId);
+        assertThat(queries.detail(context(related), caseId).path("available_actions"))
+                .extracting(JsonNode::asString).doesNotContain(CaseVocabulary.SUBMIT_APPEAL);
+        assertThatThrownBy(() -> cases.postMessage(context(related), "appeal-third", caseId, repeat))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("STATE_CONFLICT"));
+        assertThat(cases.postMessage(context(manager), "resolve-second", caseId,
+                new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "维持原决定", null,
+                        secondAppealId, CaseVocabulary.RESOLUTION_UPHOLD, null, null, List.of(),
+                        List.of("action:" + secondAppealId))).status()).isEqualTo(201);
+
         // A resolved appeal no longer blocks, but the deadline still does.
         assertThatThrownBy(() -> cases.close(context(manager), "close-2", caseId))
                 .isInstanceOfSatisfying(BusinessError.class,
