@@ -1,0 +1,13 @@
+# 测试账号注册 2026-11-26T10:45:34.194Z
+# 密码：测试专用（不记录）；验证码由真实 SMTP 组件投递，本批从测试库读取同一验证码完成注册
+PASS register acceptance-seller@local.test account_id=3 verification=1
+PASS register acceptance-buyer-a@local.test account_id=4 verification=2
+PASS register acceptance-buyer-b@local.test account_id=5 verification=3
+PASS register acceptance-noperm@local.test account_id=6 verification=4
+# 账号角色核对
+1|acceptance-manager-a@local.test|manager
+2|acceptance-manager-b@local.test|manager
+3|acceptance-seller@local.test|user
+4|acceptance-buyer-a@local.test|user
+5|acceptance-buyer-b@local.test|user
+6|acceptance-noperm@local.test|user
