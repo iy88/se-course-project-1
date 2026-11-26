@@ -271,10 +271,10 @@ class ReviewApplicationTests {
     void todoResponseFillsAllLegalKindsAndKeepsTheAuditIdInTheSummary() {
         var harness = harness();
         when(harness.products.todos(any())).thenReturn(new TodoPage(
-                List.of(new TodoItem(CASE_ID, TodoKinds.PRODUCT_REVIEW, NOW, NOW, AUDIT_ID, PRODUCT_ID)),
+                List.of(new TodoItem(CASE_ID, TodoKinds.PRODUCT_REVIEW, NOW, NOW, null, null, null, "商品审核", AUDIT_ID, PRODUCT_ID)),
                 1, Map.of(TodoKinds.PRODUCT_REVIEW, 1L), NOW));
 
-        var body = harness.application.todos(harness.context, "unclaimed", "product_review", 1, 20);
+        var body = harness.application.todos(harness.context, "unclaimed", "product_review", null, 1, 20);
 
         assertThat(body.path("items").get(0).path("summary").path("audit_id").stringValue()).isEqualTo("9");
         assertThat(body.path("counts_by_kind").path("product_review").asLong()).isEqualTo(1);
@@ -286,7 +286,7 @@ class ReviewApplicationTests {
     @Test
     void rejectsAnUnknownTodoKindAndInvalidPagination() {
         var harness = harness();
-        assertThatThrownBy(() -> harness.application.todos(harness.context, "unclaimed", "other", 1, 20))
+        assertThatThrownBy(() -> harness.application.todos(harness.context, "unclaimed", "other", null, 1, 20))
                 .isInstanceOfSatisfying(BusinessError.class,
                         error -> assertThat(error.code()).isEqualTo("INPUT_INVALID"));
         verifyNoInteractions(harness.products);

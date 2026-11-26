@@ -1,6 +1,7 @@
 package io.github.iy88.project1.api.conversation;
 
 import io.github.iy88.project1.conversation.ConversationKind;
+import io.github.iy88.project1.conversation.application.CaseConversations;
 import io.github.iy88.project1.conversation.application.ConversationViews;
 import io.github.iy88.project1.conversation.application.Conversations;
 import io.github.iy88.project1.conversation.application.TradeChats;
@@ -34,14 +35,17 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
     private final TradeChats tradeChats;
     private final ConversationStore store;
     private final TradeParticipation trades;
+    private final CaseConversations caseConversations;
 
     public WriteBackedConversationCommands(WriteExecutor writes, Conversations conversations, TradeChats tradeChats,
-                                           ConversationStore store, TradeParticipation trades) {
+                                           ConversationStore store, TradeParticipation trades,
+                                           CaseConversations caseConversations) {
         this.writes = writes;
         this.conversations = conversations;
         this.tradeChats = tradeChats;
         this.store = store;
         this.trades = trades;
+        this.caseConversations = caseConversations;
     }
 
     @Override
@@ -76,6 +80,15 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
         }
     }
 
+    @Override
+    public WriteResult<JsonNode> markCaseRead(ExecutionContext context, String idempotencyKey, long conversationId,
+                                              long displayedSeq) {
+        return writes.run(context, "conversation.mark_case_read", idempotencyKey,
+                new CaseReadRequest(conversationId, displayedSeq),
+                new CaseReadUseCase(caseConversations));
+
+    }
+
     private record StartRequest(long targetAccountId) {
     }
 
@@ -83,6 +96,9 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
     }
 
     private record ReadRequest(ConversationKind kind, long conversationId, long displayedSeq) {
+    }
+
+    private record CaseReadRequest(long conversationId, long displayedSeq) {
     }
 
     private static final class StartUseCase implements WriteExecutor.UseCase<StartRequest, StartRequest> {
@@ -252,6 +268,52 @@ public class WriteBackedConversationCommands implements ConversationWriteCommand
 
     private static RealtimeEventSources.ConversationRef realtimeReference(ConversationKind kind, long id) {
         return new RealtimeEventSources.ConversationRef(RealtimeEventSources.ConversationKind.valueOf(kind.name()), id);
+    }
+
+    private static final class CaseReadUseCase implements WriteExecutor.UseCase<CaseReadRequest, CaseReadRequest> {
+        private final CaseConversations cases;
+
+        private CaseReadUseCase(CaseConversations cases) {
+            this.cases = cases;
+        }
+
+        @Override
+        public JsonNode digestInput(CaseReadRequest request) {
+            var node = JSON.createObjectNode();
+            node.put("conversation_id", Long.toString(request.conversationId()));
+            node.put("displayed_seq", request.displayedSeq());
+            return node;
+        }
+
+        @Override
+        public LockPlan prepare(ExecutionContext context, CaseReadRequest request) {
+            return new LockPlan(Map.of(), Set.of(
+                    new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION, List.of(request.conversationId()))));
+        }
+
+        @Override
+        public CaseReadRequest qualify(ExecutionContext context, CaseReadRequest request, LockPlan plan) {
+            return request;
+        }
+
+        @Override
+        public void requireReplayAccess(ExecutionContext context, CaseReadRequest request, ResourceRef resource) {
+            if (!"case_conversation".equals(resource.type()) || resource.id() != request.conversationId()) {
+                throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "会话不存在");
+            }
+        }
+
+        @Override
+        public WriteResult.Response<?> write(WriteTransaction transaction, CaseReadRequest request,
+                                             CaseReadRequest qualification, LockPlan plan) {
+            var progress = cases.advanceRead(transaction, request.conversationId(),
+                    Long.parseLong(transaction.context().actorId()), request.displayedSeq());
+            var body = ConversationWire.read(new ConversationViews.ReadProgress(progress.lastReadSeq(),
+                    progress.unreadCount(), progress.updatedAt()));
+            return new WriteResult.Response<>(200, body,
+                    new ResourceRef("case_conversation", request.conversationId()));
+        }
+
     }
 
     private static LockPlan.Key conversationKey(ConversationKind kind, long conversationId) {

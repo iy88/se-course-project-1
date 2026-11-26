@@ -108,6 +108,15 @@ class ConversationControllerTests {
                             "updated_at", NOW.toString()));
                 }
 
+                @Override
+                public WriteResult<JsonNode> markCaseRead(io.github.iy88.project1.core.ExecutionContext context,
+                                                          String key, long conversationId, long displayedSeq) {
+                    return result(200, "case_conversation", conversationId, Map.of(
+                            "last_read_seq", 2,
+                            "unread_count", 0,
+                            "updated_at", NOW.toString()));
+                }
+
                 private static WriteResult<JsonNode> result(int status, String type, long id, Map<String, Object> body) {
                     return new WriteResult<>(UUID.randomUUID(), status, JSON.valueToTree(body),
                             new ResourceRef(type, id), false);

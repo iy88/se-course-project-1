@@ -34,6 +34,9 @@ public class CaseConversations {
     public record Message(long messageId, long seq, Instant createdAt) {
     }
 
+    public record ReadProgress(long lastReadSeq, long unreadCount, Instant updatedAt) {
+    }
+
     public Ensured ensure(WriteTransaction transaction, long caseId, long relatedAccountId) {
         boolean existed = store.findCase(caseId, relatedAccountId).isPresent();
         var conversation = store.ensureCase(transaction, caseId, relatedAccountId);
@@ -67,6 +70,20 @@ public class CaseConversations {
     public boolean archive(WriteTransaction transaction, long caseId, long relatedAccountId) {
         var conversation = store.lockCaseByCase(transaction, caseId, relatedAccountId);
         return store.archiveCase(transaction, conversation);
+    }
+
+    /** Moves the related account's read cursor forward; the thread must belong to that account. */
+    public ReadProgress advanceRead(WriteTransaction transaction, long conversationId, long accountId,
+                                    long displayedSeq) {
+        var conversation = store.caseConversation(conversationId);
+        if (conversation.relatedAccountId() != accountId) {
+            throw new io.github.iy88.project1.core.BusinessError("PARTICIPANT_REQUIRED", 404,
+                    "会话不存在或无权访问");
+        }
+        var locked = store.lockCase(transaction, conversationId);
+        var progress = store.advanceCaseRead(transaction, locked, accountId, displayedSeq);
+        return new ReadProgress(progress.lastReadSeq(), store.caseUnread(locked, accountId),
+                progress.lastReadAt());
     }
 
     private static Conversation view(CaseConversation conversation) {

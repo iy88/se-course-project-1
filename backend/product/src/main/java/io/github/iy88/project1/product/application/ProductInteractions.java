@@ -122,6 +122,27 @@ public class ProductInteractions {
         return new CommentPage(items, paging[0], paging[1], total);
     }
 
+    /** Returns the author if the published comment is in the viewer's ordinary comment scope. */
+    public Optional<Long> reportableCommentAuthor(long viewerId, long commentId) {
+        return store.comment(commentId).filter(ProductComment::published)
+                .filter(comment -> comment.authorAccountId() != viewerId)
+                .filter(comment -> products.findById(comment.productId())
+                        .filter(product -> !product.deleted())
+                        .filter(product -> reportableCommentThread(product, comment, viewerId)).isPresent())
+                .map(ProductComment::authorAccountId);
+    }
+
+    /** Resolves the author of a previously accepted report, even after the comment is removed. */
+    public Optional<Long> commentAuthor(long commentId) {
+        return store.comment(commentId).map(ProductComment::authorAccountId);
+    }
+
+    private boolean reportableCommentThread(Product product, ProductComment comment, long viewerId) {
+        var root = comment.topLevel() ? Optional.of(comment) : store.comment(comment.parentCommentId());
+        return root.filter(parent -> parent.productId() == product.id() && parent.topLevel() && parent.published())
+                .filter(parent -> visible(product) || parent.authorAccountId() == viewerId).isPresent();
+    }
+
     public CommentView createComment(long viewerId, long productId, String body) {
         return transaction.execute(status -> {
             requireAccountWritable(viewerId);

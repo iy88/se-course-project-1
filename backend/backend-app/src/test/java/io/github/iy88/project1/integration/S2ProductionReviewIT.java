@@ -192,6 +192,16 @@ class S2ProductionReviewIT {
         var approved = write(manager, "POST", "/admin/product-reviews/" + text(resubmitted, "audit_id") + "/decision",
                 "{\"decision\":\"approved\"}", key(), 200);
         assertThat(text(approved, "status")).isEqualTo("passed");
+        String completedReviews = "/management/todos?kind=product_review&keyword=Book%20" + RUN;
+        var mine = get(manager, completedReviews + "&ownership=completed_mine", 200);
+        assertThat(mine.path("total").asLong()).isEqualTo(2);
+        assertThat(mine.path("items")).extracting(row -> row.path("decision_kind").asString())
+                .containsExactly("approved", "rejected");
+        var all = get(secondManager, completedReviews + "&ownership=completed_all", 200);
+        assertThat(all.path("items")).isEqualTo(mine.path("items"));
+        assertThat(get(secondManager, completedReviews + "&ownership=completed_mine", 200)
+                .path("total").asLong()).isZero();
+        get(secondManager, detailPath, 404);
         var publiclyVisible = get(buyer, "/products/" + productId, 200);
         assertThat(text(publiclyVisible, "description")).isEqualTo("Updated description");
         var page = get(buyer, "/products?category_ids=" + firstCategory + "," + secondCategory, 200);

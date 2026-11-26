@@ -153,7 +153,7 @@ class ProductReviewFixturePort implements ProductReviewPort, ReviewNotifications
                 .param("offset", (long) (query.page() - 1) * query.pageSize())
                 .query((row, index) -> new TodoItem(row.getLong("case_id"), TodoKinds.PRODUCT_REVIEW,
                         row.getTimestamp("created_at").toInstant(), row.getTimestamp("updated_at").toInstant(),
-                        row.getLong("audit_id"), row.getLong("product_id")))
+                        null, null, null, "商品审核", row.getLong("audit_id"), row.getLong("product_id")))
                 .list();
         return new TodoPage(items, productCount, Map.of(TodoKinds.PRODUCT_REVIEW, productCount), asOf);
     }

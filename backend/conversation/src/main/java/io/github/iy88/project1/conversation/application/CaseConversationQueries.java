@@ -9,11 +9,13 @@ import io.github.iy88.project1.core.ExecutionContext;
 import java.util.HashSet;
 import java.util.Map;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /** Read-only case-thread query; access is delegated to the case module's qualification rules. */
 @Lazy
 @Service
+@Profile("infrastructure & !dependency-probe & !file-probe")
 public class CaseConversationQueries {
     private final ConversationStore store;
     private final ConversationReader reader;
