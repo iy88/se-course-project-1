@@ -210,6 +210,18 @@ class ProductServiceCategoryCorrectionTests {
     }
 
     @Test
+    void aMissingBasisIsRejectedAsUnauthorized() {
+        assertThatThrownBy(() -> service.correctCategory(MANAGER, PRODUCT,
+                new ProductService.CorrectionCommand(List.of(String.valueOf(NEW_CATEGORY)), "分类放错了", null, 0),
+                context))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("ACTION_NOT_ALLOWED");
+                    assertThat(error.status()).isEqualTo(403);
+                });
+        verify(edits, never()).save(any());
+    }
+
+    @Test
     void anUnchangedSelectionDoesNotWriteHistoryOrBumpTheVersion() {
         when(cases.claimedForProduct(MANAGER, CASE, PRODUCT)).thenReturn(true);
         when(links.activeCategoryIds(PRODUCT)).thenReturn(List.of(OLD_CATEGORY));
