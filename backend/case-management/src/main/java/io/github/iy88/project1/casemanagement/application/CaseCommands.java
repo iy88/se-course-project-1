@@ -9,10 +9,18 @@ public final class CaseCommands {
     private CaseCommands() {
     }
 
-    public record Target(String targetType, long targetId, String conversationKind, Long conversationId) {
+    public record Target(String targetType, long targetId, String conversationKind, Long conversationId,
+                         Long sourceProductId) {
+        public Target(String targetType, long targetId, String conversationKind, Long conversationId) {
+            this(targetType, targetId, conversationKind, conversationId, null);
+        }
+
         public Target {
             if (targetType == null || targetType.isBlank()) {
                 throw new BusinessError("INPUT_INVALID", 422, "target_type 不能为空");
+            }
+            if (sourceProductId != null && (!"account".equals(targetType) || sourceProductId <= 0)) {
+                throw new BusinessError("TARGET_INVALID", 422, "来源商品无效");
             }
             if (targetId <= 0) {
                 throw new BusinessError("TARGET_INVALID", 422, "目标对象无效");

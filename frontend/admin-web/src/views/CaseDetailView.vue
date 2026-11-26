@@ -14,6 +14,7 @@ import {
   type CaseDecision,
   type CaseEnforcementInput,
   type CaseMessageEvidence,
+  type CaseRelatedAccount,
   type CaseManagementWrites,
   type CaseReplacementEnforcement,
   type CaseThreadPage,
@@ -99,6 +100,33 @@ const statusLabels = { pending: "待认领", claimed: "处理中", decided: "已
 const currentStatus = computed(() =>
   detail.value?.archived_at ? "已结案" : detail.value && statusLabels[detail.value.case_status],
 );
+const reportedObject = computed(() => detail.value?.reported_object);
+const relatedAccounts = computed(() => detail.value?.related_accounts ?? []);
+const eligibleAccounts = computed(() =>
+  relatedAccounts.value.filter((account) => account.eligible),
+);
+const reportedKinds = {
+  account: "账户",
+  product: "商品",
+  comment: "评论",
+  evaluation: "评价",
+  message: "消息",
+  trade: "交易",
+};
+
+function accountLabel(account: CaseRelatedAccount): string {
+  const target = reportedObject.value;
+  let role = account.reporter ? "举报人" : "相关账户";
+  if (target?.target_type === "account" && target.target_id === account.account_id) {
+    role = target.product ? "被举报卖方" : "被举报账户";
+  } else if (detail.value?.target?.author_account_id === account.account_id) {
+    role = "被举报内容作者";
+  } else if (!account.reporter && target?.target_type === "product" && account.eligible) {
+    role = "商品卖方";
+  }
+  return `${role} · ${account.display_name ?? "账户"} #${account.account_id}`;
+}
+
 const actions = computed(() => new Set(detail.value?.available_actions ?? []));
 
 async function load(): Promise<void> {
@@ -460,8 +488,47 @@ onUnmounted(() => {
           </li>
         </ul>
       </section>
-      <section v-if="detail.target" class="card stack">
-        <h2>被举报内容</h2>
+      <section v-if="relatedAccounts.length" class="card stack">
+        <h2>相关账户</h2>
+        <ul>
+          <li v-for="account in relatedAccounts" :key="account.account_id">
+            {{ accountLabel(account) }}
+          </li>
+        </ul>
+      </section>
+      <section v-if="reportedObject" class="card stack">
+        <h2>举报对象</h2>
+        <p>{{ reportedKinds[reportedObject.target_type] }} #{{ reportedObject.target_id }}</p>
+        <details v-if="reportedObject.product">
+          <summary>
+            查看{{ reportedObject.target_type === "account" ? "来源商品" : "商品" }}
+            {{ reportedObject.product.title }} #{{ reportedObject.product.id }}
+          </summary>
+          <p class="pre-line">{{ reportedObject.product.description }}</p>
+        </details>
+        <p v-else-if="reportedObject.target_type === 'account'" class="muted">未记录来源商品。</p>
+        <p v-else-if="reportedObject.target_type === 'product'" class="muted">商品快照不可用。</p>
+        <p
+          v-else-if="
+            ['comment', 'evaluation'].includes(reportedObject.target_type) && !detail.target
+          "
+          class="muted"
+        >
+          原记录不可用。
+        </p>
+        <p v-if="detail.reported_message">
+          {{
+            detail.reported_message.conversation_kind === "chat"
+              ? "私聊"
+              : detail.reported_message.conversation_kind === "trade"
+                ? "交易会话"
+                : "事项会话"
+          }}
+          #{{ detail.reported_message.conversation_id }}
+        </p>
+      </section>
+      <details v-if="detail.target" class="card stack">
+        <summary>查看被举报{{ detail.target.target_type === "comment" ? "评论" : "评价" }}</summary>
         <p>
           {{ detail.target.target_type === "comment" ? "评论" : "评价" }} #{{
             detail.target.target_id
@@ -469,9 +536,13 @@ onUnmounted(() => {
           · 作者账户 #{{ detail.target.author_account_id }} ·
           {{ detail.target.removed ? "已移除" : "待审核" }}
         </p>
+        <p v-if="detail.target.context_id">
+          {{ detail.target.target_type === "comment" ? "所属商品" : "关联交易" }}
+          #{{ detail.target.context_id }}
+        </p>
         <p class="pre-line">{{ detail.target.body }}</p>
         <p v-if="detail.target.created_at">发表于 {{ formatDateTime(detail.target.created_at) }}</p>
-      </section>
+      </details>
       <section
         v-if="detail.evidence?.length || (detail.reported_message && !detail.archived_at)"
         class="card stack"
@@ -589,22 +660,30 @@ onUnmounted(() => {
       >
         <h2 :id="`${ids}-inquire`">发起问询</h2>
         <label class="field"
-          ><span>相关账户编号</span>
-          <input
-            v-model="peer"
-            name="peer_account_id"
-            class="input"
-            required
-            inputmode="numeric"
-            pattern="[1-9][0-9]*"
-          />
+          ><span>相关账户</span>
+          <select v-model="peer" name="peer_account_id" class="select" required>
+            <option value="" disabled>请选择相关账户</option>
+            <option
+              v-for="account in eligibleAccounts"
+              :key="account.account_id"
+              :value="account.account_id"
+            >
+              {{ accountLabel(account) }}
+            </option>
+          </select>
         </label>
         <label class="field"
           ><span>问询内容</span>
           <textarea v-model="inquiry" name="scope_text" class="textarea" required />
         </label>
         <div>
-          <button type="submit" class="btn btn--primary" :disabled="writing">发起问询</button>
+          <button
+            type="submit"
+            class="btn btn--primary"
+            :disabled="writing || !eligibleAccounts.length"
+          >
+            发起问询
+          </button>
         </div>
       </form>
 
@@ -638,6 +717,7 @@ onUnmounted(() => {
               ><span>动作</span>
               <select
                 v-model="instruction.option"
+                @change="instruction.targetId = ''"
                 :name="`action-${instruction.id}`"
                 class="select"
               >
@@ -646,7 +726,25 @@ onUnmounted(() => {
                 </option>
               </select>
             </label>
-            <label class="field"
+            <label v-if="enforcementOptions[instruction.option].target === 'account'" class="field">
+              <span>处置账户</span>
+              <select
+                v-model="instruction.targetId"
+                :name="`target-${instruction.id}`"
+                class="select"
+                required
+              >
+                <option value="" disabled>请选择处置账户</option>
+                <option
+                  v-for="account in eligibleAccounts"
+                  :key="account.account_id"
+                  :value="account.account_id"
+                >
+                  {{ accountLabel(account) }}
+                </option>
+              </select>
+            </label>
+            <label v-else class="field"
               ><span>目标编号</span>
               <input
                 v-model="instruction.targetId"

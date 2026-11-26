@@ -595,6 +595,16 @@ public class ProductService {
                 });
     }
 
+    public Optional<ReportSnapshot> reportSnapshot(long caseId) {
+        return jdbc.sql("""
+                        select product_id, title, description from product_case_snapshot where case_id = ?
+                        """).param(caseId)
+                .query((row, index) -> new ReportSnapshot(row.getLong("product_id"),
+                        row.getString("title"), row.getString("description"))).optional();
+    }
+
+    public record ReportSnapshot(long id, String title, String description) {}
+
     public void captureReportSnapshot(long caseId, long productId) {
         products.findById(productId).filter(found -> !found.deleted())
                 .ifPresent(product -> captureCaseSnapshot(caseId, product));

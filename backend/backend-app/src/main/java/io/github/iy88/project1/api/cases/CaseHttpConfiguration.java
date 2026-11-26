@@ -343,7 +343,9 @@ public class CaseHttpConfiguration {
                 }
                 case "account" -> {
                     accounts.findById(target.targetId()).orElseThrow(CaseTargetAdapter::targetInvalid);
-                    if (target.targetId() == reporterAccountId) {
+                    if (target.targetId() == reporterAccountId || (target.sourceProductId() != null
+                            && (!productService.ownsProduct(target.targetId(), target.sourceProductId())
+                            || productService.notificationTitle(reporterAccountId, target.sourceProductId()).isEmpty()))) {
                         throw targetInvalid();
                     }
                 }
@@ -367,6 +369,8 @@ public class CaseHttpConfiguration {
         public void captureReportSnapshot(long caseId, CaseCommands.Target target) {
             if ("product".equals(target.targetType())) {
                 productService.captureReportSnapshot(caseId, target.targetId());
+            } else if (target.sourceProductId() != null) {
+                productService.captureReportSnapshot(caseId, target.sourceProductId());
             }
         }
 
@@ -378,14 +382,26 @@ public class CaseHttpConfiguration {
             return switch (facts.targetType() == null ? "" : facts.targetType()) {
                 case "comment" -> comments.commentSnapshot(facts.targetId())
                         .map(fact -> new CasePorts.Targets.TargetSnapshot("comment", fact.commentId(),
-                                fact.authorAccountId(), fact.parentCommentId(), fact.body(), fact.state(),
+                                fact.authorAccountId(), fact.parentCommentId(), fact.productId(), fact.body(), fact.state(),
                                 fact.createdAt(), fact.removedAt() != null));
                 case "evaluation" -> moderation.snapshot(facts.targetId())
                         .map(fact -> new CasePorts.Targets.TargetSnapshot("evaluation", fact.reviewId(),
-                                fact.authorAccountId(), null, fact.body(), fact.state(),
+                                fact.authorAccountId(), null, fact.tradeId(), fact.body(), fact.state(),
                                 fact.createdAt(), fact.removedAt() != null));
                 default -> Optional.empty();
             };
+        }
+
+        @Override
+        public java.util.Map<Long, String> accountNames(Set<Long> ids) {
+            return accounts.findByIdIn(ids).stream().collect(java.util.stream.Collectors.toMap(
+                    account -> account.id(), account -> account.displayName()));
+        }
+
+        @Override
+        public Optional<ReportProduct> reportProduct(long caseId) {
+            return productService.reportSnapshot(caseId)
+                    .map(item -> new ReportProduct(item.id(), item.title(), item.description()));
         }
 
         @Override

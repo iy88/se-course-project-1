@@ -42,7 +42,8 @@ final class CaseIds {
         Long conversationId = target.conversationId() == null ? null
                 : body(target.conversationId(), "conversation_id");
         return new CaseCommands.Target(target.targetType(), body(target.targetId(), "target_id"),
-                target.conversationKind(), conversationId);
+                target.conversationKind(), conversationId,
+                target.sourceProductId() == null ? null : body(target.sourceProductId(), "source_product_id"));
     }
 
     static List<Long> attachments(List<CaseRequests.Attachment> attachments) {

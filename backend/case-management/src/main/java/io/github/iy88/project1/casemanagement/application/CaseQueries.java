@@ -153,6 +153,32 @@ public class CaseQueries {
         body.put("reason_text", reasonText(facts, reporter, related, manager));
         body.put("reported_reason", reporter || manager ? facts.reportedReason() : null);
         if (managerView) {
+            var relatedIds = targets.relatedAccountIds(facts);
+            var accountIds = new LinkedHashSet<>(relatedIds);
+            if (facts.reporterAccountId() != null) {
+                accountIds.add(facts.reporterAccountId());
+            }
+            var names = accountIds.isEmpty() ? java.util.Map.<Long, String>of() : targets.accountNames(accountIds);
+            var accounts = body.putArray("related_accounts");
+            for (long id : accountIds.stream().sorted().toList()) {
+                var account = accounts.addObject();
+                account.put("account_id", Long.toString(id));
+                account.put("display_name", names.get(id));
+                account.put("reporter", Long.valueOf(id).equals(facts.reporterAccountId()));
+                account.put("eligible", relatedIds.contains(id) && id != actor
+                        && !Long.valueOf(id).equals(facts.reporterAccountId()));
+            }
+            if (CaseVocabulary.REPORT.equals(facts.caseType()) && facts.targetId() != null) {
+                var object = body.putObject("reported_object");
+                object.put("target_type", facts.targetType());
+                object.put("target_id", Long.toString(facts.targetId()));
+                targets.reportProduct(caseId).ifPresent(snapshot -> {
+                    var product = object.putObject("product");
+                    product.put("id", Long.toString(snapshot.id()));
+                    product.put("title", snapshot.title());
+                    product.put("description", snapshot.description());
+                });
+            }
             if ("message".equals(facts.targetType()) && facts.targetId() != null
                     && facts.conversationId() != null && facts.conversationKind() != null) {
                 var message = body.putObject("reported_message");
@@ -167,6 +193,9 @@ public class CaseQueries {
                 target.put("author_account_id", Long.toString(snapshot.authorAccountId()));
                 if (snapshot.parentId() != null) {
                     target.put("parent_id", Long.toString(snapshot.parentId()));
+                }
+                if (snapshot.contextId() != null) {
+                    target.put("context_id", Long.toString(snapshot.contextId()));
                 }
                 target.put("body", snapshot.body());
                 target.put("state", snapshot.state());

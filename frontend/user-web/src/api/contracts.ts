@@ -777,6 +777,7 @@ export type ReportTargetType = "product" | "comment" | "message" | "evaluation" 
 
 export interface ReportTarget {
   target_type: ReportTargetType;
+  source_product_id?: string;
   target_id: string;
   conversation_kind?: ConversationKind;
   conversation_id?: string;

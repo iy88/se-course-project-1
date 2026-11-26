@@ -362,7 +362,11 @@ async function confirmOffShelf(): Promise<void> {
               <RouterLink
                 :to="{
                   name: 'report',
-                  query: { target_type: 'account', target_id: product.data.value.seller.id },
+                  query: {
+                    target_type: 'account',
+                    target_id: product.data.value.seller.id,
+                    source_product_id: product.data.value.id,
+                  },
                 }"
                 class="btn btn--small btn--ghost"
               >

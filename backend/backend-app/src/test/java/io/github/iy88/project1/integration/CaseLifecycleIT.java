@@ -370,6 +370,41 @@ class CaseLifecycleIT {
     }
 
     @Test
+    void sellerReportKeepsOnlyItsVerifiedSourceProductForTheClaimant() {
+        long reporter = REPORTER.get();
+        long seller = account("source-seller-" + RUN_ID, "来源商品卖方", "user");
+        long other = account("other-source-seller-" + RUN_ID, "其他卖方", "user");
+        long product = db.sql("""
+                insert into product (seller_account_id, title, description, price_cents, lifecycle_state)
+                values (?, '来源商品', '举报时的描述', 100, 'public') returning product_id
+                """).param(seller).query(Long.class).single();
+        assertInvalidReport(reporter, "wrong-source-seller",
+                new CaseCommands.Target("account", other, null, null, product));
+        var report = cases.submit(context(reporter), "valid-source-seller", reportFor(
+                new CaseCommands.Target("account", seller, null, null, product)));
+        assertThat(report.status()).isEqualTo(201);
+        long caseId = Long.parseLong(report.data().path("case_id").asString());
+        db.sql("update product set title = '修改后的标题' where product_id = ?").param(product).update();
+        var manager = context(MANAGER_1.get());
+        cases.claim(manager, "claim-source-seller", caseId);
+
+        var detail = queries.detail(manager, caseId);
+        assertThat(detail.path("reported_object").path("target_id").asString()).isEqualTo(Long.toString(seller));
+        var source = detail.path("reported_object").path("product");
+        assertThat(source.path("id").asString()).isEqualTo(Long.toString(product));
+        assertThat(source.path("title").asString()).isEqualTo("来源商品");
+        assertThat(source.path("description").asString()).isEqualTo("举报时的描述");
+        var accounts = detail.path("related_accounts");
+        assertThat(accounts.get(0).path("eligible").asBoolean()).isFalse();
+        assertThat(accounts.get(1).path("display_name").asString()).isEqualTo("来源商品卖方");
+        assertThat(accounts.get(1).path("eligible").asBoolean()).isTrue();
+        assertThat(queries.detail(context(reporter), caseId).has("reported_object")).isFalse();
+        assertThatThrownBy(() -> queries.detail(context(MANAGER_2.get()), caseId))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+    }
+
+    @Test
     void reportsVisibleCommentsAndReceivedEvaluationsAndKeepsTheirAuthorsForInquiry() {
         long reporter = REPORTER.get();
         long author = account("report-author-" + RUN_ID, "举报事项作者", "user");

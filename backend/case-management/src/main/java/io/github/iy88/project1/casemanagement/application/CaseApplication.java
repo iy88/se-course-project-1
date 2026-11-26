@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -201,7 +202,12 @@ public class CaseApplication {
     private final class SubmitUseCase implements WriteExecutor.UseCase<CaseCommands.Report, CaseCommands.Report> {
         @Override
         public JsonNode digestInput(CaseCommands.Report request) {
-            return json.valueToTree(request);
+            ObjectNode digest = json.valueToTree(request);
+            if (request.target().sourceProductId() == null) {
+                ((ObjectNode) digest.get("target")).remove("source_product_id");
+                ((ObjectNode) digest.get("target")).remove("sourceProductId");
+            }
+            return digest;
         }
 
         @Override

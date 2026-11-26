@@ -31,6 +31,16 @@ public final class CasePorts {
         /** Accounts that may be inquired and disposed for this case. */
         Set<Long> relatedAccountIds(CaseRecords.Facts facts);
 
+        default Map<Long, String> accountNames(Set<Long> ids) {
+            return Map.of();
+        }
+
+        default Optional<ReportProduct> reportProduct(long caseId) {
+            return Optional.empty();
+        }
+
+        record ReportProduct(long id, String title, String description) {}
+
         /** Buyer and seller of one trade, or an empty set when it does not exist. */
         Set<Long> tradeParties(long tradeId);
 
@@ -43,7 +53,7 @@ public final class CasePorts {
             return Optional.empty();
         }
 
-        record TargetSnapshot(String targetType, long targetId, long authorAccountId, Long parentId,
+        record TargetSnapshot(String targetType, long targetId, long authorAccountId, Long parentId, Long contextId,
                               String body, String state, Instant createdAt, boolean removed) {
         }
 

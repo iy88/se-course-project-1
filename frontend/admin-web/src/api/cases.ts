@@ -65,6 +65,13 @@ export interface CaseMessageEvidence {
   };
 }
 
+export interface CaseRelatedAccount {
+  account_id: string;
+  display_name: string | null;
+  reporter: boolean;
+  eligible: boolean;
+}
+
 export interface ManagementCaseDetail {
   case_id: string;
   case_type: "report" | "dispute" | "exception";
@@ -75,12 +82,19 @@ export interface ManagementCaseDetail {
   archived_at: string | null;
   public_result_at: string | null;
   available_actions?: string[];
+  related_accounts?: CaseRelatedAccount[];
+  reported_object?: {
+    target_type: "account" | "product" | "comment" | "evaluation" | "message" | "trade";
+    target_id: string;
+    product?: { id: string; title: string; description: string };
+  };
   /** Manager-only projection of the exact comment/evaluation target of this case. */
   target?: {
     target_type: "comment" | "evaluation";
     target_id: string;
     author_account_id: string;
     parent_id?: string | null;
+    context_id?: string;
     body: string | null;
     state: string;
     created_at: string | null;

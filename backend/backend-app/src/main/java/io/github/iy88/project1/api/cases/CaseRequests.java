@@ -7,7 +7,8 @@ public final class CaseRequests {
     private CaseRequests() {
     }
 
-    public record Target(String targetType, String targetId, String conversationKind, String conversationId) {
+    public record Target(String targetType, String targetId, String conversationKind, String conversationId,
+                         String sourceProductId) {
     }
 
     public record Attachment(String fileId) {

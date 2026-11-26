@@ -1576,6 +1576,8 @@ export interface components {
       /** @enum {string} */
       target_type: "product" | "comment" | "message" | "evaluation" | "account" | "trade";
       target_id: string;
+      /** @description Source product for a seller account report, verified against the seller and reporter's product visibility. */
+      source_product_id?: string;
       /** @enum {string} */
       conversation_kind?: "chat" | "trade" | "case";
       conversation_id?: string;
@@ -1657,6 +1659,25 @@ export interface components {
         | "close"
         | "publish_result"
       )[];
+      /** @description Accounts associated with the case, visible to the assigned manager. */
+      related_accounts?: {
+        account_id: string;
+        display_name: string | null;
+        reporter: boolean;
+        /** @description Whether the account can be selected for inquiry or account enforcement. */
+        eligible: boolean;
+      }[];
+      /** @description Reported object and recorded product snapshot for the assigned manager. */
+      reported_object?: {
+        /** @enum {string} */
+        target_type: "account" | "product" | "comment" | "evaluation" | "message" | "trade";
+        target_id: string;
+        product?: {
+          id: string;
+          title: string;
+          description: string;
+        };
+      };
       /** @description Exact reported message identity without body or sender, only for the assigned manager. */
       reported_message?: components["schemas"]["CaseEvidenceReferenceRequest"];
       /** @description Exact reported comment or evaluation projected only for the assigned manager. */
@@ -1666,6 +1687,8 @@ export interface components {
         target_id: string;
         author_account_id: string;
         parent_id?: string;
+        /** @description Product ID for a comment or trade ID for an evaluation. */
+        context_id?: string;
         body: string;
         state: string;
         /** Format: date-time */
