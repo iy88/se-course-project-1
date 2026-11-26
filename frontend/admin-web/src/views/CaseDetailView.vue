@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, useId } from "vue";
+import { computed, onMounted, onUnmounted, ref, useId, watch } from "vue";
 import {
   caseEvidenceFileHref,
   citeReportedMessage,
@@ -32,7 +32,7 @@ import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
 
-const props = defineProps<{ caseId: string; backHref: string }>();
+const props = defineProps<{ caseId: string; backHref: string; anchor?: string }>();
 const ids = useId();
 const detail = ref<ManagementCaseDetail>();
 const error = ref<unknown>();
@@ -190,11 +190,17 @@ const actions = computed(() => new Set(detail.value?.available_actions ?? []));
 
 function selectThreadFor(next: ManagementCaseDetail): void {
   const threads = next.threads ?? [];
+  const messageId = props.anchor?.match(/^case-message-([1-9][0-9]*)$/)?.[1];
+  const messageAccount = messageId
+    ? next.actions.find((action) => action.message_id === messageId)?.related_account_id
+    : undefined;
+  const messageThread = threads.find((item) => item.related_account_id === messageAccount);
   const chosen =
+    messageThread ??
     threads.find((item) => item.conversation_id === selectedThread.value?.conversation_id) ??
     threads[0];
   if (chosen) {
-    void loadThread(chosen);
+    void loadThread(chosen, false, messageThread ? messageId : undefined);
     return;
   }
   selectedThread.value = undefined;
@@ -230,7 +236,11 @@ async function load(): Promise<void> {
   }
 }
 
-async function loadThread(source: ManagementCaseThread, older = false): Promise<void> {
+async function loadThread(
+  source: ManagementCaseThread,
+  older = false,
+  messageId?: string,
+): Promise<void> {
   threadRequest?.abort();
   const controller = new AbortController();
   threadRequest = controller;
@@ -240,13 +250,25 @@ async function loadThread(source: ManagementCaseThread, older = false): Promise<
   threadError.value = undefined;
   threadLoading.value = true;
   try {
-    const next = await readCaseThread(
-      source.conversation_id,
-      previous?.next_before_seq ?? undefined,
-      controller.signal,
-    );
-    if (threadRequest === controller) {
-      thread.value = { ...next, items: [...next.items, ...(previous?.items ?? [])] };
+    let before = previous?.next_before_seq ?? undefined;
+    let items = previous?.items ?? [];
+    while (!controller.signal.aborted) {
+      const next = await readCaseThread(source.conversation_id, before, controller.signal);
+      if (controller.signal.aborted) return;
+      items = [...next.items, ...items];
+      const cursor = next.next_before_seq ?? undefined;
+      if (
+        !messageId ||
+        items.some((item) => item.case_message_id === messageId) ||
+        !cursor ||
+        cursor <= 1 ||
+        next.items.length === 0 ||
+        (before && cursor >= before)
+      ) {
+        thread.value = { ...next, items };
+        break;
+      }
+      before = cursor;
     }
   } catch (caught) {
     if (threadRequest === controller && !(caught instanceof AbortedError))
@@ -494,6 +516,21 @@ function addInstruction(): void {
   instructions.value.push({ id: ++instructionId, option: 0, targetId: "", expected: "terminated" });
 }
 
+watch(
+  [detail, loading, threadLoading, () => props.anchor],
+  ([data, busy, loadingMessages, anchor]) => {
+    if (loadingMessages && anchor?.startsWith("case-message-")) return;
+    if (data && !busy && anchor)
+      document.getElementById(anchor)?.scrollIntoView({ block: "center" });
+  },
+  { flush: "post" },
+);
+watch(
+  () => props.anchor,
+  (anchor) => {
+    if (anchor?.startsWith("case-message-") && detail.value) selectThreadFor(detail.value);
+  },
+);
 onMounted(load);
 onUnmounted(() => {
   detailRequest?.abort();
@@ -505,7 +542,7 @@ onUnmounted(() => {
   <div class="stack stack--loose">
     <PageHeader eyebrow="治理事项" :title="`事项 #${caseId}`" :description="pageDescription">
       <template #actions>
-        <a :href="backHref" class="btn btn--ghost">返回事项工作台</a>
+        <a :href="backHref" data-admin-route class="btn btn--ghost">返回事项工作台</a>
       </template>
     </PageHeader>
     <LoadingBlock v-if="loading && !detail" label="正在读取事项…" />
@@ -754,7 +791,12 @@ onUnmounted(() => {
               <span class="muted">{{ submittedNotes.length }} 条</span>
             </div>
             <ol class="note-list">
-              <li v-for="item in submittedNotes" :key="item.action_id" class="note-item">
+              <li
+                v-for="item in submittedNotes"
+                :id="`case-supplement-${item.action_id}`"
+                :key="item.action_id"
+                class="note-item"
+              >
                 <div class="record-meta">
                   <span class="record-type">补充说明</span>
                   <time :datetime="item.occurred_at">{{ formatDateTime(item.occurred_at) }}</time>
@@ -770,7 +812,12 @@ onUnmounted(() => {
               <span class="muted">{{ detail.evidence.length }} 项</span>
             </div>
             <ul class="evidence-list">
-              <li v-for="item in detail.evidence" :key="item.evidence_id" class="evidence-item">
+              <li
+                v-for="item in detail.evidence"
+                :id="`case-evidence-${item.evidence_id}`"
+                :key="item.evidence_id"
+                class="evidence-item"
+              >
                 <div class="record-meta">
                   <span class="record-type">
                     {{
@@ -850,7 +897,12 @@ onUnmounted(() => {
             <span class="chip">{{ detail.actions.length }} 条</span>
           </div>
           <ol class="activity-list">
-            <li v-for="(item, index) in detail.actions" :key="index" class="activity-item">
+            <li
+              v-for="(item, index) in detail.actions"
+              :id="item.action_id ? `case-action-${item.action_id}` : undefined"
+              :key="item.action_id ?? index"
+              class="activity-item"
+            >
               <span class="activity-marker" aria-hidden="true" />
               <span class="activity-copy">
                 <strong>{{ messages[item.action_kind] ?? "事项更新" }}</strong>
@@ -927,6 +979,7 @@ onUnmounted(() => {
           <ol class="thread-bubbles">
             <li
               v-for="message in thread.items"
+              :id="`case-message-${message.case_message_id}`"
               :key="message.case_message_id"
               class="thread-bubble"
               :class="`thread-bubble--${messageSide(message.sender.sender_kind)}`"

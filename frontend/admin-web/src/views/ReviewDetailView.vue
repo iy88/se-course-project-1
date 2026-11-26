@@ -209,7 +209,7 @@ async function submit(): Promise<void> {
       "
     >
       <template #actions>
-        <a :href="backHref" class="btn btn--ghost">返回我的认领</a>
+        <a :href="backHref" data-admin-route class="btn btn--ghost">返回我的认领</a>
       </template>
     </PageHeader>
 

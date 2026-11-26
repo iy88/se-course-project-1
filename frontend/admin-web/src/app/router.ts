@@ -1,14 +1,43 @@
-/* Reactive hash navigation for the administration shell. */
+/* Reactive History navigation for the administration shell. */
 import { readonly, ref } from "vue";
-import { parseHash, routeHref, type AdminRoute } from "./routes";
+import { parseLocation, routeHref, type AdminRoute } from "./routes";
+
+function currentLocation(): string {
+  const { pathname, search, hash } = window.location;
+  return pathname + search + hash;
+}
 
 const current = ref<AdminRoute>(
-  parseHash(typeof window === "undefined" ? "" : window.location.hash),
+  parseLocation(typeof window === "undefined" ? "/" : currentLocation()),
 );
 
 if (typeof window !== "undefined") {
-  window.addEventListener("hashchange", () => {
-    current.value = parseHash(window.location.hash);
+  const sync = () => {
+    current.value = parseLocation(currentLocation());
+  };
+  window.addEventListener("popstate", sync);
+  window.addEventListener("hashchange", sync);
+  document.addEventListener("click", (event) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      !(event.target instanceof Element)
+    )
+      return;
+    const link = event.target.closest<HTMLAnchorElement>("a[data-admin-route]");
+    if (
+      !link ||
+      link.target ||
+      link.hasAttribute("download") ||
+      link.origin !== window.location.origin
+    )
+      return;
+    event.preventDefault();
+    navigate(parseLocation(link.pathname + link.search + link.hash));
   });
 }
 
@@ -16,9 +45,9 @@ export const route = readonly(current);
 
 export function navigate(next: AdminRoute): void {
   const href = routeHref(next);
-  if (window.location.hash === href) {
-    current.value = next;
-    return;
+  if (currentLocation() !== href) {
+    window.history.pushState(null, "", href);
+    if (next.name !== "case" || !next.anchor) window.scrollTo(0, 0);
   }
-  window.location.hash = href;
+  current.value = next;
 }

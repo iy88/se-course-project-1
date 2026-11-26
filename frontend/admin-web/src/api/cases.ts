@@ -117,7 +117,14 @@ export interface ManagementCaseDetail {
     submitted_at?: string;
     content_type?: string;
   }[];
-  actions: { action_kind: string; occurred_at: string; actor_kind: string }[];
+  actions: {
+    action_id?: string;
+    message_id?: string;
+    related_account_id?: string;
+    action_kind: string;
+    occurred_at: string;
+    actor_kind: string;
+  }[];
   enforcements: {
     enforcement_id: string;
     action: string;
