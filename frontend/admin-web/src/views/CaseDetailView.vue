@@ -2,14 +2,20 @@
 import { computed, onMounted, onUnmounted, ref, useId } from "vue";
 import {
   caseEvidenceFileHref,
+  citeReportedMessage,
+  readCaseMessageEvidence,
   liftCaseEnforcement,
   readCase,
   readCaseThread,
+  resolveCaseAppeal,
   writeCase,
-  upholdCaseAppeal,
+  type AppealableEnforcement,
+  type AppealResolution,
   type CaseDecision,
   type CaseEnforcementInput,
+  type CaseMessageEvidence,
   type CaseManagementWrites,
+  type CaseReplacementEnforcement,
   type CaseThreadPage,
   type ManagementCaseDetail,
   type ManagementCaseThread,
@@ -35,6 +41,10 @@ const writeError = ref("");
 const keys = new IdempotencyKeys();
 let detailRequest: AbortController | undefined;
 
+const messageEvidence = ref<CaseMessageEvidence>();
+const evidenceLoading = ref(false);
+const evidenceError = ref("");
+
 const selectedThread = ref<ManagementCaseThread>();
 const thread = ref<CaseThreadPage>();
 const threadError = ref<unknown>();
@@ -49,7 +59,15 @@ const basis = ref("");
 const publicSummary = ref("");
 const publicReason = ref("");
 const confirmClose = ref(false);
-const appealDraft = ref<{ id: string; reply: string; basis: string }>();
+const appealDraft = ref<{
+  id: string;
+  reply: string;
+  basis: string;
+  resolution: AppealResolution | "";
+  originalId: string;
+  replacementAction: string;
+  replacementExpected: string;
+}>();
 const liftDraft = ref<{ enforcementId: string; reason: string }>();
 const enforcementOptions = [
   { action: "restrict_account", target: "account", label: "封禁账户" },
@@ -57,7 +75,7 @@ const enforcementOptions = [
   { action: "remove_content", target: "comment", label: "移除评论" },
   { action: "remove_content", target: "evaluation", label: "移除评价" },
   { action: "freeze_trade", target: "trade", label: "冻结交易" },
-  { action: "adjust_trade_status", target: "trade", label: "结束交易" },
+  { action: "adjust_trade_status", target: "trade", label: "调整交易状态" },
 ] as const;
 const instructions = ref<{ id: number; option: number; targetId: string; expected: string }[]>([]);
 let instructionId = 0;
@@ -153,16 +171,139 @@ async function submit<T extends keyof CaseManagementWrites>(
   }
 }
 
-async function uphold(appeal: PendingCaseAppeal): Promise<void> {
+async function openMessageEvidence(evidenceId: string): Promise<void> {
+  evidenceError.value = "";
+  messageEvidence.value = undefined;
+  evidenceLoading.value = true;
+  try {
+    messageEvidence.value = await readCaseMessageEvidence(props.caseId, evidenceId);
+  } catch (caught) {
+    evidenceError.value = problemMessage(caught);
+  } finally {
+    evidenceLoading.value = false;
+  }
+}
+
+async function citeMessage(): Promise<void> {
+  const reference = detail.value?.reported_message;
+  if (!reference || evidenceLoading.value) return;
+  evidenceError.value = "";
+  evidenceLoading.value = true;
+  const key = "case-evidence";
+  try {
+    const result = await citeReportedMessage(props.caseId, reference, keys.current(key));
+    keys.rotate(key);
+    await load();
+    await openMessageEvidence(result.evidence_id);
+  } catch (caught) {
+    evidenceError.value = problemMessage(caught);
+  } finally {
+    evidenceLoading.value = false;
+  }
+}
+
+function beginAppeal(appeal: PendingCaseAppeal): void {
+  appealDraft.value = {
+    id: appeal.appeal_action_id,
+    reply: "",
+    basis: "",
+    resolution: "",
+    originalId: "",
+    replacementAction: "",
+    replacementExpected: "terminated",
+  };
+}
+
+function selectedAppealEnforcement(appeal: PendingCaseAppeal): AppealableEnforcement | undefined {
+  return appeal.original_enforcements?.find(
+    (item) => item.enforcement_id === appealDraft.value?.originalId,
+  );
+}
+
+function resetAppealReplacement(): void {
+  if (appealDraft.value) appealDraft.value.replacementAction = "";
+}
+
+function appealEnforcementLabel(item: AppealableEnforcement): string {
+  return (
+    enforcementOptions.find(
+      (option) => option.action === item.action && option.target === item.target_type,
+    )?.label ?? item.action
+  );
+}
+
+function appealReplacementOptions(appeal: PendingCaseAppeal) {
+  const original = selectedAppealEnforcement(appeal);
+  if (!original) return [];
+  const liftActions = new Set(["lift_account_restriction", "restore_display", "lift_trade_freeze"]);
+  return enforcementOptions.filter(
+    (option) =>
+      option.target === original.target_type &&
+      option.action !== original.action &&
+      !liftActions.has(option.action),
+  );
+}
+
+function appealReplacement(appeal: PendingCaseAppeal): CaseReplacementEnforcement[] {
   const draft = appealDraft.value;
-  if (writing.value || draft?.id !== appeal.appeal_action_id) return;
+  const original = selectedAppealEnforcement(appeal);
+  const option = enforcementOptions.find(
+    (candidate) =>
+      candidate.action === draft?.replacementAction && candidate.target === original?.target_type,
+  );
+  if (!original || !option) return [];
+  return [
+    {
+      action: option.action,
+      target_type: original.target_type,
+      target_id: original.target_id,
+      expected_result:
+        option.action === "adjust_trade_status" ? draft?.replacementExpected : undefined,
+    },
+  ];
+}
+
+async function resolveAppeal(appeal: PendingCaseAppeal): Promise<void> {
+  const draft = appealDraft.value;
+  if (writing.value || !draft || draft.id !== appeal.appeal_action_id) return;
+  const resolution = draft.resolution;
+  if (!resolution) {
+    writeError.value = "请选择处理结果。";
+    return;
+  }
+  if (resolution !== "uphold" && !draft.originalId) {
+    writeError.value = "请选择要撤销或调整的原处置。";
+    return;
+  }
+  const replacements = resolution === "adjust" ? appealReplacement(appeal) : [];
+  if (resolution === "adjust" && replacements.length === 0) {
+    writeError.value = "请选择替代处置。";
+    return;
+  }
   const reply = draft.reply.trim();
   const basisRef = draft.basis.trim();
-  const key = JSON.stringify(["uphold", appeal.appeal_action_id, reply, basisRef]);
+  const key = JSON.stringify([
+    "resolve-appeal",
+    appeal.appeal_action_id,
+    resolution,
+    resolution === "uphold" ? null : draft.originalId,
+    replacements,
+    reply,
+    basisRef,
+  ]);
   writing.value = true;
   writeError.value = "";
   try {
-    await upholdCaseAppeal(props.caseId, appeal, reply, basisRef, keys.current(key));
+    await resolveCaseAppeal(
+      props.caseId,
+      appeal,
+      resolution,
+      draft.originalId || null,
+      replacements,
+      reply,
+      basisRef,
+      keys.current(key),
+    );
     keys.rotate(key);
     appealDraft.value = undefined;
     notify.success("已处理申辩。");
@@ -319,9 +460,37 @@ onUnmounted(() => {
           </li>
         </ul>
       </section>
-      <section v-if="detail.evidence?.length" class="card stack">
+      <section v-if="detail.target" class="card stack">
+        <h2>被举报内容</h2>
+        <p>
+          {{ detail.target.target_type === "comment" ? "评论" : "评价" }} #{{
+            detail.target.target_id
+          }}
+          · 作者账户 #{{ detail.target.author_account_id }} ·
+          {{ detail.target.removed ? "已移除" : "待审核" }}
+        </p>
+        <p class="pre-line">{{ detail.target.body }}</p>
+        <p v-if="detail.target.created_at">发表于 {{ formatDateTime(detail.target.created_at) }}</p>
+      </section>
+      <section
+        v-if="detail.evidence?.length || (detail.reported_message && !detail.archived_at)"
+        class="card stack"
+      >
         <h2>证据引用</h2>
-        <ul>
+        <button
+          v-if="
+            detail.reported_message &&
+            !detail.archived_at &&
+            !detail.evidence?.some((item) => item.evidence_kind === 'platform_record')
+          "
+          type="button"
+          class="btn"
+          :disabled="evidenceLoading"
+          @click="citeMessage"
+        >
+          引用被举报消息
+        </button>
+        <ul v-if="detail.evidence?.length">
           <li v-for="item in detail.evidence" :key="item.evidence_id">
             证据 #{{ item.evidence_id
             }}<template v-if="item.file_id"> · 文件 #{{ item.file_id }}</template>
@@ -332,8 +501,28 @@ onUnmounted(() => {
               rel="noopener noreferrer"
               >打开证据</a
             >
+            <button
+              v-else-if="item.evidence_kind === 'platform_record'"
+              type="button"
+              class="btn"
+              :disabled="evidenceLoading"
+              @click="openMessageEvidence(item.evidence_id)"
+            >
+              读取引用消息
+            </button>
           </li>
         </ul>
+        <p v-if="evidenceError" class="error-text" role="alert">{{ evidenceError }}</p>
+        <div v-if="messageEvidence" class="stack">
+          <p>
+            消息 #{{ messageEvidence.message.message_id }}
+            <template v-if="messageEvidence.message.sender_account_id">
+              · 账户 #{{ messageEvidence.message.sender_account_id }}
+            </template>
+            · {{ formatDateTime(messageEvidence.message.created_at) }}
+          </p>
+          <p class="pre-line">{{ messageEvidence.message.body }}</p>
+        </div>
       </section>
       <section v-if="detail.actions.length" class="card stack">
         <h2>处理记录</h2>
@@ -479,7 +668,11 @@ onUnmounted(() => {
               >
                 <option value="terminated">已终止</option>
                 <option value="completed">已完成</option>
+                <option value="in_progress">恢复进行中（仅异常交易）</option>
               </select>
+              <span class="muted"
+                >恢复进行中保留锁单与冻结，清空当前完成确认但不启动计时；交易须与本案目标一致。</span
+              >
             </label>
             <div>
               <button
@@ -519,17 +712,116 @@ onUnmounted(() => {
               v-if="appealDraft?.id !== appeal.appeal_action_id"
               type="button"
               class="btn"
-              @click="appealDraft = { id: appeal.appeal_action_id, reply: '', basis: '' }"
+              @click="beginAppeal(appeal)"
             >
-              维持原决定
+              处理申辩
             </button>
           </div>
           <form
             v-if="appealDraft?.id === appeal.appeal_action_id"
             class="stack"
             :aria-label="`处理申辩 #${appeal.appeal_action_id}`"
-            @submit.prevent="uphold(appeal)"
+            @submit.prevent="resolveAppeal(appeal)"
           >
+            <fieldset class="stack">
+              <legend>处理结果</legend>
+              <label>
+                <input
+                  v-model="appealDraft.resolution"
+                  type="radio"
+                  name="resolution"
+                  value="uphold"
+                  required
+                />
+                维持原决定
+              </label>
+              <label>
+                <input
+                  v-model="appealDraft.resolution"
+                  type="radio"
+                  name="resolution"
+                  value="revoke"
+                  :disabled="!appeal.original_enforcements?.length"
+                  required
+                />
+                撤销原处置
+              </label>
+              <label>
+                <input
+                  v-model="appealDraft.resolution"
+                  type="radio"
+                  name="resolution"
+                  value="adjust"
+                  :disabled="!appeal.original_enforcements?.length"
+                  required
+                />
+                调整处置
+              </label>
+            </fieldset>
+            <p v-if="!appeal.original_enforcements?.length" class="muted">
+              没有可撤销或调整的原处置，只能维持原决定。
+            </p>
+            <label
+              v-if="appealDraft.resolution === 'revoke' || appealDraft.resolution === 'adjust'"
+              class="field"
+            >
+              <span>原处置</span>
+              <select
+                v-model="appealDraft.originalId"
+                name="original_enforcement_id"
+                class="select"
+                required
+                @change="resetAppealReplacement()"
+              >
+                <option value="" disabled>请选择原处置</option>
+                <option
+                  v-for="item in appeal.original_enforcements ?? []"
+                  :key="item.enforcement_id"
+                  :value="item.enforcement_id"
+                >
+                  {{ appealEnforcementLabel(item) }} · {{ item.enforcement_id }} · 目标 #{{
+                    item.target_id
+                  }}
+                </option>
+              </select>
+            </label>
+            <template v-if="appealDraft.resolution === 'adjust'">
+              <label class="field">
+                <span>替代处置</span>
+                <select
+                  v-model="appealDraft.replacementAction"
+                  name="replacement_action"
+                  class="select"
+                  required
+                >
+                  <option value="" disabled>请选择替代处置</option>
+                  <option
+                    v-for="option in appealReplacementOptions(appeal)"
+                    :key="`${option.action}-${option.target}`"
+                    :value="option.action"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <p
+                v-if="appealDraft.originalId && appealReplacementOptions(appeal).length === 0"
+                class="muted"
+              >
+                该原处置暂不支持调整，请选择撤销或维持。
+              </p>
+              <label v-if="appealDraft.replacementAction === 'adjust_trade_status'" class="field">
+                <span>目标状态</span>
+                <select
+                  v-model="appealDraft.replacementExpected"
+                  name="replacement_expected_result"
+                  class="select"
+                >
+                  <option value="terminated">已终止</option>
+                  <option value="completed">已完成</option>
+                </select>
+              </label>
+            </template>
             <label class="field"
               ><span>回复内容</span>
               <textarea v-model="appealDraft.reply" name="reply" class="textarea" required />
@@ -540,7 +832,7 @@ onUnmounted(() => {
             </label>
             <div class="inline">
               <button type="button" class="btn" @click="appealDraft = undefined">取消</button>
-              <button type="submit" class="btn btn--primary" :disabled="writing">确认维持</button>
+              <button type="submit" class="btn btn--primary" :disabled="writing">提交处理</button>
             </div>
           </form>
         </div>

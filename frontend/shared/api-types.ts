@@ -746,6 +746,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/admin/cases/{case_id}/evidence": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** 引用本举报指向的消息作为平台记录证据 */
+    post: operations["referenceCaseEvidence"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/cases/{case_id}/evidence/{evidence_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 读取本事项引用的消息正文与最小上下文 */
+    get: operations["readCaseEvidenceReference"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/admin/cases/{case_id}/inquiries": {
     parameters: {
       query?: never;
@@ -1561,11 +1595,18 @@ export interface components {
     CaseEnforcementView: {
       enforcement_id: string;
       action: string;
+      target_ref?: string | null;
+      result_ref?: string | null;
       /** @enum {string} */
       result_status: "applied" | "replayed" | "failed";
+      previous_state?: string | null;
       current_state?: string | null;
       /** @description Management viewpoint only. True when this enforcement is applied, not already lifted, and reversible by API-CASE-008. */
       can_lift?: boolean;
+      affected_scope?: {
+        resource_type: string;
+        resource_id: string;
+      }[];
     };
     CasePendingInquiry: {
       inquiry_action_id: string;
@@ -1616,13 +1657,35 @@ export interface components {
         | "close"
         | "publish_result"
       )[];
+      /** @description Exact reported message identity without body or sender, only for the assigned manager. */
+      reported_message?: components["schemas"]["CaseEvidenceReferenceRequest"];
+      /** @description Exact reported comment or evaluation projected only for the assigned manager. */
+      target?: {
+        /** @enum {string} */
+        target_type: "comment" | "evaluation";
+        target_id: string;
+        author_account_id: string;
+        parent_id?: string;
+        body: string;
+        state: string;
+        /** Format: date-time */
+        created_at: string;
+        removed: boolean;
+      };
       pending_inquiries?: components["schemas"]["CasePendingInquiry"][];
-      /** @description Only the assigned manager receives unresolved appeals. Use each item with the original thread when submitting manager_reply. */
+      /** @description Only the assigned manager receives unresolved appeals. Each item names the active applied original enforcements that affected the appellant; use one with the original thread when submitting manager_reply. Reversal, lifted and terminal records are omitted. */
       pending_appeals?: {
         appeal_action_id: string;
         related_account_id: string;
         /** Format: date-time */
         submitted_at: string;
+        /** @description Eligible original executions tied to this appeal account: active applied trade freeze, account restriction or display withdrawal. Never includes a previous lift, a replacement record, a terminal adjustment or irreversible content removal. */
+        original_enforcements: {
+          enforcement_id: string;
+          action: string;
+          target_type: string;
+          target_id: string;
+        }[];
         thread: components["schemas"]["CaseThread"];
       }[];
       thread?: components["schemas"]["CaseThread"] | null;
@@ -1634,10 +1697,50 @@ export interface components {
       }[];
       evidence?: {
         evidence_id: string;
+        /** @enum {string} */
+        evidence_kind?: "submitter_attachment" | "platform_record";
         file_id?: string | null;
       }[];
       actions?: components["schemas"]["CaseActionView"][];
       enforcements?: components["schemas"]["CaseEnforcementView"][];
+    };
+    CaseEvidenceReferenceRequest: {
+      /** @enum {string} */
+      conversation_kind: "chat" | "trade" | "case";
+      conversation_id: string;
+      message_id: string;
+    };
+    CaseEvidenceSourceRef: {
+      /** @constant */
+      resource_type: "message";
+      resource_id: string;
+    };
+    CaseEvidenceReference: {
+      evidence_id: string;
+      case_id: string;
+      /** @constant */
+      evidence_kind: "platform_record";
+      source_ref: components["schemas"]["CaseEvidenceSourceRef"];
+      reused: boolean;
+    };
+    CaseReferencedMessage: {
+      evidence_id: string;
+      case_id: string;
+      source_ref: components["schemas"]["CaseEvidenceSourceRef"];
+      conversation: {
+        /** @enum {string} */
+        conversation_kind: "chat" | "trade" | "case";
+        conversation_id: string;
+      };
+      message: {
+        message_id: string;
+        /** @enum {string} */
+        sender_kind: "account" | "system";
+        sender_account_id?: string | null;
+        /** Format: date-time */
+        created_at: string;
+        body: string;
+      };
     };
     CaseResult: {
       case_id: string;
@@ -1681,6 +1784,25 @@ export interface components {
       /** @enum {string|null} */
       resolution?: "uphold" | "revoke" | "adjust" | null;
       basis_ref?: string | null;
+      /** @description Required for revoke or adjust: the manager-selected original execution from pending_appeals[].original_enforcements. Omit for statement, appeal and uphold. */
+      original_enforcement_id?: string | null;
+      /** @description Only valid for adjust. Requires a concrete action on the same target as the selected original execution; omit for revoke, uphold, statement and appeal. */
+      replacement_enforcements?: {
+        /** @enum {string} */
+        action:
+          | "restrict_account"
+          | "lift_account_restriction"
+          | "withdraw_public_access"
+          | "restore_display"
+          | "remove_content"
+          | "freeze_trade"
+          | "lift_trade_freeze"
+          | "adjust_trade_status"
+          | "remove_evaluation_content";
+        target_type: string;
+        target_id: string;
+        expected_result?: string | null;
+      }[];
     };
     CaseInquiryRequest: {
       peer_account_id: string;
@@ -1705,6 +1827,12 @@ export interface components {
           | "remove_evaluation_content";
         target_type: string;
         target_id: string;
+        /**
+         * @description For adjust_trade_status: completed, terminated, or in_progress. in_progress restores only an abnormal trade and keeps its occupancy and freezes.
+         * @example completed
+         * @example terminated
+         * @example in_progress
+         */
         expected_result?: string | null;
       }[];
     };
@@ -4725,6 +4853,121 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  referenceCaseEvidence: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        "X-CSRF-Token": string;
+      };
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CaseEvidenceReferenceRequest"];
+      };
+    };
+    responses: {
+      /** @description 同一事项、分支与消息已存在引用，返回既有记录 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CaseEvidenceReference"];
+        };
+      };
+      /** @description 引用已建立 */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CaseEvidenceReference"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE（非当前认领管理员或事项不存在） */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description CASE_CLOSED */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description INPUT_INVALID / EVIDENCE_OUT_OF_SCOPE */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  readCaseEvidenceReference: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+        evidence_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 被引用消息正文与最小上下文 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CaseReferencedMessage"];
+        };
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE（非当前认领管理员、非消息引用或范围不符） */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
         };
       };
     };

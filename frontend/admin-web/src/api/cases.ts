@@ -33,11 +33,36 @@ export interface ManagementCaseThread {
   related_account_id: string;
 }
 
+/** One active original execution that the assigned manager may revoke or adjust. */
+export interface AppealableEnforcement {
+  enforcement_id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+}
+
 export interface PendingCaseAppeal {
   appeal_action_id: string;
   related_account_id: string;
   submitted_at: string;
+  original_enforcements?: AppealableEnforcement[];
   thread: Pick<ManagementCaseThread, "conversation_kind" | "conversation_id">;
+}
+
+export interface ReportedMessageReference {
+  conversation_kind: "chat" | "trade" | "case";
+  conversation_id: string;
+  message_id: string;
+}
+
+export interface CaseMessageEvidence {
+  evidence_id: string;
+  message: {
+    message_id: string;
+    sender_account_id?: string | null;
+    created_at: string;
+    body: string;
+  };
 }
 
 export interface ManagementCaseDetail {
@@ -50,9 +75,25 @@ export interface ManagementCaseDetail {
   archived_at: string | null;
   public_result_at: string | null;
   available_actions?: string[];
+  /** Manager-only projection of the exact comment/evaluation target of this case. */
+  target?: {
+    target_type: "comment" | "evaluation";
+    target_id: string;
+    author_account_id: string;
+    parent_id?: string | null;
+    body: string | null;
+    state: string;
+    created_at: string | null;
+    removed: boolean;
+  } | null;
   threads?: ManagementCaseThread[];
   pending_appeals?: PendingCaseAppeal[];
-  evidence?: { evidence_id: string; file_id: string | null }[];
+  reported_message?: ReportedMessageReference;
+  evidence?: {
+    evidence_id: string;
+    evidence_kind?: "submitter_attachment" | "platform_record";
+    file_id: string | null;
+  }[];
   actions: { action_kind: string; occurred_at: string; actor_kind: string }[];
   enforcements: {
     enforcement_id: string;
@@ -100,6 +141,27 @@ export function caseEvidenceFileHref(caseId: string, evidenceId: string): string
   return `/api/v1/admin/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(evidenceId)}/file`;
 }
 
+export function citeReportedMessage(
+  caseId: string,
+  reference: ReportedMessageReference,
+  idempotencyKey: string,
+): Promise<{ evidence_id: string }> {
+  return request("POST", `/admin/cases/${encodeURIComponent(caseId)}/evidence`, {
+    body: reference,
+    idempotencyKey,
+  });
+}
+
+export function readCaseMessageEvidence(
+  caseId: string,
+  evidenceId: string,
+): Promise<CaseMessageEvidence> {
+  return request(
+    "GET",
+    `/admin/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(evidenceId)}`,
+  );
+}
+
 export function readCaseThread(
   conversationId: string,
   beforeSeq?: number,
@@ -123,6 +185,51 @@ export interface CaseManagementWrites {
   "publish-result": { public_summary: string; public_reason: string };
 }
 
+export type AppealResolution = "uphold" | "revoke" | "adjust";
+
+/** Replacement item uses the same fields as an API-CASE-007 decision enforcement. */
+export interface CaseReplacementEnforcement {
+  action: string;
+  target_type: string;
+  target_id: string;
+  expected_result?: string;
+}
+
+/**
+ * Resolves one pending appeal. A revoke or adjust names the manager-selected original execution;
+ * only an adjust carries a concrete replacement list.
+ */
+export function resolveCaseAppeal(
+  caseId: string,
+  appeal: PendingCaseAppeal,
+  resolution: AppealResolution,
+  originalEnforcementId: string | null,
+  replacementEnforcements: CaseReplacementEnforcement[],
+  body: string,
+  basisRef: string,
+  idempotencyKey: string,
+): Promise<unknown> {
+  const payload: Record<string, unknown> = {
+    thread: appeal.thread,
+    message_kind: "manager_reply",
+    appeal_action_id: appeal.appeal_action_id,
+    resolution,
+    body,
+    basis_ref: basisRef,
+  };
+  if (resolution !== "uphold") {
+    payload.original_enforcement_id = originalEnforcementId;
+  }
+  if (resolution === "adjust") {
+    payload.replacement_enforcements = replacementEnforcements;
+  }
+  return request("POST", `/cases/${encodeURIComponent(caseId)}/messages`, {
+    body: payload,
+    idempotencyKey,
+  });
+}
+
+/** Compatibility wrapper for the existing uphold-only appeal action. */
 export function upholdCaseAppeal(
   caseId: string,
   appeal: PendingCaseAppeal,
@@ -130,17 +237,7 @@ export function upholdCaseAppeal(
   basisRef: string,
   idempotencyKey: string,
 ): Promise<unknown> {
-  return request("POST", `/cases/${encodeURIComponent(caseId)}/messages`, {
-    body: {
-      thread: appeal.thread,
-      message_kind: "manager_reply",
-      appeal_action_id: appeal.appeal_action_id,
-      resolution: "uphold",
-      body,
-      basis_ref: basisRef,
-    },
-    idempotencyKey,
-  });
+  return resolveCaseAppeal(caseId, appeal, "uphold", null, [], body, basisRef, idempotencyKey);
 }
 
 export function writeCase<T extends keyof CaseManagementWrites>(

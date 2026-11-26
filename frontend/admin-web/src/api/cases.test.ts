@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { listCaseQueue, liftCaseEnforcement } from "./cases";
+import { listCaseQueue, liftCaseEnforcement, resolveCaseAppeal, upholdCaseAppeal } from "./cases";
 import { ApiError } from "./errors";
 
 const originalFetch = globalThis.fetch;
@@ -117,5 +117,131 @@ describe("case enforcement lift", () => {
         error.status === 409 &&
         error.code === "RESTRICTION_NOT_ACTIVE",
     );
+  });
+});
+
+describe("appeal resolution", () => {
+  it("sends the selected original and concrete replacement only for adjust", async () => {
+    let url = "";
+    let body = "";
+    let method = "";
+    globalThis.fetch = (async (input, init) => {
+      url = String(input);
+      method = init?.method ?? "";
+      body = String(init?.body ?? "");
+      return new Response(JSON.stringify({ case_action_id: "1" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    await resolveCaseAppeal(
+      "41",
+      {
+        appeal_action_id: "102",
+        related_account_id: "21",
+        submitted_at: "2026-11-24T00:00:00Z",
+        original_enforcements: [],
+        thread: { conversation_kind: "case", conversation_id: "71" },
+      },
+      "adjust",
+      "enf-1",
+      [
+        {
+          action: "adjust_trade_status",
+          target_type: "trade",
+          target_id: "900",
+          expected_result: "terminated",
+        },
+      ],
+      "已调整",
+      "evidence:7",
+      "key-1",
+    );
+
+    assert.equal(url, "/api/v1/cases/41/messages");
+    assert.equal(method, "POST");
+    assert.deepEqual(JSON.parse(body), {
+      thread: { conversation_kind: "case", conversation_id: "71" },
+      message_kind: "manager_reply",
+      appeal_action_id: "102",
+      resolution: "adjust",
+      original_enforcement_id: "enf-1",
+      replacement_enforcements: [
+        {
+          action: "adjust_trade_status",
+          target_type: "trade",
+          target_id: "900",
+          expected_result: "terminated",
+        },
+      ],
+      body: "已调整",
+      basis_ref: "evidence:7",
+    });
+  });
+
+  it("preserves the existing uphold wrapper body", async () => {
+    let body = "";
+    globalThis.fetch = (async (_input, init) => {
+      body = String(init?.body ?? "");
+      return new Response(JSON.stringify({ case_action_id: "1" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    await upholdCaseAppeal(
+      "41",
+      {
+        appeal_action_id: "102",
+        related_account_id: "21",
+        submitted_at: "2026-11-24T00:00:00Z",
+        thread: { conversation_kind: "case", conversation_id: "71" },
+      },
+      "维持",
+      "evidence:7",
+      "key-3",
+    );
+
+    assert.deepEqual(JSON.parse(body), {
+      thread: { conversation_kind: "case", conversation_id: "71" },
+      message_kind: "manager_reply",
+      appeal_action_id: "102",
+      resolution: "uphold",
+      body: "维持",
+      basis_ref: "evidence:7",
+    });
+  });
+
+  it("omits selection fields for uphold", async () => {
+    let body = "";
+    globalThis.fetch = (async (_input, init) => {
+      body = String(init?.body ?? "");
+      return new Response(JSON.stringify({ case_action_id: "1" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    await resolveCaseAppeal(
+      "41",
+      {
+        appeal_action_id: "102",
+        related_account_id: "21",
+        submitted_at: "2026-11-24T00:00:00Z",
+        thread: { conversation_kind: "case", conversation_id: "71" },
+      },
+      "uphold",
+      null,
+      [],
+      "维持",
+      "evidence:7",
+      "key-2",
+    );
+
+    const payload = JSON.parse(body);
+    assert.equal(payload.resolution, "uphold");
+    assert.equal("original_enforcement_id" in payload, false);
+    assert.equal("replacement_enforcements" in payload, false);
   });
 });

@@ -4618,6 +4618,173 @@
         }
       }
     },
+    "/api/v1/admin/cases/{case_id}/evidence": {
+      "post": {
+        "operationId": "referenceCaseEvidence",
+        "summary": "引用本举报指向的消息作为平台记录证据",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseEvidenceReferenceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "引用已建立",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseEvidenceReference"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "同一事项、分支与消息已存在引用，返回既有记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseEvidenceReference"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_VISIBLE（非当前认领管理员或事项不存在）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CASE_CLOSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "INPUT_INVALID / EVIDENCE_OUT_OF_SCOPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/cases/{case_id}/evidence/{evidence_id}": {
+      "get": {
+        "operationId": "readCaseEvidenceReference",
+        "summary": "读取本事项引用的消息正文与最小上下文",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "被引用消息正文与最小上下文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseReferencedMessage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_VISIBLE（非当前认领管理员、非消息引用或范围不符）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/cases/{case_id}/inquiries": {
       "post": {
         "operationId": "inquireCase",
@@ -7588,9 +7755,18 @@
           "action": {
             "type": "string"
           },
+          "target_ref": {
+            "type": ["string", "null"]
+          },
+          "result_ref": {
+            "type": ["string", "null"]
+          },
           "result_status": {
             "type": "string",
             "enum": ["applied", "replayed", "failed"]
+          },
+          "previous_state": {
+            "type": ["string", "null"]
           },
           "current_state": {
             "type": ["string", "null"]
@@ -7598,6 +7774,22 @@
           "can_lift": {
             "type": "boolean",
             "description": "Management viewpoint only. True when this enforcement is applied, not already lifted, and reversible by API-CASE-008."
+          },
+          "affected_scope": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["resource_type", "resource_id"],
+              "properties": {
+                "resource_type": {
+                  "type": "string"
+                },
+                "resource_id": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              }
+            }
           }
         }
       },
@@ -7721,6 +7913,51 @@
               ]
             }
           },
+          "reported_message": {
+            "description": "Exact reported message identity without body or sender, only for the assigned manager.",
+            "$ref": "#/components/schemas/CaseEvidenceReferenceRequest"
+          },
+          "target": {
+            "type": "object",
+            "description": "Exact reported comment or evaluation projected only for the assigned manager.",
+            "required": [
+              "target_type",
+              "target_id",
+              "author_account_id",
+              "body",
+              "state",
+              "created_at",
+              "removed"
+            ],
+            "properties": {
+              "target_type": {
+                "type": "string",
+                "enum": ["comment", "evaluation"]
+              },
+              "target_id": {
+                "type": "string"
+              },
+              "author_account_id": {
+                "type": "string"
+              },
+              "parent_id": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "removed": {
+                "type": "boolean"
+              }
+            }
+          },
           "pending_inquiries": {
             "type": "array",
             "items": {
@@ -7729,14 +7966,44 @@
           },
           "pending_appeals": {
             "type": "array",
-            "description": "Only the assigned manager receives unresolved appeals. Use each item with the original thread when submitting manager_reply.",
+            "description": "Only the assigned manager receives unresolved appeals. Each item names the active applied original enforcements that affected the appellant; use one with the original thread when submitting manager_reply. Reversal, lifted and terminal records are omitted.",
             "items": {
               "type": "object",
-              "required": ["appeal_action_id", "related_account_id", "submitted_at", "thread"],
+              "required": [
+                "appeal_action_id",
+                "related_account_id",
+                "submitted_at",
+                "original_enforcements",
+                "thread"
+              ],
               "properties": {
                 "appeal_action_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
                 "related_account_id": { "type": "string", "pattern": "^[1-9][0-9]*$" },
                 "submitted_at": { "type": "string", "format": "date-time" },
+                "original_enforcements": {
+                  "type": "array",
+                  "description": "Eligible original executions tied to this appeal account: active applied trade freeze, account restriction or display withdrawal. Never includes a previous lift, a replacement record, a terminal adjustment or irreversible content removal.",
+                  "items": {
+                    "type": "object",
+                    "required": ["enforcement_id", "action", "target_type", "target_id"],
+                    "properties": {
+                      "enforcement_id": {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "action": {
+                        "type": "string"
+                      },
+                      "target_type": {
+                        "type": "string"
+                      },
+                      "target_id": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]*$"
+                      }
+                    }
+                  }
+                },
                 "thread": { "$ref": "#/components/schemas/CaseThread" }
               }
             }
@@ -7779,6 +8046,10 @@
                 "evidence_id": {
                   "type": "string"
                 },
+                "evidence_kind": {
+                  "type": "string",
+                  "enum": ["submitter_attachment", "platform_record"]
+                },
                 "file_id": {
                   "type": ["string", "null"]
                 }
@@ -7795,6 +8066,119 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CaseEnforcementView"
+            }
+          }
+        }
+      },
+      "CaseEvidenceReferenceRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conversation_kind", "conversation_id", "message_id"],
+        "properties": {
+          "conversation_kind": {
+            "type": "string",
+            "enum": ["chat", "trade", "case"]
+          },
+          "conversation_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "message_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          }
+        }
+      },
+      "CaseEvidenceSourceRef": {
+        "type": "object",
+        "required": ["resource_type", "resource_id"],
+        "properties": {
+          "resource_type": {
+            "type": "string",
+            "const": "message"
+          },
+          "resource_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          }
+        }
+      },
+      "CaseEvidenceReference": {
+        "type": "object",
+        "required": ["evidence_id", "case_id", "evidence_kind", "source_ref", "reused"],
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "evidence_kind": {
+            "type": "string",
+            "const": "platform_record"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/CaseEvidenceSourceRef"
+          },
+          "reused": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CaseReferencedMessage": {
+        "type": "object",
+        "required": ["evidence_id", "case_id", "source_ref", "conversation", "message"],
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/CaseEvidenceSourceRef"
+          },
+          "conversation": {
+            "type": "object",
+            "required": ["conversation_kind", "conversation_id"],
+            "properties": {
+              "conversation_kind": {
+                "type": "string",
+                "enum": ["chat", "trade", "case"]
+              },
+              "conversation_id": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              }
+            }
+          },
+          "message": {
+            "type": "object",
+            "required": ["message_id", "sender_kind", "created_at", "body"],
+            "properties": {
+              "message_id": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "sender_kind": {
+                "type": "string",
+                "enum": ["account", "system"]
+              },
+              "sender_account_id": {
+                "type": ["string", "null"],
+                "pattern": "^[1-9][0-9]*$"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "body": {
+                "type": "string"
+              }
             }
           }
         }
@@ -7927,6 +8311,45 @@
           },
           "basis_ref": {
             "type": ["string", "null"]
+          },
+          "original_enforcement_id": {
+            "type": ["string", "null"],
+            "maxLength": 128,
+            "description": "Required for revoke or adjust: the manager-selected original execution from pending_appeals[].original_enforcements. Omit for statement, appeal and uphold."
+          },
+          "replacement_enforcements": {
+            "type": "array",
+            "description": "Only valid for adjust. Requires a concrete action on the same target as the selected original execution; omit for revoke, uphold, statement and appeal.",
+            "items": {
+              "type": "object",
+              "required": ["action", "target_type", "target_id"],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "restrict_account",
+                    "lift_account_restriction",
+                    "withdraw_public_access",
+                    "restore_display",
+                    "remove_content",
+                    "freeze_trade",
+                    "lift_trade_freeze",
+                    "adjust_trade_status",
+                    "remove_evaluation_content"
+                  ]
+                },
+                "target_type": {
+                  "type": "string"
+                },
+                "target_id": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                },
+                "expected_result": {
+                  "type": ["string", "null"]
+                }
+              }
+            }
           }
         }
       },
@@ -7991,7 +8414,9 @@
                   "type": "string"
                 },
                 "expected_result": {
-                  "type": ["string", "null"]
+                  "type": ["string", "null"],
+                  "description": "For adjust_trade_status: completed, terminated, or in_progress. in_progress restores only an abnormal trade and keeps its occupancy and freezes.",
+                  "examples": ["completed", "terminated", "in_progress"]
                 }
               }
             }
