@@ -682,7 +682,6 @@ onUnmounted(() => {
                       }}</strong>
                       <span class="muted">
                         {{ item.result_status === "failed" ? "失败" : "已记录" }}
-                        <template v-if="item.current_state"> · {{ item.current_state }}</template>
                       </span>
                     </span>
                     <button
