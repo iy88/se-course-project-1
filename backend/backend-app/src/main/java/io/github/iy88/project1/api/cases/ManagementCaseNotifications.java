@@ -37,7 +37,7 @@ class ManagementCaseNotifications implements NotificationSourcePort {
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void create(ManagementCaseChange change) {
-        if ("inquire".equals(change.kind())) return;
+        if ("inquire".equals(change.kind()) || "manager_reply".equals(change.kind())) return;
         var recipients = new HashSet<>(jdbc.sql("""
                 select a.account_id
                 from account a cross join moderation_case c

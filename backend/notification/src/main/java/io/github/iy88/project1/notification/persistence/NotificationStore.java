@@ -52,7 +52,9 @@ public interface NotificationStore {
     long unreadCount(long recipientAccountId, boolean management);
 
     static boolean inAudience(String eventType, boolean management) {
-        return eventType.startsWith("management.") == management;
+        return !eventType.equals("case.appeal_resolved")
+                && !eventType.equals("management.case_manager_reply")
+                && eventType.startsWith("management.") == management;
     }
 
     /** One stored notification with the fields the read rules need. */

@@ -273,6 +273,12 @@ class CaseLifecycleIT {
                         secondAppealId, CaseVocabulary.RESOLUTION_UPHOLD, null, null, List.of(),
                         List.of("action:" + secondAppealId))).status()).isEqualTo(201);
 
+        assertThat(db.sql("""
+                        select count(*) from notification
+                        where source_type = 'case' and source_id = ?
+                          and event_type in ('case.appeal_resolved', 'management.case_manager_reply')
+                        """).param(caseId).query(Long.class).single()).isZero();
+
         // A resolved appeal no longer blocks, but the deadline still does.
         assertThatThrownBy(() -> cases.close(context(manager), "close-2", caseId))
                 .isInstanceOfSatisfying(BusinessError.class,

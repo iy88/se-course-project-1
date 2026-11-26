@@ -35,6 +35,7 @@ interface NotificationRepository extends Repository<NotificationRecord, Long> {
                    or (:readState = 1 and n.readAt is null)
                    or (:readState = 2 and n.readAt is not null))
               and (:eventType is null or n.eventType = :eventType)
+              and n.eventType not in ('case.appeal_resolved', 'management.case_manager_reply')
               and ((:management = true and n.eventType like 'management.%')
                    or (:management = false and n.eventType not like 'management.%'))
             order by n.id desc
@@ -50,6 +51,7 @@ interface NotificationRepository extends Repository<NotificationRecord, Long> {
                    or (:readState = 1 and n.readAt is null)
                    or (:readState = 2 and n.readAt is not null))
               and (:eventType is null or n.eventType = :eventType)
+              and n.eventType not in ('case.appeal_resolved', 'management.case_manager_reply')
               and ((:management = true and n.eventType like 'management.%')
                    or (:management = false and n.eventType not like 'management.%'))
             """)
@@ -59,6 +61,7 @@ interface NotificationRepository extends Repository<NotificationRecord, Long> {
     @Query("""
             select count(n) from NotificationRecord n
             where n.recipientAccountId = :recipient and n.readAt is null
+              and n.eventType not in ('case.appeal_resolved', 'management.case_manager_reply')
               and ((:management = true and n.eventType like 'management.%')
                    or (:management = false and n.eventType not like 'management.%'))
             """)

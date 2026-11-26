@@ -728,10 +728,6 @@ public class CaseApplication {
                     CaseVocabulary.ACTION_MANAGER_REPLY, CaseVocabulary.ACTOR_MANAGER, actor, now,
                     appended.messageId(), appellant, null, appeal.actionId(), message.resolution(),
                     sourceNote, basisJson(basisRefs)));
-            notifications.create(transaction, CaseVocabulary.EVENT_APPEAL_RESOLVED,
-                    "case:" + facts.caseId() + ":appeal:" + appeal.actionId() + ":resolved",
-                    new ResourceRef("case", facts.caseId()), Set.of(appellant),
-                    Map.of("case_id", Long.toString(facts.caseId()), "resolution", message.resolution()), now);
             store.touch(facts.caseId(), now);
             audit(transaction, "case.appeal.resolve", facts.caseId(), actor);
             return messageResponse(facts, conversationId, appended, actionId, CaseVocabulary.KIND_MANAGER_REPLY);
