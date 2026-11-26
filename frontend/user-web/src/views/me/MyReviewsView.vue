@@ -10,6 +10,7 @@ import { listMyReviews } from "../../api/trades";
 import type { TradeReview } from "../../api/contracts";
 import { usePagedList } from "../../app/async";
 import { formatDateTime } from "../../app/format";
+import { session } from "../../app/session";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
@@ -116,6 +117,20 @@ function selectDirection(next: Direction): void {
               class="btn btn--small"
             >
               查看交易
+            </RouterLink>
+            <RouterLink
+              v-if="
+                direction === 'received' &&
+                item.visible &&
+                item.reviewee.id === session.accountId.value
+              "
+              :to="{
+                name: 'report',
+                query: { target_type: 'evaluation', target_id: item.review_id },
+              }"
+              class="btn btn--small btn--ghost"
+            >
+              举报评价
             </RouterLink>
           </div>
         </li>
