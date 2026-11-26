@@ -29,6 +29,7 @@ import io.github.iy88.project1.notification.application.NotificationApplication;
 import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.product.application.ProductDisplayRestrictions;
 import io.github.iy88.project1.product.application.ProductInteractions;
+import io.github.iy88.project1.product.application.ProductService;
 import io.github.iy88.project1.product.persistence.ProductRepository;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.persistence.FileReferences;
@@ -68,9 +69,9 @@ public class CaseHttpConfiguration {
     CasePorts.Targets caseTargets(ProductRepository products, AccountRepository accounts,
                                   ConversationReader reader, ConversationStore conversations,
                                   TradePorts.Participation trades, ProductInteractions comments,
-                                  TradeReviewReadModel reviews, TradeReviewModeration moderation) {
+                                  TradeReviewReadModel reviews, TradeReviewModeration moderation, ProductService productService) {
         return new CaseTargetAdapter(products, accounts, reader, conversations, trades, comments, reviews,
-                moderation);
+                moderation, productService);
     }
 
     @Bean
@@ -329,7 +330,7 @@ public class CaseHttpConfiguration {
                                      ConversationReader reader, ConversationStore conversations,
                                      TradePorts.Participation trades, ProductInteractions comments,
                                      TradeReviewReadModel reviews,
-                                     TradeReviewModeration moderation) implements CasePorts.Targets {
+                                     TradeReviewModeration moderation, ProductService productService) implements CasePorts.Targets {
         @Override
         public void requireReportable(CaseCommands.Target target, long reporterAccountId) {
             switch (target.targetType()) {
@@ -359,6 +360,13 @@ public class CaseHttpConfiguration {
                         .orElseThrow(CaseTargetAdapter::targetInvalid);
                 case "message" -> requireMessageTarget(target, reporterAccountId);
                 default -> throw targetInvalid();
+            }
+        }
+
+        @Override
+        public void captureReportSnapshot(long caseId, CaseCommands.Target target) {
+            if ("product".equals(target.targetType())) {
+                productService.captureReportSnapshot(caseId, target.targetId());
             }
         }
 

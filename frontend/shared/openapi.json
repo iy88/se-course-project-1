@@ -3881,6 +3881,16 @@
             }
           },
           {
+            "name": "case_id",
+            "in": "query",
+            "required": false,
+            "description": "当前认领事项的 ID，与 trade_id 互斥",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
             "name": "page",
             "in": "query",
             "required": false,

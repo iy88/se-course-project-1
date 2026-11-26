@@ -146,6 +146,9 @@ public class ProductService {
                 application = applications.save(new CategoryApplication(product.id(), sellerId, proposed, now));
             }
             attachImages(product.id(), sellerId, command.imageFileIds());
+            if (reviewCases.getIfAvailable() != null) {
+                captureCaseSnapshot(caseId, product);
+            }
             ProductDetail detail = detail(product, sellerId, audit);
             Map<String, Object> facts = new LinkedHashMap<>();
             facts.put("lifecycle_state", product.lifecycleState());
@@ -333,7 +336,11 @@ public class ProductService {
             }
             Instant now = Instant.now();
             int sequence = audits.maxSequence(productId) + 1;
-            ProductAudit audit = audits.save(new ProductAudit(productId, sequence, openCase(now), now));
+            long caseId = openCase(now);
+            ProductAudit audit = audits.save(new ProductAudit(productId, sequence, caseId, now));
+            if (reviewCases.getIfAvailable() != null) {
+                captureCaseSnapshot(caseId, product);
+            }
             product.transition(Product.PENDING_REVIEW, now);
             products.save(product);
             Map<String, Object> facts = new LinkedHashMap<>();
@@ -548,6 +555,75 @@ public class ProductService {
         return detail(product, owner ? viewerId : 0, owner ? latestAudit(productId) : null);
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public ProductDetail purchaseDetail(long buyerId, long productId, long tradeId) {
+        var snapshot = tradeHistory.purchaseSnapshot(productId, buyerId, tradeId)
+                .orElseThrow(ProductService::notVisible);
+        return historicalDetail(productId, snapshot);
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public ProductDetail caseDetail(long managerId, long productId, long caseId) {
+        if (!cases.claimedForProduct(managerId, caseId, productId)) {
+            throw notVisible();
+        }
+        var snapshot = jdbc.sql("""
+                        select content_version, title, description, price_cents, captured_at
+                          from product_case_snapshot
+                         where case_id = :caseId and product_id = :productId
+                        """).param("caseId", caseId).param("productId", productId)
+                .query((row, index) -> new ProductTradeHistory.PurchaseSnapshot(row.getInt("content_version"),
+                        row.getString("title"), row.getString("description"), row.getLong("price_cents"),
+                        row.getTimestamp("captured_at").toInstant())).optional().or(() -> reviewedCaseSnapshot(productId, caseId))
+                .orElseThrow(ProductService::notVisible);
+        return historicalDetail(productId, snapshot);
+    }
+
+    private Optional<ProductTradeHistory.PurchaseSnapshot> reviewedCaseSnapshot(long productId, long caseId) {
+        return audits.findByCaseId(caseId)
+                .filter(audit -> audit.productId() == productId && audit.decidedAt() != null
+                        && audit.reviewedContentVersion() != null)
+                .flatMap(audit -> {
+                    Map<String, Object> content = audit.reviewedContent();
+                    if (content.get("title") instanceof String title
+                            && content.get("description") instanceof String description
+                            && content.get("price_cents") instanceof Number price) {
+                        return Optional.of(new ProductTradeHistory.PurchaseSnapshot(audit.reviewedContentVersion(),
+                                title, description, price.longValue(), audit.decidedAt()));
+                    }
+                    return Optional.empty();
+                });
+    }
+
+    public void captureReportSnapshot(long caseId, long productId) {
+        products.findById(productId).filter(found -> !found.deleted())
+                .ifPresent(product -> captureCaseSnapshot(caseId, product));
+    }
+
+    private void captureCaseSnapshot(long caseId, Product product) {
+        jdbc.sql("""
+                        insert into product_case_snapshot
+                            (case_id, product_id, content_version, title, description, price_cents, captured_at)
+                        select id, :productId, :version, :title, :description, :price, statement_timestamp()
+                          from moderation_case where id = :caseId
+                        on conflict (case_id) do nothing
+                        """).param("caseId", caseId).param("productId", product.id())
+                .param("version", product.contentVersion()).param("title", product.title())
+                .param("description", product.description()).param("price", product.priceCents()).update();
+    }
+
+    private ProductDetail historicalDetail(long productId, ProductTradeHistory.PurchaseSnapshot snapshot) {
+        var product = products.findById(productId).orElseThrow(ProductService::notVisible);
+        var seller = new SellerRef(Long.toString(product.sellerAccountId()), "", null);
+        return new ProductDetail(Long.toString(productId), snapshot.title(), snapshot.description(),
+                snapshot.priceCents(), List.of(), List.of(), seller, product.lifecycleState(), snapshot.contentVersion(),
+                product.createdAt(), snapshot.capturedAt(), null, null, null, null);
+    }
+
+    private static BusinessError notVisible() {
+        return new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在");
+    }
+
     public Optional<String> notificationTitle(long viewerId, long productId) {
         return products.findById(productId).filter(product -> detailVisibleTo(product, viewerId))
                 .map(Product::title);
@@ -653,6 +729,26 @@ public class ProductService {
                                 buyerContent(edit.afterContent()), null))
                 .toList();
         return new PageResult<>(items, currentPage, size, pageResult.getTotalElements());
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResult<EditView> caseEditHistory(long managerId, long productId, long caseId, Integer page,
+                                                Integer pageSize) {
+        if (!cases.claimedForProduct(managerId, caseId, productId)) {
+            throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在");
+        }
+        int currentPage = page == null ? 1 : page;
+        int size = pageSize == null ? settings.pageSize() : pageSize;
+        if (currentPage < 1 || size < 1 || size > settings.pageSizeMax()) {
+            throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
+        }
+        var result = edits.findByProductIdAndBasisTypeAndBasisIdOrderByEditedAtDescIdDesc(
+                productId, "case", caseId, PageRequest.of(currentPage - 1, size));
+        List<EditView> items = result.getContent().stream()
+                .map(edit -> new EditView(Long.toString(edit.id()), edit.editedAt(), edit.operatorKind(),
+                        edit.editKind(), buyerContent(edit.beforeContent()), buyerContent(edit.afterContent()), edit.reason()))
+                .toList();
+        return new PageResult<>(items, currentPage, size, result.getTotalElements());
     }
 
     private static ExecutionContext internalContext() {

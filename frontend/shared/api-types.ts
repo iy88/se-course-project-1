@@ -4407,6 +4407,8 @@ export interface operations {
     parameters: {
       query?: {
         trade_id?: string;
+        /** @description 当前认领事项的 ID，与 trade_id 互斥 */
+        case_id?: string;
         page?: number;
         page_size?: number;
       };

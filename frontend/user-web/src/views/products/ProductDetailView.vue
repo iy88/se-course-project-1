@@ -359,6 +359,15 @@ async function confirmOffShelf(): Promise<void> {
                 label="联系卖家"
                 variant="ghost"
               />
+              <RouterLink
+                :to="{
+                  name: 'report',
+                  query: { target_type: 'account', target_id: product.data.value.seller.id },
+                }"
+                class="btn btn--small btn--ghost"
+              >
+                举报卖方
+              </RouterLink>
             </div>
 
             <div class="summary__description">
