@@ -88,6 +88,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/management/statistics": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get management statistics
+     * @description Requires a current manager session. Only completed_in_selection uses the selected time range.
+     */
+    get: operations["getManagementStatistics"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/products/{product_id}/comments": {
     parameters: {
       query?: never;
@@ -847,6 +867,52 @@ export interface components {
       /** Format: date-time */
       as_of: string;
     };
+    ManagementStatistics: {
+      /** Format: date-time */
+      as_of: string;
+      selection: {
+        /** @enum {string} */
+        time_scope: "all" | "range";
+        /** Format: date-time */
+        start_at: string | null;
+        /** Format: date-time */
+        end_at: string | null;
+      };
+      accounts: {
+        /** Format: int64 */
+        total: number;
+        /** Format: int64 */
+        banned: number;
+      };
+      products_by_state: {
+        /** Format: int64 */
+        pending_review: number;
+        /** Format: int64 */
+        review_rejected: number;
+        /** Format: int64 */
+        public: number;
+        /** Format: int64 */
+        in_trade: number;
+        /** Format: int64 */
+        off_shelf: number;
+      };
+      pending: {
+        /** Format: int64 */
+        reviews: number;
+        /** Format: int64 */
+        reports: number;
+      };
+      trades: {
+        /** Format: int64 */
+        completed: number;
+        /** Format: int64 */
+        terminated: number;
+        /** Format: int64 */
+        disputed: number;
+      };
+      /** Format: int64 */
+      completed_in_selection: number;
+    };
     CommentAuthor: {
       id: string;
       display_name: string;
@@ -1566,6 +1632,70 @@ export interface operations {
         };
       };
       /** @description Review dependency unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+    };
+  };
+  getManagementStatistics: {
+    parameters: {
+      query: {
+        /** @description Choose all records or a half-open UTC interval. */
+        time_scope: "all" | "range";
+        /** @description Inclusive UTC start, required only for range. */
+        start_at?: string;
+        /** @description Exclusive UTC end, required only for range. */
+        end_at?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Management statistics in one read snapshot */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-store";
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ManagementStatistics"];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Management qualification required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Invalid time selection */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Error"];
+        };
+      };
+      /** @description Management statistics dependency unavailable */
       503: {
         headers: {
           [name: string]: unknown;
