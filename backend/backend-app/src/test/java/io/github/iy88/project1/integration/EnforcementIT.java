@@ -121,6 +121,7 @@ class EnforcementIT {
             throw new IllegalArgumentException("REDIS_NAMESPACE is required");
         }
         properties.setProperty("REDIS_NAMESPACE", baseNamespace + ":enforcement:" + RUN_ID);
+        properties.setProperty("ALLOWED_ORIGINS", "http://127.0.0.1:3000");
         properties.setProperty("DB_TRANSACTION_TIMEOUT_SECONDS", "20");
         properties.setProperty("DB_LOCK_TIMEOUT_SECONDS", "10");
         createFixtures(properties);
