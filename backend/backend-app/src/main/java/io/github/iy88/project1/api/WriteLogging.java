@@ -30,7 +30,7 @@ public class WriteLogging {
             throw rejection;
         } catch (Throwable failure) {
             LOG.error("write request_id={} action={} result={} elapsed_ms={}", context.requestId(),
-                    operation, failure.getClass().getSimpleName(), elapsed(start));
+                    operation, failure.getClass().getSimpleName(), elapsed(start), failure);
             throw failure;
         }
     }
