@@ -559,7 +559,8 @@ class S4ProductionEnforcementIT {
         var pdfResponse = http.send(request(reporter, pdfPath).GET().build(), HttpResponse.BodyHandlers.ofString());
         assertThat(pdfResponse.statusCode()).isEqualTo(302);
         assertThat(URI.create(pdfResponse.headers().firstValue("Location").orElseThrow()).getQuery())
-                .contains("response-content-type=application/pdf", "response-content-disposition=inline");
+                .contains("response-content-disposition=inline")
+                .doesNotContain("response-content-type=");
         var ownDetail = get(reporter, "/cases/" + caseId, 200);
         assertThat(ownDetail.at("/report_materials/attachments/0/content_type").asString()).isEqualTo("image/png");
         assertThat(ownDetail.at("/report_materials/attachments/1/content_type").asString()).isEqualTo("application/pdf");
