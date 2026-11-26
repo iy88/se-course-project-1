@@ -37,6 +37,7 @@ class ManagementCaseNotifications implements NotificationSourcePort {
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void create(ManagementCaseChange change) {
+        if ("inquire".equals(change.kind())) return;
         var recipients = new HashSet<>(jdbc.sql("""
                 select a.account_id
                 from account a cross join moderation_case c
@@ -129,7 +130,6 @@ class ManagementCaseNotifications implements NotificationSourcePort {
         return switch (kind) {
             case "opened" -> "有新的待处理事项";
             case "claim" -> "事项已认领";
-            case "inquire" -> "已发出事项问询";
             case "statement" -> "收到问询回复";
             case "appeal" -> "收到申辩";
             case "manager_reply" -> "申辩已有处理结果";

@@ -172,6 +172,7 @@ class CaseLifecycleIT {
                     and source_type = 'case' and source_id = ? and event_type = 'case.inquiry_created'
                 """).param(related).param(caseId).query(Long.class).single();
         assertInquiryNotification(caseId, noticeId, inquiry.data().path("case_message_id").asString());
+        assertThat(managementNoticeRecipients(caseId, "inquire")).isEmpty();
 
         // The related account answers the inquiry in the same thread.
         var statement = cases.postMessage(context(related), "statement-1", caseId,
