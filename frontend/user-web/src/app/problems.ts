@@ -169,7 +169,8 @@ const copy: Record<string, ProblemCopy> = {
     requiresLogin: false,
   },
   UPLOAD_TRANSFER_FAILED: {
-    message: "无法连接对象存储，请检查网络后重试。",
+    message:
+      "上传未完成：可能是网络不可达，或对象存储未放行当前访问地址；请检查网络后重试，仍失败请联系管理员。",
     retryable: true,
     requiresLogin: false,
   },

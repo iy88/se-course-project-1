@@ -69,18 +69,6 @@ class CaseApplicationTests {
     }
 
     @Test
-    void rejectsANewReportAfterTheSameObjectWasClosed() {
-        var harness = harness(pending());
-        var target = new CaseCommands.Target("account", RELATED, null, null);
-        when(harness.store.findClosedReport(REPORTER, target)).thenReturn(Optional.of(archived()));
-
-        assertThatThrownBy(() -> harness.application.submit(context(REPORTER), "key-1",
-                new CaseCommands.Report(target, "虚假信息", null, List.of())))
-                .isInstanceOfSatisfying(BusinessError.class,
-                        error -> assertThat(error.code()).isEqualTo("CASE_CLOSED"));
-    }
-
-    @Test
     void claimIsUniqueAndAlreadyClaimedForTheSameManager() {
         var harness = harness(pending());
         when(harness.store.claim(CASE_ID, MANAGER, NOW)).thenReturn(claimed());
@@ -132,9 +120,7 @@ class CaseApplicationTests {
                 new CaseCommands.Message(THREAD_ID, CaseVocabulary.KIND_APPEAL, "请求复核", null, null, null, null));
         assertThat(submitted.status()).isEqualTo(201);
 
-        when(harness.store.appealOf(CASE_ID, RELATED)).thenReturn(Optional.of(new CaseRecords.Action(102,
-                CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
-                RELATED, null, null, null, null, null)));
+        when(harness.store.hasPendingAppeal(CASE_ID, RELATED)).thenReturn(true);
         when(harness.store.action(CASE_ID, 102L)).thenReturn(Optional.of(new CaseRecords.Action(102,
                 CASE_ID, CaseVocabulary.ACTION_APPEAL, CaseVocabulary.ACTOR_ACCOUNT, RELATED, NOW, 12L,
                 RELATED, null, null, null, null, null)));
@@ -217,7 +203,7 @@ class CaseApplicationTests {
                 });
 
         var result = harness.application.decide(context(MANAGER), "decide-content", CASE_ID,
-                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:41"),
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of(),
                         List.of(new CaseCommands.Enforcement("remove_content", "comment", 500L, null))));
 
         assertThat(result.status()).isEqualTo(201);
@@ -623,6 +609,21 @@ class CaseApplicationTests {
     }
 
     @Test
+    void newKeyForAnAlreadyLiftedAccountEnforcementConflictsAfterAutoArchive() {
+        var harness = harness(archived());
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recordedEnforcement()));
+        when(harness.store.lift(CASE_ID, "enf-1")).thenReturn(Optional.of(new CaseRecords.Lift(NOW, MANAGER)));
+
+        assertThatThrownBy(() -> harness.application.lift(context(MANAGER), "lift-new", CASE_ID, "enf-1", "解除"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESTRICTION_NOT_ACTIVE"));
+
+        verify(harness.store, never()).markEnforcementLifted(anyLong(), anyString(), anyLong(), anyString(), any());
+        verify(harness.store, never()).addAction(any());
+        verify(harness.transaction, never()).audit(anyString(), any(), any(), any());
+    }
+
+    @Test
     void restoreDecisionUsesAdjustInProgressAndReturnsStructuredScopeWithoutADuplicateNotice() {
         var enforcement = mock(CasePorts.Enforcement.class);
         var decidedAt = NOW.plusSeconds(42);
@@ -650,7 +651,7 @@ class CaseApplicationTests {
         when(harness.store.appealEligibility(anyLong(), anyLong())).thenReturn(Optional.empty());
 
         var result = harness.application.decide(context(MANAGER), "restore-1", CASE_ID,
-                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of(),
                         List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID,
                                 "in_progress"))));
 
@@ -678,7 +679,7 @@ class CaseApplicationTests {
         var otherManager = harness(claimedTrade(OTHER_MANAGER), enforcement);
 
         assertThatThrownBy(() -> otherManager.application.decide(context(MANAGER), "restore-2", CASE_ID,
-                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of(),
                         List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID,
                                 "in_progress")))))
                 .isInstanceOfSatisfying(BusinessError.class,
@@ -686,7 +687,7 @@ class CaseApplicationTests {
 
         var harness = harness(claimedTrade(), enforcement);
         assertThatThrownBy(() -> harness.application.decide(context(MANAGER), "restore-3", CASE_ID,
-                new CaseCommands.Decision("violation", "异常交易恢复", List.of("case:41"),
+                new CaseCommands.Decision("violation", "异常交易恢复", List.of(),
                         List.of(new CaseCommands.Enforcement("adjust_trade_status", "trade", TRADE_ID + 1,
                                 "in_progress")))))
                 .isInstanceOfSatisfying(BusinessError.class,
@@ -733,7 +734,6 @@ class CaseApplicationTests {
         when(store.lock(any(), anyLong())).thenAnswer(invocation -> facts.get());
         when(store.requireLocked(any(), anyLong())).thenAnswer(invocation -> facts.get());
         when(store.findOpenReport(anyLong(), any())).thenReturn(Optional.empty());
-        when(store.findClosedReport(anyLong(), any())).thenReturn(Optional.empty());
         when(store.openReportIfAbsent(any(), anyLong(), anyString(), any())).thenReturn(Optional.of(CASE_ID));
         when(store.addAction(any())).thenReturn(101L);
         when(store.claim(anyLong(), anyLong(), any())).thenReturn(claimed());

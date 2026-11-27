@@ -35,12 +35,27 @@ public interface NotificationStore {
 
     Stored markRead(Stored current, Instant readAt);
 
+    default List<Stored> page(long recipient, NotificationQuery.ReadFilter filter, String eventType,
+                              int page, int pageSize) {
+        return page(recipient, filter, eventType, page, pageSize, false);
+    }
+
     List<Stored> page(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType, int page,
-                      int pageSize);
+                      int pageSize, boolean management);
 
-    long count(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType);
+    long count(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType, boolean management);
 
-    long unreadCount(long recipientAccountId);
+    default long unreadCount(long recipientAccountId) {
+        return unreadCount(recipientAccountId, false);
+    }
+
+    long unreadCount(long recipientAccountId, boolean management);
+
+    static boolean inAudience(String eventType, boolean management) {
+        return !eventType.equals("case.appeal_resolved")
+                && !eventType.equals("management.case_manager_reply")
+                && eventType.startsWith("management.") == management;
+    }
 
     /** One stored notification with the fields the read rules need. */
     record Stored(long notificationId, long recipientAccountId, String intentKey, String eventType,

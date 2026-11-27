@@ -7,7 +7,7 @@
  * those capabilities from the case payload (`thread`, `appeal_deadline_at`,
  * archived state) instead of from the case status alone.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getCase, postCaseMessage, supplementReport } from "../../api/cases";
 import { listMyTodos } from "../../api/aggregation";
@@ -51,6 +51,8 @@ const detail = useAsyncData<CaseDetail>((signal) => getCase(caseId.value, signal
 const threadMessages = ref<CaseMessage[]>([]);
 const threadStatus = ref<"idle" | "loading" | "ready" | "failed">("idle");
 const threadError = ref<unknown>(null);
+const anchorMessageId = computed(() => /^#case-message-([1-9][0-9]*)$/.exec(route.hash)?.[1]);
+let threadRequest: AbortController | undefined;
 
 /* One open reply form at a time, keyed by the inquiry action it answers. */
 const replyingTo = ref<string | null>(null);
@@ -65,6 +67,38 @@ const appealError = ref<string | null>(null);
 
 /* Pending inquiries come from the todo aggregation, not from the message list. */
 const pendingInquiryIds = ref<string[]>([]);
+
+const supplementDialog = ref<HTMLDialogElement | null>(null);
+const supplementOpen = ref(false);
+const reportMaterials = computed(() => detail.data.value?.report_materials);
+const caseTypeLabel = computed(() => {
+  const kind = detail.data.value?.case_type;
+  if (kind === "report") return "举报";
+  if (kind === "product_review") return "商品审核";
+  return "异常交易";
+});
+const pageDescription = computed(() =>
+  detail.data.value
+    ? `${caseTypeLabel.value} · 当前进度：${caseStatusLabels[detail.data.value.case_status]}`
+    : "查看事项进度与材料。",
+);
+
+function attachmentKindLabel(contentType?: string): string {
+  if (contentType === "application/pdf") return "PDF 附件";
+  if (contentType?.startsWith("image/")) return "图片附件";
+  return "附件";
+}
+
+function toggleSupplement(): void {
+  const dialog = supplementDialog.value;
+  if (!dialog) return;
+  if (dialog.open) {
+    dialog.close();
+  } else {
+    dialog.showModal();
+    supplementOpen.value = true;
+  }
+}
 
 const supplementNote = ref("");
 const supplementFiles = ref<string[]>([]);
@@ -118,28 +152,57 @@ const canRespond = computed(() => availability.value.respond);
 const canAppeal = computed(() => availability.value.appeal);
 
 async function loadThread(): Promise<void> {
+  threadRequest?.abort();
   const thread = detail.data.value?.thread;
   if (!thread) {
     threadStatus.value = "ready";
     threadMessages.value = [];
     return;
   }
+  const request = new AbortController();
+  threadRequest = request;
+  const anchor = anchorMessageId.value;
   threadStatus.value = "loading";
   threadError.value = null;
   try {
-    const page = await listMessages(thread.conversation_kind, thread.conversation_id, {
-      limit: 100,
-    });
-    threadMessages.value = page.items.map((message) => ({
-      case_message_id: message.message_id,
-      seq: message.seq,
-      message_kind: (message.message_type as CaseMessageKind) ?? "statement",
-      body: message.body,
-      sender: message.sender,
-      created_at: message.created_at,
-    }));
+    const page = await listMessages(
+      thread.conversation_kind,
+      thread.conversation_id,
+      { limit: 100 },
+      request.signal,
+    );
+    const pages = [page.items];
+    let before = page.next_before_seq ?? null;
+    let found = page.items.some((message) => message.message_id === anchor);
+    while (anchor && !found && before !== null && before > 1) {
+      const older = await listMessages(
+        thread.conversation_kind,
+        thread.conversation_id,
+        { limit: 100, before_seq: before },
+        request.signal,
+      );
+      pages.push(older.items);
+      found = older.items.some((message) => message.message_id === anchor);
+      before =
+        older.next_before_seq != null && older.next_before_seq < before
+          ? older.next_before_seq
+          : null;
+    }
+    if (request.signal.aborted) return;
+    threadMessages.value = pages
+      .reverse()
+      .flat()
+      .map((message) => ({
+        case_message_id: message.message_id,
+        seq: message.seq,
+        message_kind: (message.message_type as CaseMessageKind) ?? "statement",
+        body: message.body,
+        sender: message.sender,
+        created_at: message.created_at,
+      }));
     threadStatus.value = "ready";
   } catch (caught) {
+    if (request.signal.aborted) return;
     threadError.value = caught;
     threadStatus.value = "failed";
   }
@@ -201,8 +264,10 @@ async function loadPendingInquiries(): Promise<void> {
 
 async function load(): Promise<void> {
   await detail.run();
-  await loadThread();
-  await loadPendingInquiries();
+  if (!isReporterView.value) {
+    await loadThread();
+    await loadPendingInquiries();
+  }
 }
 
 onMounted(() => {
@@ -214,6 +279,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  threadRequest?.abort();
   if (clockTimer !== null) {
     clearInterval(clockTimer);
     clockTimer = null;
@@ -221,7 +287,30 @@ onUnmounted(() => {
 });
 
 watch(caseId, () => {
+  supplementDialog.value?.close();
+  supplementNote.value = "";
+  supplementFiles.value = [];
+  supplementError.value = null;
+  threadRequest?.abort();
   void load();
+});
+
+watch(anchorMessageId, (anchor) => {
+  if (
+    anchor &&
+    detail.data.value?.case_id === caseId.value &&
+    !threadMessages.value.some((message) => message.case_message_id === anchor)
+  ) {
+    void loadThread();
+  }
+});
+
+watch([anchorMessageId, threadStatus], async ([anchor, status]) => {
+  if (!anchor || status !== "ready") return;
+  await nextTick();
+  if (anchor === anchorMessageId.value && detail.data.value?.case_id === caseId.value) {
+    document.getElementById(`case-message-${anchor}`)?.scrollIntoView({ block: "start" });
+  }
 });
 
 function openInquiryReply(actionId: string): void {
@@ -309,8 +398,10 @@ async function submitSupplement(): Promise<void> {
       },
       newIdempotencyKey(),
     );
+    if (current.case_id !== caseId.value) return;
     supplementNote.value = "";
     supplementFiles.value = [];
+    supplementDialog.value?.close();
     notify.success(`已补充材料（第 ${result.supplement_count} 次）。`);
     await load();
   } catch (caught) {
@@ -329,42 +420,51 @@ async function submitSupplement(): Promise<void> {
       <PageHeader
         eyebrow="事项"
         :title="`事项 #${detail.data.value.case_id}`"
-        :description="`当前进度：${caseStatusLabels[detail.data.value.case_status]}`"
+        :description="pageDescription"
       >
         <template #actions>
           <RouterLink to="/me/cases" class="btn btn--ghost">返回事项列表</RouterLink>
         </template>
       </PageHeader>
 
-      <section class="card stack">
-        <div class="inline">
-          <StateBadge
-            :label="
-              detail.data.value.archived_at
-                ? '已结案'
-                : caseStatusLabels[detail.data.value.case_status]
-            "
-            :tone="
-              detail.data.value.archived_at
-                ? 'neutral'
-                : caseStatusTones[detail.data.value.case_status]
-            "
-          />
-          <span class="chip">{{
-            detail.data.value.case_type === "report"
-              ? "举报"
-              : detail.data.value.case_type === "product_review"
-                ? "商品审核"
-                : "异常交易"
-          }}</span>
-          <span v-if="detail.data.value.decision_kind" class="chip chip--active">
-            {{ caseDecisionLabels[detail.data.value.decision_kind] }}
-          </span>
+      <section class="card case-summary">
+        <div class="case-summary__top">
+          <div class="inline">
+            <StateBadge
+              :label="
+                detail.data.value.archived_at
+                  ? '已结案'
+                  : caseStatusLabels[detail.data.value.case_status]
+              "
+              :tone="
+                detail.data.value.archived_at
+                  ? 'neutral'
+                  : caseStatusTones[detail.data.value.case_status]
+              "
+            />
+            <span class="chip">{{ caseTypeLabel }}</span>
+            <span v-if="detail.data.value.decision_kind" class="chip chip--active">
+              {{ caseDecisionLabels[detail.data.value.decision_kind] }}
+            </span>
+          </div>
+
+          <button
+            v-if="canSupplement"
+            type="button"
+            class="btn btn--small btn--ghost supplement-toggle"
+            aria-haspopup="dialog"
+            aria-controls="case-supplement"
+            :aria-expanded="supplementOpen"
+            @click="toggleSupplement"
+          >
+            补充材料
+          </button>
         </div>
 
-        <p v-if="detail.data.value.reason_text" class="reason pre-line break-anywhere">
-          {{ detail.data.value.reason_text }}
-        </p>
+        <div v-if="detail.data.value.reason_text" class="summary-copy">
+          <span class="field__label">处理说明</span>
+          <p class="reason pre-line break-anywhere">{{ detail.data.value.reason_text }}</p>
+        </div>
 
         <p v-if="appealDeadline" class="banner banner--warn">
           申辩截止：{{ formatDateTime(appealDeadline) }}
@@ -372,7 +472,7 @@ async function submitSupplement(): Promise<void> {
           <template v-else>· 申辩期已结束</template>
         </p>
 
-        <div v-if="detail.data.value.enforcements.length" class="stack stack--tight">
+        <div v-if="detail.data.value.enforcements.length" class="summary-enforcements">
           <span class="field__label">处置结果</span>
           <ul class="plain-list">
             <li v-for="(item, index) in detail.data.value.enforcements" :key="index">
@@ -387,13 +487,136 @@ async function submitSupplement(): Promise<void> {
         </div>
       </section>
 
-      <section class="card">
-        <div class="card__head"><h2>进度</h2></div>
+      <section v-if="isReporterView" class="card materials-card">
+        <div class="card__head">
+          <div>
+            <p class="section-kicker">举报记录</p>
+            <h2>我的举报材料</h2>
+          </div>
+          <span class="chip">
+            {{ reportMaterials?.supplements.length ?? 0 }} 次补充 ·
+            {{ reportMaterials?.attachments.length ?? 0 }} 个附件
+          </span>
+        </div>
+
+        <div class="material-overview">
+          <section
+            v-if="detail.data.value.reported_reason || reportMaterials?.original_note"
+            class="material-block"
+          >
+            <h3>举报说明</h3>
+            <p
+              v-if="detail.data.value.reported_reason"
+              class="pre-line break-anywhere material-copy"
+            >
+              {{ detail.data.value.reported_reason }}
+            </p>
+            <p v-if="reportMaterials?.original_note" class="pre-line break-anywhere">
+              {{ reportMaterials.original_note }}
+            </p>
+          </section>
+
+          <section v-if="reportMaterials?.product" class="material-block">
+            <div class="section-heading">
+              <h3>关联商品快照</h3>
+              <span class="muted">举报提交时</span>
+            </div>
+            <dl class="case-fields">
+              <dt>商品名称</dt>
+              <dd>{{ reportMaterials.product.title || "未填写" }}</dd>
+              <dt>商品编号</dt>
+              <dd>#{{ reportMaterials.product.id }}</dd>
+              <dt>商品简介</dt>
+              <dd class="pre-line">{{ reportMaterials.product.description || "未填写" }}</dd>
+            </dl>
+            <RouterLink
+              class="text-link"
+              :to="{ name: 'product-detail', params: { productId: reportMaterials.product.id } }"
+            >
+              查看当前商品页
+            </RouterLink>
+          </section>
+        </div>
+
+        <div class="material-streams">
+          <section v-if="reportMaterials?.supplements.length" class="material-block">
+            <div class="section-heading">
+              <h3>补充说明</h3>
+              <span class="muted">{{ reportMaterials.supplements.length }} 条</span>
+            </div>
+            <ol class="note-list">
+              <li
+                v-for="item in reportMaterials.supplements"
+                :key="item.action_id"
+                class="note-item"
+              >
+                <div class="record-meta">
+                  <span class="record-type">补充说明</span>
+                  <time :datetime="item.occurred_at">{{ formatDateTime(item.occurred_at) }}</time>
+                </div>
+                <p class="pre-line break-anywhere">{{ item.note }}</p>
+              </li>
+            </ol>
+          </section>
+
+          <section v-if="reportMaterials?.attachments.length" class="material-block">
+            <div class="section-heading">
+              <h3>附件</h3>
+              <span class="muted">{{ reportMaterials.attachments.length }} 项</span>
+            </div>
+            <ul class="attachment-list">
+              <li v-for="item in reportMaterials.attachments" :key="item.evidence_id">
+                <div class="record-meta">
+                  <span class="record-type">{{ attachmentKindLabel(item.content_type) }}</span>
+                  <span class="mono">证据 #{{ item.evidence_id }}</span>
+                  <time :datetime="item.submitted_at"
+                    >提交于 {{ formatDateTime(item.submitted_at) }}</time
+                  >
+                </div>
+                <img
+                  v-if="item.content_type?.startsWith('image/')"
+                  :src="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
+                  :alt="`已提交的图片 #${item.evidence_id}`"
+                  class="evidence-image"
+                  width="640"
+                  height="480"
+                  loading="lazy"
+                  decoding="async"
+                />
+                <a
+                  v-else
+                  class="evidence-link"
+                  :href="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :aria-label="`在新标签页打开${attachmentKindLabel(item.content_type)} #${item.evidence_id}`"
+                >
+                  <span class="file-link">
+                    <span class="file-type">{{ attachmentKindLabel(item.content_type) }}</span>
+                    <span>{{
+                      item.content_type === "application/pdf" ? "在浏览器中查看 PDF" : "查看附件"
+                    }}</span>
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </section>
+
+      <section class="card progress-card">
+        <div class="card__head">
+          <div>
+            <p class="section-kicker">处理轨迹</p>
+            <h2>进度</h2>
+          </div>
+          <span class="chip">{{ detail.data.value.actions.length }} 条</span>
+        </div>
         <ol class="timeline">
           <li v-for="(action, index) in detail.data.value.actions" :key="index">
             <span class="timeline__dot" aria-hidden="true" />
             <span class="timeline__body">
-              <span>{{ caseActionKindText(action.action_kind) }}</span>
+              <strong>{{ caseActionKindText(action.action_kind) }}</strong>
               <span class="muted">
                 {{ formatDateTime(action.occurred_at) }} ·
                 {{ caseActorKindText(action.actor_kind) }}
@@ -404,7 +627,7 @@ async function submitSupplement(): Promise<void> {
         </ol>
       </section>
 
-      <section class="card">
+      <section v-if="!isReporterView" class="card">
         <div class="card__head">
           <h2>沟通记录</h2>
           <span class="chip">{{ threadMessages.length }} 条</span>
@@ -418,6 +641,7 @@ async function submitSupplement(): Promise<void> {
           <li
             v-for="message in threadMessages"
             :key="message.case_message_id"
+            :id="`case-message-${message.case_message_id}`"
             class="thread__item"
             :class="{ 'thread__item--mine': message.sender.account_id === session.accountId.value }"
           >
@@ -527,46 +751,259 @@ async function submitSupplement(): Promise<void> {
         从「我的事项 → 我提交的」打开本事项，才能补充说明与证据。
       </p>
 
-      <section v-if="canSupplement" class="card">
-        <div class="card__head"><h2>补充材料</h2></div>
-        <p class="muted">可补充说明与证据；补充不会改变事项状态与已作出的决定。</p>
-        <div class="field">
-          <label class="field__label" for="supplement-note">补充说明</label>
-          <textarea
-            id="supplement-note"
-            v-model="supplementNote"
-            class="textarea"
-            maxlength="1000"
+      <dialog
+        v-if="canSupplement"
+        id="case-supplement"
+        ref="supplementDialog"
+        class="card supplement-dialog"
+        aria-labelledby="case-supplement-title"
+        @close="supplementOpen = false"
+        @cancel="supplementPending && $event.preventDefault()"
+      >
+        <form class="stack" @submit.prevent="submitSupplement">
+          <h2 id="case-supplement-title">补充材料</h2>
+          <div class="field">
+            <label class="field__label" for="supplement-note">补充说明</label>
+            <textarea
+              id="supplement-note"
+              v-model="supplementNote"
+              class="textarea"
+              maxlength="1000"
+            />
+          </div>
+          <ImageUploader
+            v-model="supplementFiles"
+            purpose="case_evidence"
+            label="证据文件"
+            hint="支持 JPG、PNG、PDF"
+            :max-count="5"
+            :target="null"
           />
-        </div>
-        <ImageUploader
-          v-model="supplementFiles"
-          purpose="case_evidence"
-          label="证据文件"
-          hint="支持 JPG、PNG、PDF"
-          :max-count="5"
-          :target="null"
-        />
-        <p class="muted">
-          证据先按暂存上传，提交补充时随材料一起绑定到该事项；事项归属核验随事项后端接入后改用事项目标。
-        </p>
-        <p v-if="supplementError" class="field__error" role="alert">{{ supplementError }}</p>
-        <div class="inline">
-          <button
-            type="button"
-            class="btn btn--primary"
-            :disabled="supplementPending"
-            @click="submitSupplement"
-          >
-            {{ supplementPending ? "提交中…" : "提交补充" }}
-          </button>
-        </div>
-      </section>
+          <p v-if="supplementError" class="field__error" role="alert">{{ supplementError }}</p>
+          <div class="inline">
+            <button
+              type="button"
+              class="btn btn--ghost"
+              :disabled="supplementPending"
+              @click="toggleSupplement"
+            >
+              关闭
+            </button>
+            <button type="submit" class="btn btn--primary" :disabled="supplementPending">
+              {{ supplementPending ? "提交中…" : "提交补充" }}
+            </button>
+          </div>
+        </form>
+      </dialog>
     </template>
   </div>
 </template>
 
 <style scoped>
+.section-kicker {
+  margin: 0;
+  color: var(--info);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.case-summary {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.case-summary__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.case-summary__top > .inline {
+  flex: 1 1 20rem;
+}
+
+.summary-copy,
+.summary-enforcements {
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--line);
+}
+
+.summary-copy {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.materials-card {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.material-overview,
+.material-streams {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.material-block {
+  min-inline-size: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, #fff, #fbfcfb);
+}
+
+.material-block h3,
+.material-block > h3 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.material-copy {
+  margin-block-start: var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-block-end: var(--space-2);
+}
+
+.case-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.case-fields dt {
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.case-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.text-link {
+  display: inline-flex;
+  margin-block-start: var(--space-2);
+  color: var(--info);
+  font-size: 0.8125rem;
+}
+
+.note-list,
+.attachment-list,
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.note-list,
+.attachment-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.note-item,
+.attachment-list > li {
+  min-inline-size: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fbfcfb;
+}
+
+.note-item > p {
+  margin-block-start: var(--space-2);
+  font-size: 0.875rem;
+}
+
+.record-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.record-meta time {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.record-type,
+.file-type {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cad9eb;
+  border-radius: 999px;
+  padding: 0.06rem 0.48rem;
+  color: var(--info);
+  background: var(--info-soft);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.evidence-link {
+  display: block;
+  margin-block-start: var(--space-2);
+  color: inherit;
+  text-decoration: none;
+}
+
+.file-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 0.8125rem;
+}
+
+.evidence-image {
+  display: block;
+  inline-size: min(100%, 32rem);
+  block-size: auto;
+  max-inline-size: min(100%, 32rem);
+  max-block-size: 24rem;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+}
+
+.supplement-toggle {
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+.supplement-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(36rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  color: inherit;
+}
+
+.supplement-dialog::backdrop {
+  background: rgb(0 0 0 / 38%);
+}
+
 .reason {
   font-size: 0.875rem;
   color: var(--ink-soft);
@@ -589,22 +1026,37 @@ async function submitSupplement(): Promise<void> {
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 0;
 }
 
 .timeline li {
+  position: relative;
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
+  padding-block: var(--space-2);
+}
+
+.timeline li:not(:last-child)::before {
+  position: absolute;
+  inset-block: 1.15rem calc(-0.1rem);
+  inset-inline-start: 0.22rem;
+  inline-size: 1px;
+  background: var(--line);
+  content: "";
 }
 
 .timeline__dot {
+  position: relative;
+  z-index: 1;
   inline-size: 0.5rem;
   block-size: 0.5rem;
-  margin-block-start: 0.5rem;
+  margin-block-start: 0.42rem;
+  border: 2px solid var(--panel);
   border-radius: 50%;
   background: var(--brand);
   flex: 0 0 auto;
+  box-shadow: 0 0 0 1px var(--brand);
 }
 
 .timeline__body {
@@ -621,6 +1073,7 @@ async function submitSupplement(): Promise<void> {
 }
 
 .thread__item {
+  scroll-margin-block-start: 5rem;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);

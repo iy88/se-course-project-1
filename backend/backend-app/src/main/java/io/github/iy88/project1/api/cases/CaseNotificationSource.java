@@ -61,13 +61,33 @@ class CaseNotificationSource implements NotificationSourcePort {
         if (CaseVocabulary.EVENT_RESULT_PUBLISHED.equals(facts.eventType())) {
             return publishedResult(caseFacts, accountId, facts.includeBody());
         }
-        if (threads.findConversation(caseFacts.caseId(), accountId).isEmpty()
+        boolean hasThread = threads.findConversation(caseFacts.caseId(), accountId).isPresent();
+        if (!hasThread
                 && cases.appealEligibility(caseFacts.caseId(), accountId).isEmpty()) {
             return Optional.empty();
         }
         var notice = notice(facts.eventType());
+        Long messageId = facts.includeBody() && hasThread && CaseVocabulary.EVENT_INQUIRY_CREATED.equals(facts.eventType())
+                ? inquiryMessageId(caseFacts.caseId(), accountId, facts.intentKey()) : null;
         return Optional.of(new NotificationSourceView(notice.summary(), caseRef(caseFacts), null,
-                facts.includeBody() ? notice.body() : null));
+                facts.includeBody() ? notice.body() : null, null, messageId));
+    }
+
+    private Long inquiryMessageId(long caseId, long accountId, String intentKey) {
+        String prefix = "case:" + caseId + ":inquiry:";
+        if (intentKey == null || !intentKey.startsWith(prefix)) {
+            return null;
+        }
+        long actionId;
+        try {
+            actionId = Long.parseLong(intentKey.substring(prefix.length()));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+        return cases.action(caseId, actionId)
+                .filter(action -> CaseVocabulary.ACTION_INQUIRE.equals(action.actionKind())
+                        && Long.valueOf(accountId).equals(action.relatedAccountId()))
+                .map(CaseRecords.Action::messageId).orElse(null);
     }
 
     /** The result notification is reporter-only and uses the already-confirmed anonymous fields. */

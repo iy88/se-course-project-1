@@ -27,7 +27,7 @@ const list = usePagedList<NotificationSummary>(async (page, pageSize, signal) =>
   const result = await listNotifications({ page, page_size: pageSize, read: filter.value }, signal);
   if (!signal.aborted) unreadCount.value = result.unread_count;
   return result;
-});
+}, 10);
 
 const filters: NotificationReadFilter[] = ["all", "unread", "read"];
 let requestedPage = 1;
@@ -55,6 +55,10 @@ async function refreshPage(page = list.paging.page): Promise<void> {
     do {
       pending = false;
       await list.load(requestedPage);
+      if (!pending && list.state.value === "ready" && list.paging.page > list.totalPages.value) {
+        requestedPage = list.totalPages.value;
+        pending = true;
+      }
     } while (pending);
   } finally {
     loading = false;
@@ -172,93 +176,11 @@ async function reload(): Promise<void> {
         :page="list.paging.page"
         :page-size="list.paging.pageSize"
         :total="list.paging.total"
+        show-single-page
         @change="refreshPage"
       />
     </template>
   </div>
 </template>
 
-<style scoped>
-.notification-filters {
-  max-inline-size: 28rem;
-}
-
-.rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  inline-size: 100%;
-  padding: var(--space-2) var(--space-3);
-  text-align: start;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  color: var(--ink);
-  text-decoration: none;
-}
-
-.row:hover {
-  border-color: var(--brand);
-}
-
-.row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 1px;
-}
-
-.row--unread {
-  background: #fcfdfb;
-  border-inline-start: 3px solid var(--brand);
-}
-
-.row__main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-inline-size: 0;
-  flex: 1;
-}
-
-.row__meta,
-.row__details {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-}
-
-.row__type {
-  color: var(--ink-faint);
-  font-size: 0.75rem;
-}
-
-.row__time {
-  margin-inline-start: auto;
-  white-space: nowrap;
-}
-
-.row__time,
-.row__details {
-  font-size: 0.8125rem;
-}
-
-.row__trade {
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.row__unread {
-  font-size: 0.75rem;
-  color: var(--brand);
-}
-
-.row__go {
-  color: var(--ink-faint);
-}
-</style>
+<style scoped src="../../../../shared/notification-list.css"></style>

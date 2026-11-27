@@ -65,6 +65,13 @@ export interface CaseMessageEvidence {
   };
 }
 
+export interface CaseRelatedAccount {
+  account_id: string;
+  display_name: string | null;
+  reporter: boolean;
+  eligible: boolean;
+}
+
 export interface ManagementCaseDetail {
   case_id: string;
   case_type: "report" | "dispute" | "exception";
@@ -75,12 +82,19 @@ export interface ManagementCaseDetail {
   archived_at: string | null;
   public_result_at: string | null;
   available_actions?: string[];
+  related_accounts?: CaseRelatedAccount[];
+  reported_object?: {
+    target_type: "account" | "product" | "comment" | "evaluation" | "message" | "trade";
+    target_id: string;
+    product?: { id: string; title: string; description: string };
+  };
   /** Manager-only projection of the exact comment/evaluation target of this case. */
   target?: {
     target_type: "comment" | "evaluation";
     target_id: string;
     author_account_id: string;
     parent_id?: string | null;
+    context_id?: string;
     body: string | null;
     state: string;
     created_at: string | null;
@@ -89,12 +103,28 @@ export interface ManagementCaseDetail {
   threads?: ManagementCaseThread[];
   pending_appeals?: PendingCaseAppeal[];
   reported_message?: ReportedMessageReference;
+  decision_basis_actions?: {
+    action_id: string;
+    action_kind: string;
+    occurred_at: string;
+    note: string | null;
+  }[];
   evidence?: {
     evidence_id: string;
     evidence_kind?: "submitter_attachment" | "platform_record";
     file_id: string | null;
+    decision_basis?: boolean;
+    submitted_at?: string;
+    content_type?: string;
   }[];
-  actions: { action_kind: string; occurred_at: string; actor_kind: string }[];
+  actions: {
+    action_id?: string;
+    message_id?: string;
+    related_account_id?: string;
+    action_kind: string;
+    occurred_at: string;
+    actor_kind: string;
+  }[];
   enforcements: {
     enforcement_id: string;
     action: string;
@@ -124,9 +154,14 @@ export interface CaseEnforcementInput {
 export interface CaseThreadPage {
   items: {
     case_message_id: string;
+    seq: number;
     message_kind: string;
     body: string;
-    sender: { display_name: string };
+    sender: {
+      account_id: string | null;
+      display_name: string;
+      sender_kind: string | null;
+    };
     created_at: string;
   }[];
   next_before_seq: number | null;
@@ -206,7 +241,7 @@ export function resolveCaseAppeal(
   originalEnforcementId: string | null,
   replacementEnforcements: CaseReplacementEnforcement[],
   body: string,
-  basisRef: string,
+  basisRefs: string[] | string,
   idempotencyKey: string,
 ): Promise<unknown> {
   const payload: Record<string, unknown> = {
@@ -215,7 +250,7 @@ export function resolveCaseAppeal(
     appeal_action_id: appeal.appeal_action_id,
     resolution,
     body,
-    basis_ref: basisRef,
+    ...(typeof basisRefs === "string" ? { basis_ref: basisRefs } : { basis_refs: basisRefs }),
   };
   if (resolution !== "uphold") {
     payload.original_enforcement_id = originalEnforcementId;

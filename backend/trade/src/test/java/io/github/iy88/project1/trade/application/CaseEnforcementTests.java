@@ -257,6 +257,111 @@ class CaseEnforcementTests {
     }
 
     @Test
+    void ordinaryLiftReleasesOnlyTheCaseOwnedFreezeAndKeepsOtherSources() {
+        var own = freeze(71, FreezeSource.ADMIN_CASE, CASE_ID, true);
+        var accountBan = freeze(72, FreezeSource.ACCOUNT_BAN, 9001, true);
+        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(own, accountBan));
+        when(repository.insertHistory(any())).thenReturn(710L);
+
+        var outcome = application.liftCaseFreezeLocked(transaction, CASE_ID, TRADE_ID, "basis-20", "release");
+
+        assertThat(outcome.transitionId()).isEqualTo(710);
+        assertThat(outcome.frozenBefore()).isTrue();
+        assertThat(outcome.frozenAfter()).isTrue();
+        verify(repository).endFreeze(eq(71L), eq(MANAGER), eq(NOW));
+        verify(repository, never()).endFreeze(eq(72L), any(), any());
+        verify(repository, never()).endAllFreezes(anyLong(), any());
+
+        var captured = ArgumentCaptor.forClass(TradeModels.History.class);
+        verify(repository).insertHistory(captured.capture());
+        assertThat(captured.getValue().action()).isEqualTo("trade.unfreeze");
+        assertThat(captured.getValue().freezeId()).isEqualTo(71);
+        assertThat(captured.getValue().fromFrozen()).isTrue();
+        assertThat(captured.getValue().toFrozen()).isTrue();
+    }
+
+    @Test
+    void ordinaryLiftAcceptsTheSystemTimeoutSourceWithoutRestoringTheTrade() {
+        when(repository.find(TRADE_ID)).thenReturn(Optional.of(trade(TradeStatus.ABNORMAL)));
+        var timeout = freeze(73, FreezeSource.TIMEOUT, CASE_ID, true);
+        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(timeout), List.of());
+        when(repository.insertHistory(any())).thenReturn(711L);
+
+        var outcome = application.liftCaseFreezeLocked(transaction, CASE_ID, TRADE_ID, "basis-21", "release");
+
+        assertThat(outcome.transitionId()).isEqualTo(711);
+        assertThat(outcome.previousStatus()).isEqualTo("abnormal");
+        assertThat(outcome.currentStatus()).isEqualTo("abnormal");
+        assertThat(outcome.frozenBefore()).isTrue();
+        assertThat(outcome.frozenAfter()).isFalse();
+        verify(repository).endFreeze(eq(73L), eq(MANAGER), eq(NOW));
+        verify(repository, never()).save(any(Trade.class));
+        verify(repository, never()).invalidateConfirmations(anyLong(), any(), any());
+        verify(repository, never()).saveWait(anyLong(), any());
+        verify(schedules, never()).schedule(any());
+    }
+
+    @Test
+    void ordinaryLiftResumesThePausedWaitOnlyAfterTheLastSource() {
+        var own = freeze(71, FreezeSource.ADMIN_CASE, CASE_ID, true);
+        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(own), List.of(), List.of());
+        when(repository.waitFor(TRADE_ID)).thenReturn(Optional.of(new TradeModels.Wait(TRADE_ID,
+                NOW.minusSeconds(100), null, 10, 100, "s2-v1", null, null)));
+        when(repository.currentConfirmations(TRADE_ID)).thenReturn(List.of(new TradeModels.Confirmation(1,
+                TRADE_ID, 1, BUYER, null, NOW.minusSeconds(50), null, null, UUID.randomUUID())));
+        when(repository.insertHistory(any())).thenReturn(712L);
+
+        var outcome = application.liftCaseFreezeLocked(transaction, CASE_ID, TRADE_ID, "basis-22", "release");
+
+        assertThat(outcome.transitionId()).isEqualTo(712);
+        assertThat(outcome.frozenAfter()).isFalse();
+        verify(repository).saveWait(eq(TRADE_ID), any());
+        verify(schedules).schedule(any());
+    }
+
+    @Test
+    void ordinaryLiftRejectsAnAccountBanOnlySource() {
+        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(
+                freeze(72, FreezeSource.ACCOUNT_BAN, 9001, true)));
+
+        assertThatThrownBy(() -> application.liftCaseFreezeLocked(transaction, CASE_ID, TRADE_ID,
+                "basis-23", "release"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TRADE_FREEZE_NOT_ACTIVE"));
+        verify(repository, never()).endFreeze(anyLong(), any(), any());
+        verify(repository, never()).insertHistory(any());
+    }
+
+    @Test
+    void ordinaryLiftRejectsAmbiguousCaseSources() {
+        var adminCase = freeze(71, FreezeSource.ADMIN_CASE, CASE_ID, true);
+        var timeout = freeze(73, FreezeSource.TIMEOUT, CASE_ID, true);
+        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(adminCase, timeout));
+
+        assertThatThrownBy(() -> application.liftCaseFreezeLocked(transaction, CASE_ID, TRADE_ID,
+                "basis-24", "release"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TRADE_FREEZE_NOT_ACTIVE"));
+        verify(repository, never()).endFreeze(anyLong(), any(), any());
+        verify(repository, never()).insertHistory(any());
+    }
+
+    @Test
+    void ordinaryLiftRejectsASourceFromAnotherCaseOrTrade() {
+        var otherCase = freeze(74, FreezeSource.ADMIN_CASE, OTHER_CASE_ID, true);
+        var otherTrade = new TradeModels.Freeze(75, TRADE_ID + 1, FreezeSource.TIMEOUT, CASE_ID, "reason",
+                NOW.minusSeconds(50), null, null);
+        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(otherCase, otherTrade));
+
+        assertThatThrownBy(() -> application.liftCaseFreezeLocked(transaction, CASE_ID, TRADE_ID,
+                "basis-25", "release"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("TRADE_FREEZE_NOT_ACTIVE"));
+        verify(repository, never()).endFreeze(anyLong(), any(), any());
+        verify(repository, never()).insertHistory(any());
+    }
+
+    @Test
     void terminalAdjustmentReturnsTheHistoryIdAndClosesTradeOwnedFacts() {
         when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(
                 freeze(71, FreezeSource.ADMIN_CASE, CASE_ID, true)));

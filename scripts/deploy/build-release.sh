@@ -29,8 +29,9 @@ git -C "$repo" archive "$revision" -- .node-version backend frontend scripts/dep
 
 (
     cd "$source_dir/backend"
-    mvn --batch-mode --no-transfer-progress -Dmaven.test.skip=true -pl backend-app,maintenance -am package
-)
+    mvn --batch-mode --no-transfer-progress -T 10 -Dmaven.test.skip=true -pl backend-app,maintenance -am package
+) &
+backend_pid=$!
 
 (
     cd "$source_dir/frontend"
@@ -48,7 +49,21 @@ git -C "$repo" archive "$revision" -- .node-version backend frontend scripts/dep
     fi
     pnpm install --frozen-lockfile
     pnpm run build
-)
+) &
+frontend_pid=$!
+
+build_failed=0
+if ! wait "$backend_pid"; then
+    echo "Backend build failed" >&2
+    build_failed=1
+fi
+if ! wait "$frontend_pid"; then
+    echo "Frontend build failed" >&2
+    build_failed=1
+fi
+if (( build_failed )); then
+    exit 1
+fi
 
 copy_jar() {
     local module=$1
