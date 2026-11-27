@@ -411,6 +411,26 @@ public class CaseHttpConfiguration {
         }
 
         @Override
+        public List<DispositionProduct> dispositionProducts(CaseRecords.Facts facts) {
+            if (facts.targetId() == null) {
+                return List.of();
+            }
+            if ("account".equals(facts.targetType())) {
+                return products.findForSeller(facts.targetId(), null, org.springframework.data.domain.Pageable.unpaged())
+                        .map(product -> new DispositionProduct(product.id(), product.title()))
+                        .getContent();
+            }
+            Optional<Long> productId = switch (facts.targetType()) {
+                case "product" -> Optional.of(facts.targetId());
+                case "comment" -> comments.commentSnapshot(facts.targetId()).map(item -> item.productId());
+                case "trade" -> trades.productId(facts.targetId()).stream().boxed().findFirst();
+                default -> Optional.empty();
+            };
+            return productId.flatMap(products::findById).filter(product -> !product.deleted())
+                    .map(product -> new DispositionProduct(product.id(), product.title())).stream().toList();
+        }
+
+        @Override
         public Set<Long> relatedAccountIds(CaseRecords.Facts facts) {
             if (facts.targetId() == null) {
                 return Set.of();

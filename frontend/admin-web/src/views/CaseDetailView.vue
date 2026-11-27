@@ -120,9 +120,6 @@ const relatedAccounts = computed(() => detail.value?.related_accounts ?? []);
 const eligibleAccounts = computed(() =>
   relatedAccounts.value.filter((account) => account.eligible),
 );
-const soleEligibleAccountId = computed(() =>
-  eligibleAccounts.value.length === 1 ? eligibleAccounts.value[0].account_id : undefined,
-);
 const selectedThreadTitle = computed(() =>
   selectedThread.value ? accountDisplayName(selectedThread.value.related_account_id) : "事项会话",
 );
@@ -147,6 +144,34 @@ function accountLabel(account: CaseRelatedAccount): string {
   }
   return `${role} · ${account.display_name ?? "账户"} #${account.account_id}`;
 }
+
+const dispositionChoices = computed(() =>
+  enforcementOptions.map(({ target }) => {
+    const disposition = detail.value?.disposition_targets;
+    const reported = reportedObject.value;
+    if (target === "account") {
+      return eligibleAccounts.value.map((account) => ({
+        id: account.account_id,
+        label: accountLabel(account),
+      }));
+    }
+    if (target === "product") {
+      const products =
+        disposition?.products ??
+        (reported?.target_type === "product"
+          ? [{ id: reported.target_id, title: reported.product?.title ?? "商品" }]
+          : []);
+      return products.map((product) => ({
+        id: product.id,
+        label: `${product.title} #${product.id}`,
+      }));
+    }
+    const subject = disposition ?? reported;
+    return subject?.target_type === target
+      ? [{ id: subject.target_id, label: `${reportedKinds[target]} #${subject.target_id}` }]
+      : [];
+  }),
+);
 
 function accountDisplayName(accountId: string): string {
   const account = relatedAccounts.value.find((item) => item.account_id === accountId);
@@ -498,20 +523,25 @@ async function lift(enforcementId: string, reason: string): Promise<void> {
 }
 
 function submitDecision(): void {
-  const enforcements: CaseEnforcementInput[] =
-    decisionKind.value === "violation"
-      ? instructions.value.map((entry) => {
-          const option = enforcementOptions[entry.option];
-          return {
-            action: option.action,
-            target_type: option.target,
-            target_id:
-              (option.target === "account" ? soleEligibleAccountId.value : undefined) ??
-              entry.targetId.trim(),
-            expected_result: option.action === "adjust_trade_status" ? entry.expected : undefined,
-          };
-        })
-      : [];
+  const enforcements: CaseEnforcementInput[] = [];
+  if (decisionKind.value === "violation") {
+    for (const entry of instructions.value) {
+      const option = enforcementOptions[entry.option];
+      const choices = dispositionChoices.value[entry.option];
+      const target =
+        choices.length === 1 ? choices[0] : choices.find(({ id }) => id === entry.targetId);
+      if (!target) {
+        writeError.value = "请选择有效的处置对象。";
+        return;
+      }
+      enforcements.push({
+        action: option.action,
+        target_type: option.target,
+        target_id: target.id,
+        expected_result: option.action === "adjust_trade_status" ? entry.expected : undefined,
+      });
+    }
+  }
   void submit("decisions", {
     decision_kind: decisionKind.value,
     reason: decisionReason.value.trim(),
@@ -521,7 +551,10 @@ function submitDecision(): void {
 }
 
 function addInstruction(): void {
-  instructions.value.push({ id: ++instructionId, option: 0, targetId: "", expected: "terminated" });
+  const option = dispositionChoices.value.findIndex((choices) => choices.length);
+  if (option >= 0) {
+    instructions.value.push({ id: ++instructionId, option, targetId: "", expected: "terminated" });
+  }
 }
 
 watch(
@@ -1107,41 +1140,36 @@ onUnmounted(() => {
                 :name="`action-${instruction.id}`"
                 class="select"
               >
-                <option v-for="(option, index) in enforcementOptions" :key="index" :value="index">
+                <option
+                  v-for="(option, index) in enforcementOptions"
+                  :key="option.action + option.target"
+                  :value="index"
+                  :disabled="!dispositionChoices[index].length"
+                >
                   {{ option.label }}
                 </option>
               </select>
             </label>
-            <label v-if="enforcementOptions[instruction.option].target === 'account'" class="field">
-              <span>处置账户</span>
+            <p v-if="dispositionChoices[instruction.option].length === 1" class="muted">
+              处置对象 · {{ dispositionChoices[instruction.option][0].label }}
+            </p>
+            <label v-else class="field">
+              <span>处置对象</span>
               <select
-                :value="soleEligibleAccountId ?? instruction.targetId"
-                :disabled="soleEligibleAccountId !== undefined"
-                @change="instruction.targetId = ($event.target as HTMLSelectElement).value"
+                v-model="instruction.targetId"
                 :name="`target-${instruction.id}`"
                 class="select"
                 required
               >
-                <option value="" disabled>请选择处置账户</option>
+                <option value="" disabled>请选择处置对象</option>
                 <option
-                  v-for="account in eligibleAccounts"
-                  :key="account.account_id"
-                  :value="account.account_id"
+                  v-for="target in dispositionChoices[instruction.option]"
+                  :key="target.id"
+                  :value="target.id"
                 >
-                  {{ accountLabel(account) }}
+                  {{ target.label }}
                 </option>
               </select>
-            </label>
-            <label v-else class="field"
-              ><span>目标编号</span>
-              <input
-                v-model="instruction.targetId"
-                :name="`target-${instruction.id}`"
-                class="input"
-                required
-                inputmode="numeric"
-                pattern="[1-9][0-9]*"
-              />
             </label>
             <label
               v-if="enforcementOptions[instruction.option].action === 'adjust_trade_status'"
@@ -1170,7 +1198,9 @@ onUnmounted(() => {
               </button>
             </div>
           </fieldset>
-          <div><button type="button" class="btn" @click="addInstruction">添加处置项</button></div>
+          <div v-if="dispositionChoices.some((choices) => choices.length)">
+            <button type="button" class="btn" @click="addInstruction">添加处置项</button>
+          </div>
         </template>
         <div>
           <button type="submit" class="btn btn--primary" :disabled="writing">提交决定</button>
