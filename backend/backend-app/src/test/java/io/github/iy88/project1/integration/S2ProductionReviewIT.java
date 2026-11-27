@@ -345,6 +345,9 @@ class S2ProductionReviewIT {
 
         String range = path + "?time_scope=range&start_at=2026-10-03T00:00:00Z&end_at=2026-10-04T00:00:00Z";
         var before = get(manager, range, 200);
+        assertThat(before.path("completed_by_day").size()).isEqualTo(1);
+        assertThat(before.at("/completed_by_day/0/day").asText()).isEqualTo("2026-10-03");
+        long beforeCompletedOnDay = before.at("/completed_by_day/0/completed").asLong();
         long buyerId = buyer.account().id();
         long sellerId = manager.account().id();
         try {
@@ -367,9 +370,27 @@ class S2ProductionReviewIT {
             var all = get(manager, path + "?time_scope=all", 200);
             assertThat(selected.path("completed_in_selection").asLong())
                     .isEqualTo(before.path("completed_in_selection").asLong() + 1);
+            assertThat(selected.path("completed_by_day").size()).isEqualTo(1);
+            assertThat(selected.at("/completed_by_day/0/day").asText()).isEqualTo("2026-10-03");
+            assertThat(selected.at("/completed_by_day/0/completed").asLong())
+                    .isEqualTo(beforeCompletedOnDay + 1);
+            var twoDays = get(manager, path
+                    + "?time_scope=range&start_at=2026-10-03T00:00:00Z&end_at=2026-10-05T00:00:00Z", 200);
+            assertThat(twoDays.path("completed_by_day").size()).isEqualTo(2);
+            assertThat(twoDays.at("/completed_by_day/0/day").asText()).isEqualTo("2026-10-03");
+            assertThat(twoDays.at("/completed_by_day/1/day").asText()).isEqualTo("2026-10-04");
+            long dailyTotal = 0;
+            for (var day : twoDays.path("completed_by_day")) {
+                dailyTotal += day.path("completed").asLong();
+            }
+            assertThat(dailyTotal).isEqualTo(twoDays.path("completed_in_selection").asLong());
             assertThat(all.path("completed_in_selection").asLong()).isEqualTo(all.path("trades").path("completed").asLong());
+            assertThat(all.path("completed_by_day").isEmpty()).isTrue();
             assertThat(all.path("selection").path("start_at").isNull()).isTrue();
             assertThat(all.path("selection").path("end_at").isNull()).isTrue();
+            var longRange = get(manager, path
+                    + "?time_scope=range&start_at=2026-10-01T00:00:00Z&end_at=2026-11-02T00:00:00Z", 200);
+            assertThat(longRange.path("completed_by_day").isEmpty()).isTrue();
             for (String group : List.of("accounts", "products_by_state", "pending", "trades")) {
                 assertThat(selected.path(group)).isEqualTo(all.path(group));
             }

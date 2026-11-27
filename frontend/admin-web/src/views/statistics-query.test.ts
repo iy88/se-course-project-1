@@ -27,11 +27,15 @@ function range(startAt: string, endAt: string): StatisticsSelection {
   return { time_scope: "range", start_at: startAt, end_at: endAt };
 }
 
-function statistics(selection: StatisticsSelection, completed = 0): ManagementStatistics {
+function statistics(
+  selection: StatisticsSelection,
+  completed = 0,
+  completedByDay: ManagementStatistics["completed_by_day"] = [],
+): ManagementStatistics {
   return {
     as_of: "2026-11-27T00:00:00.000Z",
     selection: {
-      time_scope: "range",
+      time_scope: selection.time_scope,
       start_at: selection.time_scope === "range" ? selection.start_at : null,
       end_at: selection.time_scope === "range" ? selection.end_at : null,
     },
@@ -46,6 +50,7 @@ function statistics(selection: StatisticsSelection, completed = 0): ManagementSt
     pending: { reviews: 0, reports: 0 },
     trades: { completed: 0, terminated: 0, disputed: 0 },
     completed_in_selection: completed,
+    completed_by_day: completedByDay,
   };
 }
 
@@ -70,45 +75,44 @@ const SHORT_RANGE = range("2026-11-20T10:00:00.000Z", "2026-11-20T18:00:00.000Z"
 const LONG_RANGE = range("2026-01-01T00:00:00.000Z", "2026-02-02T00:00:00.000Z");
 
 describe("management statistics query lifecycle", () => {
-  it("keeps a failed trend separate from the valid summary and retries it", async () => {
-    let calls = 0;
-    const read: StatisticsReader = () => {
-      calls += 1;
-      if (calls === 1) return Promise.resolve(statistics(SHORT_RANGE, 7));
-      if (calls === 2) return Promise.reject(new Error("trend down"));
-      return Promise.resolve(statistics(SHORT_RANGE, 0));
-    };
+  it("loads the summary and daily trend from one response", async () => {
+    const { calls, read } = queuedReader();
     const query = createStatisticsQuery(read);
+    const loaded = query.load(SHORT_RANGE);
 
-    await query.load(range("2026-11-20T10:00:00.000Z", "2026-11-21T18:00:00.000Z"));
-    await flush();
+    assert.equal(calls.length, 1);
+    calls[0].resolve(statistics(SHORT_RANGE, 7, [{ day: "2026-11-20", completed: 7 }]));
+    await loaded;
 
+    assert.equal(calls.length, 1);
     assert.equal(query.data.value?.completed_in_selection, 7);
-    assert.equal(query.error.value, undefined);
-    assert.equal(query.trendStatus.value, "error");
-    assert.ok(query.trendError.value instanceof Error);
-    assert.equal(query.trend.value.length, 0);
-
-    query.retryTrend();
-    await flush();
-
+    assert.deepEqual(query.trend.value, [{ label: "11/20", count: 7 }]);
     assert.equal(query.trendStatus.value, "ready");
-    assert.deepEqual(
-      query.trend.value.map((point) => point.count),
-      [0, 0],
-    );
-    assert.equal(query.data.value?.completed_in_selection, 7);
+    assert.equal(query.trendDayCount.value, 1);
   });
 
-  it("skips every trend request above 31 UTC day buckets", async () => {
+  it("does not request a daily trend for all time", async () => {
+    const { calls, read } = queuedReader();
+    const query = createStatisticsQuery(read);
+    const loaded = query.load({ time_scope: "all" });
+
+    assert.equal(calls.length, 1);
+    calls[0].resolve(statistics({ time_scope: "all" }, 6));
+    await loaded;
+
+    assert.equal(calls.length, 1);
+    assert.equal(query.trendStatus.value, "all");
+    assert.deepEqual(query.trend.value, []);
+  });
+
+  it("uses one summary request for a range above 31 UTC days", async () => {
     const { calls, read } = queuedReader();
     const query = createStatisticsQuery(read);
     const loaded = query.load(LONG_RANGE);
-    assert.equal(calls.length, 1);
 
+    assert.equal(calls.length, 1);
     calls[0].resolve(statistics(LONG_RANGE, 5));
     await loaded;
-    await flush();
 
     assert.equal(calls.length, 1);
     assert.equal(query.trendStatus.value, "too-many");
@@ -116,45 +120,14 @@ describe("management statistics query lifecycle", () => {
     assert.deepEqual(query.trend.value, []);
   });
 
-  it("does not request a daily trend for all time", async () => {
-    const { calls, read } = queuedReader();
-    const query = createStatisticsQuery(read);
-    const loaded = query.load({ time_scope: "all" });
-    assert.equal(calls.length, 1);
-
-    calls[0].resolve(statistics({ time_scope: "all" }, 6));
-    await loaded;
-    await flush();
-
-    assert.equal(calls.length, 1);
-    assert.equal(query.trendStatus.value, "all");
-    assert.deepEqual(query.trend.value, []);
-  });
-
-  it("loads 31 buckets and keeps a successful zero", async () => {
-    const { calls, read } = queuedReader();
-    const query = createStatisticsQuery(read);
-    const loaded = query.load(range("2026-01-01T00:00:00.000Z", "2026-02-01T00:00:00.000Z"));
-    calls[0].resolve(statistics(LONG_RANGE, 0));
-    await loaded;
-    await flush();
-
-    assert.equal(calls.length, 32);
-    for (const call of calls.slice(1)) call.resolve(statistics(call.selection, 0));
-    await flush();
-
-    assert.equal(query.trendStatus.value, "ready");
-    assert.equal(query.trend.value.length, 31);
-    assert.ok(query.trend.value.every((point) => point.count === 0));
-  });
-
-  it("does not write a stale summary response after a newer query starts", async () => {
+  it("does not write a stale response after a newer query starts", async () => {
     const { calls, read } = queuedReader();
     const query = createStatisticsQuery(read);
     const first = query.load(SHORT_RANGE);
     const second = query.load(LONG_RANGE);
     const currentSummary = () => query.data.value;
 
+    assert.equal(calls.length, 2);
     assert.equal(calls[0].signal?.aborted, true);
     calls[0].resolve(statistics(SHORT_RANGE, 11));
     await flush();
@@ -164,64 +137,29 @@ describe("management statistics query lifecycle", () => {
 
     calls[1].resolve(statistics(LONG_RANGE, 22));
     await second;
-    await flush();
     await first;
 
     assert.equal(currentSummary()?.completed_in_selection, 22);
     assert.equal(query.trendStatus.value, "too-many");
   });
 
-  it("does not write a stale bucket response after switching to a long range", async () => {
+  it("retries a failed request and renders only the successful result", async () => {
     const { calls, read } = queuedReader();
     const query = createStatisticsQuery(read);
     const first = query.load(SHORT_RANGE);
-    calls[0].resolve(statistics(SHORT_RANGE, 3));
+
+    calls[0].reject(new Error("statistics down"));
     await first;
-    await flush();
+    assert.ok(query.error.value instanceof Error);
+
+    query.retry();
     assert.equal(calls.length, 2);
-
-    const second = query.load(LONG_RANGE);
-    assert.equal(calls[1].signal?.aborted, true);
-    calls[1].resolve(statistics(SHORT_RANGE, 99));
+    calls[1].resolve(statistics(SHORT_RANGE, 3, [{ day: "2026-11-20", completed: 3 }]));
     await flush();
 
+    assert.equal(query.error.value, undefined);
     assert.equal(query.data.value?.completed_in_selection, 3);
-    assert.deepEqual(query.trend.value, []);
-    assert.equal(query.trendStatus.value, "idle");
-
-    calls[2].resolve(statistics(LONG_RANGE, 4));
-    await second;
-    await flush();
-
-    assert.equal(query.trendStatus.value, "too-many");
-    assert.equal(query.trendDayCount.value, 32);
-    assert.deepEqual(query.trend.value, []);
-  });
-
-  it("does not write a stale bucket response after switching to all time", async () => {
-    const { calls, read } = queuedReader();
-    const query = createStatisticsQuery(read);
-    const first = query.load(SHORT_RANGE);
-    calls[0].resolve(statistics(SHORT_RANGE, 3));
-    await first;
-    await flush();
-    assert.equal(calls.length, 2);
-
-    const second = query.load({ time_scope: "all" });
-    assert.equal(calls[1].signal?.aborted, true);
-    calls[1].resolve(statistics(SHORT_RANGE, 99));
-    await flush();
-
-    assert.equal(query.trendStatus.value, "idle");
-    assert.deepEqual(query.trend.value, []);
-
-    calls[2].resolve(statistics({ time_scope: "all" }, 4));
-    await second;
-    await flush();
-
-    assert.equal(query.trendStatus.value, "all");
-    assert.deepEqual(query.trend.value, []);
-    assert.equal(query.data.value?.completed_in_selection, 4);
+    assert.deepEqual(query.trend.value, [{ label: "11/20", count: 3 }]);
   });
 
   it("ignores a pending response after dispose", async () => {
