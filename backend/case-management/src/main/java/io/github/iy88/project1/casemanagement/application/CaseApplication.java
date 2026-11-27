@@ -515,8 +515,11 @@ public class CaseApplication {
                 resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
                         List.of(request.message().conversationId())));
             }
-            var plan = new LockPlan(Map.of(), resources);
             var message = request.message();
+            if (CaseVocabulary.KIND_MANAGER_REPLY.equals(message.messageKind())) {
+                addCaseThreadLocks(facts.caseId(), resources);
+            }
+            var plan = new LockPlan(Map.of(), resources);
             if (enforcement != null && reversal(message) && facts.claimedBy(actor(context))) {
                 var appellant = appellantFor(facts.caseId(), message.appealActionId());
                 if (appellant != null) {
@@ -730,6 +733,7 @@ public class CaseApplication {
                     sourceNote, basisJson(basisRefs)));
             store.touch(facts.caseId(), now);
             audit(transaction, "case.appeal.resolve", facts.caseId(), actor);
+            archiveIfFullyReverted(transaction, facts, actor, now);
             return messageResponse(facts, conversationId, appended, actionId, CaseVocabulary.KIND_MANAGER_REPLY);
         }
 
@@ -1003,6 +1007,40 @@ public class CaseApplication {
 
     // ------------------------------------------------------------------ close
 
+    private void addCaseThreadLocks(long caseId, Set<LockPlan.Key> resources) {
+        for (long accountId : store.relatedAccountIds(caseId)) {
+            threads.findConversation(caseId, accountId)
+                    .ifPresent(id -> resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
+                            List.of(id))));
+        }
+    }
+
+    private CaseRecords.Facts archiveCase(WriteTransaction transaction, CaseRecords.Facts facts,
+                                         Long manager, Instant now) {
+        for (long accountId : store.relatedAccountIds(facts.caseId())) {
+            threads.archive(transaction, facts.caseId(), accountId);
+        }
+        var archived = store.archive(facts.caseId(), now);
+        store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_CLOSE,
+                manager == null ? CaseVocabulary.ACTOR_SYSTEM : CaseVocabulary.ACTOR_MANAGER,
+                manager, now, null, null, null, null, null, null, null));
+        return archived;
+    }
+
+    private void archiveIfFullyReverted(WriteTransaction transaction, CaseRecords.Facts facts, long manager,
+                                        Instant now) {
+        if (!facts.decided() || facts.archived() || store.latestPendingAppeal(facts.caseId()).isPresent()) {
+            return;
+        }
+        var applied = store.enforcements(facts.caseId()).stream()
+                .filter(item -> "applied".equals(item.resultStatus()) || "replayed".equals(item.resultStatus()))
+                .filter(item -> !LIFT_ACTIONS.contains(item.action())).toList();
+        if (!applied.isEmpty() && applied.stream().allMatch(item -> item.liftedAt() != null)) {
+            archiveCase(transaction, facts, null, now);
+            audit(transaction, "case.close", facts.caseId(), manager);
+        }
+    }
+
     private final class CloseUseCase implements WriteExecutor.UseCase<CloseRequest, CloseRequest> {
         @Override
         public JsonNode digestInput(CloseRequest request) {
@@ -1014,11 +1052,7 @@ public class CaseApplication {
             var facts = store.find(request.caseId()).orElseThrow(CaseApplication::notVisible);
             var resources = new TreeSet<LockPlan.Key>();
             resources.add(CaseLifecycleStore.lockKey(facts.caseId()));
-            for (long accountId : store.relatedAccountIds(facts.caseId())) {
-                threads.findConversation(facts.caseId(), accountId)
-                        .ifPresent(id -> resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
-                                List.of(id))));
-            }
+            addCaseThreadLocks(facts.caseId(), resources);
             return new LockPlan(Map.of(), resources);
         }
 
@@ -1064,12 +1098,7 @@ public class CaseApplication {
             if (store.latestPendingAppeal(facts.caseId()).isPresent()) {
                 throw new BusinessError("CASE_APPEAL_PENDING", 409, "存在未处理的申辩");
             }
-            for (long accountId : store.relatedAccountIds(facts.caseId())) {
-                threads.archive(transaction, facts.caseId(), accountId);
-            }
-            facts = store.archive(facts.caseId(), now);
-            store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_CLOSE,
-                    CaseVocabulary.ACTOR_MANAGER, manager, now, null, null, null, null, null, null, null));
+            facts = archiveCase(transaction, facts, manager, now);
             audit(transaction, "case.close", facts.caseId(), manager);
             return new WriteResult.Response<>(200, closed(facts), new ResourceRef("case", facts.caseId()));
         }
@@ -1162,6 +1191,7 @@ public class CaseApplication {
             var recorded = requireRecorded(request.caseId(), request.enforcementId());
             var resources = new TreeSet<LockPlan.Key>();
             resources.add(CaseLifecycleStore.lockKey(facts.caseId()));
+            addCaseThreadLocks(facts.caseId(), resources);
             var accounts = new TreeMap<Long, LockPlan.AccountMode>();
             for (long accountId : targets.relatedAccountIds(facts)) {
                 accounts.put(accountId, LockPlan.AccountMode.SHARED);
@@ -1227,6 +1257,7 @@ public class CaseApplication {
                     basisJson(List.of(reason))));
             store.touch(facts.caseId(), now);
             audit(transaction, "case.enforcement.lift", facts.caseId(), manager);
+            archiveIfFullyReverted(transaction, facts, manager, now);
             var lifted = store.lift(facts.caseId(), request.enforcementId())
                     .orElse(new CaseRecords.Lift(now, manager));
             return lifted(recorded, lifted, outcomes);

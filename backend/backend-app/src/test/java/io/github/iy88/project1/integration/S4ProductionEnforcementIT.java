@@ -466,6 +466,10 @@ class S4ProductionEnforcementIT {
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         assertThat(activeSources(active)).hasSize(2);
         lift(manager, firstCase, first);
+        assertThat(get(manager, "/cases/" + firstCase, 200).path("archived_at").asText())
+                .isNotBlank();
+        assertThat(get(otherManager, "/cases/" + secondCase, 200).path("archived_at").isNull())
+                .isTrue();
         assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean()).isTrue();
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         get(buyer, "/products/" + product, 404);
