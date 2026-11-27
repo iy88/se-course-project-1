@@ -1,0 +1,86 @@
+@startuml
+top to bottom direction
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 15
+skinparam dpi 160
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam linetype ortho
+skinparam nodesep 18
+skinparam ranksep 35
+skinparam packageStyle rectangle
+skinparam ArrowColor #526271
+skinparam DefaultFontColor #223243
+skinparam BackgroundColor white
+
+package "Vue 双端" #F0F6FB {
+  rectangle "<b>admin-web</b>\n管理端" as admin #FFFFFF
+  rectangle "<b>user-web</b>\n用户端 PWA" as user #FFFFFF
+  admin -[hidden]right-> user
+}
+
+package "backend-app" #F2F7F2 {
+  rectangle "REST API" as rest #DCECF8
+  rectangle "WebSocket" as websocket #DCECF8
+  rectangle "跨模块用例" as orchestration #FFFFFF
+  rectangle "待办与统计" as queries #FFFFFF
+  rest -[hidden]right-> websocket
+  queries -[hidden]right-> orchestration
+  rest -down-> queries
+  rest -down-> orchestration
+}
+
+package "业务模块" as domain #F0F6FB {
+  rectangle "<b>account</b>\n账户与登录" as account #FFFFFF
+  rectangle "<b>product</b>\n商品与审核" as product #FFFFFF
+  rectangle "<b>category</b>\n分类与别名" as category #FFFFFF
+  rectangle "<b>trade</b>\n请求、约定与确认" as trade #FFFFFF
+  rectangle "<b>conversation</b>\n会话与消息" as conversation #FFFFFF
+  rectangle "<b>case-management</b>\n举报与处置" as cases #FFFFFF
+  rectangle "<b>notification</b>\n收件箱与已读" as notification #FFFFFF
+
+  account -[hidden]right-> product
+  product -[hidden]right-> category
+  category -[hidden]right-> trade
+  conversation -[hidden]right-> cases
+  cases -[hidden]right-> notification
+  account -[hidden]down-> conversation
+  product -[hidden]down-> cases
+  category -[hidden]down-> notification
+}
+
+package "公共模块" as shared #FAF4EB {
+  rectangle "<b>backend-core</b>\n事务、幂等与审计" as core #FFFFFF
+  rectangle "<b>file-storage</b>\n签名、核验与回收" as files #FFFFFF
+  rectangle "<b>messaging</b>\n事件与任务队列" as messaging #FFFFFF
+  core -[hidden]right-> files
+  files -[hidden]right-> messaging
+}
+
+package "数据库维护" #FAF4EB {
+  artifact "<b>database-migrations</b>\nFlyway SQL" as migrations #FFFFFF
+  rectangle "<b>maintenance</b>\n迁移与备份" as maintenance #FFFFFF
+  maintenance .down.> migrations
+}
+
+database "PostgreSQL\n业务与持久事件" as pg #FAF4EB
+database "Redis\nSession / Streams" as redis #F4F0FA
+storage "私有 OSS" as oss #F4F0FA
+pg -[hidden]right-> oss
+oss -[hidden]right-> redis
+
+admin -down-> rest
+user -down-> rest
+user -down-> websocket
+queries -down-> domain
+orchestration -down-> domain
+domain -down-> shared
+conversation -[hidden]down-> core
+cases -[hidden]down-> files
+notification -[hidden]down-> messaging
+core -down-> pg
+files -down-> oss
+messaging -down-> redis
+migrations .down.> pg
+websocket .down.> messaging
+@enduml

@@ -1,0 +1,79 @@
+@startuml
+top to bottom direction
+skinparam defaultFontName PingFang SC
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam linetype ortho
+skinparam nodesep 18
+skinparam ranksep 34
+skinparam packageStyle rectangle
+skinparam ArrowColor #526271
+skinparam DefaultFontColor #223243
+skinparam BackgroundColor white
+
+package "公网入口" #F0F6FB {
+  rectangle "浏览器" as browser #FFFFFF
+  rectangle "阿里云 ESA\nHTTPS 接入" as edge #FFFFFF
+  rectangle "公网 Nginx" as proxy #FFFFFF
+  rectangle "frp 隧道" as tunnel #FFFFFF
+  browser -right-> edge
+  edge -right-> proxy
+  proxy -right-> tunnel
+}
+
+package "发布" #FAF4EB {
+  rectangle "Gitea main" as git #FFFFFF
+  rectangle "Jenkins\n构建发布包" as jenkins #FFFFFF
+  git -right-> jenkins
+}
+
+node "Ubuntu 源站" as origin #F2F7F2 {
+  rectangle "源站 Nginx" as nginx #DCECF8
+
+  package "静态文件" #F0F6FB {
+    artifact "用户端 PWA" as user #FFFFFF
+    artifact "管理端" as admin #FFFFFF
+    user -[hidden]down-> admin
+  }
+
+  package "systemd 进程" as processes #FFFFFF {
+    rectangle "API 实例池\nREST + WebSocket" as api #DCECF8
+    rectangle "scheduler\n派发与清理" as scheduler #FFFFFF
+    rectangle "worker 池\n任务与邮件" as worker #FFFFFF
+    api -[hidden]right-> scheduler
+    scheduler -[hidden]right-> worker
+  }
+
+  package "发布维护" #FAF4EB {
+    artifact "v2 发布包" as release #FFFFFF
+    rectangle "maintenance.jar\n备份 / Flyway" as maintenance #FFFFFF
+    release .down.> maintenance
+  }
+
+  database "PostgreSQL\nv2 数据库" as pg #FAF4EB
+  database "Redis\nv2 命名空间" as redis #FAF4EB
+  pg -[hidden]right-> redis
+}
+
+package "外部服务" #F4F0FA {
+  storage "私有 OSS" as oss #FFFFFF
+  rectangle "SMTP" as smtp #FFFFFF
+  oss -[hidden]right-> smtp
+}
+
+tunnel -down-> nginx
+tunnel -[hidden]right-> git
+jenkins .down.> release
+nginx -right-> user
+nginx -right-> admin
+nginx -down-> api
+processes -down-> pg
+api -down-> redis
+scheduler -down-> redis
+redis -up-> worker
+maintenance .down.> pg
+processes -down-> oss
+worker -down-> smtp
+@enduml

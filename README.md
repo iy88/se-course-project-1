@@ -1,11 +1,59 @@
 <!--
-Version: 0.1.63
-Version-Datetime: 2026-11-27T15:15:00+08:00
+Version: 0.1.65
+Version-Datetime: 2026-11-27T23:36:53+08:00
 -->
 
 # 校园二手交易与物品流转平台
 
-项目包含 Spring Boot 后端、用户端界面和管理端界面。日常开发使用 `scripts/dev.py` 或 `scripts/dev.ps1` 启停服务，通过 `maintenance.jar` 初始化或迁移数据库。
+## 生产部署
+
+| 入口 | 地址 |
+|---|---|
+| 用户端 PWA | [mobile.v2.cm.iy88.site](https://mobile.v2.cm.iy88.site/) |
+| 管理端 | [admin.v2.cm.iy88.site](https://admin.v2.cm.iy88.site/) |
+
+两端通过各自域名同源访问 `/api/v1`，用户端通过 `/api/v1/realtime` 建立 WebSocket 连接。
+
+### 生产测试用户
+
+本批演示账号使用同一个登录密码。
+
+```text
+cIgKKqpp_NVvarTTo0uAM5cUYKYqAsDN
+```
+
+| 登录入口 | 测试角色 | 显示名称 | 登录邮箱 |
+|---|---|---|---|
+| 管理端 | 测试管理员 | 管理员 | `seed-demo-0394b5bbeafe-manager@example.test` |
+| 用户端 | 卖家 | 计科23级·陈子航 | `demo-seller@example.test` |
+| 用户端 | 卖家 2 | 建筑20级·罗文博 | `demo-seller2@example.test` |
+| 用户端 | 卖家 3 | 生物23级·吴桐 | `demo-seller3@example.test` |
+| 用户端 | 买家 | 汉语言22级·林晓雨 | `demo-buyer@example.test` |
+| 用户端 | 买家 2 | 机械21级·赵一鸣 | `demo-buyer2@example.test` |
+| 用户端 | 买家 3 | 新闻22级·孙可 | `demo-buyer3@example.test` |
+| 用户端 | 无关用户 | 视觉传达23级·何佳 | `demo-outsider@example.test` |
+| 用户端 | 冻结交易卖家 | 电子22级·郑博 | `demo-frozen_seller@example.test` |
+| 用户端 | 冻结交易买家 | 数学23级·许安 | `demo-frozen_buyer@example.test` |
+
+### 生产部署架构
+
+[![生产部署架构，展示公网代理、源站进程、发布链路和数据服务](docs/design/architecture/diagrams/生产部署架构.png)](docs/design/architecture/diagrams/生产部署架构.png)
+
+[PlantUML 源文件](docs/design/architecture/diagrams/生产部署架构.puml)
+
+### 项目详细架构
+
+[![项目详细架构，逐节点展示双端、应用入口、七个业务模块和公共模块](docs/design/architecture/diagrams/项目详细架构.png)](docs/design/architecture/diagrams/项目详细架构.png)
+
+[PlantUML 源文件](docs/design/architecture/diagrams/项目详细架构.puml)
+
+## 技术栈
+
+- 前端采用 Vue 3、TypeScript 和 Rsbuild。用户端支持 PWA，双端使用由 OpenAPI 生成的接口类型。
+- 后端采用 Java 27、Spring Boot 和 Maven 多模块，使用 Spring Data JPA／JDBC 访问 PostgreSQL，以 Flyway 管理数据库迁移。
+- Redis 支持会话、实时事件和后台任务。阿里云私有 OSS 保存图片与事项证据，SMTP 投递验证码。Nginx 提供静态站点和反向代理，systemd 管理后端进程。
+
+日常开发使用 `scripts/dev.py` 或 `scripts/dev.ps1` 启停服务，通过 `maintenance.jar` 初始化或迁移数据库。
 
 ## 快速开始
 
