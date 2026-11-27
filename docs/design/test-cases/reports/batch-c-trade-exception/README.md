@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.2
-Version-Datetime: 2026-11-27T22:40:00+08:00
+Version: 0.3.0
+Version-Datetime: 2026-11-28T00:05:00+08:00
 -->
 
 # [测试主验证][C] US-05／06／14 交易与异常处理 执行报告
@@ -13,9 +13,9 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 | 负责人／审查人 | 孙含佳（`shjj11`）／袁尚峰（`iy88`） |
 | 用户故事 | US-05、US-06、US-14 |
 | 执行项 | C01—C18（共 18 项） |
-| 代码版本 | commit `76e0adce`；分支 `test/evidence-trade-exception-shjj11`；被测代码 `main` |
-| 执行日期 | 2026-11-26 至 2026-11-27（本地时间；最后一次页面复跑 2026-11-27 21:02—21:07） |
-| 环境 | 用户端 `http://127.0.0.1:3000`；管理端 `http://127.0.0.1:3001`；API `http://127.0.0.1:18081`（`backend-app-0.0.1-SNAPSHOT`，三个角色进程：`infrastructure`／`delivery-scheduler`／`delivery-worker`）；PostgreSQL 5432（库 `project1_accept`，容器 `project1-postgres`）；Redis 6379（命名空间 `project1:accept:s4`） |
+| 代码版本 | 被测代码 `main@6296eb4e`（含 #169 `07f0e42f` 解冻执行器、#184 `2fcdde63` 完成原因文案）；首轮执行基于 `main@5bbe4f0e` 系列；本分支证据提交在 `9f721206` 之后按第二轮复测补齐 |
+| 执行日期 | 2026-11-26 至 2026-11-27 首轮；2026-11-27 23:10—23:55 在 `main@6296eb4e` 完成第二轮复测（部署环境见 `evidence/RUN-C3/RUN-C3-retest-2nd.md`） |
+| 环境 | 用户端 `http://127.0.0.1:3000`；管理端 `http://127.0.0.1:3001`；API `http://127.0.0.1:18081`（复测版本为 `main@6296eb4e` 构建的 `backend-app-0.0.1-SNAPSHOT.jar`，进程 `infrastructure`／`delivery-scheduler`／`delivery-worker`）；PostgreSQL 5432（库 `project1_accept`，容器 `project1-postgres`，复测前补应用迁移 V25_147、V26—V29）；Redis 6379（命名空间 `project1:accept:s4`） |
 | 浏览器 | Microsoft Edge 无头模式（CDP 驱动），视口 1440×1000—1440×1200；每个角色独立用户目录（买方 C／买方 A／卖方 B／管理员） |
 | 依赖类型 | PostgreSQL、Redis 为真实实例（启动探针通过）；SMTP 为真实邮箱，注册与登录验证由负责人用自有邮箱实测通过；本批交易样本的账户为库内直建（C 批允许预置前置样本），页面流程不使用附件上传，因此 OSS 不在判定路径内 |
 | 执行方式 | 页面为主：真实登录、真实页面点击，以页面文案与页面状态判定；接口响应与库内字段用于交叉核对（区分见「执行项结果」备注列） |
@@ -88,7 +88,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 | 合成数据 | 受控时钟推进 `confirmation_wait` 与 `task_schedule` 指纹生成异常交易 46／67 与事项 10／15；C14 使用等待中的交易发起争议 |
 | 前端步骤 | 买方／卖方交易详情与列表查看冻结横幅；管理端共享池按「异常事项」筛选并认领；管理端「处置决定」下发「调整交易状态」 |
 | 接口／DB／Redis／OSS 核对 | `trade_freeze` 来源与 `ended_at`；`confirmation_wait` 起止与 `end_reason`；商品 `lifecycle_state`、占用；`moderation_case`／`case_enforcement`；`trade_confirmation` 条数 |
-| 实际结果 | C13、C14、C15、C18 页面判定通过；C16 在页面与库上验证冻结期受限、历史只读与计时暂停，C16、C17 剩余断言同被 `lift_trade_freeze` 阻塞（#168），失败记录与阻塞断言分列见 `RUN-C3-c16-freeze-pause.md` |
+| 实际结果 | C13、C14、C15、C18 页面判定通过；C16、C17 在 `main@6296eb4e` 上按 #168 复测口径重跑并通过（多来源、普通冻结续算、超时恢复三类场景），冻结期 IM 发送限制同时验证 |
 | 结论 | 部分通过（4 通过／2 部分通过） |
 | 缺陷 | #168（解冻动作 503，由 S4-01 执行器提供） |
 | 证据 | `evidence/RUN-C3/`、`evidence/RUN-C3/C16-C17-partial.md` |
@@ -101,19 +101,19 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 | C02 | 两买方各自提交请求，卖方交易列表出现两笔「待接受」；卖方详情点「接受请求」→ 交易进入「等待约定生效」；未成交一方列表该笔显示「已关闭」，不再有接受入口 | `TRD-IF` API-TRD-002；`TRD-KD` 接受请求、锁序、占用不变量；`R1` 接受调用顺序；US-05-AC-02 | 通过 | 库内另一笔 `closed`／`other_user_locked`，商品 `in_trade` 且占用指向成交交易；两接受同时发起时一笔 200、一笔 409 `REQUEST_ALREADY_ENDED` | RUN-C1／[两笔待接受](evidence/RUN-C1/pages/C02-7-two-buyers.png)、[已关闭](evidence/RUN-C1/pages/C02-11-loser-closed.png)、[并发](evidence/RUN-C1/RUN-C1-c02-concurrency.txt) |
 | C03 | 买方详情「撤回请求」→「已撤回购买请求」，状态「已撤回」，约定区提示当前阶段不能提出约定；另一组卖方详情「拒绝请求」→「已拒绝该请求」，状态「已拒绝」 | `TRD-IF` API-TRD-003、004；`TRD-KD` 请求撤回／拒绝；`CONV-KD` 归档；US-05-AC-03 | 通过 | 库内 `withdrawn`／`rejected` | RUN-C1／[撤回](evidence/RUN-C1/pages/C03-3-withdrawn.png)、[拒绝](evidence/RUN-C1/pages/C03-5-rejected.png) |
 | C04 | 卖方在交易详情填约定表单（交付时间／地点／方式／金额／支付安排／支付时点）→「提出约定」→ 状态「待回应」并显示提出时间；买方看到「同意约定／拒绝」→ 点同意 → 约定「已生效」「版本 第 1 版」 | `TRD-IF` API-TRD-005、006；`TRD-KD` AgreementVersion／Decision；`CONV-KD` 系统消息；US-05-AC-04 | 通过 | 库内 `agreement_version` 交易 34 第 1 版 `rejected`；交易 33 第 1 版 `superseded`、第 2 版 `effective`（经 C05 变更） | RUN-C1／[表单](evidence/RUN-C1/pages/C04-1-agreement-form.png)、[待回应](evidence/RUN-C1/pages/C04-2-agreement-proposed.png)、[已生效](evidence/RUN-C1/pages/C04-5-agreement-effective.png) |
-| C05 | 买方先点「我已交付并收款完成」→ 顶部「等待对方完成确认，剩余 7 天 0 小时」；卖方「提出新的约定变更」→「待回应」；买方「同意约定」→ 版本变「第 2 版」、确认回到「0/2」、等待提示消失 | `TRD-IF` API-TRD-005—007；`TRD-KD` 转换与计时表；`C1` 幂等；US-05-AC-05、AC-11 | 通过 | 库内第 1 版 `superseded`、第 2 版 `effective`；该笔 `confirmation_wait.ended_at` 有值（结束原因随后被完成流程写为 `completed`，未单独落「约定变更」） | RUN-C1／[单方确认](evidence/RUN-C1/pages/C05-1-single-confirmation.png)、[变更生效](evidence/RUN-C1/pages/C05-4-change-effective.png) |
-| C06 | 首约前买方「申请取消交易」→「交易已取消。」、状态「已终止」、结束原因「已取消」；卖方申请 → 买方「同意取消」→ 同样「交易已取消。」；**约定生效后**卖方申请 →「取消申请已提交，等待对方回应。」「待对方同意」，买方「同意取消」→「交易已取消。」「已终止」「结束原因：已取消」 | `TRD-IF` API-TRD-008、009；`TRD-KD` 取消转换；`R1` 结束调用；US-05-AC-06 | 通过 | 三条路径齐：首约前买方直接生效、首约前卖方需同意、约定后双方同意才终止；库内 `terminated`／`cancelled`，商品 `off_shelf`，会话归档 | RUN-C1／[买方取消](evidence/RUN-C1/pages/C06-2-cancelled.png)、[卖方申请](evidence/RUN-C1/pages/C06-3-seller-cancel-request.png)、[首约后申请](evidence/RUN-C1/pages/C06-6-post-agreement-cancel-request.png)、[买方同意](evidence/RUN-C1/pages/C06-7-buyer-consent-panel.png)、[取消生效](evidence/RUN-C1/pages/C06-8-cancelled-after-agreement.png)、[步骤](evidence/RUN-C1/RUN-C1-c06c-steps.md) |
+| C05 | 买方先点「我已交付并收款完成」→「等待对方完成确认，剩余 7 天 0 小时」；卖方「提出新的约定变更」→「待回应」；买方「同意约定」→「第 2 版」、确认回到 `0/2`、等待提示消失 | `TRD-IF` API-TRD-005—007；`TRD-KD` 转换与计时表；`C1` 幂等；US-05-AC-05、AC-11 | 通过 | 复测（`main@6296eb4e`，交易 84）：生效瞬间旧确认 `invalidated_at` 有值（历史保留、当前有效 0）、旧等待 `end_reason=agreement_changed`；重新确认对应新约定版本，新等待 `wait_seconds=604800`、累计 0 | RUN-C1／[单方确认](evidence/RUN-C1/pages/C05-1-single-confirmation.png)、[变更生效](evidence/RUN-C1/pages/C05-4-change-effective.png)、[复测](evidence/RUN-C1/RUN-C1-retest-2nd.md) |
+| C06 | 首约前买方「申请取消交易」→「交易已取消／已终止／已取消」；卖方申请 → 买方「同意取消」→ 同样已取消；**约定生效后**卖方申请 →「待对方同意」→ 买方同意 → 已终止；买方拒绝或卖方撤回 → 交易仍「交易中」、约定生效 | `TRD-IF` API-TRD-008、009；`TRD-KD` 取消转换；`R1` 结束调用；US-05-AC-06 | 通过 | 三条取消路径齐备；复测（交易 86）：拒绝后提案 `rejected`、撤回后 `withdrawn`，交易 `in_progress`、约定 `effective`、商品占用不变；终态分支 `archived_at` 有值 | RUN-C1／[首约前](evidence/RUN-C1/pages/C06-2-cancelled.png)、[首约后](evidence/RUN-C1/pages/C06-8-cancelled-after-agreement.png)、[拒绝/撤回](evidence/RUN-C1/pages/RT-C06-after-withdraw.png)、[复测](evidence/RUN-C1/RUN-C1-retest-2nd.md) |
 | C07 | 买方提交完成确认 →「完成确认 1/2 已确认」「等待对方完成确认，剩余 7 天」；卖方再确认 →「2/2 已确认」，按钮变「提交评价」 | `TRD-IF` API-TRD-007；`TRD-KD` TradeConfirmation、完成转换；`R1` 完成调用；`C1` 原子性；US-05-AC-07、AC-10 | 通过 | 库内 `completed`、商品 `off_shelf`、占用释放 | RUN-C1／[单方确认](evidence/RUN-C1/pages/C07-1-buyer-confirmed.png)、[已完成](evidence/RUN-C1/pages/C07-2-trade-completed.png) |
-| C08 | 约定生效后「发起争议」填说明 →「争议已提交，交易进入争议状态。」；按钮变「申请取消交易／确认争议已解决」；双方各确认一次后争议结束、页面回到约定视图 | `TRD-IF` API-TRD-010、011；`TRD-KD` 争议、恢复及计时；`CASE-KD` 争议事项；`CONV-KD` 归档；US-05-AC-08 | 通过 | 库内 `trade_dispute` `resolved`、交易回 `in_progress` | RUN-C1／[争议表单](evidence/RUN-C1/pages/C08-2-dispute-form.png)、[争议中](evidence/RUN-C1/pages/C08-3-disputed.png)、[已解决](evidence/RUN-C1/pages/C08-4-resolved.png) |
+| C08 | 约定生效后「发起争议」→「争议已提交，交易进入争议状态。」；双方各「确认争议已解决」→ 回到约定视图 | `TRD-IF` API-TRD-010、011；`TRD-KD` 争议、恢复及计时；`CASE-KD` 争议事项；`CONV-KD` 归档；US-05-AC-08 | 通过 | 复测（交易 85）：旧等待 `end_reason=disputed`（累计 2 秒）；恢复时当前确认清零、历史保留、无活动等待；重新确认新等待 `604800`／累计 0；争议事项 29 `decided` | RUN-C1／[争议](evidence/RUN-C1/pages/C08-3-disputed.png)、[已解决](evidence/RUN-C1/pages/C08-4-resolved.png)、[复测](evidence/RUN-C1/RUN-C1-retest-2nd.md) |
 | C09 | 管理端两次页面处置：① 异常事项 #16「认定违规 + 调整交易状态 / 70 / 已完成」→「操作已完成。」「已决定」「调整交易状态 已记录 · status=completed」，买方交易页「已完成」、完成确认仍「1/2 已确认」、按钮变「提交评价」；② 异常事项 #15「调整交易状态 / 67 / 已终止」→ 交易页「已终止／结束原因：管理终止」、确认仍「1/2」；③ 对已完成交易再下发「恢复进行中」被页面拒绝（提示「当前状态已变化，请刷新后重试。」，事项仍「处理中」） | `TRD-IF` API-TRD-013；`TRD-KD` 管理调整与终态；`CASE-IF` CASE-007；`R1` 终止调用；US-05-AC-10、US-14-AC-06、AC-08 | 通过 | 库内：完成一笔 `completed`／`completed`、终止一笔 `terminated`／`admin_terminated`，商品 `off_shelf`、占用释放；终态再调整 `409 TRADE_TERMINAL`「交易已结束」；另核对处置目标必须与事项目标一致（`409 TARGET_STATE_CONFLICT`） | RUN-C1／[完成处置](evidence/RUN-C1/pages/C09-4-complete-form.png)、[完成结果](evidence/RUN-C1/pages/C09-5-complete-result.png)、[交易页已完成](evidence/RUN-C1/pages/C09-9-trade-completed.png)、[终态被拒](evidence/RUN-C1/pages/C09-8-terminal-rejected.png)、[终止一笔](evidence/RUN-C1/pages/C09-2-decision-result.png)、[步骤](evidence/RUN-C1/RUN-C1-c09b-steps.md) |
 | C10 | 尚无有效约定的交易详情没有「我已交付并收款完成」按钮，页面层不给入口 | `TRD-IF` API-TRD-007；`TRD-KD`「尚无有效约定」转换、TradeConfirmation；US-06-AC-01 | 通过 | 接口同路径返回 409 `AGREEMENT_REQUIRED` | RUN-C2／[交易详情](evidence/RUN-C2/pages/C10-1-before-confirm.png) |
 | C11 | 约定生效后一方提交确认，详情显示该条记录（确认人、时间、说明）；另一方提交后「2/2 已确认」并列出两条记录与约定版本 | `TRD-IF` API-TRD-007；`TRD-KD` TradeConfirmation、ConfirmationWait、完成转换；`C1` 幂等；US-06-AC-02、AC-03 | 通过 | 库内 `trade_confirmation` 交易 33／42 各 2 条，未互相覆盖 | RUN-C2／[1/2](evidence/RUN-C1/pages/C07-1-buyer-confirmed.png)、[2/2](evidence/RUN-C1/pages/C07-2-trade-completed.png) |
-| C12 | 无关账户「我的交易」只列出自己的交易；直接打开他人交易详情显示「内容不存在，或你当前无权查看。」 | `TRD-IF` API-TRD-013；`TRD-KD` 字段与权限；`CASE-KD` 管理范围；US-06-AC-06 | 通过 | 列表级与详情级页面证据齐备；接口 404 `RESOURCE_NOT_VISIBLE`（无关用户、未认领管理员） | RUN-C2／[列表](evidence/RUN-C2/pages/C12-1-outsider-list.png)、[详情](evidence/RUN-C1/pages/C12-2-outsider-trade-detail.png)、[步骤](evidence/RUN-C1/RUN-C1-c06c-steps.md) |
+| C12 | 无关账户「我的交易」只有自己的交易；打开他人交易详情显示「内容不存在，或你当前无权查看。」；认领管理员可读本人事项（相关账户、处置目标、问询入口） | `TRD-IF` API-TRD-013；`TRD-KD` 字段与权限；`CASE-KD` 管理范围；US-06-AC-06 | 部分通过 | 无关用户／未认领管理员 404、认领管理员事项范围 200、无关交易 404 均已验证；**未验证**「认领管理员读取交易确认历史」——`API-TRD-013` 限参与方，交易详情对管理员返回 404，口径待设计确认（已在复审回复提出） | RUN-C2／[列表](evidence/RUN-C2/pages/C12-1-outsider-list.png)、[详情](evidence/RUN-C1/pages/C12-2-outsider-trade-detail.png)、[管理员事项](evidence/RUN-C1/pages/RT-C12-manager-case.png)、[复测](evidence/RUN-C1/RUN-C1-retest-2nd.md) |
 | C13 | 单方确认后推进受控时钟：买方交易列表该笔仍为「交易中」，进详情出现横幅「交易已被冻结：单方确认超时」，按钮只剩「进入交易会话／发私聊」 | `TRD-KD`「超时、重试与异常恢复」「计时规则」；`CASE-KD` 异常事项创建；US-14-AC-01 | 通过 | 库内 `abnormal`、`trade_freeze` 1 条（`source=timeout`）、商品 `in_trade` 占用保持、生成 `trade_timeout_case` | RUN-C3／[列表](evidence/RUN-C3/pages/C13-1-buyer-trades-frozen.png)、[详情](evidence/RUN-C3/pages/C13-2-frozen-trade-detail.png)、[步骤](evidence/RUN-C1/RUN-C1-egf-steps.md) |
-| C14 | 等待中的交易发起争议 →「争议已提交，交易进入争议状态。」、状态「争议中」，页面不再显示剩余等待 | `TRD-IF` API-TRD-010、011；`TRD-KD` 争议与恢复；`CASE-KD` 争议事项结案；`C1` 锁序；US-14-AC-02 | 通过 | 库内该笔 `confirmation_wait.end_reason=disputed`、`trade_dispute` `open` | RUN-C3／[等待中](evidence/RUN-C3/pages/C14-1-wait-started.png)、[争议后](evidence/RUN-C3/pages/C14-2-dispute-during-wait.png) |
-| C15 | 管理端「事项工作台 → 待认领 → 异常事项」显示 1 项 #15；点「认领」→ 进入事项详情，标签「处理中」、处理记录「认领 · 2026/11/27 21:02」，页面开放「发起问询」「处置决定」；该事项不再出现在待认领列表 | `CASE-IF` API-CASE-004、010；`CASE-KD` 认领与处理权限；`C1` 资格锁；US-14-AC-03 | 通过 | 认领前共享池明细不可见（404），认领后 `viewpoint=manager`、可用动作 `[inquire, decide]`；库内 `claimed_manager_id=3` | RUN-C3／[共享池](evidence/RUN-C3/pages/C15-6-exception-pool.png)、[认领后](evidence/RUN-C3/pages/C15-7-claimed-detail.png)、[步骤](evidence/RUN-C3/RUN-C3-c15-claim-steps.md) |
-| C16 | 冻结中的交易详情按钮只剩「进入交易会话／发私聊」，完成确认与争议入口消失、历史只读；管理端「冻结交易」下发后买方页出现横幅「交易已被冻结：…」，库内 `confirmation_wait.active_since` 置空、已走秒保留（计时暂停），商品仍 `in_trade`、占用保持 | `TRD-KD` TradeFreeze、冻结暂停；`CASE-KD` 处置后申辩；`R2B` 账户与交易限制；US-14-AC-04 | 部分通过 | 已验证：冻结期受限操作（页面 + 409 `STATE_CONFLICT`）、冻结暂停计时、锁单保留。**失败记录**：`lift_trade_freeze` 503 `DEPENDENCY_UNAVAILABLE`；**阻塞断言**：解除一个冻结来源、仍有其他冻结时不续算（#168） | RUN-C3／[冻结详情](evidence/RUN-C3/pages/C13-2-frozen-trade-detail.png)、[管理端冻结](evidence/RUN-C3/pages/C16-2-admin-frozen.png)、[买方冻结页](evidence/RUN-C3/pages/C16-3-frozen-by-admin.png)、[冻结与失败分列](evidence/RUN-C3/RUN-C3-c16-freeze-pause.md) |
-| C17 | 管理端在事项上「调整交易状态 → 恢复进行中」后，交易回到进行中，约定、确认与占用保持，页面无剩余等待 | `TRD-IF` API-TRD-013；`TRD-KD` 恢复；`CASE-IF` CASE-007；`R2B` 部分恢复；US-14-AC-05 | 部分通过／阻塞 | 恢复 201 生效（库内 `in_progress`、占用保持、旧等待 `ended_at` 非空）。**失败记录**：`lift_trade_freeze` 503 `DEPENDENCY_UNAVAILABLE`「该处置动作由正式执行器 S4-01 提供」；**阻塞断言**：解冻后重新确认、计时按完整 7 天重启（#168） | RUN-C3／[失败与阻塞分列](evidence/RUN-C3/RUN-C3-c16-freeze-pause.md)、[部分通过记录](evidence/RUN-C3/C16-C17-partial.md)、[步骤](evidence/RUN-C1/RUN-C1-c17-steps.md) |
+| C14 | 等待中的交易发起争议 →「争议已提交，交易进入争议状态。」、状态「争议中」，页面不再显示剩余等待 | `TRD-IF` API-TRD-010、011；`TRD-KD` 争议与恢复；`CASE-KD` 争议事项结案；`C1` 锁序；US-14-AC-02 | 通过 | 库内 `confirmation_wait.end_reason=disputed`；复测同 C08：恢复不自动启动等待，重新确认才计满 7 天（交易 85） | RUN-C3／[等待中](evidence/RUN-C3/pages/C14-1-wait-started.png)、[争议后](evidence/RUN-C3/pages/C14-2-dispute-during-wait.png)、[复测](evidence/RUN-C1/RUN-C1-retest-2nd.md) |
+| C15 | 事项工作台「待认领 → 异常事项」→ #15「认领」→ 详情「处理中」「认领 · 21:02」，开放「发起问询／处置决定」 | `CASE-IF` API-CASE-004、010；`CASE-KD` 认领与处理权限；`C1` 资格锁；US-14-AC-03 | 通过 | 复测：第二管理员重复认领 `409 CASE_ALREADY_CLAIMED`、读取事项 404、发起决定 `404 NOT_CASE_MANAGER`，`claimed_manager_id=3` 不变 | RUN-C3／[共享池](evidence/RUN-C3/pages/C15-6-exception-pool.png)、[认领后](evidence/RUN-C3/pages/C15-7-claimed-detail.png)、[越权拒绝](evidence/RUN-C1/RUN-C1-retest-2nd.md) |
+| C16 | 冻结期交易页按钮只剩「进入交易会话／发私聊」，确认历史只读；管理端冻结后出现冻结横幅；#168 修复后：两条活动冻结只解除一条 → 交易仍冻结、确认 409、计时不续算；冻结期交易会话与私聊发送被拒 | `TRD-KD` TradeFreeze、冻结暂停；`CASE-KD` 处置后申辩；`R2B` 账户与交易限制；US-14-AC-04 | 通过 | 复测（`main@6296eb4e`，交易 82／89）：决议 `201`、`timeout` 冻结结束而 `admin_case` 仍活动、`wait.active_since` 为空且累计不变、确认 `409 TRADE_FROZEN`；交易会话与私聊发送 `403 MESSAGE_SEND_FORBIDDEN`，历史 200；冻结用户消息数不变 | RUN-C3／[冻结页](evidence/RUN-C3/pages/C16-3-frozen-by-admin.png)、[IM 拒绝](evidence/RUN-C1/pages/RT-IM-frozen-send.png)、[复测](evidence/RUN-C3/RUN-C3-retest-2nd.md) |
+| C17 | 管理员恢复异常交易 → 交易回进行中、占用保持；解冻后按 #168 复测口径补验重新确认与完整 7 天 | `TRD-IF` API-TRD-013；`TRD-KD` 恢复；`CASE-IF` CASE-007；`R2B` 部分恢复；US-14-AC-05 | 通过 | 复测（交易 83）：`adjust_trade_status+lift_trade_freeze` 决议 `201`、旧确认失效（历史保留）、未自动启动等待；买方重新确认 `201`，新等待 `wait_seconds=604800`、累计 0、`active_since` 有值；页面「剩余 6 天 23 小时」 | RUN-C3／[重新确认后](evidence/RUN-C3/pages/RT-C17-reconfirmed-wait.png)、[复测](evidence/RUN-C3/RUN-C3-retest-2nd.md) |
 | C18 | 管理端将异常交易处置为「已终止」后，买方交易页「已终止／结束原因：管理终止」、完成确认仍「1/2 已确认」（保留历史、未伪造完成），按钮只剩会话与私聊 | `TRD-KD` 管理调整与终态；`CASE-IF` CASE-007；`R1` 终止调用；`R2B` 解冻与归档；US-14-AC-06、AC-08 | 通过 | 库内 `terminated`／`admin_terminated`、商品 `off_shelf`、占用释放；再下发恢复 409 `STATE_CONFLICT` 且状态不变 | RUN-C3／[交易页](evidence/RUN-C3/pages/C18-1-terminal-trade.png)、[步骤](evidence/RUN-C1/RUN-C1-c18-steps.md) |
 
 ## 逐项明细（环境／SHA／Design·AC／RUN 状态）
@@ -159,6 +159,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 - 页面步骤：买方先「我已交付并收款完成」；卖方「提出新的约定变更」；买方「同意约定」。
 - 页面观察（实际）：顶部「等待对方完成确认，剩余 7 天 0 小时」→ 变更「待回应」→ 同意后「第 2 版」、确认「0/2」、等待提示消失。
 - 核对与结果：第 1 版 `superseded`、第 2 版 `effective`；确认回到 0/2 与旧等待提示消失以页面判定，库内该笔 `confirmation_wait.ended_at` 有值 → 通过（页面）。
+- 复测（`main@6296eb4e`）：同一次同意操作后立即查询，旧确认 `invalidated_at` 有值、旧等待 `ended_at` 有值且 `end_reason=agreement_changed`；重新确认对应新约定版本，新等待 `604800`、累计 0。
 
 ### C06 分阶段取消
 
@@ -167,6 +168,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 - 页面步骤：① 首约前买方「申请取消交易」（直接生效）；② 另一组首约前卖方「申请取消交易」→ 买方「同意取消」；③ 约定已生效后（交易 71）卖方「申请取消交易」→ 买方「同意取消」。
 - 页面观察（实际）：①「交易已取消。」「已终止」「结束原因：已取消」；②③ 卖方申请后「取消申请已提交，等待对方回应。」「待对方同意」，对方看到「同意取消／拒绝」，同意后同样「交易已取消。」。
 - 核对与结果：库内 `terminated`、`terminal_reason=cancelled`、商品 `off_shelf`、占用释放、`trade_conversation.archived_at` 有值 → 通过（页面）。
+- 复测（`main@6296eb4e`）：拒绝取消后提案 `rejected`、撤回后 `withdrawn`，交易保持 `in_progress`、约定 `effective`、占用不变。
 
 ### C07 双方完成确认
 
@@ -183,6 +185,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 - 页面步骤：「发起争议」填说明 → 提交；双方各点「确认争议已解决」。
 - 页面观察（实际）：「争议已提交，交易进入争议状态。」；按钮变「申请取消交易／确认争议已解决」；双方确认后回到约定视图。
 - 核对与结果：`trade_dispute` `resolved`、交易回 `in_progress` → 通过（页面）。
+- 复测（`main@6296eb4e`）：旧等待 `end_reason=disputed`、恢复时当前确认清零且历史保留、无活动等待；重新确认后新等待 `604800`、累计 0；争议事项 `decided`。
 
 ### C09 管理端处置：完成／终止与终态保护
 
@@ -216,6 +219,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 - 页面步骤：无关账户打开「我的交易」列表；再直接打开他人的交易详情（`/trades/71`）。
 - 页面观察（实际）：列表只含自己的交易；详情页显示「内容不存在，或你当前无权查看。」。
 - 核对与结果：接口 404 `RESOURCE_NOT_VISIBLE`（无关用户、未认领管理员） → 通过（页面，列表级）。
+- 复测（`main@6296eb4e`）：认领管理员读取本人事项 200（相关账户、处置目标、问询入口），读取无关交易与他人事项 404；读取目标交易详情 404 属 `API-TRD-013`「参与方」口径，待设计确认。
 
 ### C13 单方确认超时转异常
 
@@ -232,6 +236,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 - 页面步骤：等待中的交易「发起争议」→ 填说明 → 提交。
 - 页面观察（实际）：「争议已提交，交易进入争议状态。」，状态「争议中」，页面不再显示剩余等待。
 - 核对与结果：该笔 `confirmation_wait.end_reason=disputed`、`trade_dispute` `open` → 通过（页面）。
+- 复测（`main@6296eb4e`）：与 C08 同一组证据，恢复后不自动启动等待，重新确认才计满 7 天。
 
 ### C15 共享池认领异常事项
 
@@ -240,6 +245,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 - 页面步骤：事项工作台「待认领」筛「异常事项」→ 点 #15 的「认领」。
 - 页面观察（实际）：进入事项详情「处理中」、处理记录「认领 · 2026/11/27 21:02」、开放「发起问询」「处置决定」；待认领列表不再含 #15。
 - 核对与结果：认领前 404、认领后 `viewpoint=manager`、`claimed_manager_id=3`、可用动作 `[inquire, decide]` → 通过（页面）。
+- 复测（`main@6296eb4e`）：第二管理员重复认领 `409 CASE_ALREADY_CLAIMED`、决定 `404 NOT_CASE_MANAGER`；原认领人与流水不变。
 
 ### C16 冻结期间受限操作
 
@@ -248,6 +254,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 - 页面步骤：① 打开冻结交易详情，确认完成确认与争议入口；② 管理端对另一笔交易（交易 72）下发「冻结交易」，买方刷新详情。
 - 页面观察（实际）：按钮只剩「进入交易会话／发私聊」，推进类入口全部消失；管理端冻结后买方页出现横幅「交易已被冻结：异常交易核查期间冻结交易，等待进一步核对。」，确认记录保留、剩余等待倒计时消失；管理端页面显示「冻结交易 已记录 · …frozen=true」并提供「解除处置」。
 - 核对与结果：完成确认、发起争议均 409 `STATE_CONFLICT`；`confirmation_wait.active_since` 置空、`accumulated_seconds` 保留（计时暂停）；`trade_freeze` 新增 `source=admin_case`、占用保持。**失败记录**：`lift_trade_freeze` 503；**阻塞断言**：解除一个来源后仍存在其他冻结时不续算（#168） → 部分通过。
+- 复测（`main@6296eb4e`）：两条活动冻结只解除一条 → 决议 `201`、另一条仍活动、计时暂停不续算、确认 `409 TRADE_FROZEN`；交易会话与私聊发送 `403 MESSAGE_SEND_FORBIDDEN`，历史只读。
 
 ### C17 管理员恢复与解冻缺口
 
@@ -256,6 +263,7 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 - 页面步骤：在事项上下发「调整交易状态 → 恢复进行中」；随后下发解冻；买方重新提交完成确认。
 - 页面观察（实际）：恢复后交易回到进行中、无剩余等待提示；解冻无页面入口（动作由事项处置下发），故本项页面证据仅为交易侧状态。
 - 核对与结果：恢复 201、占用保持、旧等待 `ended_at` 非空；`lift_trade_freeze` 503 `DEPENDENCY_UNAVAILABLE`（S4-01），后续确认仍 409 `TRADE_FROZEN` → 部分通过／阻塞（#168）。失败记录与阻塞断言的分列见 `evidence/RUN-C3/RUN-C3-c16-freeze-pause.md` 第 3 节。
+- 复测（`main@6296eb4e`）：恢复+解冻决议 `201`、旧确认失效、未自动启动等待；重新确认 `201`，新等待 `604800`、累计 0。
 
 ### C18 异常交易终止与终态保护
 
@@ -273,28 +281,43 @@ Version-Datetime: 2026-11-27T22:40:00+08:00
 | `backend-app`（`trade` 模块）单元测试 | C05—C09、C16—C18（处置、冻结资格、终态） | `mvn -o -pl trade test` | 通过：38 个用例全绿（`CaseEnforcementTests` 15、`TradePartyFreezeQualificationTests` 7、`TradeReviewModerationTests` 5、`TradeReviewQueriesTests` 3、`TradeTest` 8） |
 | `backend-app` 集成测试（`*IT`，真实依赖） | C02、C07、C08、C13、C18 | `mvn -o -pl backend-app verify -Dit.envFile=backend/.env.accept` | 未运行：本批未改动后端代码，集成套件留给 #168 接入后的回归一并执行 |
 
+## 证据索引
+
+| 证据 | 位置 |
+|---|---|
+| 报告 | `README.md`（本文件，0.3.0） |
+| 首轮步骤与接口记录 | `evidence/RUN-C1/RUN-C1-steps.md`、`RUN-C1b-steps.md`、`RUN-C1c-steps.md`、`RUN-C1d-steps.md`、`RUN-C1-egf-steps.md`、`RUN-C1-c17-steps.md`、`RUN-C1-c18-steps.md` |
+| 首轮页面处置 | `evidence/RUN-C1/RUN-C1-c09-page-steps.md`、`RUN-C1-c09b-steps.md`、`RUN-C3/RUN-C3-c15-claim-steps.md` |
+| 第二轮复测（C16／C17／IM） | `evidence/RUN-C3/RUN-C3-retest-2nd.md`、`evidence/RUN-C3/RUN-C3-retest-2nd.jsonl` |
+| 第二轮复测（C05／C06／C08／C12／C14／C15／#183） | `evidence/RUN-C1/RUN-C1-retest-2nd.md` |
+| 并发与通知 | `evidence/RUN-C1/RUN-C1-c02-concurrency.txt`、`RUN-C1-notify-realtime.txt` |
+| 页面截图 | `evidence/RUN-C1/pages/`、`evidence/RUN-C2/pages/`、`evidence/RUN-C3/pages/` |
+| 页面证据索引与待办 | `evidence/STATUS.md` |
+| 执行日志 | `evidence/run-log.txt` |
+
+
 ## 缺陷与复测
 
 | 缺陷 Issue | 现象 | 修复 PR／commit | 复测 RUN | 复测结果 |
 |---|---|---|---|---|
-| #168 | `POST /api/v1/admin/cases/{case_id}/decisions` 下发 `lift_trade_freeze` 返回 503 `DEPENDENCY_UNAVAILABLE`「该处置动作由正式执行器 S4-01 提供」；同一事项上 `adjust_trade_status` 正常 201 | 待接入 | RUN-C3（`C16-C17-partial.md` 已备三条复测口径） | 未复测：C16 多冻结来源不续算、C17 解冻后重新确认与完整 7 天计时 |
+| #168 | 旧版本下发 `lift_trade_freeze` 返回 `503 DEPENDENCY_UNAVAILABLE`「该处置动作由正式执行器 S4-01 提供」（失败记录保留：`RUN-C1/RUN-C1-c17-steps.md` C17-6） | 已由 #169 修复（`07f0e42f`，合入 `main`） | RUN-C3 第二轮复测（`RUN-C3-retest-2nd.md`） | 通过：决议接口返回 `201`，多来源只解除一条仍冻结且不续算；解除最后一条后等待按剩余时间续算（累计 90 秒保留）；恢复+解冻后重新确认 `201`，新等待 `604800`、累计 0 |
 | #162 | 上传失败提示把对象存储跨域拦截误报为网络问题 | PR #163 待合入；桶 CORS 白名单需主账号补充 | 不在本批路径 | 未复测 |
 | #142 | 纠类缺少依据返回 422 | 已由 #143 修复并合入 `main`（B 批记录） | 不在本批路径 | — |
-| 待登记（文案） | 管理员处置完成交易时，买方交易页「结束原因：双方确认完成」仍写双方确认，而同一页完成确认为「1/2 已确认」；终止时显示「管理终止」正常 | 待建 Issue | RUN-C1（`RUN-C1-c09b-steps.md` 第 4 节） | 未修复 |
+| #183 | 管理员处置完成交易时显示「结束原因：双方确认完成」，与同页「1/2 已确认」不一致 | 已由 #184 修复（`2fcdde63`，合入 `main@6296eb4e`） | RUN-C1 第二轮复测（`RUN-C1-retest-2nd.md`） | 通过：页面显示「结束原因：管理员处置完成」，完成确认仍「1/2 已确认」 |
 
 ## 未覆盖与阻塞
 
-- C16、C17 各有一半断言依赖 #168 的解冻执行器，本次无法验证；复测口径已在 `evidence/RUN-C3/C16-C17-partial.md` 写清（解冻 200、重新确认后 7 天完整计时、多冻结来源不续算），失败记录（503）与阻塞断言在 `RUN-C3-c16-freeze-pause.md` 第 3 节分列。
+- #168 已修复并完成第二轮复测（C16／C17 转为通过）；旧的 503 失败证据保留在 `RUN-C1/RUN-C1-c17-steps.md`，修复后的实际结果见 `RUN-C3/RUN-C3-retest-2nd.md`。
 - OSS 不在本批页面路径内（流程无附件上传）；SMTP 为真实邮箱，注册与登录验证由负责人实测通过，本批交易样本账户按 C 批约定库内预置。
-- 管理端登录出现两次「请求校验失败，请刷新页面后重试。」，刷新后成功；属登录页令牌竞态现象，未登记为缺陷。
+- 管理端登录偶发「请求校验失败，请刷新页面后重试。」，刷新后成功，未登记为缺陷。
 - 受控时钟需要同步 `task_schedule.source_version` 指纹，只改时间字段会让任务被判失效（见 `evidence/RUN-C1/RUN-C1-egf-steps.md`）。
 
 ## 批次结论
 
 | 字段 | 内容 |
 |---|---|
-| 通过项／总项 | 16 / 18（C16、C17 部分通过） |
-| 通过 RUN | RUN-C1（C01—C09）、RUN-C2（C10—C12）、RUN-C3（C13—C18，其中两项部分通过）；对应执行测试项的前端 RUN C-RUN-01—03 |
-| 未执行项及原因 | 无整项未执行；C16／C17 的剩余断言阻塞于 #168 |
+| 通过项／总项 | 17 / 18（C12 部分通过：管理员读确认历史口径待确认） |
+| 通过 RUN | RUN-C1（C01—C09）、RUN-C2（C10—C11）、RUN-C3（C13—C18，C16／C17 已按 #168 复测）；对应执行测试项的前端 RUN C-RUN-01—03 |
+| 未执行项及原因 | 无整项未执行；C12 的「管理员读交易确认历史」受 `API-TRD-013`（限参与方）限制，口径待确认 |
 | 证据目录 | `reports/batch-c-trade-exception/evidence/` |
-| 可汇总 | 是（附 #168 阻塞说明；解冻执行器接入后按三条口径复测 C16／C17） |
+| 可汇总 | 是（C12 待设计确认；#168、#183 已复测通过；#162 待 OSS 白名单） |
