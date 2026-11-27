@@ -8,7 +8,7 @@
 
  :: Spring Boot ::                (v4.1.2)
 
-2026-11-26T23:07:16.060+08:00  INFO 20504 --- [backend-app] [           main] i.g.iy88.project1.BackendAppApplication  : Starting BackendAppApplication v0.0.1-SNAPSHOT using Java 27.0.1.0.2 with PID 20504 (D:\U\SE\se-course-project-1\backend\backend-app\target\backend-app-0.0.1-SNAPSHOT.jar started by <user> in D:\U\SE\se-course-project-1)
+2026-11-26T23:07:16.060+08:00  INFO 20504 --- [backend-app] [           main] i.g.iy88.project1.BackendAppApplication  : Starting BackendAppApplication v0.0.1-SNAPSHOT using Java 27.0.1.0.2 with PID 20504 (<repo>\backend\backend-app\target\backend-app-0.0.1-SNAPSHOT.jar started by <user> in <repo>)
 2026-11-26T23:07:16.065+08:00  INFO 20504 --- [backend-app] [           main] i.g.iy88.project1.BackendAppApplication  : The following 2 profiles are active: "infrastructure", "dependency-probe"
 2026-11-26T23:07:17.765+08:00  INFO 20504 --- [backend-app] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
 2026-11-26T23:07:17.768+08:00  INFO 20504 --- [backend-app] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
