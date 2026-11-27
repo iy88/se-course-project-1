@@ -1,0 +1,2728 @@
+{
+  "boundary_bracketed": false,
+  "boundary_criteria": "latency SLA, configured error budget, complete load delivery and sustained validation; not a proof of hardware saturation",
+  "case": "Mixed",
+  "conclusion": "validated_lower_bound_only_upper_limit_unknown",
+  "configured_ceiling_reached": true,
+  "effective_start_rate": 200.0,
+  "first_observed_failing_rate": null,
+  "format_version": 1,
+  "highest_validated_rate": 200.0,
+  "login_ms": [
+    179.79837500000002,
+    79.507834,
+    27.49725,
+    25.151667,
+    24.709167,
+    24.818666999999998,
+    25.025292,
+    24.146416000000002,
+    24.171333,
+    24.058,
+    23.682584,
+    24.338041,
+    24.190666999999998,
+    24.128916,
+    24.437125,
+    24.663958,
+    23.567375000000002,
+    23.940541999999997,
+    23.634124999999997,
+    23.55875,
+    23.852833,
+    25.283625,
+    30.494958,
+    24.278416,
+    24.020166999999997,
+    23.863166000000003,
+    23.715333,
+    23.361791999999998,
+    23.624959,
+    23.5475,
+    22.536834,
+    24.434583999999997,
+    22.680291,
+    22.65725,
+    22.788542,
+    23.027124999999998,
+    23.191875,
+    22.455833000000002,
+    22.350208,
+    22.367874999999998,
+    22.800082999999997,
+    24.009,
+    25.963625,
+    22.81,
+    22.980833,
+    22.373166,
+    22.223542,
+    22.791667,
+    22.816833000000003,
+    22.495417,
+    24.067416,
+    23.235916999999997,
+    21.945916999999998,
+    22.058,
+    22.196875000000002,
+    21.562082999999998,
+    26.817500000000003,
+    22.639792,
+    23.765375,
+    22.723334,
+    22.738959,
+    22.761209,
+    23.632917,
+    25.191666,
+    23.064334,
+    21.917084,
+    22.472958000000002,
+    26.741,
+    22.4245,
+    27.711833000000002,
+    23.111,
+    22.100791,
+    21.513,
+    21.406208,
+    21.449084,
+    22.059959,
+    22.899709,
+    21.920334,
+    21.376083,
+    21.711709,
+    22.18325,
+    22.351083,
+    23.486167,
+    23.668167,
+    22.843958,
+    23.555833000000003,
+    22.059208,
+    21.570042,
+    21.959084,
+    21.667209,
+    21.242583999999997,
+    21.734666999999998,
+    21.688333,
+    21.213791999999998,
+    21.501042,
+    22.708375,
+    21.778540999999997,
+    21.306042,
+    21.637084,
+    21.66975
+  ],
+  "long_validation": false,
+  "mode": "capacity",
+  "notes": [
+    "No automatic request retries; expected arrival times never shift to hide latency.",
+    "Latency is HTTP request start through usable response; IM delivery and retrieval are separate end-to-end samples.",
+    "In-flight limits, skipped arrivals, fixture exhaustion and missing samples cannot establish a service upper bound.",
+    "Resource ps CPU/RSS samples are local observations; remote backend and PostgreSQL lock/connection monitoring require separate telemetry.",
+    "Published records and completed trades accumulate; failed trade fixtures are quarantined rather than silently reused.",
+    "Single publish reuses a setup-uploaded image and measures only POST /products; mixed publish measures the full multipart upload and publish flow."
+  ],
+  "parameters": {
+    "base_url": "http://127.0.0.1:<port>",
+    "capacity": {
+      "capacity_case": "Mixed",
+      "capacity_max_arrivals": 200000,
+      "capacity_max_error_rate": 0.0,
+      "capacity_max_in_flight": 8192,
+      "capacity_max_lag_ms": 500,
+      "capacity_max_rate": 200.0,
+      "capacity_max_samples": 500000,
+      "capacity_refinements": 0,
+      "capacity_resolution": 1.0,
+      "capacity_stage_seconds": 20,
+      "capacity_start_rate": 200.0,
+      "capacity_validation_seconds": 20,
+      "capacity_warmup_seconds": 5,
+      "monitor_pid": [],
+      "single_operation": "Search"
+    },
+    "duration_seconds": 120,
+    "min_samples": 20,
+    "mode": "Capacity",
+    "race_rounds": 5,
+    "think_ms": 1000,
+    "timeout_seconds": 60,
+    "users": 100,
+    "warmup_seconds": 30,
+    "ws_base_url": "http://127.0.0.1:<port>"
+  },
+  "passed": true,
+  "rate_unit": "business scenarios/s; actual HTTP RPS reported separately",
+  "refinement_strategy": "integer_binary_search",
+  "single_operation": null,
+  "stages": [
+    {
+      "application_http_requests_started_in_window": 7409,
+      "application_http_rps": 370.45,
+      "application_successful_response_rps": 350.4,
+      "backlog_growth_per_second": -0.028566319374064182,
+      "completed_scenarios_in_window": 3994,
+      "completion_scope": "legacy completion fields track measured-start cohort; successful_response fields include warmup carry-in responses completed during measurement",
+      "drain_seconds": 0.116568167,
+      "drained": true,
+      "early_stop_reason": null,
+      "enough_samples": true,
+      "error_budget_passed": true,
+      "expected_arrivals": 4000,
+      "fixture_drops": 0,
+      "growing_backlog": false,
+      "http_completions_in_window": 7200,
+      "http_requests_started_in_window": 7609,
+      "http_rps": 380.45,
+      "http_successful_response_rps": 360.4,
+      "http_successful_responses_completed_in_window": 7208,
+      "in_flight_limit_drops": 0,
+      "index": 0,
+      "kind": "coarse",
+      "late_arrivals_skipped": 0,
+      "latency_sla_passed": true,
+      "local_resources": [
+        {
+          "elapsed_seconds": 0.003646459,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.5,
+              "pid": 20449,
+              "rss_kib": 22880
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 1.008839209,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.9,
+              "pid": 20449,
+              "rss_kib": 27968
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 2.014086375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.8,
+              "pid": 20449,
+              "rss_kib": 28560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 3.019475667,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 20449,
+              "rss_kib": 28800
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 4.025201167,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 20449,
+              "rss_kib": 29216
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 5.030422375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 20449,
+              "rss_kib": 29408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 6.03431425,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 20449,
+              "rss_kib": 29568
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 7.038823167,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 20449,
+              "rss_kib": 29680
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 8.0427545,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 20449,
+              "rss_kib": 29824
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 9.046032917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 20449,
+              "rss_kib": 29936
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 10.054079084,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 20449,
+              "rss_kib": 30112
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 11.058875417,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 20449,
+              "rss_kib": 30288
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 12.063531625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 20449,
+              "rss_kib": 30432
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 13.068440417,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.7,
+              "pid": 20449,
+              "rss_kib": 30576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 14.073552542,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.8,
+              "pid": 20449,
+              "rss_kib": 31856
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 15.077377375,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.2,
+              "pid": 20449,
+              "rss_kib": 32000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 16.081763667,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.8,
+              "pid": 20449,
+              "rss_kib": 32176
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 17.085727167,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.4,
+              "pid": 20449,
+              "rss_kib": 32288
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 18.089564667,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.5,
+              "pid": 20449,
+              "rss_kib": 32400
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 19.093085459,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.5,
+              "pid": 20449,
+              "rss_kib": 32544
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 20.097636375,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.8,
+              "pid": 20449,
+              "rss_kib": 32656
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 21.101133625,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.4,
+              "pid": 20449,
+              "rss_kib": 32784
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 22.105302167,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.5,
+              "pid": 20449,
+              "rss_kib": 32896
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 23.109230084,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 20449,
+              "rss_kib": 33024
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 24.113722459,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 20449,
+              "rss_kib": 33184
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 25.117759375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 20449,
+              "rss_kib": 33312
+            }
+          ]
+        }
+      ],
+      "max_in_flight": 52,
+      "omitted_samples": 0,
+      "operations": {
+        "detail": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 11.753292,
+          "min_ms": 0.9848750000000001,
+          "p50_ms": 1.79025,
+          "p95_ms": 3.510541,
+          "p99_ms": 6.070083,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "200": 1000
+          },
+          "threshold_ms": 3000.0
+        },
+        "home": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 51.492458,
+          "min_ms": 10.066042000000001,
+          "p50_ms": 13.947084,
+          "p95_ms": 21.142333999999998,
+          "p99_ms": 30.609167,
+          "passed": true,
+          "samples": 1200,
+          "statuses": {
+            "200": 1200
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_delivery": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 95.521417,
+          "min_ms": 59.692750000000004,
+          "p50_ms": 65.279083,
+          "p95_ms": 74.288667,
+          "p99_ms": 81.334917,
+          "passed": true,
+          "samples": 400,
+          "statuses": {
+            "none": 400
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_read": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 63.997333000000005,
+          "min_ms": 53.258084,
+          "p50_ms": 58.237542000000005,
+          "p95_ms": 60.494291,
+          "p99_ms": 61.668417000000005,
+          "passed": true,
+          "samples": 403,
+          "statuses": {
+            "200": 403
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_retrieval": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 4.484042,
+          "min_ms": 0.9901249999999999,
+          "p50_ms": 1.919875,
+          "p95_ms": 2.882,
+          "p99_ms": 3.389208,
+          "passed": true,
+          "samples": 403,
+          "statuses": {
+            "none": 403
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_send": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 72.793125,
+          "min_ms": 55.100209,
+          "p50_ms": 59.474041,
+          "p95_ms": 63.311125,
+          "p99_ms": 66.14658399999999,
+          "passed": true,
+          "samples": 400,
+          "statuses": {
+            "201": 400
+          },
+          "threshold_ms": 3000.0
+        },
+        "publish": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 13.570166,
+          "min_ms": 3.41925,
+          "p50_ms": 4.824084,
+          "p95_ms": 8.660417,
+          "p99_ms": 11.434458999999999,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "scenario_detail": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 11.758375,
+          "min_ms": 0.986291,
+          "p50_ms": 1.793083,
+          "p95_ms": 3.5135829999999997,
+          "p99_ms": 6.0727910000000005,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "none": 1000
+          },
+          "threshold_ms": null
+        },
+        "scenario_home": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 51.5,
+          "min_ms": 10.075292,
+          "p50_ms": 13.955625,
+          "p95_ms": 21.1575,
+          "p99_ms": 30.617167000000002,
+          "passed": true,
+          "samples": 1200,
+          "statuses": {
+            "none": 1200
+          },
+          "threshold_ms": null
+        },
+        "scenario_im": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 152.239083,
+          "min_ms": 114.237416,
+          "p50_ms": 122.814416,
+          "p95_ms": 133.160416,
+          "p99_ms": 141.614834,
+          "passed": true,
+          "samples": 400,
+          "statuses": {
+            "none": 400
+          },
+          "threshold_ms": null
+        },
+        "scenario_publish": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 150.460375,
+          "min_ms": 88.5605,
+          "p50_ms": 107.235666,
+          "p95_ms": 127.8165,
+          "p99_ms": 137.631083,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "none": 200
+          },
+          "threshold_ms": null
+        },
+        "scenario_search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 42.338708000000004,
+          "min_ms": 10.873958,
+          "p50_ms": 16.232833,
+          "p95_ms": 21.9055,
+          "p99_ms": 28.430207999999997,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "none": 1000
+          },
+          "threshold_ms": null
+        },
+        "scenario_trade": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 133.435459,
+          "min_ms": 46.280167,
+          "p50_ms": 59.368291,
+          "p95_ms": 91.461917,
+          "p99_ms": 108.394958,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "none": 200
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 42.326750000000004,
+          "min_ms": 10.865584,
+          "p50_ms": 16.213167000000002,
+          "p95_ms": 21.890333000000002,
+          "p99_ms": 28.418875,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "200": 1000
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_accept": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 15.270334,
+          "min_ms": 4.915709,
+          "p50_ms": 6.4715,
+          "p95_ms": 10.561708,
+          "p99_ms": 12.65075,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "200": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_agree": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 34.625792000000004,
+          "min_ms": 4.8915,
+          "p50_ms": 7.629042,
+          "p95_ms": 11.376334,
+          "p99_ms": 14.3385,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "200": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_agreement": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 17.877708,
+          "min_ms": 4.547333,
+          "p50_ms": 5.937333000000001,
+          "p95_ms": 10.933208,
+          "p99_ms": 16.680375,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_confirm_buyer": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 28.099167,
+          "min_ms": 5.720333,
+          "p50_ms": 7.766542,
+          "p95_ms": 11.963583999999999,
+          "p99_ms": 17.586916000000002,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_confirm_seller": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 22.416875,
+          "min_ms": 6.19825,
+          "p50_ms": 8.938375,
+          "p95_ms": 14.49625,
+          "p99_ms": 19.359041,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_read": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 10.404708000000001,
+          "min_ms": 1.445041,
+          "p50_ms": 2.473417,
+          "p95_ms": 3.6825,
+          "p99_ms": 4.431042,
+          "passed": true,
+          "samples": 801,
+          "statuses": {
+            "200": 801
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_relist": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 9.880583,
+          "min_ms": 2.919666,
+          "p50_ms": 4.377708,
+          "p95_ms": 6.15325,
+          "p99_ms": 6.954333,
+          "passed": true,
+          "samples": 201,
+          "statuses": {
+            "200": 201
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_request": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 22.535708000000003,
+          "min_ms": 5.443167,
+          "p50_ms": 6.6751249999999995,
+          "p95_ms": 12.054166,
+          "p99_ms": 13.781708,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_verify": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 11.585542,
+          "min_ms": 1.600584,
+          "p50_ms": 2.595958,
+          "p95_ms": 3.827625,
+          "p99_ms": 4.58075,
+          "passed": true,
+          "samples": 201,
+          "statuses": {
+            "200": 201
+          },
+          "threshold_ms": 3000.0
+        },
+        "upload_bytes": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 61.256375,
+          "min_ms": 24.188208,
+          "p50_ms": 29.54225,
+          "p95_ms": 37.629957999999995,
+          "p99_ms": 52.641792,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "204": 200
+          },
+          "threshold_ms": null
+        },
+        "upload_complete": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 96.612084,
+          "min_ms": 54.682874999999996,
+          "p50_ms": 69.306125,
+          "p95_ms": 84.316834,
+          "p99_ms": 89.589833,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "200": 200
+          },
+          "threshold_ms": null
+        },
+        "upload_lease": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 7.6145830000000005,
+          "min_ms": 1.5349579999999998,
+          "p50_ms": 2.139917,
+          "p95_ms": 4.253917,
+          "p99_ms": 5.74975,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": null
+        }
+      },
+      "outcome": "passed",
+      "passed": true,
+      "pending_at_window_end": 6,
+      "planned_sample_seconds": 20,
+      "progress": [
+        {
+          "completed": 0,
+          "in_flight": 12,
+          "seconds": 0.001369875,
+          "started": 1
+        },
+        {
+          "completed": 194,
+          "in_flight": 7,
+          "seconds": 1.00186925,
+          "started": 201
+        },
+        {
+          "completed": 394,
+          "in_flight": 7,
+          "seconds": 2.001128625,
+          "started": 401
+        },
+        {
+          "completed": 594,
+          "in_flight": 7,
+          "seconds": 3.001305291,
+          "started": 601
+        },
+        {
+          "completed": 793,
+          "in_flight": 8,
+          "seconds": 4.001694125,
+          "started": 801
+        },
+        {
+          "completed": 992,
+          "in_flight": 9,
+          "seconds": 5.002290708,
+          "started": 1001
+        },
+        {
+          "completed": 1194,
+          "in_flight": 7,
+          "seconds": 6.001376666,
+          "started": 1201
+        },
+        {
+          "completed": 1394,
+          "in_flight": 7,
+          "seconds": 7.001801375,
+          "started": 1401
+        },
+        {
+          "completed": 1594,
+          "in_flight": 7,
+          "seconds": 8.00122175,
+          "started": 1601
+        },
+        {
+          "completed": 1794,
+          "in_flight": 7,
+          "seconds": 9.001551666,
+          "started": 1801
+        },
+        {
+          "completed": 1994,
+          "in_flight": 7,
+          "seconds": 10.001882125,
+          "started": 2001
+        },
+        {
+          "completed": 2194,
+          "in_flight": 7,
+          "seconds": 11.001288625,
+          "started": 2201
+        },
+        {
+          "completed": 2394,
+          "in_flight": 7,
+          "seconds": 12.001117666,
+          "started": 2401
+        },
+        {
+          "completed": 2594,
+          "in_flight": 7,
+          "seconds": 13.001202541,
+          "started": 2601
+        },
+        {
+          "completed": 2794,
+          "in_flight": 7,
+          "seconds": 14.001598208,
+          "started": 2801
+        },
+        {
+          "completed": 2994,
+          "in_flight": 7,
+          "seconds": 15.002069833,
+          "started": 3001
+        },
+        {
+          "completed": 3194,
+          "in_flight": 7,
+          "seconds": 16.001833291,
+          "started": 3201
+        },
+        {
+          "completed": 3394,
+          "in_flight": 7,
+          "seconds": 17.001559291,
+          "started": 3401
+        },
+        {
+          "completed": 3594,
+          "in_flight": 7,
+          "seconds": 18.001135041,
+          "started": 3601
+        },
+        {
+          "completed": 3794,
+          "in_flight": 7,
+          "seconds": 19.002363958,
+          "started": 3801
+        },
+        {
+          "completed": 3994,
+          "in_flight": 6,
+          "seconds": 20.0,
+          "started": 4000
+        }
+      ],
+      "sample_seconds": 20.0,
+      "scenario_completions_per_second": 199.7,
+      "scenario_error_rate": 0.0,
+      "scenario_errors": 0,
+      "scheduled_latency_passed": true,
+      "scheduled_to_complete_p50_ms": 16.053291,
+      "scheduled_to_complete_p95_ms": 125.061,
+      "scheduled_to_complete_p99_ms": 133.425625,
+      "scheduling_lag_max_ms": 8.836208,
+      "scheduling_lag_p95_ms": 2.2004580000000002,
+      "started_arrivals": 4000,
+      "started_at_unix_ms": 1795770150221,
+      "started_rate": 200.0,
+      "storage_http_put_rps": 10.0,
+      "storage_http_puts_started_in_window": 200,
+      "target_rate": 200.0,
+      "total_completed_including_warmup_and_drain": 5000,
+      "total_started_including_warmup": 5000,
+      "unit": "scenario_starts_per_second",
+      "warmup": {
+        "detail": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 164.92475000000002,
+          "min_ms": 2.5105,
+          "p50_ms": 4.983334,
+          "p95_ms": 47.679249999999996,
+          "p99_ms": 145.098916,
+          "passed": true,
+          "samples": 250,
+          "statuses": {
+            "200": 250
+          },
+          "threshold_ms": 3000.0
+        },
+        "home": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 340.492625,
+          "min_ms": 13.966417,
+          "p50_ms": 33.399084,
+          "p95_ms": 205.24954200000002,
+          "p99_ms": 268.073542,
+          "passed": true,
+          "samples": 300,
+          "statuses": {
+            "200": 300
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_delivery": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 4306.087541,
+          "min_ms": 64.75575,
+          "p50_ms": 222.805875,
+          "p95_ms": 1978.5036659999998,
+          "p99_ms": 4305.223375,
+          "passed": true,
+          "samples": 100,
+          "statuses": {
+            "none": 100
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_read": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 117.595416,
+          "min_ms": 55.684834,
+          "p50_ms": 61.44095900000001,
+          "p95_ms": 91.118625,
+          "p99_ms": 117.595416,
+          "passed": true,
+          "samples": 95,
+          "statuses": {
+            "200": 95
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_retrieval": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 45.217166000000006,
+          "min_ms": 1.72825,
+          "p50_ms": 3.9886660000000003,
+          "p95_ms": 24.522,
+          "p99_ms": 45.217166000000006,
+          "passed": true,
+          "samples": 95,
+          "statuses": {
+            "none": 95
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_send": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 420.700542,
+          "min_ms": 57.988208,
+          "p50_ms": 67.344666,
+          "p95_ms": 168.710958,
+          "p99_ms": 265.805417,
+          "passed": true,
+          "samples": 100,
+          "statuses": {
+            "201": 100
+          },
+          "threshold_ms": 3000.0
+        },
+        "publish": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 201.160625,
+          "min_ms": 7.3525,
+          "p50_ms": 16.817791,
+          "p95_ms": 169.842167,
+          "p99_ms": 201.160625,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "201": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "scenario_detail": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 164.931084,
+          "min_ms": 2.5135829999999997,
+          "p50_ms": 4.986,
+          "p95_ms": 47.683583,
+          "p99_ms": 145.10245799999998,
+          "passed": true,
+          "samples": 250,
+          "statuses": {
+            "none": 250
+          },
+          "threshold_ms": null
+        },
+        "scenario_home": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 340.512333,
+          "min_ms": 13.974250000000001,
+          "p50_ms": 33.407417,
+          "p95_ms": 205.260208,
+          "p99_ms": 268.08425,
+          "passed": true,
+          "samples": 300,
+          "statuses": {
+            "none": 300
+          },
+          "threshold_ms": null
+        },
+        "scenario_im": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 4366.355708,
+          "min_ms": 122.769042,
+          "p50_ms": 288.800375,
+          "p95_ms": 2040.9237080000003,
+          "p99_ms": 4365.992,
+          "passed": true,
+          "samples": 100,
+          "statuses": {
+            "none": 100
+          },
+          "threshold_ms": null
+        },
+        "scenario_publish": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 1237.187625,
+          "min_ms": 110.87700000000001,
+          "p50_ms": 134.153083,
+          "p95_ms": 1014.5146249999999,
+          "p99_ms": 1237.187625,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "none": 50
+          },
+          "threshold_ms": null
+        },
+        "scenario_search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 261.542708,
+          "min_ms": 15.748292000000001,
+          "p50_ms": 30.080167000000003,
+          "p95_ms": 168.345958,
+          "p99_ms": 226.68775,
+          "passed": true,
+          "samples": 250,
+          "statuses": {
+            "none": 250
+          },
+          "threshold_ms": null
+        },
+        "scenario_trade": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 1129.951833,
+          "min_ms": 82.125125,
+          "p50_ms": 137.98416699999999,
+          "p95_ms": 997.263584,
+          "p99_ms": 1129.951833,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "none": 50
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 261.529375,
+          "min_ms": 15.735916,
+          "p50_ms": 30.070916999999998,
+          "p95_ms": 168.334,
+          "p99_ms": 226.677583,
+          "passed": true,
+          "samples": 250,
+          "statuses": {
+            "200": 250
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_accept": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 189.932042,
+          "min_ms": 8.844917,
+          "p50_ms": 20.319416999999998,
+          "p95_ms": 161.219458,
+          "p99_ms": 189.932042,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "200": 50
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_agree": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 159.14025,
+          "min_ms": 8.909791,
+          "p50_ms": 17.21675,
+          "p95_ms": 90.10354199999999,
+          "p99_ms": 159.14025,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "200": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_agreement": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 136.35270799999998,
+          "min_ms": 8.485917,
+          "p50_ms": 15.254166,
+          "p95_ms": 97.253583,
+          "p99_ms": 136.35270799999998,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "201": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_confirm_buyer": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 196.858667,
+          "min_ms": 8.882,
+          "p50_ms": 16.140249999999998,
+          "p95_ms": 144.35941599999998,
+          "p99_ms": 196.858667,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "201": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_confirm_seller": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 222.78979199999998,
+          "min_ms": 11.096207999999999,
+          "p50_ms": 17.861667,
+          "p95_ms": 151.707708,
+          "p99_ms": 222.78979199999998,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "201": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_read": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 142.52525,
+          "min_ms": 2.416375,
+          "p50_ms": 5.03125,
+          "p95_ms": 43.555292,
+          "p99_ms": 86.151375,
+          "passed": true,
+          "samples": 196,
+          "statuses": {
+            "200": 196
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_relist": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 261.882834,
+          "min_ms": 4.725791,
+          "p50_ms": 9.058292000000002,
+          "p95_ms": 57.155125,
+          "p99_ms": 261.882834,
+          "passed": true,
+          "samples": 48,
+          "statuses": {
+            "200": 48
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_request": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 407.491583,
+          "min_ms": 10.556125,
+          "p50_ms": 16.961541999999998,
+          "p95_ms": 288.827875,
+          "p99_ms": 407.491583,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "201": 50
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_verify": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 143.167875,
+          "min_ms": 2.488625,
+          "p50_ms": 5.2989999999999995,
+          "p95_ms": 42.732292,
+          "p99_ms": 143.167875,
+          "passed": true,
+          "samples": 48,
+          "statuses": {
+            "200": 48
+          },
+          "threshold_ms": 3000.0
+        },
+        "upload_bytes": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 157.978833,
+          "min_ms": 28.692166,
+          "p50_ms": 34.099667,
+          "p95_ms": 144.46241700000002,
+          "p99_ms": 157.978833,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "204": 50
+          },
+          "threshold_ms": null
+        },
+        "upload_complete": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 789.561208,
+          "min_ms": 67.122666,
+          "p50_ms": 77.451459,
+          "p95_ms": 692.1341669999999,
+          "p99_ms": 789.561208,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "200": 49
+          },
+          "threshold_ms": null
+        },
+        "upload_lease": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 251.423875,
+          "min_ms": 3.385167,
+          "p50_ms": 5.259709000000001,
+          "p95_ms": 60.347417,
+          "p99_ms": 251.423875,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "201": 50
+          },
+          "threshold_ms": null
+        }
+      },
+      "warmup_admission_drops": 0,
+      "warmup_fixture_drops": 0,
+      "warmup_passed": true,
+      "warmup_seconds": 5,
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0
+    },
+    {
+      "application_http_requests_started_in_window": 7401,
+      "application_http_rps": 370.05,
+      "application_successful_response_rps": 350.05,
+      "backlog_growth_per_second": 0.12528440407818628,
+      "completed_scenarios_in_window": 3993,
+      "completion_scope": "legacy completion fields track measured-start cohort; successful_response fields include warmup carry-in responses completed during measurement",
+      "drain_seconds": 0.111346875,
+      "drained": true,
+      "early_stop_reason": null,
+      "enough_samples": true,
+      "error_budget_passed": true,
+      "expected_arrivals": 4000,
+      "fixture_drops": 0,
+      "growing_backlog": false,
+      "http_completions_in_window": 7194,
+      "http_requests_started_in_window": 7601,
+      "http_rps": 380.05,
+      "http_successful_response_rps": 360.05,
+      "http_successful_responses_completed_in_window": 7201,
+      "in_flight_limit_drops": 0,
+      "index": 1,
+      "kind": "validation",
+      "late_arrivals_skipped": 0,
+      "latency_sla_passed": true,
+      "local_resources": [
+        {
+          "elapsed_seconds": 0.002858083,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 20449,
+              "rss_kib": 53984
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 1.008038458,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 2.01362825,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.8,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 3.01691825,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 4.020655083,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 5.026066791,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.8,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 6.030735708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 7.034386625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 8.038047166,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 9.04321025,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 10.04813775,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 11.052180166,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.2,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 12.056280375,
+          "processes": [
+            {
+              "cpu_reported_pct": 4.9,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 13.060602166,
+          "processes": [
+            {
+              "cpu_reported_pct": 4.9,
+              "pid": 20449,
+              "rss_kib": 54000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 14.065461541,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.6,
+              "pid": 20449,
+              "rss_kib": 54032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 15.070378958,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 20449,
+              "rss_kib": 54032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 16.074172375,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.4,
+              "pid": 20449,
+              "rss_kib": 54032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 17.079797083,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.6,
+              "pid": 20449,
+              "rss_kib": 54032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 18.084313458,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 20449,
+              "rss_kib": 54032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 19.08939775,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 20449,
+              "rss_kib": 54032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 20.093903,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 20449,
+              "rss_kib": 54032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 21.097486208,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.4,
+              "pid": 20449,
+              "rss_kib": 54112
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 22.10207875,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.2,
+              "pid": 20449,
+              "rss_kib": 54224
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 23.107444333,
+          "processes": [
+            {
+              "cpu_reported_pct": 4.4,
+              "pid": 20449,
+              "rss_kib": 54224
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 24.111967125,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.0,
+              "pid": 20449,
+              "rss_kib": 54224
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 25.116008833,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.1,
+              "pid": 20449,
+              "rss_kib": 54224
+            }
+          ]
+        }
+      ],
+      "max_in_flight": 15,
+      "omitted_samples": 0,
+      "operations": {
+        "detail": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 13.731959,
+          "min_ms": 0.8424170000000001,
+          "p50_ms": 1.6224589999999999,
+          "p95_ms": 3.317,
+          "p99_ms": 4.494458,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "200": 1000
+          },
+          "threshold_ms": 3000.0
+        },
+        "home": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 33.755417,
+          "min_ms": 5.539917,
+          "p50_ms": 12.607459,
+          "p95_ms": 20.11775,
+          "p99_ms": 25.983875,
+          "passed": true,
+          "samples": 1200,
+          "statuses": {
+            "200": 1200
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_delivery": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 83.167542,
+          "min_ms": 57.861999999999995,
+          "p50_ms": 64.294083,
+          "p95_ms": 72.784208,
+          "p99_ms": 80.176333,
+          "passed": true,
+          "samples": 400,
+          "statuses": {
+            "none": 400
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_read": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 64.13662500000001,
+          "min_ms": 52.737625,
+          "p50_ms": 57.779333,
+          "p95_ms": 60.511083,
+          "p99_ms": 61.272833,
+          "passed": true,
+          "samples": 400,
+          "statuses": {
+            "200": 400
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_retrieval": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 3.2927500000000003,
+          "min_ms": 0.815584,
+          "p50_ms": 1.6565830000000001,
+          "p95_ms": 2.521916,
+          "p99_ms": 2.855667,
+          "passed": true,
+          "samples": 400,
+          "statuses": {
+            "none": 400
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_send": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 75.677542,
+          "min_ms": 54.095957999999996,
+          "p50_ms": 59.141542,
+          "p95_ms": 63.238249999999994,
+          "p99_ms": 65.942625,
+          "passed": true,
+          "samples": 400,
+          "statuses": {
+            "201": 400
+          },
+          "threshold_ms": 3000.0
+        },
+        "publish": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 15.679583000000001,
+          "min_ms": 3.238334,
+          "p50_ms": 4.437417,
+          "p95_ms": 7.152958,
+          "p99_ms": 9.359292,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "scenario_detail": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 13.747250000000001,
+          "min_ms": 0.8441660000000001,
+          "p50_ms": 1.626084,
+          "p95_ms": 3.322291,
+          "p99_ms": 4.510417,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "none": 1000
+          },
+          "threshold_ms": null
+        },
+        "scenario_home": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 33.764625,
+          "min_ms": 5.546291,
+          "p50_ms": 12.625166,
+          "p95_ms": 20.126333,
+          "p99_ms": 25.992042,
+          "passed": true,
+          "samples": 1200,
+          "statuses": {
+            "none": 1200
+          },
+          "threshold_ms": null
+        },
+        "scenario_im": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 142.291209,
+          "min_ms": 110.98275000000001,
+          "p50_ms": 121.765833,
+          "p95_ms": 132.086416,
+          "p99_ms": 139.92350000000002,
+          "passed": true,
+          "samples": 400,
+          "statuses": {
+            "none": 400
+          },
+          "threshold_ms": null
+        },
+        "scenario_publish": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 981.322917,
+          "min_ms": 82.39533300000001,
+          "p50_ms": 101.49341700000001,
+          "p95_ms": 164.97162500000002,
+          "p99_ms": 723.2355,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "none": 200
+          },
+          "threshold_ms": null
+        },
+        "scenario_search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 35.913833,
+          "min_ms": 8.740666,
+          "p50_ms": 14.504792,
+          "p95_ms": 21.835458,
+          "p99_ms": 29.691583,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "none": 1000
+          },
+          "threshold_ms": null
+        },
+        "scenario_trade": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 121.239333,
+          "min_ms": 41.399832999999994,
+          "p50_ms": 54.792291999999996,
+          "p95_ms": 84.271541,
+          "p99_ms": 96.584292,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "none": 200
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 35.900875,
+          "min_ms": 8.732458,
+          "p50_ms": 14.495125,
+          "p95_ms": 21.823833,
+          "p99_ms": 29.679458,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "200": 1000
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_accept": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 16.194709000000003,
+          "min_ms": 4.884083,
+          "p50_ms": 6.128667,
+          "p95_ms": 9.209999999999999,
+          "p99_ms": 11.662291999999999,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "200": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_agree": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 12.526209,
+          "min_ms": 4.476833,
+          "p50_ms": 6.388541,
+          "p95_ms": 10.424208,
+          "p99_ms": 12.021208,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "200": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_agreement": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 17.427999999999997,
+          "min_ms": 4.306875,
+          "p50_ms": 5.347333,
+          "p95_ms": 9.895791,
+          "p99_ms": 12.942,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_confirm_buyer": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 12.808250000000001,
+          "min_ms": 4.734541999999999,
+          "p50_ms": 7.166416,
+          "p95_ms": 11.300583,
+          "p99_ms": 12.579583999999999,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_confirm_seller": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 21.939332999999998,
+          "min_ms": 5.542916999999999,
+          "p50_ms": 7.8281670000000005,
+          "p95_ms": 13.515457999999999,
+          "p99_ms": 17.044332999999998,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_read": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 7.849666,
+          "min_ms": 1.242042,
+          "p50_ms": 2.206334,
+          "p95_ms": 3.4785,
+          "p99_ms": 4.165167,
+          "passed": true,
+          "samples": 801,
+          "statuses": {
+            "200": 801
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_relist": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 8.451375,
+          "min_ms": 2.4855419999999997,
+          "p50_ms": 3.8583749999999997,
+          "p95_ms": 5.8267500000000005,
+          "p99_ms": 6.841375,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "200": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_request": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 23.082291,
+          "min_ms": 5.04425,
+          "p50_ms": 6.237915999999999,
+          "p95_ms": 9.488542,
+          "p99_ms": 18.727292,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_verify": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 5.640499999999999,
+          "min_ms": 1.2662909999999998,
+          "p50_ms": 2.232583,
+          "p95_ms": 3.6498749999999998,
+          "p99_ms": 4.3724169999999996,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "200": 200
+          },
+          "threshold_ms": 3000.0
+        },
+        "upload_bytes": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 836.5275,
+          "min_ms": 23.170625,
+          "p50_ms": 26.922625,
+          "p95_ms": 68.372167,
+          "p99_ms": 428.323666,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "204": 200
+          },
+          "threshold_ms": null
+        },
+        "upload_complete": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 948.36675,
+          "min_ms": 53.099333,
+          "p50_ms": 64.173458,
+          "p95_ms": 88.56245799999999,
+          "p99_ms": 157.312917,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "200": 200
+          },
+          "threshold_ms": null
+        },
+        "upload_lease": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 8.331708,
+          "min_ms": 1.460291,
+          "p50_ms": 1.946,
+          "p95_ms": 2.999625,
+          "p99_ms": 4.100833,
+          "passed": true,
+          "samples": 200,
+          "statuses": {
+            "201": 200
+          },
+          "threshold_ms": null
+        }
+      },
+      "outcome": "passed",
+      "passed": true,
+      "pending_at_window_end": 7,
+      "planned_sample_seconds": 20,
+      "progress": [
+        {
+          "completed": 0,
+          "in_flight": 8,
+          "seconds": 0.001754125,
+          "started": 1
+        },
+        {
+          "completed": 194,
+          "in_flight": 7,
+          "seconds": 1.001551917,
+          "started": 201
+        },
+        {
+          "completed": 394,
+          "in_flight": 7,
+          "seconds": 2.001114333,
+          "started": 401
+        },
+        {
+          "completed": 594,
+          "in_flight": 7,
+          "seconds": 3.001040375,
+          "started": 601
+        },
+        {
+          "completed": 794,
+          "in_flight": 7,
+          "seconds": 4.001614292,
+          "started": 801
+        },
+        {
+          "completed": 994,
+          "in_flight": 7,
+          "seconds": 5.001032958,
+          "started": 1001
+        },
+        {
+          "completed": 1194,
+          "in_flight": 7,
+          "seconds": 6.001970167,
+          "started": 1201
+        },
+        {
+          "completed": 1394,
+          "in_flight": 7,
+          "seconds": 7.0020745,
+          "started": 1401
+        },
+        {
+          "completed": 1594,
+          "in_flight": 7,
+          "seconds": 8.001841458,
+          "started": 1601
+        },
+        {
+          "completed": 1794,
+          "in_flight": 7,
+          "seconds": 9.002057667,
+          "started": 1801
+        },
+        {
+          "completed": 1994,
+          "in_flight": 7,
+          "seconds": 10.001358458,
+          "started": 2001
+        },
+        {
+          "completed": 2194,
+          "in_flight": 7,
+          "seconds": 11.001240833,
+          "started": 2201
+        },
+        {
+          "completed": 2394,
+          "in_flight": 7,
+          "seconds": 12.002323208,
+          "started": 2401
+        },
+        {
+          "completed": 2594,
+          "in_flight": 7,
+          "seconds": 13.001179,
+          "started": 2601
+        },
+        {
+          "completed": 2793,
+          "in_flight": 8,
+          "seconds": 14.001341208,
+          "started": 2801
+        },
+        {
+          "completed": 2994,
+          "in_flight": 7,
+          "seconds": 15.001486042,
+          "started": 3001
+        },
+        {
+          "completed": 3186,
+          "in_flight": 15,
+          "seconds": 16.0012525,
+          "started": 3201
+        },
+        {
+          "completed": 3393,
+          "in_flight": 8,
+          "seconds": 17.001449167,
+          "started": 3401
+        },
+        {
+          "completed": 3593,
+          "in_flight": 8,
+          "seconds": 18.001222292,
+          "started": 3601
+        },
+        {
+          "completed": 3794,
+          "in_flight": 7,
+          "seconds": 19.001896625,
+          "started": 3801
+        },
+        {
+          "completed": 3993,
+          "in_flight": 7,
+          "seconds": 20.0,
+          "started": 4000
+        }
+      ],
+      "sample_seconds": 20.0,
+      "scenario_completions_per_second": 199.65,
+      "scenario_error_rate": 0.0,
+      "scenario_errors": 0,
+      "scheduled_latency_passed": true,
+      "scheduled_to_complete_p50_ms": 14.628250000000001,
+      "scheduled_to_complete_p95_ms": 124.111875,
+      "scheduled_to_complete_p99_ms": 134.443375,
+      "scheduling_lag_max_ms": 4.426292,
+      "scheduling_lag_p95_ms": 2.25325,
+      "started_arrivals": 4000,
+      "started_at_unix_ms": 1795770175402,
+      "started_rate": 200.0,
+      "storage_http_put_rps": 10.0,
+      "storage_http_puts_started_in_window": 200,
+      "target_rate": 200.0,
+      "total_completed_including_warmup_and_drain": 5000,
+      "total_started_including_warmup": 5000,
+      "unit": "scenario_starts_per_second",
+      "warmup": {
+        "detail": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 8.389541000000001,
+          "min_ms": 1.107,
+          "p50_ms": 2.065958,
+          "p95_ms": 3.9835000000000003,
+          "p99_ms": 6.09275,
+          "passed": true,
+          "samples": 250,
+          "statuses": {
+            "200": 250
+          },
+          "threshold_ms": 3000.0
+        },
+        "home": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 23.882125000000002,
+          "min_ms": 10.162834,
+          "p50_ms": 14.547667,
+          "p95_ms": 20.526458,
+          "p99_ms": 22.444042,
+          "passed": true,
+          "samples": 300,
+          "statuses": {
+            "200": 300
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_delivery": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 89.29775,
+          "min_ms": 58.143083,
+          "p50_ms": 65.689459,
+          "p95_ms": 73.904791,
+          "p99_ms": 87.85208399999999,
+          "passed": true,
+          "samples": 100,
+          "statuses": {
+            "none": 100
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_read": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 62.829708999999994,
+          "min_ms": 53.654834,
+          "p50_ms": 58.601292,
+          "p95_ms": 61.456667,
+          "p99_ms": 62.829708999999994,
+          "passed": true,
+          "samples": 98,
+          "statuses": {
+            "200": 98
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_retrieval": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 7.598667,
+          "min_ms": 1.0087080000000002,
+          "p50_ms": 2.062125,
+          "p95_ms": 3.288084,
+          "p99_ms": 7.598667,
+          "passed": true,
+          "samples": 98,
+          "statuses": {
+            "none": 98
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_send": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 78.812833,
+          "min_ms": 54.861582999999996,
+          "p50_ms": 60.093292,
+          "p95_ms": 64.933375,
+          "p99_ms": 72.613334,
+          "passed": true,
+          "samples": 100,
+          "statuses": {
+            "201": 100
+          },
+          "threshold_ms": 3000.0
+        },
+        "publish": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 16.924583,
+          "min_ms": 3.398709,
+          "p50_ms": 4.874542,
+          "p95_ms": 8.791375,
+          "p99_ms": 16.924583,
+          "passed": true,
+          "samples": 48,
+          "statuses": {
+            "201": 48
+          },
+          "threshold_ms": 3000.0
+        },
+        "scenario_detail": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 8.392,
+          "min_ms": 1.11075,
+          "p50_ms": 2.0682919999999996,
+          "p95_ms": 3.987625,
+          "p99_ms": 6.097625,
+          "passed": true,
+          "samples": 250,
+          "statuses": {
+            "none": 250
+          },
+          "threshold_ms": null
+        },
+        "scenario_home": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 23.893625,
+          "min_ms": 10.169457999999999,
+          "p50_ms": 14.590416,
+          "p95_ms": 20.567834,
+          "p99_ms": 22.460667,
+          "passed": true,
+          "samples": 300,
+          "statuses": {
+            "none": 300
+          },
+          "threshold_ms": null
+        },
+        "scenario_im": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 151.348917,
+          "min_ms": 115.999875,
+          "p50_ms": 123.471208,
+          "p95_ms": 133.736833,
+          "p99_ms": 150.69816699999998,
+          "passed": true,
+          "samples": 100,
+          "statuses": {
+            "none": 100
+          },
+          "threshold_ms": null
+        },
+        "scenario_publish": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 127.69245900000001,
+          "min_ms": 96.202208,
+          "p50_ms": 106.704709,
+          "p95_ms": 121.95808299999999,
+          "p99_ms": 127.69245900000001,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "none": 50
+          },
+          "threshold_ms": null
+        },
+        "scenario_search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 40.090834,
+          "min_ms": 10.912084,
+          "p50_ms": 16.464416999999997,
+          "p95_ms": 23.909125,
+          "p99_ms": 39.471542,
+          "passed": true,
+          "samples": 250,
+          "statuses": {
+            "none": 250
+          },
+          "threshold_ms": null
+        },
+        "scenario_trade": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 105.69779199999999,
+          "min_ms": 47.493791,
+          "p50_ms": 60.299875,
+          "p95_ms": 98.498542,
+          "p99_ms": 105.69779199999999,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "none": 50
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 40.075542,
+          "min_ms": 10.90175,
+          "p50_ms": 16.452624999999998,
+          "p95_ms": 23.899209000000003,
+          "p99_ms": 39.459125,
+          "passed": true,
+          "samples": 250,
+          "statuses": {
+            "200": 250
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_accept": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 15.964625,
+          "min_ms": 5.6015,
+          "p50_ms": 6.935583,
+          "p95_ms": 11.360999999999999,
+          "p99_ms": 15.964625,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "200": 50
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_agree": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 13.275458,
+          "min_ms": 5.01525,
+          "p50_ms": 7.150334,
+          "p95_ms": 12.158999999999999,
+          "p99_ms": 13.275458,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "200": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_agreement": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 11.963291,
+          "min_ms": 4.4636249999999995,
+          "p50_ms": 5.732166,
+          "p95_ms": 11.436667,
+          "p99_ms": 11.963291,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "201": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_confirm_buyer": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 15.423458,
+          "min_ms": 5.508917,
+          "p50_ms": 8.325333,
+          "p95_ms": 13.916875000000001,
+          "p99_ms": 15.423458,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "201": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_confirm_seller": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 16.944416,
+          "min_ms": 6.532,
+          "p50_ms": 9.053666,
+          "p95_ms": 15.556333,
+          "p99_ms": 16.944416,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "201": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_read": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 8.454625,
+          "min_ms": 1.442708,
+          "p50_ms": 2.451042,
+          "p95_ms": 4.098084,
+          "p99_ms": 5.133292,
+          "passed": true,
+          "samples": 196,
+          "statuses": {
+            "200": 196
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_relist": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 8.816625,
+          "min_ms": 2.8588329999999997,
+          "p50_ms": 4.1368339999999995,
+          "p95_ms": 6.684416000000001,
+          "p99_ms": 8.816625,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "200": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_request": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 19.438083,
+          "min_ms": 5.764583999999999,
+          "p50_ms": 6.851458,
+          "p95_ms": 11.76475,
+          "p99_ms": 19.438083,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "201": 50
+          },
+          "threshold_ms": 3000.0
+        },
+        "trade_verify": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 20.206417000000002,
+          "min_ms": 1.626167,
+          "p50_ms": 2.595542,
+          "p95_ms": 4.03525,
+          "p99_ms": 20.206417000000002,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "200": 49
+          },
+          "threshold_ms": 3000.0
+        },
+        "upload_bytes": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 36.032166,
+          "min_ms": 24.831374999999998,
+          "p50_ms": 26.806292,
+          "p95_ms": 30.739417000000003,
+          "p99_ms": 36.032166,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "204": 50
+          },
+          "threshold_ms": null
+        },
+        "upload_complete": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 87.127209,
+          "min_ms": 64.460667,
+          "p50_ms": 72.118916,
+          "p95_ms": 84.84925,
+          "p99_ms": 87.127209,
+          "passed": true,
+          "samples": 49,
+          "statuses": {
+            "200": 49
+          },
+          "threshold_ms": null
+        },
+        "upload_lease": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 5.415625,
+          "min_ms": 1.637292,
+          "p50_ms": 2.152375,
+          "p95_ms": 4.02775,
+          "p99_ms": 5.415625,
+          "passed": true,
+          "samples": 50,
+          "statuses": {
+            "201": 50
+          },
+          "threshold_ms": null
+        }
+      },
+      "warmup_admission_drops": 0,
+      "warmup_fixture_drops": 0,
+      "warmup_passed": true,
+      "warmup_seconds": 5,
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0
+    }
+  ],
+  "stop_reason": "configured_ceiling_reached",
+  "validation_seconds": 20,
+  "websocket_disconnects": 0,
+  "websocket_reconnect_failures": 0
+}

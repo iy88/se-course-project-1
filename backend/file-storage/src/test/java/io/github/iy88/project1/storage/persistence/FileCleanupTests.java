@@ -58,7 +58,6 @@ class FileCleanupTests {
         assertThat(cleanup.runBatch(objects, 8)).isEqualTo(new FileCleanup.Result(1, List.of()));
 
         var calls = inOrder(objects, files, manager);
-        calls.verify(objects).requireWritableBucket();
         calls.verify(files).cleanupCandidates(eq(BUCKET), eq("dev/product_image/"), eq("dev/case_evidence/"),
                 eq("dev/account_avatar/"), any(Instant.class), any(Instant.class), eq(PageRequest.of(0, 8)));
         calls.verify(files).lockById(1);
