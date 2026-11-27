@@ -1,0 +1,107 @@
+{
+  "results": [
+    {
+      "step": "ban buyer-b: report",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "ban buyer-b: supplement",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "ban buyer-b: claim",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "ban buyer-b: decision",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "banned buyer-b evaluates trade 7",
+      "status": 403,
+      "code": "ACCOUNT_WRITE_RESTRICTED",
+      "expect": {
+        "status": 403,
+        "code": "ACCOUNT_WRITE_RESTRICTED"
+      },
+      "pass": true
+    },
+    {
+      "step": "freeze trade 3: report",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "freeze trade 3: supplement",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "freeze trade 3: claim",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "freeze trade 3: decision",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "seller sends to buyer-a during freeze",
+      "status": 403,
+      "code": "MESSAGE_SEND_FORBIDDEN",
+      "expect": {
+        "status": 403,
+        "code": "MESSAGE_SEND_FORBIDDEN"
+      },
+      "pass": true
+    },
+    {
+      "step": "buyer-a evaluates trade 8 while trade 3 frozen",
+      "status": 409,
+      "code": "REVIEW_ALREADY_SUBMITTED",
+      "expect": {
+        "status": 201
+      },
+      "pass": false
+    }
+  ],
+  "banCase": "15",
+  "freezeCase": "16"
+}

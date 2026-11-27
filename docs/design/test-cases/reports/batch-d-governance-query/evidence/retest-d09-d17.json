@@ -1,0 +1,162 @@
+{
+  "build": {
+    "branch": "test/evidence-governance-query-sourmoon",
+    "commit": "af7265b0",
+    "main": "41bc161f",
+    "jar": "backend-app-0.0.1-SNAPSHOT.jar (2026-11-27 12:39)",
+    "env": "dev"
+  },
+  "env": {
+    "api": "http://127.0.0.1:8080",
+    "db": "PostgreSQL 18.7 project1_s1",
+    "redis": "redis 8 db 0"
+  },
+  "executedAt": "2026-11-27T04:57:56.843Z",
+  "log": [
+    {
+      "step": "D09 inquiry case 24",
+      "status": 201,
+      "ok": true,
+      "extra": {
+        "actionId": "85",
+        "messageId": "20"
+      }
+    },
+    {
+      "step": "D09 inquiry case 25",
+      "status": 201,
+      "ok": true,
+      "extra": {
+        "actionId": "86",
+        "messageId": "21"
+      }
+    },
+    {
+      "step": "D09 multi-enforcement decision",
+      "status": 201,
+      "ok": true,
+      "extra": [
+        [
+          "remove_content",
+          "applied"
+        ],
+        [
+          "restrict_account",
+          "applied"
+        ]
+      ]
+    },
+    {
+      "step": "D09 second restriction source",
+      "status": 201,
+      "ok": true,
+      "extra": [
+        [
+          "restrict_account",
+          "applied"
+        ]
+      ]
+    },
+    {
+      "step": "D09 lift one source",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "restored": [
+          "account:3"
+        ],
+        "remaining": [
+          "account_restriction"
+        ]
+      }
+    },
+    {
+      "step": "D09 restricted account still blocked",
+      "status": 403,
+      "ok": true
+    },
+    {
+      "step": "D09 lift last source",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "remaining": []
+      }
+    },
+    {
+      "step": "D09 account restored",
+      "status": 201,
+      "ok": true
+    },
+    {
+      "step": "D17 qa-buyer-a favorite",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "total": 2,
+        "pages": 1,
+        "fetched": 2
+      }
+    },
+    {
+      "step": "D17 qa-buyer-a trade",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "total": 5,
+        "pages": 3,
+        "fetched": 5
+      }
+    },
+    {
+      "step": "D17 qa-buyer-a evaluation&direction=written",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "total": 3,
+        "pages": 2,
+        "fetched": 3
+      }
+    },
+    {
+      "step": "D17 qa-buyer-a report&direction=written",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "total": 4,
+        "pages": 2,
+        "fetched": 4
+      }
+    },
+    {
+      "step": "D17 qa-seller product",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "total": 11,
+        "pages": 3,
+        "fetched": 6
+      }
+    },
+    {
+      "step": "D17 qa-seller trade",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "total": 9,
+        "pages": 3,
+        "fetched": 6
+      }
+    },
+    {
+      "step": "D17 overview",
+      "status": 200,
+      "ok": true,
+      "extra": {
+        "trades": 5,
+        "favorites": 2,
+        "reports": 4
+      }
+    }
+  ]
+}
