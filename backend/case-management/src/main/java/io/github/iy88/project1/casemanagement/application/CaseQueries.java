@@ -187,6 +187,18 @@ public class CaseQueries {
             }
         }
         if (managerView) {
+            if (facts.claimedBy(actor) && CaseVocabulary.CLAIMED.equals(facts.caseStatus())
+                    && !facts.archived() && facts.targetId() != null) {
+                var disposition = body.putObject("disposition_targets");
+                disposition.put("target_type", facts.targetType());
+                disposition.put("target_id", Long.toString(facts.targetId()));
+                var products = disposition.putArray("products");
+                for (var product : targets.dispositionProducts(facts)) {
+                    var item = products.addObject();
+                    item.put("id", Long.toString(product.id()));
+                    item.put("title", product.title());
+                }
+            }
             var relatedIds = targets.relatedAccountIds(facts);
             var accountIds = new LinkedHashSet<>(relatedIds);
             if (facts.reporterAccountId() != null) {

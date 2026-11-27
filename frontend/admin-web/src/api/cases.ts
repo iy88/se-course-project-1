@@ -83,6 +83,11 @@ export interface ManagementCaseDetail {
   public_result_at: string | null;
   available_actions?: string[];
   related_accounts?: CaseRelatedAccount[];
+  disposition_targets?: {
+    target_type: string;
+    target_id: string;
+    products: { id: string; title: string }[];
+  };
   reported_object?: {
     target_type: "account" | "product" | "comment" | "evaluation" | "message" | "trade";
     target_id: string;
