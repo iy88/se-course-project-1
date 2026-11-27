@@ -18,6 +18,7 @@ import type {
   TodoKind,
   TradeAction,
   TradeStatus,
+  TradeView,
 } from "../api/contracts";
 
 export type Tone = "ok" | "warn" | "danger" | "info" | "neutral";
@@ -33,6 +34,28 @@ export const tradeStatusLabels: Record<TradeStatus, string> = {
   terminated: "已终止",
   completed: "已完成",
 };
+
+export function tradeTerminalReasonLabel(
+  reason: TradeView["terminal_reason"],
+  bothConfirmed: boolean,
+  history: TradeView["state_history"],
+): string | null {
+  switch (reason) {
+    case "completed":
+      if (
+        history?.some((entry) => entry.action === "trade.completed" && entry.actor_kind === "admin")
+      ) {
+        return "管理员处置完成";
+      }
+      return bothConfirmed ? "双方确认完成" : "交易已完成";
+    case "cancelled":
+      return "已取消";
+    case "admin_terminated":
+      return "管理终止";
+    default:
+      return null;
+  }
+}
 
 export const tradeStatusTones: Record<TradeStatus, Tone> = {
   pending_acceptance: "warn",
