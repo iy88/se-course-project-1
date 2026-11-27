@@ -17,6 +17,7 @@ import { conversationKey, rememberPeer } from "../../app/conversation-directory"
 import { formatRelative, truncate } from "../../app/format";
 import { registerSnapshotReloader, subscribeRealtime } from "../../app/realtime";
 import { session } from "../../app/session";
+import { cachedTradeTitle, loadTradeTitles } from "../../app/trade-title-cache";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
@@ -33,31 +34,18 @@ const list = usePagedList<ConversationEntry>((page, pageSize, signal) =>
 const tradeProductTitles = shallowReactive(new Map<string, string | null>());
 const metadataRequests = new AbortController();
 
-function tradeId(branch: ConversationBranch): string | undefined {
-  if (branch.conversation_kind !== "trade") return;
-  const source = branch.source_ref;
-  if (typeof source === "string") return /^trade:([0-9]+)$/.exec(source)?.[1];
-  return source?.resource_type === "trade" ? source.resource_id : undefined;
-}
-
 function tradeProductTitle(branch: ConversationBranch): string | null | undefined {
-  return tradeProductTitles.get(`${session.accountId.value}:${tradeId(branch)}`);
+  return cachedTradeTitle(tradeProductTitles, session.accountId.value, branch);
 }
 
 watch([list.items, session.accountId], ([entries, accountId]) => {
-  if (!accountId) return;
-  for (const branch of entries.flatMap((entry) => entry.branches)) {
-    const id = tradeId(branch);
-    if (!id) continue;
-    const key = `${accountId}:${id}`;
-    if (tradeProductTitles.has(key)) continue;
-    tradeProductTitles.set(key, null);
-    void getTrade(id, metadataRequests.signal)
-      .then((trade) => {
-        tradeProductTitles.set(key, trade.product.title ?? null);
-      })
-      .catch(() => tradeProductTitles.delete(key));
-  }
+  void loadTradeTitles(
+    tradeProductTitles,
+    accountId,
+    entries.flatMap((entry) => entry.branches),
+    async (id, signal) => (await getTrade(id, signal)).product.title ?? null,
+    metadataRequests.signal,
+  );
 });
 
 const activeKey = () => {
