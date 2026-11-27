@@ -839,34 +839,31 @@ onUnmounted(() => {
                     {{ formatDateTime(item.submitted_at) }}
                   </time>
                 </div>
+                <img
+                  v-if="item.file_id && item.content_type?.startsWith('image/')"
+                  :src="caseEvidenceFileHref(caseId, item.evidence_id)"
+                  :alt="`证据图片 #${item.evidence_id}`"
+                  class="evidence-image"
+                  width="640"
+                  height="480"
+                  loading="lazy"
+                  decoding="async"
+                />
                 <a
-                  v-if="item.file_id"
+                  v-else-if="item.file_id"
                   class="evidence-link"
                   :href="caseEvidenceFileHref(caseId, item.evidence_id)"
                   target="_blank"
                   rel="noopener noreferrer"
                   :aria-label="`在新标签页打开${attachmentKindLabel(item.content_type)} #${item.evidence_id}`"
                 >
-                  <img
-                    v-if="item.content_type?.startsWith('image/')"
-                    :src="caseEvidenceFileHref(caseId, item.evidence_id)"
-                    :alt="`证据图片 #${item.evidence_id}`"
-                    class="evidence-image"
-                    width="640"
-                    height="480"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <span v-else class="file-link">
+                  <span class="file-link">
                     <span class="file-type">{{ attachmentKindLabel(item.content_type) }}</span>
                     <span>
                       {{
                         item.content_type === "application/pdf" ? "在浏览器中查看 PDF" : "查看附件"
                       }}
                     </span>
-                  </span>
-                  <span v-if="item.content_type?.startsWith('image/')" class="evidence-link__label">
-                    在新标签页打开原图
                   </span>
                 </a>
                 <button
@@ -1568,6 +1565,7 @@ onUnmounted(() => {
 }
 
 .evidence-image {
+  margin-block-start: var(--space-2);
   display: block;
   inline-size: min(100%, 32rem);
   block-size: auto;
@@ -1686,18 +1684,6 @@ details > .case-fields {
   margin-block-start: var(--space-2);
   color: inherit;
   text-decoration: none;
-}
-
-.evidence-link:where(:hover, :focus-visible) .evidence-link__label {
-  color: var(--brand);
-  text-decoration: underline;
-}
-
-.evidence-link__label {
-  display: inline-flex;
-  margin-block-start: var(--space-2);
-  color: var(--info);
-  font-size: 0.8125rem;
 }
 
 .file-link {

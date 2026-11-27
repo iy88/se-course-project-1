@@ -573,31 +573,29 @@ async function submitSupplement(): Promise<void> {
                     >提交于 {{ formatDateTime(item.submitted_at) }}</time
                   >
                 </div>
+                <img
+                  v-if="item.content_type?.startsWith('image/')"
+                  :src="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
+                  :alt="`已提交的图片 #${item.evidence_id}`"
+                  class="evidence-image"
+                  width="640"
+                  height="480"
+                  loading="lazy"
+                  decoding="async"
+                />
                 <a
+                  v-else
                   class="evidence-link"
                   :href="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
                   target="_blank"
                   rel="noopener noreferrer"
                   :aria-label="`在新标签页打开${attachmentKindLabel(item.content_type)} #${item.evidence_id}`"
                 >
-                  <img
-                    v-if="item.content_type?.startsWith('image/')"
-                    :src="`/api/v1/cases/${caseId}/evidence/${item.evidence_id}/file`"
-                    :alt="`已提交的图片 #${item.evidence_id}`"
-                    class="evidence-image"
-                    width="640"
-                    height="480"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <span v-else class="file-link">
+                  <span class="file-link">
                     <span class="file-type">{{ attachmentKindLabel(item.content_type) }}</span>
                     <span>{{
                       item.content_type === "application/pdf" ? "在浏览器中查看 PDF" : "查看附件"
                     }}</span>
-                  </span>
-                  <span v-if="item.content_type?.startsWith('image/')" class="evidence-link__label">
-                    在新标签页打开原图
                   </span>
                 </a>
               </li>
@@ -962,18 +960,6 @@ async function submitSupplement(): Promise<void> {
   margin-block-start: var(--space-2);
   color: inherit;
   text-decoration: none;
-}
-
-.evidence-link:where(:hover, :focus-visible) .evidence-link__label {
-  color: var(--brand);
-  text-decoration: underline;
-}
-
-.evidence-link__label {
-  display: inline-flex;
-  margin-block-start: var(--space-2);
-  color: var(--info);
-  font-size: 0.8125rem;
 }
 
 .file-link {
