@@ -1,20 +1,29 @@
 # 性能与容量测试环境准备
 
-记录时间：2026-11-27T14:00—15:05 +08:00。
+记录时间：2026-11-27T14:00—15:32 +08:00。
 
 ## 代码与产物
 
 | 项目 | 实际值 |
 |---|---|
-| 压测运行时工作树 | 从 `main` `41bc161f` 派生，包含本分支尚未提交的 seed、loadtest 和前后端改动 |
-| 收尾基线 | 压测完成后本地分支快进到 `main` `429bb3d1`；`41bc161f..429bb3d1` 只新增 Batch D 文档与截图，不涉及后端或 loadtest 代码 |
-| 后端 JAR | `backend-app-0.0.1-SNAPSHOT.jar`；SHA-256 `125d57f4d7cf6fbcc03a32900c112818e3b4898d18ff0f47fa4dfe02afe1ee26` |
+| 干净复跑基线 | PR 提交 `d98552f2f6018f4e8665f94391e4573b488075e4`；从该提交建立独立 detached worktree `/private/tmp/p1-pr178-clean`，不携带其他未提交改动 |
+| 后端 JAR（P-RUN-01） | `backend-app-0.0.1-SNAPSHOT.jar`；SHA-256 `09c92cf7e61f49fc04d4e6c03df308766f452c41e5ff878f1ec791a4f916d09b` |
 | 维护 JAR | `maintenance-0.0.1-SNAPSHOT.jar`；SHA-256 `bf36dc15968ae6fe9dcbbcf822463f7e6c6782f88d9919b6ca87cd9932cd4b7b` |
-| 压测驱动 | `loadtest/target/release/campus-loadtest` 0.1.0；SHA-256 `8f32db78418de9d033db0086416418bc9d5e6889e49eec17d885a5633745906f` |
+| 压测驱动（P-RUN-01） | `loadtest/target/release/campus-loadtest` 0.1.0；SHA-256 `c4b0d61c8f6f376c08286a7faac68f2e8044563e15875955a471fb1edb6335e1` |
+| 容量档驱动（P-RUN-02／03） | 初审前驱动；SHA-256 `8f32db78418de9d033db0086416418bc9d5e6889e49eec17d885a5633745906f` |
 | Java | OpenJDK 27.0.1.1 |
-| 驱动单测 | `cargo test --locked --manifest-path loadtest/Cargo.toml`：29/29 通过 |
+| 驱动单测 | `cargo test --locked --manifest-path loadtest/Cargo.toml`：31/31 通过 |
 
 后端 JAR 使用可复现构建时间，文件系统时间固定为 1980-02-01，不能据此判断构建时刻；以摘要和报告参数为准。
+
+## 版本对应与未混入改动
+
+初审指出，首次 P-RUN-01 使用的后端 JAR 来自含其他未提交改动的开发工作树。该 JAR 的旧摘要为 `125d57f4…`，额外后端源码改动集中在案件公开聚合结果：
+
+- 删除 `CaseResultController` 与跨事项 `CaseQueries.results`；
+- 调整案件详情公开字段及相关案件测试。
+
+这些文件不属于压测驱动的登录、商品、交易、上传、会话或实时 WebSocket 路径，但为避免仅靠静态归因，P-RUN-01 已按干净提交 `d98552f2` 重新构建并完整复跑。容量档 P-RUN-02／03 仍保留首次实验结果，实际被测后端 JAR 为旧摘要 `125d57f4…`，驱动也是修复 WS hint 早到竞态前的版本；因此 P-RUN-02／03 只作 Single Search 与横向扩容观察，IM 容量档为初审前历史数据，不用于最终送达结论或完整客户端验收。
 
 ## 主机与依赖
 

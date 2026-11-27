@@ -1,0 +1,21 @@
+Worktree: /private/tmp/p1-pr178-clean
+Commit: d98552f2f6018f4e8665f94391e4573b488075e4
+Date: 2026-11-27T15:27—15:28 +0800
+
+Command:
+  mvn --batch-mode --no-transfer-progress -T 10 -f backend/pom.xml \
+    -Dmaven.test.skip=true -pl backend-app,maintenance -am package
+Result: BUILD SUCCESS; 14 reactor modules
+
+Command:
+  cargo test --locked --manifest-path loadtest/Cargo.toml
+Result: 31 passed; 0 failed; 0 ignored
+
+Command:
+  cargo build --release --locked --manifest-path loadtest/Cargo.toml
+Result: success
+
+SHA-256:
+  09c92cf7e61f49fc04d4e6c03df308766f452c41e5ff878f1ec791a4f916d09b  backend-app JAR
+  bf36dc15968ae6fe9dcbbcf822463f7e6c6782f88d9919b6ca87cd9932cd4b7b  maintenance JAR
+  c4b0d61c8f6f376c08286a7faac68f2e8044563e15875955a471fb1edb6335e1  campus-loadtest release

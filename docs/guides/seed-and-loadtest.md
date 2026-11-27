@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-11-27T15:15:00+08:00
+Version: 0.1.2
+Version-Datetime: 2026-11-27T15:32:00+08:00
 -->
 
 # 种子数据与真实接口压测使用说明
@@ -144,7 +144,7 @@ cargo build --release --locked --manifest-path loadtest/Cargo.toml
   --output var/load/report-smoke.json
 ```
 
-驱动使用当前契约：先取 `GET /api/v1/account/entry-context`，用 entry CSRF 调 `POST /api/v1/account/session`，随后每个用户使用自己的 `__Host-se_session` Cookie 和 `__Host-se_csrf`；所有非安全请求带 `Origin` 和 `X-CSRF-Token`。实时连接直接连 `/api/v1/realtime`，首帧为 `hello {protocol_version:1, csrf_token, cursor}`，处理 `hello_ok`、`sync_reset`/`resume`、`event`、`cursor_advance`、`ping`/`pong`，并按 `through_seq` ACK。IM 在收到 hint 后用接收方 Cookie 调消息接口取实际消息，再完成 `im_delivery`/`im_retrieval` 匹配。上传走当前 POST policy 表单，发布/交易/会话使用当前路径、字段和字符串 ID。
+驱动使用当前契约：先取 `GET /api/v1/account/entry-context`，用 entry CSRF 调 `POST /api/v1/account/session`，随后每个用户使用自己的 `__Host-se_session` Cookie 和 `__Host-se_csrf`；所有非安全请求带 `Origin` 和 `X-CSRF-Token`。实时连接直接连 `/api/v1/realtime`，首帧为 `hello {protocol_version:1, csrf_token, cursor}`，处理 `hello_ok`、`sync_reset`/`resume`、`event`、`cursor_advance`、`ping`/`pong`，并按 `through_seq` ACK。IM 在收到 hint 后记录真实到达时刻，用接收方 Cookie 调消息接口取实际消息；若 hint 先于发送响应到达，发送响应返回后再核对双方的 `message_id`／`seq` 并匹配 body。上传走当前 POST policy 表单，发布/交易/会话使用当前路径、字段和字符串 ID。
 
 容量与竞态：
 

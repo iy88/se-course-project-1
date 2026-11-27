@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.0
-Version-Datetime: 2026-11-27T12:09:54+08:00
+Version: 0.2.1
+Version-Datetime: 2026-11-27T15:32:00+08:00
 -->
 
 # Rust 真实接口压测
@@ -106,10 +106,12 @@ cargo build --release --locked
 2. 用接收方 Cookie 执行 `GET /api/v1/conversations/{kind}/{id}/messages?after_seq=<seq-1>&limit=20`。
 3. 只有返回项的 `message_id`、`seq` 与 hint 一致，且 `body` 等于发送内容时才完成待匹配送达。
 
+WebSocket hint 可能先于发送 POST 的 HTTP 响应到达。此时驱动保存 hint 的真实到达时刻与 `message_id`／`message_seq`，不提前完成样本；发送响应返回后再与响应中的 `message_id`／`seq` 核对。ID 或序号不一致记为送达失败，body 仍须通过接收方 HTTP 回读精确匹配。
+
 报告分别给出：
 
 - `im_send`：发送 POST 的 HTTP 延迟。
-- `im_delivery`：发送 POST 开始 → 接收方 HTTP 回读验证并匹配内容，端到端延迟。
+- `im_delivery`：发送 POST 开始 → 接收方 hint 实际到达；完成判定仍等待发送响应和 HTTP 回读交叉核对。
 - `im_retrieval`：接收方收到 hint → GET 回读验证完成，单独延迟。
 
 验证后会追加一次已读进度 `POST /api/v1/conversations/chat/{id}/read-progress`（`displayed_seq`），并以观察项 `im_read` 单独记录；其延迟、样本量和错误仍保留在操作指标中，错误会影响总判定。未匹配的消息不会自动重试，超时即失败。

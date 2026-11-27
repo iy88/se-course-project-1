@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "generated_at": "2026-11-27T15:31:46+0800",
+  "host": {
+    "os": "macOS arm64",
+    "cpu": "Apple M5 Pro",
+    "logical_cpu": 18,
+    "ram_bytes": 68719476736
+  },
+  "topology": {
+    "http_api": "nginx least_conn -> infrastructure JVMs",
+    "websocket": "separate nginx least_conn -> infrastructure JVMs",
+    "worker": "delivery-worker JVMs",
+    "scheduler": "one delivery-scheduler JVM",
+    "database": "isolated PostgreSQL 18.7 on loopback",
+    "redis": "isolated Redis 8.10.3 on loopback",
+    "oss": "real private Alibaba Cloud OSS with isolated random prefix"
+  },
+  "scenarios": [
+    {
+      "passed": true,
+      "case": null,
+      "single_operation": null,
+      "highest_validated_rate": null,
+      "first_observed_failing_rate": null,
+      "conclusion": null,
+      "configured_ceiling_reached": null,
+      "stop_reason": null,
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [],
+      "operations": {},
+      "max_runtime_metrics": {
+        "redis_dbsize": 302,
+        "event_stream": 10000,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 44,
+        "all_events": 21732,
+        "db_sessions": 41,
+        "db_active": 11,
+        "db_locks": 94
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 1.8,
+          "rss_kib": 1216096
+        },
+        "worker-1": {
+          "cpu_pct": 0.8,
+          "rss_kib": 1185024
+        },
+        "api-1": {
+          "cpu_pct": 908.8,
+          "rss_kib": 1398688
+        },
+        "ws-1": {
+          "cpu_pct": 323.7,
+          "rss_kib": 1296560
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 962.2,
+        "rss_kib": 5089536
+      },
+      "upstream_counts": {
+        "127.0.0.1:60397": {
+          "200": 20021,
+          "201": 5463
+        },
+        "127.0.0.1:60455": {
+          "101": 100
+        }
+      }
+    }
+  ]
+}

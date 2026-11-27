@@ -54,14 +54,30 @@
 
 定向结果支持以下运行建议：
 
-- 默认 400 RPS 使用 API 1 已够；如需冗余或覆盖 600 RPS 附近余量，使用 API 2。
+- 默认 Single Search 400 HTTP RPS 使用 API 1 已够；如需冗余或覆盖 600 RPS 附近余量，使用 API 2。该结论不泛化到任意业务组合。
 - IM 在 400 场景/s 使用 WS 2；WS 4 无进一步收益。
 - 不建议 API 4／WS 4；不建议增加 worker。
 
-## 15:04—15:10 复验与清理
+## 15:04—15:10 初次复验与清理
 
 - `cargo test --locked --manifest-path loadtest/Cargo.toml`：
   - 沙箱内首跑 23/29，通过；6 个需绑定 loopback 临时端口的测试被系统权限拒绝。
-  - 在本地网络权限下重跑，29/29 通过，0 failed。
+  - 在本地网络权限下重跑，当时 29/29 通过，0 failed。
 - 正式超上限档因用户需求变更只做短窗，不再做 300 秒长期验证；默认 400 RPS 的 300 秒证据不受影响。
 - OSS 前缀经删除与二次检查为空；临时 PostgreSQL、Redis、JVM、nginx、manifest 和报告目录均已清理。
+
+## 15:20—15:32 review 修正与干净源码复跑
+
+- PR review 指出两项 P1：
+  - 首次 P-RUN-01 的后端 JAR 来自含 PR 外未提交案件改动的开发工作树。
+  - WS hint 可能先于发送 HTTP 响应到达，旧实现可在 expected `message_id` 尚未绑定时提前完成送达。
+- 修复 IM 关联：
+  - 提前到达时缓存 hint 的真实到达时刻、message_id 与 seq；不提前完成。
+  - 发送响应返回后核对发送端与接收端 message_id／seq，再由 HTTP 回读正文并核对 body。
+  - ID 或 seq 不匹配返回失败结果，不记为送达。
+  - 新增“WS 先于 HTTP 响应”和 ID／seq 不匹配单测；loadtest 31/31 通过。
+- 提交 `d98552f2` 后建立独立 detached worktree：
+  - 后端、maintenance 与 loadtest 全部从该干净提交重建。
+  - 重新执行 P-RUN-01：100 用户／10,000 商品、30/120 秒、think 1 秒。
+  - 结果：21,279 HTTP 请求、177.33 HTTP/s；零 HTTP 错误、零 WS 断连、零重连失败；必需操作 P95 最大 401.70 ms，接收方 hint P95 2.24 ms，HTTP 回读 P95 2.25 ms。
+- P-RUN-02／03 容量结果保留首次实验数据，并在报告中注明实际被测 JAR 摘要与“不证明 PR 外业务改动／完整客户端”的边界。
