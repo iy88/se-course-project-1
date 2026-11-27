@@ -153,4 +153,49 @@ class OssMaintenanceTests {
                 .map(key -> DeletedInfo.newBuilder().key(key).build()).toList());
         return result;
     }
+
+    @Test
+    void clearsOnlyTheExplicitSegmentBoundedPrefixAndRechecksTheFirstPage() {
+        OSSClient client = privateBucket();
+        var first = page("project1/dev/product_image/one", "project1/dev/case_evidence/two");
+        var empty = page();
+        when(client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(first, empty);
+        when(client.deleteMultipleObjects(any(DeleteMultipleObjectsRequest.class))).thenAnswer(invocation -> {
+            DeleteMultipleObjectsRequest request = invocation.getArgument(0);
+            return deleted(keysIn(request).toArray(String[]::new));
+        });
+
+        assertThat(OssMaintenance.clearPrefix(client, BUCKET, "project1/dev")).isEqualTo(2);
+        var requests = ArgumentCaptor.forClass(ListObjectsV2Request.class);
+        verify(client, times(2)).listObjectsV2(requests.capture());
+        assertThat(requests.getAllValues()).allSatisfy(request -> {
+            assertThat(request.bucket()).isEqualTo(BUCKET);
+            assertThat(request.prefix()).isEqualTo("project1/dev/");
+            assertThat(request.continuationToken()).isNull();
+        });
+    }
+
+    @Test
+    void refusesAnEmptyOrUnboundedPrefixBeforeListing() {
+        OSSClient client = privateBucket();
+        assertThat(assertThrows(IllegalArgumentException.class,
+                () -> OssMaintenance.clearPrefix(client, BUCKET, ""))).hasMessageContaining("segment-bounded");
+        assertThat(assertThrows(IllegalArgumentException.class,
+                () -> OssMaintenance.clearPrefix(client, BUCKET, "project1/dev/"))).hasMessageContaining("segment-bounded");
+        assertThat(assertThrows(IllegalArgumentException.class,
+                () -> OssMaintenance.clearPrefix(client, BUCKET, "project1//dev"))).hasMessageContaining("segment-bounded");
+        verify(client, never()).listObjectsV2(any(ListObjectsV2Request.class));
+    }
+
+    @Test
+    void refusesAKeyOutsideThePrefixEvenIfTheServiceReturnsOne() {
+        OSSClient client = privateBucket();
+        var page = page("project1/dev2/other");
+        when(client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(page);
+
+        assertThat(assertThrows(IllegalStateException.class,
+                () -> OssMaintenance.clearPrefix(client, BUCKET, "project1/dev")))
+                .hasMessageContaining("outside the configured prefix");
+        verify(client, never()).deleteMultipleObjects(any(DeleteMultipleObjectsRequest.class));
+    }
 }

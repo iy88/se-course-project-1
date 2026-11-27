@@ -54,13 +54,6 @@ public final class OssFileObjects {
         return new Location(bucket, purposePrefix(purpose) + UUID.randomUUID());
     }
 
-    public void requireWritableBucket() {
-        call(() -> {
-            OssClients.requirePrivateUnversionedBucket(client, bucket);
-            return null;
-        });
-    }
-
     public Optional<Metadata> head(Location location) {
         requireManagedLocation(location);
         try {
@@ -117,7 +110,6 @@ public final class OssFileObjects {
     public UploadForm signUpload(Location location, String region, Credentials credentials,
                                  Instant signedAt, Instant expiresAt, long sizeBytes, String contentType) {
         requireManagedLocation(location);
-        requireWritableBucket();
         return OssPostPolicy.sign(location, region, credentials, signedAt, expiresAt, sizeBytes, contentType);
     }
 

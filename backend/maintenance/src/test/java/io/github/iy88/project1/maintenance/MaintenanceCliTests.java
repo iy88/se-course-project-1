@@ -105,4 +105,60 @@ class MaintenanceCliTests {
                 "db", "migrate", "--env-file=.env.dev", "--email=manager@example.invalid"
         })).isNull();
     }
+
+    @Test
+    void parsesLoadSeedWithDefaultsAndExplicitResetAcknowledgement() {
+        var options = MaintenanceCli.Options.parse(new String[]{
+                "seed", "load", "--env-file", ".env.dev", "--prepare-reset", "--tag", "baseline"
+        });
+
+        assertThat(options).isNotNull();
+        assertThat(options.command()).isEqualTo("seed load");
+        assertThat(options.users()).isEqualTo(100);
+        assertThat(options.products()).isEqualTo(10000);
+        assertThat(options.prepareReset()).isTrue();
+        assertThat(options.tag()).isEqualTo("baseline");
+        assertThat(options.manifest()).isNull();
+    }
+
+    @Test
+    void parsesDemoSeedWithoutLeakingScaleKnobs() {
+        var options = MaintenanceCli.Options.parse(new String[]{
+                "seed", "demo", "--env-file=.env.dev", "--prepare-reset",
+                "--manifest", "var/demo/manifest.json", "--seed", "7"
+        });
+
+        assertThat(options).isNotNull();
+        assertThat(options.command()).isEqualTo("seed demo");
+        assertThat(options.manifest()).isEqualTo(Path.of("var/demo/manifest.json"));
+        assertThat(options.seed()).isEqualTo(7);
+        assertThat(MaintenanceCli.Options.parse(new String[]{
+                "seed", "demo", "--env-file=.env.dev", "--prepare-reset", "--users", "10"
+        })).isNull();
+    }
+
+    @Test
+    void parsesScopedOssResetAndRejectsEmptyPrefixes() {
+        var options = MaintenanceCli.Options.parse(new String[]{
+                "oss", "reset", "--env-file", ".env.dev", "--prefix", "project1/dev"
+        });
+        assertThat(options).isNotNull();
+        assertThat(options.prefix()).isEqualTo("project1/dev");
+        assertThat(MaintenanceCli.Options.parse(new String[]{
+                "oss", "reset", "--env-file", ".env.dev", "--prefix", ""
+        })).isNull();
+        assertThat(MaintenanceCli.Options.parse(new String[]{
+                "oss", "reset", "--env-file", ".env.dev", "--prefix", "project1/dev/"
+        })).isNull();
+    }
+
+    @Test
+    void seedParsingStillRequiresTheEnvironmentFileAndRejectsForeignOptions() {
+        assertThat(MaintenanceCli.Options.parse(new String[]{
+                "seed", "load", "--prepare-reset"
+        })).isNull();
+        assertThat(MaintenanceCli.Options.parse(new String[]{
+                "seed", "load", "--env-file", ".env.dev", "--prepare-reset", "--email", "x@example.test"
+        })).isNull();
+    }
 }
