@@ -2,7 +2,7 @@ use crate::diagnostics::{RequestDetails, classify};
 use crate::{
   http::Driver,
   model::{ResolvedTradePair, id_string, id_value},
-  ws::Pending,
+  ws::{Pending, PendingProgress},
 };
 use anyhow::{Context, Result, ensure};
 use reqwest::Method;
@@ -434,14 +434,7 @@ impl Driver {
     let (tx, rx) = oneshot::channel();
     self.pending.lock().unwrap().insert(
       content.clone(),
-      Pending {
-        recipient,
-        conversation_kind: "chat".into(),
-        conversation,
-        started: start,
-        message_id: None,
-        tx,
-      },
+      Pending::new(recipient, "chat".into(), conversation, tx),
     );
     let sent = self
       .api(
@@ -454,13 +447,23 @@ impl Driver {
       .await;
     let mut displayed_seq = None;
     if let Ok(response) = &sent {
-      let Some(message_id) = id_string(&response["message_id"]) else {
+      let message_id = id_string(&response["message_id"]);
+      let message_seq = response["seq"].as_u64().filter(|seq| *seq > 0);
+      let (Some(message_id), Some(message_seq)) = (message_id, message_seq) else {
         self.pending.lock().unwrap().remove(&content);
-        return Err(anyhow::anyhow!("message id missing from send response"));
+        return Err(anyhow::anyhow!(
+          "message id or seq missing from send response"
+        ));
       };
-      displayed_seq = response["seq"].as_u64().filter(|seq| *seq > 0);
-      if let Some(candidate) = self.pending.lock().unwrap().get_mut(&content) {
-        candidate.message_id = Some(message_id);
+      displayed_seq = Some(message_seq);
+      let mut pending = self.pending.lock().unwrap();
+      let candidate = pending
+        .get_mut(&content)
+        .context("pending IM delivery disappeared")?;
+      if let PendingProgress::Complete(result) = candidate.sent(message_id, message_seq)
+        && let Some(candidate) = pending.remove(&content)
+      {
+        candidate.finish(result);
       }
     }
     let delivered = if sent.is_ok() {
@@ -476,13 +479,16 @@ impl Driver {
       user,
       "im_delivery",
       start,
-      delivered.unwrap_or_else(|| start.elapsed().as_secs_f64() * 1000.),
-      delivered.is_some(),
+      delivered.as_ref().map_or_else(
+        || start.elapsed().as_secs_f64() * 1000.,
+        |result| result.elapsed_ms,
+      ),
+      delivered.as_ref().is_some_and(|result| result.matched),
       None,
     );
     sent?;
     ensure!(
-      delivered.is_some(),
+      delivered.as_ref().is_some_and(|result| result.matched),
       "recipient did not retrieve the matching message"
     );
     if let Some(seq) = displayed_seq {

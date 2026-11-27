@@ -24,11 +24,97 @@ pub(crate) struct Pending {
   pub(crate) recipient: usize,
   pub(crate) conversation_kind: String,
   pub(crate) conversation: u64,
-  pub(crate) started: Instant,
-  pub(crate) message_id: Option<String>,
-  pub(crate) tx: oneshot::Sender<f64>,
+  expected: Option<DeliveryObservation>,
+  early: Option<EarlyDelivery>,
+  tx: oneshot::Sender<DeliveryResult>,
 }
 pub(crate) type Deliveries = Arc<Mutex<HashMap<String, Pending>>>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DeliveryObservation {
+  message_id: String,
+  message_seq: u64,
+}
+
+#[derive(Debug)]
+struct EarlyDelivery {
+  observation: DeliveryObservation,
+  elapsed_ms: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DeliveryResult {
+  pub(crate) elapsed_ms: f64,
+  pub(crate) matched: bool,
+}
+
+pub(crate) enum PendingProgress {
+  Waiting,
+  Complete(DeliveryResult),
+}
+
+impl Pending {
+  pub(crate) fn new(
+    recipient: usize,
+    conversation_kind: String,
+    conversation: u64,
+    tx: oneshot::Sender<DeliveryResult>,
+  ) -> Self {
+    Self {
+      recipient,
+      conversation_kind,
+      conversation,
+      expected: None,
+      early: None,
+      tx,
+    }
+  }
+
+  fn observation(hint: &DeliveryHint) -> DeliveryObservation {
+    DeliveryObservation {
+      message_id: hint.message_id.clone(),
+      message_seq: hint.message_seq,
+    }
+  }
+
+  /// A recipient hint can be delivered before the sender has the HTTP response.
+  /// Keep its real arrival time, then validate it after the send response binds
+  /// the expected message ID and sequence.
+  fn received(&mut self, hint: &DeliveryHint, elapsed_ms: f64) -> PendingProgress {
+    let observation = Self::observation(hint);
+    if let Some(expected) = &self.expected {
+      return PendingProgress::Complete(DeliveryResult {
+        elapsed_ms,
+        matched: expected == &observation,
+      });
+    }
+    if self.early.is_none() {
+      self.early = Some(EarlyDelivery {
+        observation,
+        elapsed_ms,
+      });
+    }
+    PendingProgress::Waiting
+  }
+
+  pub(crate) fn sent(&mut self, message_id: String, message_seq: u64) -> PendingProgress {
+    self.expected = Some(DeliveryObservation {
+      message_id,
+      message_seq,
+    });
+    let Some(early) = self.early.take() else {
+      return PendingProgress::Waiting;
+    };
+    PendingProgress::Complete(DeliveryResult {
+      elapsed_ms: early.elapsed_ms,
+      matched: self.expected.as_ref() == Some(&early.observation),
+    })
+  }
+
+  pub(crate) fn finish(self, result: DeliveryResult) {
+    let _ = self.tx.send(result);
+  }
+}
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
@@ -522,17 +608,19 @@ fn spawn_retrieval(driver: Driver, user: usize, hint: DeliveryHint) {
           && candidate.conversation_kind == hint.conversation_kind
           && candidate.conversation == hint.conversation_id
           && content.as_str() == body
-          && candidate
-            .message_id
-            .as_deref()
-            .is_none_or(|message_id| message_id == hint.message_id)
       })
       .map(|(content, _)| content.clone());
-    if let Some(key) = key
+    let Some(key) = key else {
+      return;
+    };
+    let progress = pending
+      .get_mut(&key)
+      .expect("pending key from same map")
+      .received(&hint, received.elapsed().as_secs_f64() * 1000.);
+    if let PendingProgress::Complete(result) = progress
       && let Some(candidate) = pending.remove(&key)
     {
-      let elapsed = candidate.started.elapsed().as_secs_f64() * 1000.;
-      let _ = candidate.tx.send(elapsed);
+      let _ = candidate.tx.send(result);
     }
   });
 }
@@ -619,6 +707,64 @@ mod tests {
       }}))
       .is_none()
     );
+  }
+
+  #[test]
+  fn early_delivery_waits_for_send_response_and_keeps_received_time() {
+    let (tx, mut rx) = oneshot::channel();
+    let mut pending = Pending::new(1, "chat".into(), 99, tx);
+    let hint = DeliveryHint {
+      conversation_kind: "chat".into(),
+      conversation_id: 99,
+      message_id: "1234".into(),
+      message_seq: 5,
+    };
+    assert!(matches!(
+      pending.received(&hint, 12.5),
+      PendingProgress::Waiting
+    ));
+    assert!(matches!(
+      rx.try_recv(),
+      Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    let PendingProgress::Complete(result) = pending.sent("1234".into(), 5) else {
+      panic!("early delivery was not completed after the send response");
+    };
+    assert_eq!(
+      result,
+      DeliveryResult {
+        elapsed_ms: 12.5,
+        matched: true
+      }
+    );
+  }
+
+  #[test]
+  fn early_delivery_rejects_sender_id_or_sequence_mismatch() {
+    for (message_id, message_seq) in [("9999", 5), ("1234", 6)] {
+      let (tx, _rx) = oneshot::channel();
+      let mut pending = Pending::new(1, "chat".into(), 99, tx);
+      let hint = DeliveryHint {
+        conversation_kind: "chat".into(),
+        conversation_id: 99,
+        message_id: "1234".into(),
+        message_seq: 5,
+      };
+      assert!(matches!(
+        pending.received(&hint, 7.25),
+        PendingProgress::Waiting
+      ));
+      let PendingProgress::Complete(result) = pending.sent(message_id.into(), message_seq) else {
+        panic!("mismatched delivery was not evaluated");
+      };
+      assert_eq!(
+        result,
+        DeliveryResult {
+          elapsed_ms: 7.25,
+          matched: false
+        }
+      );
+    }
   }
 
   #[test]
