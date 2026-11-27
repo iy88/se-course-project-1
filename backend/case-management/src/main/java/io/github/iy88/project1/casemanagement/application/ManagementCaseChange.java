@@ -4,9 +4,9 @@ import java.time.Instant;
 
 /** A case change that is delivered only if the business transaction commits. */
 public record ManagementCaseChange(long caseId, String kind, String occurrence, Instant occurredAt,
-                                   Long messageId, Long evidenceAnchorId) {
+                                   Long messageId, Long evidenceAnchorId, Long managerActorId) {
     public ManagementCaseChange(long caseId, String kind, String occurrence, Instant occurredAt) {
-        this(caseId, kind, occurrence, occurredAt, null, null);
+        this(caseId, kind, occurrence, occurredAt, null, null, null);
     }
 
     public static ManagementCaseChange opened(long caseId, Instant at) {

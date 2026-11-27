@@ -466,6 +466,10 @@ class S4ProductionEnforcementIT {
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         assertThat(activeSources(active)).hasSize(2);
         lift(manager, firstCase, first);
+        assertThat(db.sql("""
+                select count(*) from notification where source_type = 'case' and source_id = ?
+                  and event_type in ('management.case_decide', 'management.case_execute', 'management.case_lift')
+                """).param(firstCase).query(Long.class).single()).isZero();
         assertThat(get(manager, "/cases/" + firstCase, 200).path("archived_at").asText())
                 .isNotBlank();
         assertThat(get(otherManager, "/cases/" + secondCase, 200).path("archived_at").isNull())

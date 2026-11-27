@@ -86,7 +86,8 @@ public class ReviewCaseStore implements ProductReviewCases {
 
     public void recordDecision(long caseId, long managerId, Instant decidedAt) {
         actions.save(ModerationCaseAction.decision(caseId, managerId, decidedAt));
-        events.publishEvent(new ManagementCaseChange(caseId, "decide", "review:decide", decidedAt));
+        events.publishEvent(new ManagementCaseChange(caseId, "decide", "review:decide", decidedAt,
+                null, null, managerId));
     }
 
     /**

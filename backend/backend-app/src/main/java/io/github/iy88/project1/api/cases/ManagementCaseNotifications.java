@@ -10,6 +10,7 @@ import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.notification.application.NotificationSourcePort;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -47,6 +48,9 @@ class ManagementCaseNotifications implements NotificationSourcePort {
                 .param("caseId", change.caseId())
                 .param("broadcast", "opened".equals(change.kind()) || "claim".equals(change.kind()))
                 .query(Long.class).list());
+        if (Set.of("decide", "execute", "lift").contains(change.kind())) {
+            recipients.remove(change.managerActorId());
+        }
         if (recipients.isEmpty()) return;
 
         String type = EVENT_PREFIX + change.kind();

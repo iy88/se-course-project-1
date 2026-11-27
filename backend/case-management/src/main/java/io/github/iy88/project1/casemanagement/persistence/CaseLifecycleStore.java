@@ -311,7 +311,8 @@ public class CaseLifecycleStore {
         var change = CaseVocabulary.ACTION_SUBMIT.equals(action.actionKind())
                 ? ManagementCaseChange.opened(action.caseId(), action.occurredAt())
                 : new ManagementCaseChange(action.caseId(), action.actionKind(), "action:" + id,
-                        action.occurredAt(), action.messageId(), evidenceAnchorId);
+                        action.occurredAt(), action.messageId(), evidenceAnchorId,
+                        CaseVocabulary.ACTOR_MANAGER.equals(action.actorKind()) ? action.actorAccountId() : null);
         events.publishEvent(change);
         return id;
     }
