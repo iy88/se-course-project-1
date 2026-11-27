@@ -1,5 +1,7 @@
 package io.github.iy88.project1.casemanagement.persistence;
 
+import io.github.iy88.project1.casemanagement.application.ManagementCaseChange;
+import org.springframework.context.ApplicationEventPublisher;
 import io.github.iy88.project1.core.BusinessError;
 import java.time.Instant;
 import org.springframework.context.annotation.Profile;
@@ -13,13 +15,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(propagation = Propagation.MANDATORY)
 public class TradeTimeoutCases {
     private final JdbcClient jdbc;
+    private final ApplicationEventPublisher events;
 
-    public TradeTimeoutCases(JdbcClient jdbc) {
+    public TradeTimeoutCases(JdbcClient jdbc, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
+        this.events = events;
     }
 
     public long open(long tradeId, String reason, Instant at) {
-        return jdbc.sql("""
+        long caseId = jdbc.sql("""
                 with created as (
                     insert into moderation_case (case_type, created_at, updated_at, target_type, target_id, case_status)
                     values ('exception', :at, :at, 'trade', :tradeId, 'pending')
@@ -34,10 +38,12 @@ public class TradeTimeoutCases {
                 .param("reason", reason)
                 .query(Long.class)
                 .single();
+        events.publishEvent(ManagementCaseChange.opened(caseId, at));
+        return caseId;
     }
 
     public long openDispute(long tradeId, long disputeId, Instant at) {
-        return jdbc.sql("""
+        long caseId = jdbc.sql("""
                 with created as (
                     insert into moderation_case (case_type, created_at, updated_at, target_type, target_id, case_status)
                     values ('dispute', :at, :at, 'trade', :tradeId, 'pending')
@@ -52,6 +58,8 @@ public class TradeTimeoutCases {
                 .param("disputeId", disputeId)
                 .query(Long.class)
                 .single();
+        events.publishEvent(ManagementCaseChange.opened(caseId, at));
+        return caseId;
     }
 
     public void lockAndValidate(long caseId, long managerId, long tradeId, String basisRef) {

@@ -1,0 +1,117 @@
+{
+  "build": {
+    "branch": "test/evidence-governance-query-sourmoon",
+    "commit": "bc137a79",
+    "main": "41bc161f",
+    "env": "dev"
+  },
+  "env": {
+    "api": "http://127.0.0.1:8080",
+    "db": "PostgreSQL 18.7 project1_s1",
+    "redis": "redis 8 db 0"
+  },
+  "executedAt": "2026-11-27T05:50:06.017Z",
+  "log": [
+    {
+      "step": "D17 seller products all pages",
+      "ok": true,
+      "extra": {
+        "total": 12,
+        "pages": 6,
+        "fetched": 12,
+        "unique": true
+      }
+    },
+    {
+      "step": "D17 seller trades all pages",
+      "ok": true,
+      "extra": {
+        "total": 9,
+        "pages": 5,
+        "fetched": 9,
+        "unique": true
+      }
+    },
+    {
+      "step": "D17 buyer favorites",
+      "ok": true,
+      "extra": {
+        "total": 2,
+        "pages": 1,
+        "fetched": 2,
+        "unique": true
+      }
+    },
+    {
+      "step": "D17 buyer trades",
+      "ok": true,
+      "extra": {
+        "total": 5,
+        "pages": 3,
+        "fetched": 5,
+        "unique": true
+      }
+    },
+    {
+      "step": "D17 buyer evaluations written",
+      "ok": true,
+      "extra": {
+        "total": 3,
+        "pages": 2,
+        "fetched": 3,
+        "unique": true
+      }
+    },
+    {
+      "step": "D17 buyer reports written",
+      "ok": true,
+      "extra": {
+        "total": 6,
+        "pages": 3,
+        "fetched": 6,
+        "unique": true
+      }
+    },
+    {
+      "step": "D17 buyer products empty group",
+      "ok": true,
+      "extra": {
+        "total": 0,
+        "pages": 1,
+        "fetched": 0,
+        "unique": true
+      }
+    },
+    {
+      "step": "D17 seller favorites empty group",
+      "ok": true,
+      "extra": {
+        "total": 0,
+        "pages": 1,
+        "fetched": 0,
+        "unique": true
+      }
+    },
+    {
+      "step": "D17 my cases matches reports",
+      "ok": true,
+      "extra": {
+        "casesTotal": 6,
+        "reportsTotal": 6
+      }
+    },
+    {
+      "step": "D17 overview equals list totals",
+      "ok": true,
+      "extra": {
+        "buyer": {
+          "trades": 5,
+          "favorites": 2,
+          "reports": 6,
+          "evaluations": 3
+        },
+        "sellerProducts": 12
+      }
+    }
+  ]
+}

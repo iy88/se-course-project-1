@@ -64,9 +64,10 @@ public final class InMemoryNotificationStore implements NotificationStore {
 
     @Override
     public List<Stored> page(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType,
-                             int page, int pageSize) {
+                             int page, int pageSize, boolean management) {
         List<Stored> matching = rows.values().stream()
                 .filter(row -> row.recipientAccountId() == recipientAccountId)
+                .filter(row -> NotificationStore.inAudience(row.eventType(), management))
                 .filter(row -> matchesRead(row, filter))
                 .filter(row -> eventType == null || row.eventType().equals(eventType))
                 .sorted(Comparator.comparingLong(Stored::notificationId).reversed())
@@ -77,18 +78,20 @@ public final class InMemoryNotificationStore implements NotificationStore {
     }
 
     @Override
-    public long count(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType) {
+    public long count(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType, boolean management) {
         return rows.values().stream()
                 .filter(row -> row.recipientAccountId() == recipientAccountId)
+                .filter(row -> NotificationStore.inAudience(row.eventType(), management))
                 .filter(row -> matchesRead(row, filter))
                 .filter(row -> eventType == null || row.eventType().equals(eventType))
                 .count();
     }
 
     @Override
-    public long unreadCount(long recipientAccountId) {
+    public long unreadCount(long recipientAccountId, boolean management) {
         return rows.values().stream()
                 .filter(row -> row.recipientAccountId() == recipientAccountId && row.readAt() == null)
+                .filter(row -> NotificationStore.inAudience(row.eventType(), management))
                 .count();
     }
 

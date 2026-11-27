@@ -10,7 +10,7 @@ import BrandMark from "../../shared/BrandMark.vue";
 import MobileBackButton from "../../shared/MobileBackButton.vue";
 import PageFeedback from "../../shared/PageFeedback.vue";
 import UiIcon from "../../shared/UiIcon.vue";
-import { session } from "./app/session";
+import { refreshSession, session } from "./app/session";
 import { badges, refreshBadges, resetBadges } from "./app/badges";
 import { backFallbackFor, hasBackEntry } from "./app/navigation";
 import { refreshesNotificationList } from "./app/notification-events";
@@ -69,6 +69,7 @@ function goBack(): void {
 // Unread badges belong to the resync snapshot: after a `sync_reset` the client
 // reloads every registered snapshot before resuming from the recorded head.
 registerSnapshotReloader(() => refreshBadges());
+registerSnapshotReloader(() => refreshSession());
 
 let unsubscribeRealtime: (() => void) | null = null;
 let badgeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -109,6 +110,11 @@ watch(
     if (!unsubscribeRealtime) {
       unsubscribeRealtime = subscribeRealtime((frame) => {
         if (refreshesNotificationList(frame)) scheduleBadgeRefresh();
+        if (frame.event_type === "notification_created") {
+          void refreshSession().catch(() => {
+            // Keep the last known restriction state until the next successful refresh.
+          });
+        }
       });
     }
     if (accountChanged) restartRealtime();
@@ -196,6 +202,9 @@ watch(
           <span class="shell__account-name">{{ session.displayName.value }}</span>
         </RouterLink>
       </div>
+      <div v-if="session.account.value?.write_restricted" class="shell__restriction" role="status">
+        <p>你的账户已封禁，部分操作受限。可在「我的事项」查看处理结果。</p>
+      </div>
     </header>
 
     <OfflineNotice />
@@ -250,6 +259,17 @@ watch(
   z-index: 10;
   background: var(--panel);
   border-block-end: 1px solid var(--line);
+}
+
+.shell__restriction {
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.shell__restriction p {
+  max-inline-size: var(--shell-max);
+  margin: 0 auto;
+  padding: var(--space-2) var(--shell-gutter);
 }
 
 .shell__header-inner {

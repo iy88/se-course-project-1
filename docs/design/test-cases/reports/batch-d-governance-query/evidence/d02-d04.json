@@ -1,0 +1,136 @@
+{
+  "results": [
+    {
+      "step": "supplement case 9",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "claim case 9",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "decide case 9 (no_action)",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "close case 9",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "supplement closed case 9",
+      "status": 409,
+      "code": "CASE_CLOSED",
+      "expect": {
+        "status": 409,
+        "code": "CASE_CLOSED"
+      },
+      "pass": true
+    },
+    {
+      "step": "publish result case 9",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "supplement case 12 with evidence",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "claim case 12",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "decide case 12 (violation + remove evaluation)",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    }
+  ],
+  "before": {
+    "status": 200,
+    "body": {
+      "items": [],
+      "page": 1,
+      "page_size": 20,
+      "total": 0
+    },
+    "headers": {}
+  },
+  "after": {
+    "items": [
+      {
+        "case_id": "9",
+        "decision_kind": "no_action",
+        "public_summary": "举报事项经核查未认定违规，已归档。",
+        "public_reason": "证据不足，维持原内容。",
+        "published_at": "2026-11-26T14:40:06.055582Z"
+      }
+    ],
+    "page": 1,
+    "page_size": 20,
+    "total": 1
+  },
+  "reviewAfter": {
+    "items": [
+      {
+        "review_id": "1",
+        "trade_id": "1",
+        "reviewer": {
+          "id": "4",
+          "display_name": "QA Buyer A",
+          "avatar_url": null
+        },
+        "reviewee": {
+          "id": "2",
+          "display_name": "QA Seller",
+          "avatar_url": null
+        },
+        "rating": 5,
+        "content": null,
+        "visible": false,
+        "created_at": "2026-11-26T14:37:24.362774Z"
+      }
+    ],
+    "page": 1,
+    "page_size": 20,
+    "total": 1
+  },
+  "evidenceFile": "10"
+}

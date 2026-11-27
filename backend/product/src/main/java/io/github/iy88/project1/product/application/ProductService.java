@@ -372,6 +372,9 @@ public class ProductService {
             Instant now = Instant.now();
             audit.withdraw(now);
             audits.save(audit);
+            if (lifecycle != null) {
+                lifecycle.withdrawn(audit.caseId(), now);
+            }
             CategoryApplication pending = applications.lockPending(productId).orElse(null);
             Long applicationId = null;
             if (pending != null) {
@@ -511,13 +514,19 @@ public class ProductService {
         transaction.executeWithoutResult(status -> {
             writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
-            if (!categoryApplicationAllowed(product, latestAudit(productId))) {
+            ProductAudit latest = latestAudit(productId);
+            if (!categoryApplicationAllowed(product, latest)) {
                 throw new BusinessError("CATEGORY_APPLICATION_NOT_PENDING", 409, "没有待处理分类申请");
             }
             CategoryApplication application = applications.lockPending(productId)
                     .orElseThrow(() -> new BusinessError("CATEGORY_APPLICATION_NOT_PENDING", 409, "没有待处理分类申请"));
-            application.withdraw(Instant.now());
+            Instant now = Instant.now();
+            application.withdraw(now);
             applications.save(application);
+            var lifecycle = reviewCases.getIfAvailable();
+            if (lifecycle != null && latest != null && "pending".equals(latest.status())) {
+                lifecycle.classificationWithdrawn(latest.caseId(), application.id(), now);
+            }
             Map<String, Object> facts = new LinkedHashMap<>();
             facts.put("product_id", Long.toString(productId));
             facts.put("status", application.status());
@@ -595,6 +604,16 @@ public class ProductService {
                 });
     }
 
+    public Optional<ReportSnapshot> reportSnapshot(long caseId) {
+        return jdbc.sql("""
+                        select product_id, title, description from product_case_snapshot where case_id = ?
+                        """).param(caseId)
+                .query((row, index) -> new ReportSnapshot(row.getLong("product_id"),
+                        row.getString("title"), row.getString("description"))).optional();
+    }
+
+    public record ReportSnapshot(long id, String title, String description) {}
+
     public void captureReportSnapshot(long caseId, long productId) {
         products.findById(productId).filter(found -> !found.deleted())
                 .ifPresent(product -> captureCaseSnapshot(caseId, product));
@@ -617,7 +636,7 @@ public class ProductService {
         var seller = new SellerRef(Long.toString(product.sellerAccountId()), "", null);
         return new ProductDetail(Long.toString(productId), snapshot.title(), snapshot.description(),
                 snapshot.priceCents(), List.of(), List.of(), seller, product.lifecycleState(), snapshot.contentVersion(),
-                product.createdAt(), snapshot.capturedAt(), null, null, null, null);
+                product.createdAt(), snapshot.capturedAt(), null, null, null, null, null);
     }
 
     private static BusinessError notVisible() {
@@ -809,10 +828,15 @@ public class ProductService {
                         found.status()))
                 .orElse(null)
                 : null;
+        List<DisplayRestrictionRef> restrictions = owner
+                ? displayRestrictions.findActive(product.id()).stream()
+                        .map(item -> new DisplayRestrictionRef(item.sourceType(), item.reason(), item.createdAt()))
+                        .toList()
+                : null;
         return new ProductDetail(Long.toString(product.id()), product.title(), product.description(),
                 product.priceCents(), images(product.id()), categories, sellerRef, product.lifecycleState(),
                 product.contentVersion(), product.createdAt(), product.updatedAt(), pending, latest, permissions,
-                categoryApplication);
+                categoryApplication, restrictions);
     }
 
     private List<CategoryRef> categoryRefs(Collection<Long> categoryIds) {
@@ -1172,7 +1196,13 @@ public class ProductService {
                                 List<ImageRef> images, List<CategoryRef> categories, SellerRef seller,
                                 String lifecycleState, int contentVersion, Instant createdAt, Instant updatedAt,
                                 ReviewRef pendingReview, ReviewRef latestReview, Permissions permissions,
-                                CategoryApplicationRef categoryApplication) {
+                                CategoryApplicationRef categoryApplication,
+                                @com.fasterxml.jackson.annotation.JsonInclude(
+                                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                                List<DisplayRestrictionRef> displayRestrictions) {
+    }
+
+    public record DisplayRestrictionRef(String sourceType, String reason, Instant createdAt) {
     }
 
     public record CategoryApplicationRef(String id, String proposedName, String status) {

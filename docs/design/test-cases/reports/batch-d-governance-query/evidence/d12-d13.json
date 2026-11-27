@@ -1,0 +1,442 @@
+{
+  "results": [
+    {
+      "step": "statistics without time_scope",
+      "status": 422,
+      "code": "INPUT_INVALID",
+      "expect": {
+        "status": 422
+      },
+      "pass": true,
+      "body": {
+        "error": {
+          "code": "INPUT_INVALID",
+          "message": "请选择全部时间或有效的 UTC 起止时间",
+          "details": {}
+        },
+        "request_id": "1f88034a-109c-4b20-a467-82ae39418a54"
+      }
+    },
+    {
+      "step": "statistics as normal user",
+      "status": 403,
+      "code": "MANAGEMENT_NOT_ALLOWED",
+      "expect": {
+        "status": 403,
+        "code": "MANAGEMENT_NOT_ALLOWED"
+      },
+      "pass": true,
+      "body": {
+        "error": {
+          "code": "MANAGEMENT_NOT_ALLOWED",
+          "message": "无管理权限",
+          "details": {}
+        },
+        "request_id": "12003909-a698-4b03-af7c-9627767fa9cd"
+      }
+    },
+    {
+      "step": "statistics all",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "as_of": "2026-11-26T14:55:37.604397Z",
+        "selection": {
+          "time_scope": "all",
+          "start_at": null,
+          "end_at": null
+        },
+        "accounts": {
+          "total": 6,
+          "banned": 1
+        },
+        "products_by_state": {
+          "pending_review": 0,
+          "review_rejected": 0,
+          "public": 2,
+          "in_trade": 2,
+          "off_shelf": 7
+        },
+        "pending": {
+          "reviews": 0,
+          "reports": 9
+        },
+        "trades": {
+          "completed": 6,
+          "terminated": 1,
+          "disputed": 0
+        },
+        "completed_in_selection": 6
+      }
+    },
+    {
+      "step": "range covering all",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "as_of": "2026-11-26T14:55:37.647542Z",
+        "selection": {
+          "time_scope": "range",
+          "start_at": "2026-11-26T14:00:00Z",
+          "end_at": "2026-11-26T23:59:59Z"
+        },
+        "accounts": {
+          "total": 6,
+          "banned": 1
+        },
+        "products_by_state": {
+          "pending_review": 0,
+          "review_rejected": 0,
+          "public": 2,
+          "in_trade": 2,
+          "off_shelf": 7
+        },
+        "pending": {
+          "reviews": 0,
+          "reports": 9
+        },
+        "trades": {
+          "completed": 6,
+          "terminated": 1,
+          "disputed": 0
+        },
+        "completed_in_selection": 6
+      }
+    },
+    {
+      "step": "range end equals trade 1 completion",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "as_of": "2026-11-26T14:55:37.677726Z",
+        "selection": {
+          "time_scope": "range",
+          "start_at": "2026-11-26T14:00:00Z",
+          "end_at": "2026-11-26T14:37:05.326Z"
+        },
+        "accounts": {
+          "total": 6,
+          "banned": 1
+        },
+        "products_by_state": {
+          "pending_review": 0,
+          "review_rejected": 0,
+          "public": 2,
+          "in_trade": 2,
+          "off_shelf": 7
+        },
+        "pending": {
+          "reviews": 0,
+          "reports": 9
+        },
+        "trades": {
+          "completed": 6,
+          "terminated": 1,
+          "disputed": 0
+        },
+        "completed_in_selection": 0
+      }
+    },
+    {
+      "step": "range start equals trade 1 completion",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "as_of": "2026-11-26T14:55:37.708514Z",
+        "selection": {
+          "time_scope": "range",
+          "start_at": "2026-11-26T14:37:05.326Z",
+          "end_at": "2026-11-26T23:59:59Z"
+        },
+        "accounts": {
+          "total": 6,
+          "banned": 1
+        },
+        "products_by_state": {
+          "pending_review": 0,
+          "review_rejected": 0,
+          "public": 2,
+          "in_trade": 2,
+          "off_shelf": 7
+        },
+        "pending": {
+          "reviews": 0,
+          "reports": 9
+        },
+        "trades": {
+          "completed": 6,
+          "terminated": 1,
+          "disputed": 0
+        },
+        "completed_in_selection": 6
+      }
+    },
+    {
+      "step": "start inclusive / end exclusive",
+      "pass": false
+    },
+    {
+      "step": "current counts unaffected by range",
+      "pass": true
+    },
+    {
+      "step": "range start equals end",
+      "status": 422,
+      "code": "INPUT_INVALID",
+      "expect": {
+        "status": 422
+      },
+      "pass": true,
+      "body": {
+        "error": {
+          "code": "INPUT_INVALID",
+          "message": "请选择全部时间或有效的 UTC 起止时间",
+          "details": {}
+        },
+        "request_id": "82b9855b-e143-4a8b-8c08-2d4c33a0c254"
+      }
+    },
+    {
+      "step": "all with timestamps",
+      "status": 422,
+      "code": "INPUT_INVALID",
+      "expect": {
+        "status": 422
+      },
+      "pass": true,
+      "body": {
+        "error": {
+          "code": "INPUT_INVALID",
+          "message": "请选择全部时间或有效的 UTC 起止时间",
+          "details": {}
+        },
+        "request_id": "184ec2f1-fa6f-44d4-9165-86c702db4205"
+      }
+    },
+    {
+      "step": "range without end",
+      "status": 422,
+      "code": "INPUT_INVALID",
+      "expect": {
+        "status": 422
+      },
+      "pass": true,
+      "body": {
+        "error": {
+          "code": "INPUT_INVALID",
+          "message": "请选择全部时间或有效的 UTC 起止时间",
+          "details": {}
+        },
+        "request_id": "4cecd28d-5d53-4ba3-ba78-e949d05f45dc"
+      }
+    },
+    {
+      "step": "empty range",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "as_of": "2026-11-26T14:55:37.811405Z",
+        "selection": {
+          "time_scope": "range",
+          "start_at": "2026-01-01T00:00:00Z",
+          "end_at": "2026-01-02T00:00:00Z"
+        },
+        "accounts": {
+          "total": 6,
+          "banned": 1
+        },
+        "products_by_state": {
+          "pending_review": 0,
+          "review_rejected": 0,
+          "public": 2,
+          "in_trade": 2,
+          "off_shelf": 7
+        },
+        "pending": {
+          "reviews": 0,
+          "reports": 9
+        },
+        "trades": {
+          "completed": 6,
+          "terminated": 1,
+          "disputed": 0
+        },
+        "completed_in_selection": 0
+      }
+    },
+    {
+      "step": "empty range zero",
+      "pass": true
+    },
+    {
+      "step": "no money fields",
+      "pass": true,
+      "moneyKeys": []
+    }
+  ],
+  "all": {
+    "as_of": "2026-11-26T14:55:37.604397Z",
+    "selection": {
+      "time_scope": "all",
+      "start_at": null,
+      "end_at": null
+    },
+    "accounts": {
+      "total": 6,
+      "banned": 1
+    },
+    "products_by_state": {
+      "pending_review": 0,
+      "review_rejected": 0,
+      "public": 2,
+      "in_trade": 2,
+      "off_shelf": 7
+    },
+    "pending": {
+      "reviews": 0,
+      "reports": 9
+    },
+    "trades": {
+      "completed": 6,
+      "terminated": 1,
+      "disputed": 0
+    },
+    "completed_in_selection": 6
+  },
+  "rangeAll": {
+    "as_of": "2026-11-26T14:55:37.647542Z",
+    "selection": {
+      "time_scope": "range",
+      "start_at": "2026-11-26T14:00:00Z",
+      "end_at": "2026-11-26T23:59:59Z"
+    },
+    "accounts": {
+      "total": 6,
+      "banned": 1
+    },
+    "products_by_state": {
+      "pending_review": 0,
+      "review_rejected": 0,
+      "public": 2,
+      "in_trade": 2,
+      "off_shelf": 7
+    },
+    "pending": {
+      "reviews": 0,
+      "reports": 9
+    },
+    "trades": {
+      "completed": 6,
+      "terminated": 1,
+      "disputed": 0
+    },
+    "completed_in_selection": 6
+  },
+  "endAtBoundary": {
+    "as_of": "2026-11-26T14:55:37.677726Z",
+    "selection": {
+      "time_scope": "range",
+      "start_at": "2026-11-26T14:00:00Z",
+      "end_at": "2026-11-26T14:37:05.326Z"
+    },
+    "accounts": {
+      "total": 6,
+      "banned": 1
+    },
+    "products_by_state": {
+      "pending_review": 0,
+      "review_rejected": 0,
+      "public": 2,
+      "in_trade": 2,
+      "off_shelf": 7
+    },
+    "pending": {
+      "reviews": 0,
+      "reports": 9
+    },
+    "trades": {
+      "completed": 6,
+      "terminated": 1,
+      "disputed": 0
+    },
+    "completed_in_selection": 0
+  },
+  "startAtBoundary": {
+    "as_of": "2026-11-26T14:55:37.708514Z",
+    "selection": {
+      "time_scope": "range",
+      "start_at": "2026-11-26T14:37:05.326Z",
+      "end_at": "2026-11-26T23:59:59Z"
+    },
+    "accounts": {
+      "total": 6,
+      "banned": 1
+    },
+    "products_by_state": {
+      "pending_review": 0,
+      "review_rejected": 0,
+      "public": 2,
+      "in_trade": 2,
+      "off_shelf": 7
+    },
+    "pending": {
+      "reviews": 0,
+      "reports": 9
+    },
+    "trades": {
+      "completed": 6,
+      "terminated": 1,
+      "disputed": 0
+    },
+    "completed_in_selection": 6
+  },
+  "emptyRange": {
+    "as_of": "2026-11-26T14:55:37.811405Z",
+    "selection": {
+      "time_scope": "range",
+      "start_at": "2026-01-01T00:00:00Z",
+      "end_at": "2026-01-02T00:00:00Z"
+    },
+    "accounts": {
+      "total": 6,
+      "banned": 1
+    },
+    "products_by_state": {
+      "pending_review": 0,
+      "review_rejected": 0,
+      "public": 2,
+      "in_trade": 2,
+      "off_shelf": 7
+    },
+    "pending": {
+      "reviews": 0,
+      "reports": 9
+    },
+    "trades": {
+      "completed": 6,
+      "terminated": 1,
+      "disputed": 0
+    },
+    "completed_in_selection": 0
+  }
+}

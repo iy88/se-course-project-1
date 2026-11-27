@@ -1,0 +1,103 @@
+{
+  "results": [
+    {
+      "step": "inquiry #1",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "inquiry #2",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "inquiry to reporter rejected",
+      "status": 422,
+      "code": "INPUT_INVALID",
+      "expect": {
+        "status": 422,
+        "code": "INPUT_INVALID"
+      },
+      "pass": true
+    },
+    {
+      "step": "todo merged",
+      "total": 1,
+      "ids": [
+        "61",
+        "62"
+      ],
+      "pass": true
+    },
+    {
+      "step": "reply inquiry #1",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "todo keeps remaining sub-item",
+      "ids": [
+        "62"
+      ],
+      "pass": true
+    },
+    {
+      "step": "reply inquiry #2",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "todo removed",
+      "stillThere": false,
+      "pass": true
+    },
+    {
+      "step": "duplicate statement on answered inquiry",
+      "status": 409,
+      "code": "STATE_CONFLICT",
+      "expect": {
+        "status": 409,
+        "code": "STATE_CONFLICT"
+      },
+      "pass": true
+    }
+  ],
+  "thread": {
+    "conversation_kind": "case",
+    "conversation_id": "1"
+  },
+  "inquiryIds": [
+    "61",
+    "62"
+  ],
+  "todos": {
+    "items": [],
+    "page": 1,
+    "page_size": 20,
+    "total": 0,
+    "counts_by_kind": {
+      "agreement_response": 0,
+      "cancellation_response": 0,
+      "inquiry_response": 0,
+      "completion_response": 0,
+      "request_response": 0
+    },
+    "as_of": "2026-11-26T14:44:43.095374100Z"
+  }
+}

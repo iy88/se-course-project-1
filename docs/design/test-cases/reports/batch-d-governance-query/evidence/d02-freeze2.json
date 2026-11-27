@@ -1,0 +1,61 @@
+{
+  "results": [
+    {
+      "step": "report trade 2",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "supplement trade case",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "claim trade case",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "decide freeze_trade(2)",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "buyer-a evaluates trade 9 while trade 2 frozen",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "seller publishes while frozen",
+      "status": 409,
+      "code": "TRADE_FROZEN",
+      "expect": {
+        "status": 409,
+        "code": "TRADE_FROZEN"
+      },
+      "pass": true
+    }
+  ],
+  "caseId": "18",
+  "basis": "7"
+}

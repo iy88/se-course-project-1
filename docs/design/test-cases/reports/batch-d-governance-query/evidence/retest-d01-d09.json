@@ -1,0 +1,95 @@
+{
+  "build": {
+    "branch": "test/evidence-governance-query-sourmoon",
+    "commit": "2afca07c",
+    "main": "41bc161f",
+    "jar": "backend-app-0.0.1-SNAPSHOT.jar (2026-11-27 12:39)",
+    "env": "dev"
+  },
+  "env": {
+    "api": "http://127.0.0.1:8080",
+    "db": "PostgreSQL 18.7 project1_s1",
+    "redis": "redis 8 db 0"
+  },
+  "executedAt": "2026-11-27T04:49:22.078Z",
+  "steps": [
+    {
+      "step": "D01 non-participant review",
+      "remark": "trade 1 participants are 2 and 4",
+      "expect": {
+        "status": 403,
+        "code": "ACTION_NOT_ALLOWED"
+      },
+      "status": 403,
+      "code": "ACTION_NOT_ALLOWED",
+      "body": {
+        "error": {
+          "code": "ACTION_NOT_ALLOWED",
+          "message": "当前身份不能执行该操作",
+          "details": {}
+        },
+        "request_id": "cf70efe1-9f71-48e4-be8d-8b030a55e2fd"
+      },
+      "pass": true
+    },
+    {
+      "step": "D01 non-participant review query",
+      "remark": "query keeps 404",
+      "expect": {
+        "status": 404,
+        "code": "RESOURCE_NOT_VISIBLE"
+      },
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "body": {
+        "error": {
+          "code": "RESOURCE_NOT_VISIBLE",
+          "message": "交易不存在",
+          "details": {}
+        },
+        "request_id": "d93488bb-ae8b-46b7-969b-4808e3c4a85b"
+      },
+      "pass": true
+    },
+    {
+      "step": "D09 repeat lift display restriction",
+      "remark": "case 19 enforcement already lifted",
+      "expect": {
+        "status": 409,
+        "code": "RESTRICTION_NOT_ACTIVE"
+      },
+      "status": 409,
+      "code": "RESTRICTION_NOT_ACTIVE",
+      "body": {
+        "error": {
+          "code": "RESTRICTION_NOT_ACTIVE",
+          "message": "原限制记录不存在或已解除",
+          "details": {}
+        },
+        "request_id": "ec29cf7a-3854-473e-8f3a-2fe9ab0eee93",
+        "operation_id": "921d9e5d-af4d-42b9-9ad3-6c844b0738ac"
+      },
+      "pass": true
+    },
+    {
+      "step": "D09 repeat lift trade freeze",
+      "remark": "case 16 enforcement already lifted",
+      "expect": {
+        "status": 409,
+        "code": "TRADE_FREEZE_NOT_ACTIVE"
+      },
+      "status": 409,
+      "code": "TRADE_FREEZE_NOT_ACTIVE",
+      "body": {
+        "error": {
+          "code": "TRADE_FREEZE_NOT_ACTIVE",
+          "message": "原交易冻结已解除或不存在",
+          "details": {}
+        },
+        "request_id": "d4452438-aa6e-4a36-a16b-1d3ab54ec656",
+        "operation_id": "270d38b6-7626-4858-a72d-09fc329a7331"
+      },
+      "pass": true
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -126,6 +127,16 @@ public class FileReferences {
         }
         matches.forEach(references::delete);
         return new Released(target, ids, fileIds);
+    }
+
+    /** Reads display metadata for a reference whose target the caller has already authorized. */
+    @Transactional(readOnly = true)
+    public Optional<String> referencedContentType(Target target, long fileId) {
+        return files.findReferenced(fileId, target.type(), target.id())
+                .map(FileRecord::snapshot)
+                .filter(entry -> "verified".equals(entry.state()))
+                .map(FileRegistry.Entry::content)
+                .map(content -> content.contentType());
     }
 
     public FileRegistry.Entry readReferenced(Target target, long fileId) {

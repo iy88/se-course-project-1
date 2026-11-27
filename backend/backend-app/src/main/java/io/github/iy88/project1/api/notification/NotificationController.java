@@ -57,18 +57,22 @@ public class NotificationController {
                                                     @RequestParam(name = "page_size", required = false) Integer pageSize,
                                                     @RequestParam(required = false) String read,
                                                     @RequestParam(name = "event_type", required = false)
-                                                    String eventType) {
-        var context = context(request);
+                                                    String eventType,
+                                                    @RequestParam(required = false) String audience) {
+        boolean management = management(audience);
+        var context = context(request, management);
         var query = new NotificationQuery(positive(page, 1, "page"), pageSize(pageSize), filter(read), eventType);
-        var body = NotificationWire.page(queries().list(context, query));
+        var body = NotificationWire.page(queries().list(context, query, management));
         return ok(body);
     }
 
     @GetMapping("/{notification_id}")
     public ResponseEntity<Map<String, Object>> get(HttpServletRequest request,
-                                                    @PathVariable("notification_id") String notificationId) {
-        var context = context(request);
-        var body = NotificationWire.detail(queries().get(context, identifier(notificationId)));
+                                                    @PathVariable("notification_id") String notificationId,
+                                                    @RequestParam(required = false) String audience) {
+        boolean management = management(audience);
+        var context = context(request, management);
+        var body = NotificationWire.detail(queries().get(context, identifier(notificationId), management));
         return ok(body);
     }
 
@@ -76,8 +80,10 @@ public class NotificationController {
     public ResponseEntity<Object> markRead(
             HttpServletRequest request,
             @PathVariable("notification_id") String notificationId,
-            @RequestHeader(name = IDEMPOTENCY_HEADER, required = false) String idempotencyKey) {
-        var context = context(request);
+            @RequestHeader(name = IDEMPOTENCY_HEADER, required = false) String idempotencyKey,
+            @RequestParam(required = false) String audience) {
+        boolean management = management(audience);
+        var context = context(request, management);
         long id = identifier(notificationId);
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new BusinessError("INPUT_INVALID", 422, "缺少 Idempotency-Key");
@@ -86,20 +92,30 @@ public class NotificationController {
         if (command == null) {
             throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "通知写入暂不可用");
         }
+        queries().requireAudience(context, id, management);
         var result = command.markRead(context, idempotencyKey, id);
         // The stored result is already the response body, so a replay answers with
         // exactly the payload of the first successful call.
         return ResponseEntity.status(result.status()).cacheControl(CacheControl.noStore()).body(result.data());
     }
 
-    private ExecutionContext context(HttpServletRequest request) {
+    private ExecutionContext context(HttpServletRequest request, boolean management) {
         var resolver = actors.getIfAvailable();
         if (resolver == null) {
             throw new BusinessError("AUTHENTICATION_UNAVAILABLE", 503, "身份服务暂不可用");
         }
         var actor = resolver.resolve(request);
+        if (management && !actor.manager()) {
+            throw new BusinessError("ACTION_NOT_ALLOWED", 403, "当前账户无管理资格");
+        }
         return requests.forActor(request, ExecutionContext.ActorKind.ACCOUNT, Long.toString(actor.accountId()),
                 actor.sessionId(), null, actor.credentialVersion());
+    }
+
+    private static boolean management(String audience) {
+        if (audience == null || "user".equals(audience)) return false;
+        if ("management".equals(audience)) return true;
+        throw new BusinessError("INPUT_INVALID", 422, "audience 取值无效");
     }
 
     private NotificationQueries queries() {

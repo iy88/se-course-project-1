@@ -13,4 +13,8 @@ public interface ProductReviewCaseLifecycle {
     long open(Instant submittedAt);
 
     void requireUnclaimed(long caseId);
+
+    default void classificationWithdrawn(long caseId, long applicationId, Instant at) {}
+
+    default void withdrawn(long caseId, Instant at) {}
 }

@@ -1,0 +1,146 @@
+{
+  "results": [
+    {
+      "step": "comment on P2",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "report comment",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "supplement",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "claim",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "decide remove_content",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "appeal eligibility present",
+      "deadline": "2026-11-26T14:54:00.212260Z",
+      "pass": true
+    },
+    {
+      "step": "appeal within window",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "close with pending appeal",
+      "status": 409,
+      "code": "CASE_APPEAL_WINDOW_OPEN",
+      "expect": {
+        "status": 409
+      },
+      "pass": true
+    },
+    {
+      "step": "manager reply uphold",
+      "status": 422,
+      "code": "BASIS_REQUIRED",
+      "expect": {
+        "status": 201
+      },
+      "pass": false
+    },
+    {
+      "step": "close before window ends",
+      "status": 409,
+      "code": "CASE_APPEAL_WINDOW_OPEN",
+      "expect": {
+        "status": 409,
+        "code": "CASE_APPEAL_WINDOW_OPEN"
+      },
+      "pass": true
+    },
+    {
+      "step": "repeat reply for same appeal",
+      "status": 422,
+      "code": "BASIS_REQUIRED",
+      "expect": {
+        "status": 409
+      },
+      "pass": false
+    },
+    {
+      "step": "late appeal",
+      "status": 409,
+      "code": "CASE_APPEAL_WINDOW_ENDED",
+      "expect": {
+        "status": 409
+      },
+      "pass": true
+    },
+    {
+      "step": "close after window",
+      "status": 409,
+      "code": "CASE_APPEAL_PENDING",
+      "expect": {
+        "status": 200
+      },
+      "pass": false
+    },
+    {
+      "step": "repeat close idempotent",
+      "pass": false
+    },
+    {
+      "step": "speak after close",
+      "status": 409,
+      "code": "CASE_APPEAL_WINDOW_ENDED",
+      "expect": {
+        "status": 409
+      },
+      "pass": true
+    }
+  ],
+  "caseId": "22",
+  "thread": {
+    "conversation_kind": "case",
+    "conversation_id": "12"
+  },
+  "appealActionId": "74",
+  "closed": {
+    "error": {
+      "code": "CASE_APPEAL_PENDING",
+      "message": "存在未处理的申辩",
+      "details": {}
+    },
+    "request_id": "1bfa58af-346a-49b2-acf0-9a33f14c1a94",
+    "operation_id": "59cabf15-0654-490a-b25f-34b8a129a507"
+  }
+}

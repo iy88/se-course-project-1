@@ -630,13 +630,13 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         long reviewer = actor(context);
         return run(context, "trade.review.submit", key, command,
                 (ctx, request) -> prepareReview(reviewer, request.tradeId()),
-                (ctx, request) -> qualifyTrade(ctx, request.tradeId()),
+                (ctx, request) -> qualifyReview(ctx, request.tradeId()),
                 this::replayTrade,
                 (transaction, request, qualification) -> {
                     int rating = rating(request.rating());
                     String content = requiredTrimmedText(request.content(), 2000, "评价内容");
                     var trade = repository.lockTrade(transaction, request.tradeId());
-                    trade.requireParticipant(reviewer);
+                    requireReviewParticipant(trade, reviewer);
                     requireWrite(reviewer);
                     if (trade.status() != TradeStatus.COMPLETED) {
                         throw reviewNotCompleted();
@@ -965,6 +965,22 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         if (!exactAdminCaseFreeze(history, freeze, trade, caseId)) {
             throw freezeNotActive();
         }
+        return liftFreezeFacts(transaction, trade, freeze, caseId, manager, basisRef, validatedReason, now(),
+                UUID.randomUUID());
+    }
+
+    @Override
+    public TradePorts.CaseEnforcementOutcome liftCaseFreezeLocked(WriteTransaction transaction, long caseId,
+                                                                  long tradeId, String basisRef, String reason) {
+        var trade = requireLockedTrade(transaction, caseId, tradeId);
+        long manager = actor(transaction.context());
+        String validatedReason = requiredText(reason, 500, "解除原因");
+        requireWrite(manager);
+        requirePartyFreezeLocks(transaction, trade);
+        if (trade.status().isTerminal()) {
+            throw freezeNotActive();
+        }
+        var freeze = caseSourcedFreeze(trade, caseId);
         return liftFreezeFacts(transaction, trade, freeze, caseId, manager, basisRef, validatedReason, now(),
                 UUID.randomUUID());
     }
@@ -1740,6 +1756,19 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return null;
     }
 
+    private Void qualifyReview(ExecutionContext context, long tradeId) {
+        accounts.requireCurrentSession(context);
+        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
+        requireReviewParticipant(trade, actor(context));
+        return null;
+    }
+
+    private static void requireReviewParticipant(Trade trade, long reviewer) {
+        if (!trade.isParticipant(reviewer)) {
+            throw Trade.actionNotAllowed();
+        }
+    }
+
     private Void qualifyGovernance(ExecutionContext context, long tradeId) {
         accounts.requireCurrentSession(context);
         repository.find(tradeId).orElseThrow(Trade::notVisible);
@@ -1890,6 +1919,28 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
                 TradeStatus.IN_PROGRESS.value(), phase(trade.phase()), phase(restored.phase()), frozen, frozen,
                 false);
+    }
+
+    /**
+     * Ordinary case lifts carry no freeze id. Resolve only the one active freeze whose provenance
+     * is this case: an admin-case freeze or a system timeout freeze recorded with this case as
+     * {@code source_ref}. Account bans and case freezes owned by another case are never candidates;
+     * zero or multiple matching rows fail closed.
+     */
+    private TradeModels.Freeze caseSourcedFreeze(Trade trade, long caseId) {
+        var matches = repository.activeFreezes(trade.id()).stream()
+                .filter(freeze -> freeze.tradeId() == trade.id())
+                .filter(freeze -> freeze.source() == FreezeSource.ADMIN_CASE
+                        || freeze.source() == FreezeSource.TIMEOUT)
+                .filter(freeze -> Objects.equals(freeze.sourceRef(), caseId))
+                .toList();
+        if (matches.size() > 1) {
+            throw new BusinessError("TRADE_FREEZE_NOT_ACTIVE", 409, "交易冻结来源无法唯一定位");
+        }
+        if (matches.isEmpty()) {
+            throw freezeNotActive();
+        }
+        return matches.getFirst();
     }
 
     private static boolean exactAdminCaseFreeze(TradeModels.History history, TradeModels.Freeze freeze, Trade trade,

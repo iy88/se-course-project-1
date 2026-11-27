@@ -1,0 +1,138 @@
+{
+  "results": [
+    {
+      "step": "report for claim race",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "concurrent claim",
+      "statuses": [
+        200,
+        409
+      ],
+      "pass": true
+    },
+    {
+      "step": "non-claimant opens case",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 404
+      },
+      "pass": true
+    },
+    {
+      "step": "claimant opens case",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "non-claimant repeats claim",
+      "status": 409,
+      "code": "CASE_ALREADY_CLAIMED",
+      "expect": {
+        "status": 409,
+        "code": "CASE_ALREADY_CLAIMED"
+      },
+      "pass": true
+    },
+    {
+      "step": "claimant repeats claim",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "claim review 2",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "seller edits while review claimed",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "decision after parallel edit",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    }
+  ],
+  "caseId": "20",
+  "winner": "qa-manager-a",
+  "loser": "qa-manager-b",
+  "decision": {
+    "audit_id": "2",
+    "status": "passed",
+    "case_id": "2",
+    "case_status": "decided",
+    "product": {
+      "id": "2",
+      "lifecycle_state": "public",
+      "content_version": 3
+    },
+    "category_application": {
+      "application_id": "2",
+      "proposed_name": "书籍资料",
+      "status": "approved"
+    },
+    "reviewed_content_version": 3,
+    "decided_at": "2026-11-26T14:43:01.823161Z"
+  },
+  "product": {
+    "id": "2",
+    "title": "批次D P2 待审商品（卖方并行编辑）",
+    "description": "批次D P2 待审商品 用于批次 D 人工验证的合成商品数据。",
+    "price_cents": 9900,
+    "images": [
+      {
+        "file_id": "2",
+        "url": "https://campus-market-v2-zxy.oss-cn-hangzhou.aliyuncs.com/project1/dev/product_image/49530e43-11e1-4138-ae17-0f856e12cb51?response-cache-control=private%2C%20no-store&x-oss-expires=59&x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-credential=<redacted>&x-oss-date=20261126T144301Z&x-oss-signature=<redacted>",
+        "expires_at": "2026-11-26T14:44:01.921963200Z"
+      }
+    ],
+    "categories": [
+      {
+        "id": "4",
+        "name": "书籍资料"
+      }
+    ],
+    "seller": {
+      "id": "2",
+      "display_name": "QA Seller",
+      "avatar_url": null
+    },
+    "lifecycle_state": "public",
+    "content_version": 3,
+    "created_at": "2026-11-26T14:30:25.951337Z",
+    "updated_at": "2026-11-26T14:43:01.823161Z",
+    "pending_review": null,
+    "latest_review": null,
+    "permissions": null,
+    "category_application": null
+  }
+}

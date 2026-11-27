@@ -50,7 +50,7 @@ jobs:
           restore-keys: |
             maven-deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
       - name: Verify backend
-        run: ./mvnw --batch-mode --no-transfer-progress verify
+        run: ./mvnw --batch-mode --no-transfer-progress --threads 2 verify
       - name: Log backend coverage
         run: |
           python3 - <<'PY'
@@ -145,12 +145,12 @@ jobs:
           SMTP_PASSWORD=integration-fixture
           SMTP_FROM=integration@example.com
           EOF
-          ./mvnw --batch-mode --no-transfer-progress -pl maintenance -am package -DskipTests
+          ./mvnw --batch-mode --no-transfer-progress --threads 2 -pl maintenance -am package -DskipTests
           java -jar maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
             db migrate --env-file="$RUNNER_TEMP/project1-integration.env"
       - name: Verify backend with PostgreSQL and Redis
         run: |
-          ./mvnw --batch-mode --no-transfer-progress verify -Pintegration \
+          ./mvnw --batch-mode --no-transfer-progress --threads 2 verify -Pintegration \
             -Dit.envFile="$RUNNER_TEMP/project1-integration.env"
 
   frontend:
