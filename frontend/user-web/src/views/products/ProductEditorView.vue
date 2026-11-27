@@ -15,6 +15,7 @@ import {
   getProduct,
   listCategories,
   readBannedScope,
+  resubmitForReview,
   updateProduct,
 } from "../../api/products";
 import type {
@@ -27,6 +28,7 @@ import { formatCentsAsYuanInput, parseYuanToCents } from "../../app/format";
 import { IdempotencyKeys } from "../../app/keys";
 import { bannedGroupLabels } from "../../app/labels";
 import { problemMessage } from "../../app/problems";
+import { saveProductEditAndResubmit } from "../../app/product-edit-submission";
 import { notify } from "../../app/toast";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import ImageUploader from "../../components/ImageUploader.vue";
@@ -161,32 +163,43 @@ async function submit(): Promise<void> {
   if (priceCents === null) return;
 
   submitting.value = true;
-  const operation = isEditing.value ? "update-product" : "create-product";
   try {
     const application = newCategoryName.value.trim()
       ? { proposed_name: newCategoryName.value.trim() }
       : undefined;
     if (productId.value && editing.value) {
-      const updated = await updateProduct(
-        productId.value,
-        {
-          title: title.value.trim(),
-          description: description.value.trim(),
-          price_cents: priceCents,
-          category_ids: selectedCategoryIds.value.length ? selectedCategoryIds.value : undefined,
-          image_file_ids: imageFileIds.value,
-          category_application: canApplyNewCategory.value ? application : undefined,
-          expected_version: editing.value.content_version,
-        },
-        keys.current(operation),
+      const result = await saveProductEditAndResubmit(
+        () =>
+          updateProduct(
+            productId.value!,
+            {
+              title: title.value.trim(),
+              description: description.value.trim(),
+              price_cents: priceCents,
+              category_ids: selectedCategoryIds.value.length ? selectedCategoryIds.value : undefined,
+              image_file_ids: imageFileIds.value,
+              category_application: canApplyNewCategory.value ? application : undefined,
+              expected_version: editing.value!.content_version,
+            },
+            keys.current("update-product"),
+          ),
+        (updated) =>
+          resubmitForReview(
+            updated.id,
+            updated.content_version,
+            keys.current("resubmit-product"),
+          ),
       );
-      keys.rotate(operation);
+      keys.rotate("update-product");
+      if (result.resubmitted) keys.rotate("resubmit-product");
       notify.success(
-        updated.lifecycle_state === "pending_review"
-          ? "修改已保存，审核结论以最新内容为准。"
-          : "修改已保存。",
+        result.resubmitted
+          ? "修改已保存，已重新提交审核。"
+          : result.product.lifecycle_state === "pending_review"
+            ? "修改已保存，审核结论以最新内容为准。"
+            : "修改已保存。",
       );
-      await router.push({ name: "product-detail", params: { productId: updated.id } });
+      await router.push({ name: "product-detail", params: { productId: result.product.id } });
       return;
     }
     const created = await createProduct(
@@ -198,9 +211,9 @@ async function submit(): Promise<void> {
         image_file_ids: imageFileIds.value,
         category_application: application,
       },
-      keys.current(operation),
+      keys.current("create-product"),
     );
-    keys.rotate(operation);
+    keys.rotate("create-product");
     notify.success("商品已提交审核，通过后会公开展示。");
     await router.push({ name: "product-detail", params: { productId: created.id } });
   } catch (caught) {
