@@ -238,6 +238,8 @@ java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --spring.pro
 
 将示例收件地址替换为测试地址。探针完成后退出，失败时返回非零状态；SMTP 日志中的邮件 ID 可用于在收件箱中定位 `[Project1 S1] SMTP probe`。
 
+依赖探针是部署环境的一次性配置校验入口。私有桶和版本控制状态在这里核验；正常上传授权、完成核验和清理请求不会重复查询 Bucket ACL／versioning。
+
 ### OSS 配置
 
 后端探针和维护工具共用阿里云 OSS Java SDK 2.0（`com.aliyun:alibabacloud-oss-v2`）。v2 使用两个私有 Bucket：开发桶供开发与联调使用，生产使用独立桶；两桶分别专属于对应部署，不与 legacy 共用。各环境的 `OSS_BUCKET` 只填本环境桶名。商品图片与事项证据分别使用 `<OSS_PREFIX>/product_image/` 和 `<OSS_PREFIX>/case_evidence/`。
