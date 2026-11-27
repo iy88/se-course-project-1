@@ -2,6 +2,8 @@ A-RUN-03 final verification
 
 Date: 2026-11-27 19:32:11 +08:00
 Working tree: test/evidence-account-product-iy88
+Evidence archived in: 0ae8bd103ad49b5756e899ab0d2aebca790b24bb
+Exact execution SHA: not recorded in the original log
 
 Backend:
   Command:

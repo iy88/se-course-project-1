@@ -1,13 +1,17 @@
 package io.github.iy88.project1.casemanagement.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.iy88.project1.casemanagement.CaseSettings;
 import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
+import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import java.time.Clock;
 import java.time.Instant;
@@ -76,6 +80,54 @@ class CaseQueriesTests {
         assertThat(detail.path("target").isMissingNode()).isTrue();
         assertThat(detail.path("reported_object").isMissingNode()).isTrue();
         assertThat(detail.path("related_accounts").isMissingNode()).isTrue();
+        assertThat(detail.path("disposition_targets").isMissingNode()).isTrue();
+        verify(targets, never()).dispositionProducts(any());
+    }
+
+    @Test
+    void claimedManagerReceivesZeroOneOrMultipleDispositionProducts() {
+        var facts = claimedFacts();
+        when(store.find(CASE)).thenReturn(Optional.of(facts));
+        when(threads.findConversation(CASE, MANAGER)).thenReturn(OptionalLong.empty());
+        var first = new CasePorts.Targets.DispositionProduct(99L, "First");
+        var second = new CasePorts.Targets.DispositionProduct(100L, "Second");
+        when(targets.dispositionProducts(facts))
+                .thenReturn(List.of(), List.of(first), List.of(first, second));
+
+        var empty = queries.detail(context(MANAGER), CASE).path("disposition_targets");
+        assertThat(empty.path("target_type").asString()).isEqualTo("comment");
+        assertThat(empty.path("target_id").asString()).isEqualTo("501");
+        assertThat(empty.path("products").size()).isZero();
+        var single = queries.detail(context(MANAGER), CASE).path("disposition_targets").path("products");
+        assertThat(single.size()).isEqualTo(1);
+        assertThat(single.get(0).path("id").asString()).isEqualTo("99");
+        assertThat(single.get(0).path("title").asString()).isEqualTo("First");
+        var multiple = queries.detail(context(MANAGER), CASE).path("disposition_targets").path("products");
+        assertThat(multiple.size()).isEqualTo(2);
+        assertThat(multiple.get(1).path("id").asString()).isEqualTo("100");
+        assertThat(multiple.get(1).path("title").asString()).isEqualTo("Second");
+    }
+
+    @Test
+    void anotherManagerCannotReadDispositionProducts() {
+        var facts = claimedFacts();
+        when(store.find(CASE)).thenReturn(Optional.of(facts));
+
+        assertThatThrownBy(() -> queries.detail(context(32L), CASE))
+                .isInstanceOfSatisfying(BusinessError.class, error -> assertThat(error.status()).isEqualTo(404));
+        verify(targets, never()).dispositionProducts(any());
+    }
+
+    @Test
+    void decidedCaseDoesNotExposeDispositionProducts() {
+        var facts = new CaseRecords.Facts(CASE, CaseVocabulary.REPORT, "comment", COMMENT, null, null, REPORTER,
+                "请核实", MANAGER, NOW, CaseVocabulary.DECIDED, "violation", "reason", MANAGER, NOW, null,
+                null, null, null, NOW, NOW);
+        when(store.find(CASE)).thenReturn(Optional.of(facts));
+        when(threads.findConversation(CASE, MANAGER)).thenReturn(OptionalLong.empty());
+
+        assertThat(queries.detail(context(MANAGER), CASE).path("disposition_targets").isMissingNode()).isTrue();
+        verify(targets, never()).dispositionProducts(any());
     }
 
     private static CaseRecords.Facts claimedFacts() {
