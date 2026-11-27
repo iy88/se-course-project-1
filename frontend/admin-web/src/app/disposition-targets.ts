@@ -49,6 +49,9 @@ export function dispositionTargets(
     : [];
 }
 
-export function resolveDispositionTarget(choices: Choice[], selectedId: string): Choice | undefined {
+export function resolveDispositionTarget(
+  choices: Choice[],
+  selectedId: string,
+): Choice | undefined {
   return choices.length === 1 ? choices[0] : choices.find(({ id }) => id === selectedId);
 }
