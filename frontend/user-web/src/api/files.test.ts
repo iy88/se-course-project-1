@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { describeProblem, problemMessage } from "../app/problems";
 import { ApiError } from "./errors";
 import { acceptedFileTypes, uploadRequestBody, uploadToOss } from "./files";
 import type { UploadCapabilities } from "./contracts";
@@ -51,10 +52,17 @@ describe("upload transfer", () => {
         assert.ok(error instanceof ApiError, `expected ApiError, got ${String(error)}`);
         assert.equal(error.code, "UPLOAD_TRANSFER_FAILED");
         assert.doesNotMatch(error.message, /Failed to fetch/);
-        // 浏览器把「网络不可达」和「跨域预检被拦」都报成 TypeError，文案必须同时提示两者，
-        // 否则桶的 CORS 白名单缺失会被误判成断网。
-        assert.match(error.message, /网络不可达/);
-        assert.match(error.message, /对象存储未放行当前访问地址/);
+        // The interface renders the reviewed copy for the code, so assert what
+        // the user sees rather than only the raw transport message. Browsers
+        // report both an unreachable host and a blocked CORS preflight as the
+        // same TypeError, and the copy must name both causes.
+        assert.equal(
+          problemMessage(error),
+          "上传未完成：可能是网络不可达，或对象存储未放行当前访问地址；请检查网络后重试，仍失败请联系管理员。",
+        );
+        const problem = describeProblem(error);
+        assert.equal(problem.retryable, true);
+        assert.equal(problem.requiresLogin, false);
         return true;
       },
     );
