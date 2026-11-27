@@ -34,7 +34,17 @@ const target = computed<ReportTarget | null>(() => {
   const type = targetTypes.find((option) => option.value === target_type)?.value;
   if (!type || typeof target_id !== "string" || !resourceId.test(target_id)) return null;
 
-  if (type !== "message") return { target_type: type, target_id };
+  if (type !== "message") {
+    const source = route.query.source_product_id;
+    return {
+      target_type: type,
+      target_id,
+      source_product_id:
+        type === "account" && typeof source === "string" && resourceId.test(source)
+          ? source
+          : undefined,
+    };
+  }
   if (
     (conversation_kind !== "chat" && conversation_kind !== "trade") ||
     typeof conversation_id !== "string" ||

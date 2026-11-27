@@ -4,8 +4,9 @@
  * Routes are declared with an explicit `meta.requiresAuth` flag so the guard has
  * a single decision point; the shell decides how the navigation is presented.
  */
-import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
-import { ensureSession, session } from "./session";
+import { createRouter, createWebHistory, START_LOCATION, type RouteRecordRaw } from "vue-router";
+import { ensureSession, refreshSession, session } from "./session";
+import { notify } from "./toast";
 
 declare module "vue-router" {
   interface RouteMeta {
@@ -13,6 +14,8 @@ declare module "vue-router" {
     anonymous?: boolean;
     /** Route needs a valid session; unauthenticated visitors go to the login page. */
     requiresAuth?: boolean;
+    /** Route opens a form that requires an unrestricted account. */
+    requiresWrite?: boolean;
     /** Navigation label used by the shell when the route is a primary entry. */
     navLabel?: string;
     /** Deterministic parent used when a deep link has no in-app history. */
@@ -59,7 +62,7 @@ export const routes: RouteRecordRaw[] = [
     path: "/products/new",
     name: "product-create",
     component: () => import("../views/products/ProductEditorView.vue"),
-    meta: { requiresAuth: true, backTo: "my-products", backLabel: "我的商品" },
+    meta: { requiresAuth: true, requiresWrite: true, backTo: "my-products", backLabel: "我的商品" },
   },
   {
     path: "/products/:productId",
@@ -73,6 +76,7 @@ export const routes: RouteRecordRaw[] = [
     component: () => import("../views/products/ProductEditorView.vue"),
     meta: {
       requiresAuth: true,
+      requiresWrite: true,
       backTo: "product-detail",
       backParams: ["productId"],
       backLabel: "商品详情",
@@ -183,7 +187,7 @@ export const routes: RouteRecordRaw[] = [
     path: "/report",
     name: "report",
     component: () => import("../views/cases/ReportView.vue"),
-    meta: { requiresAuth: true, backTo: "my-cases", backLabel: "事项列表" },
+    meta: { requiresAuth: true, requiresWrite: true, backTo: "my-cases", backLabel: "事项列表" },
   },
   {
     path: "/:pathMatch(.*)*",
@@ -198,17 +202,28 @@ export const router = createRouter({
   routes,
   scrollBehavior: (to, _from, savedPosition) => {
     if (to.name === "product-detail" && /^#comment-[1-9][0-9]*$/.test(to.hash)) return false;
+    if (to.name === "case-detail" && /^#case-message-[1-9][0-9]*$/.test(to.hash)) return false;
     return savedPosition ?? { top: 0 };
   },
 });
 
-router.beforeEach(async (to) => {
-  await ensureSession();
+router.beforeEach(async (to, from) => {
+  if (to.meta.requiresWrite && session.isAuthenticated.value) {
+    await refreshSession().catch(() => {
+      // Use the last known state when identity refresh is temporarily unavailable.
+    });
+  } else {
+    await ensureSession();
+  }
   if (to.meta.requiresAuth && !session.isAuthenticated.value) {
     return { name: "login", query: { redirect: to.fullPath } };
   }
   if (to.meta.anonymous && session.isAuthenticated.value) {
     return { name: "home" };
+  }
+  if (to.meta.requiresWrite && session.account.value?.write_restricted) {
+    notify.warn("当前账户处于限制状态，该操作暂不可用。可在「我的事项」查看处理结果。");
+    return from === START_LOCATION ? { name: "home", replace: true } : false;
   }
   return true;
 });

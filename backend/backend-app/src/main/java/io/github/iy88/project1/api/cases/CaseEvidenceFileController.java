@@ -1,5 +1,6 @@
 package io.github.iy88.project1.api.cases;
 
+import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import io.github.iy88.project1.casemanagement.application.CasePorts;
 import io.github.iy88.project1.casemanagement.application.CaseRecords;
 import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
@@ -29,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
  * case/file pairing inside the file read transaction.
  */
 @RestController
-@RequestMapping("/api/v1/admin/cases")
+@RequestMapping("/api/v1")
 @Profile("!dependency-probe & !file-probe")
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class CaseEvidenceFileController {
@@ -51,10 +52,22 @@ public class CaseEvidenceFileController {
         this.environment = environment;
     }
 
-    @GetMapping("/{case_id}/evidence/{evidence_id}/file")
+    @GetMapping("/admin/cases/{case_id}/evidence/{evidence_id}/file")
     ResponseEntity<Void> file(HttpServletRequest request,
                               @PathVariable("case_id") String caseId,
                               @PathVariable("evidence_id") String evidenceId) {
+        return file(request, caseId, evidenceId, false);
+    }
+
+    @GetMapping("/cases/{case_id}/evidence/{evidence_id}/file")
+    ResponseEntity<Void> reporterFile(HttpServletRequest request,
+                                      @PathVariable("case_id") String caseId,
+                                      @PathVariable("evidence_id") String evidenceId) {
+        return file(request, caseId, evidenceId, true);
+    }
+
+    private ResponseEntity<Void> file(HttpServletRequest request, String caseId, String evidenceId,
+                                      boolean reporterView) {
         long caseKey = CaseIds.path(caseId);
         long evidenceKey = CaseIds.path(evidenceId);
         var context = support.context(request);
@@ -64,12 +77,8 @@ public class CaseEvidenceFileController {
         if (lifecycle == null || managerPort == null || fileReads == null) {
             throw CaseHttpSupport.unavailable();
         }
-        long actor = actor(context);
-        requireClaim(lifecycle, managerPort, context, caseKey, actor);
-        Long fileId = requireEvidence(lifecycle, caseKey, evidenceKey, null).fileId();
-        if (fileId == null) {
-            throw notVisible();
-        }
+        long fileId = requireCurrentAccess(lifecycle, managerPort, context, caseKey, evidenceKey,
+                null, reporterView);
         var target = new UploadRegistration.Target("case", caseKey);
         var settings = settings();
         try {
@@ -77,7 +86,7 @@ public class CaseEvidenceFileController {
                     settings.accessKeyId(), settings.accessKeySecret(), client -> fileReads.prepare(target, fileId,
                             new OssFileObjects(client, settings.bucket(), settings.prefix()),
                             () -> requireCurrentAccess(lifecycle, managerPort, context, caseKey, evidenceKey,
-                                    fileId)));
+                                    fileId, reporterView)));
             return ResponseEntity.status(HttpStatus.FOUND).location(authorized.url())
                     .cacheControl(CacheControl.noStore())
                     .header(REFERRER_POLICY, "no-referrer")
@@ -95,11 +104,21 @@ public class CaseEvidenceFileController {
     }
 
     /** Runs inside {@link FileRead#prepare} before the active reference is read. */
-    private static void requireCurrentAccess(CaseLifecycleStore store, CasePorts.Managers managers,
-                                             ExecutionContext context, long caseId, long evidenceId, long fileId) {
+    private static long requireCurrentAccess(CaseLifecycleStore store, CasePorts.Managers managers,
+                                             ExecutionContext context, long caseId, long evidenceId, Long fileId,
+                                             boolean reporterView) {
         long actor = actor(context);
-        requireClaim(store, managers, context, caseId, actor);
-        requireEvidence(store, caseId, evidenceId, fileId);
+        if (reporterView) {
+            store.find(caseId).filter(facts -> CaseVocabulary.REPORT.equals(facts.caseType()) && facts.reportedBy(actor))
+                    .orElseThrow(CaseEvidenceFileController::notVisible);
+        } else {
+            requireClaim(store, managers, context, caseId, actor);
+        }
+        var evidence = requireEvidence(store, caseId, evidenceId, fileId);
+        if (reporterView && !evidence.submittedAttachmentBy(actor)) {
+            throw notVisible();
+        }
+        return evidence.fileId();
     }
 
     private static CaseRecords.Facts requireClaim(CaseLifecycleStore store, CasePorts.Managers managers,

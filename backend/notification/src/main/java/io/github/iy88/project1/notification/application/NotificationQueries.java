@@ -27,33 +27,52 @@ public class NotificationQueries {
     }
 
     public NotificationPage list(ExecutionContext context, NotificationQuery query) {
+        return list(context, query, false);
+    }
+
+    public NotificationPage list(ExecutionContext context, NotificationQuery query, boolean management) {
         long accountId = recipientOf(context);
         List<NotificationStore.Stored> rows = store.page(accountId, query.read(), query.eventType(), query.page(),
-                query.pageSize());
-        long total = store.count(accountId, query.read(), query.eventType());
-        long unread = store.unreadCount(accountId);
+                query.pageSize(), management);
+        long total = store.count(accountId, query.read(), query.eventType(), management);
+        long unread = store.unreadCount(accountId, management);
         return new NotificationPage(rows.stream().map(row -> project(context, row, false)).toList(), query.page(),
                 query.pageSize(), total, unread);
     }
 
     public NotificationView get(ExecutionContext context, long notificationId) {
-        long accountId = recipientOf(context);
-        var row = store.findForRecipient(notificationId, accountId)
+        return get(context, notificationId, false);
+    }
+
+    public NotificationView get(ExecutionContext context, long notificationId, boolean management) {
+        return project(context, requireVisible(context, notificationId, management), true);
+    }
+
+    public void requireAudience(ExecutionContext context, long notificationId, boolean management) {
+        requireVisible(context, notificationId, management);
+    }
+
+    private NotificationStore.Stored requireVisible(ExecutionContext context, long notificationId,
+                                                      boolean management) {
+        return store.findForRecipient(notificationId, recipientOf(context))
+                .filter(row -> NotificationStore.inAudience(row.eventType(), management))
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "通知不存在"));
-        return project(context, row, true);
     }
 
     /** Recipient-scoped transport metadata; the source module is not consulted. */
     public Optional<NotificationItem> findRecipientItem(ExecutionContext context, long notificationId) {
         long accountId = recipientOf(context);
-        return store.findForRecipient(notificationId, accountId).map(NotificationStore.Stored::item);
+        return store.findForRecipient(notificationId, accountId)
+                .filter(row -> NotificationStore.inAudience(row.eventType(), false))
+                .map(NotificationStore.Stored::item);
     }
 
     private NotificationView project(ExecutionContext context, NotificationStore.Stored row, boolean includeBody) {
         var projected = sources.flatMap(port -> port.project(context, facts(row, includeBody)));
         return projected
                 .map(view -> new NotificationView(row.notificationId(), row.eventType(), row.occurredAt(),
-                        row.readAt(), view.summary(), view.source(), view.subject(), view.body(), view.commentId()))
+                        row.readAt(), view.summary(), view.source(), view.subject(), view.body(), view.commentId(),
+                        view.caseMessageId(), view.anchor()))
                 .orElseGet(() -> new NotificationView(row.notificationId(), row.eventType(), row.occurredAt(),
                         row.readAt(), HIDDEN_SOURCE_SUMMARY, null, null, null));
     }

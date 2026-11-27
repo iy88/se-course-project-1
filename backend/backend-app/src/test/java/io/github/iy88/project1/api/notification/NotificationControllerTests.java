@@ -62,13 +62,13 @@ class NotificationControllerTests {
         @Primary
         NotificationQueries stubNotificationQueries() {
             var queries = mock(NotificationQueries.class);
-            when(queries.list(any(), any())).thenReturn(new NotificationPage(
+            when(queries.list(any(), any(), eq(false))).thenReturn(new NotificationPage(
                     List.of(new NotificationView(11L, "product_audit.passed", OCCURRED, null,
                             "商品审核通过", new ResourceRef("product", 42L), "高等数学", "可以查看商品状态。")),
                     2, 20, 21, 3));
-            when(queries.get(any(), eq(11L))).thenReturn(new NotificationView(11L, "product_audit.passed",
+            when(queries.get(any(), eq(11L), eq(false))).thenReturn(new NotificationView(11L, "product_audit.passed",
                     OCCURRED, READ_AT, "商品审核通过", new ResourceRef("product", 42L), "高等数学", "可以查看商品状态。"));
-            when(queries.get(any(), eq(99L)))
+            when(queries.get(any(), eq(99L), eq(false)))
                     .thenThrow(new BusinessError("RESOURCE_NOT_VISIBLE", 404, "通知不存在"));
             return queries;
         }

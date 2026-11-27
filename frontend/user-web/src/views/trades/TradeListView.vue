@@ -26,8 +26,8 @@ const status = ref<TradeStatus | "">("");
 
 const roles: { value: "all" | "buyer" | "seller"; label: string }[] = [
   { value: "all", label: "全部" },
-  { value: "buyer", label: "我买到的" },
-  { value: "seller", label: "我卖出的" },
+  { value: "buyer", label: "作为买方" },
+  { value: "seller", label: "作为卖方" },
 ];
 
 const statusOptions: { value: TradeStatus | ""; label: string }[] = [

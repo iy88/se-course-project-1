@@ -69,6 +69,13 @@ const canComment = computed(() => {
   return !isOwner.value && (state === "public" || state === "in_trade");
 });
 const ownerGuidance = computed(() => {
+  const restrictions = product.data.value?.display_restrictions ?? [];
+  if (restrictions.some((restriction) => restriction.source_type === "account_ban")) {
+    return "账户受限期间，商品暂停公开展示。";
+  }
+  if (restrictions.length) {
+    return "商品因管理处置暂停公开展示。";
+  }
   switch (product.data.value?.lifecycle_state) {
     case "pending_review":
       return "当前为仅你可见的预览，审核结论以最新保存内容为准。";
@@ -362,7 +369,11 @@ async function confirmOffShelf(): Promise<void> {
               <RouterLink
                 :to="{
                   name: 'report',
-                  query: { target_type: 'account', target_id: product.data.value.seller.id },
+                  query: {
+                    target_type: 'account',
+                    target_id: product.data.value.seller.id,
+                    source_product_id: product.data.value.id,
+                  },
                 }"
                 class="btn btn--small btn--ghost"
               >

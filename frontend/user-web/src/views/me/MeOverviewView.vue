@@ -119,8 +119,8 @@ function requestSignOut(): void {
             <span class="overview__value">{{ overview.data.value.trades.total }}</span>
             <span class="overview__label">交易</span>
             <span class="muted overview__detail">
-              买入 {{ overview.data.value.trades.buying }} · 卖出
-              {{ overview.data.value.trades.selling }}
+              已完成 {{ overview.data.value.trades.by_state.completed ?? 0 }} · 已关闭
+              {{ overview.data.value.trades.by_state.closed ?? 0 }}
             </span>
           </RouterLink>
         </li>
