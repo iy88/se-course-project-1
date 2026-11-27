@@ -1,0 +1,21 @@
+# 自动化补充断言 2026-11-27T08:19:19.163Z（目标 build main@5bbe4f0e，库 project1_acceptance）
+PASS | B05 | 重复收藏返回首次时间 | 2026-11-27T08:16:36.835484Z == 2026-11-27T08:16:36.835484Z
+PASS | B05 | 同一账户与商品只有一条收藏记录 | rows=1
+PASS | B05 | 取消后重新收藏仍一条且商品不变 | product_hash_equal=true
+PASS | B01 | 商品可挂多个分类（前置） | status=200
+PASS | B01 | 同时选择两个分类只返回全部命中的商品 | total=1
+PASS | B01 | 只命中一个分类时不返回 | total=0
+PASS | B01 | 数据库分类关联数量正确 | links=2
+PASS | B08 | 非卖方回复被拒绝 | status=403 code=COMMENT_REPLY_NOT_ALLOWED
+PASS | B08 | 作者删除后记录保留、不再公开 | true|8
+PASS | B10 | 发送后本人该分支未读为 0 | send=201 unread=0
+PASS | B10 | 接收方同一分支有未读 | unread=1
+PASS | B10 | 提交已读进度成功 | status=200 seq=10
+PASS | B10 | 查看后该分支未读归零 | unread=0
+PASS | B13 | 重复名称创建返回 409 | status=409 code=CATEGORY_NAME_CONFLICT
+PASS | B13 | 冲突后分类身份与归属不变 | equal=true
+PASS | B14 | 重复移除同一别名均幂等且保留历史 | first=204 second=204 same=true
+PASS | B18 | 管理端曾关联计数与数据库一致 | list=1 db=1
+PASS | B17 | 交易中商品可纠类且版本递增 | status=200 version 1->2
+PASS | B17 | 交易状态、约定与历史快照不变 | state=disputed|5|2|null trade_same=true snapshot_same=true
+# SUMMARY total=19 pass=19 fail=0

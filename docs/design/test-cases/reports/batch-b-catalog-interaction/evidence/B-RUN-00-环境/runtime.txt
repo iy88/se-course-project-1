@@ -14,5 +14,5 @@ $ flyway schema (project1_acceptance)
 25 migrations applied
 
 # OSS 隔离
-OSS_BUCKET=campus-market-v2-jwy (private)
-OSS_PREFIX=project1/acceptance/jwy
+OSS_BUCKET=<dev-bucket> (private)
+OSS_PREFIX=project1/<acceptance-prefix>
