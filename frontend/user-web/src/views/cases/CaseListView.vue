@@ -84,7 +84,6 @@ function open(item: MyCaseItem): void {
     >
       <template #actions>
         <RouterLink :to="{ name: 'case-results' }" class="btn btn--ghost">公开结果</RouterLink>
-        <RouterLink to="/report" class="btn btn--primary">提交举报</RouterLink>
       </template>
     </PageHeader>
 
@@ -131,14 +130,10 @@ function open(item: MyCaseItem): void {
       :title="scope === 'mine' ? '还没有提交过举报' : '没有收到处置的事项'"
       :description="
         scope === 'mine'
-          ? '发现违规商品、评论或消息时可以提交举报。'
+          ? '请从商品、评论、评价或消息旁的举报入口发起。'
           : '发生实际处置后，相关事项会出现在这里。'
       "
-    >
-      <RouterLink v-if="scope === 'mine'" to="/report" class="btn btn--primary"
-        >提交举报</RouterLink
-      >
-    </EmptyState>
+    />
     <template v-else>
       <ul class="rows">
         <li v-for="item in list.items.value" :key="item.case_id">

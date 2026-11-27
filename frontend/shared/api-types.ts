@@ -57,6 +57,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/cases/{case_id}/evidence/{evidence_id}/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 打开举报人本人提交的事项附件 */
+    get: operations["openOwnReportEvidenceFile"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/admin/product-reviews/{audit_id}": {
     parameters: {
       query?: never;
@@ -1576,6 +1593,8 @@ export interface components {
       /** @enum {string} */
       target_type: "product" | "comment" | "message" | "evaluation" | "account" | "trade";
       target_id: string;
+      /** @description Source product for a seller account report, verified against the seller and reporter's product visibility. */
+      source_product_id?: string;
       /** @enum {string} */
       conversation_kind?: "chat" | "trade" | "case";
       conversation_id?: string;
@@ -1657,6 +1676,54 @@ export interface components {
         | "close"
         | "publish_result"
       )[];
+      /** @description Accounts associated with the case, visible to the assigned manager. */
+      related_accounts?: {
+        account_id: string;
+        display_name: string | null;
+        reporter: boolean;
+        /** @description Whether the account can be selected for inquiry or account enforcement. */
+        eligible: boolean;
+      }[];
+      /** @description Reported object and recorded product snapshot for the assigned manager. */
+      reported_object?: {
+        /** @enum {string} */
+        target_type: "account" | "product" | "comment" | "evaluation" | "message" | "trade";
+        target_id: string;
+        product?: {
+          id: string;
+          title: string;
+          description: string;
+        };
+      };
+      /** @description Report material visible to its reporter. */
+      report_materials?: {
+        original_note?: string | null;
+        product?: {
+          id: string;
+          title: string;
+          description?: string | null;
+        };
+        supplements: {
+          action_id: string;
+          note: string;
+          /** Format: date-time */
+          occurred_at: string;
+        }[];
+        attachments: {
+          evidence_id: string;
+          content_type?: string;
+          /** Format: date-time */
+          submitted_at: string;
+        }[];
+      };
+      decision_basis_actions?: {
+        action_id: string;
+        /** @enum {string} */
+        action_kind: "inquire" | "statement" | "supplement";
+        /** Format: date-time */
+        occurred_at: string;
+        note: string | null;
+      }[];
       /** @description Exact reported message identity without body or sender, only for the assigned manager. */
       reported_message?: components["schemas"]["CaseEvidenceReferenceRequest"];
       /** @description Exact reported comment or evaluation projected only for the assigned manager. */
@@ -1666,6 +1733,8 @@ export interface components {
         target_id: string;
         author_account_id: string;
         parent_id?: string;
+        /** @description Product ID for a comment or trade ID for an evaluation. */
+        context_id?: string;
         body: string;
         state: string;
         /** Format: date-time */
@@ -1699,6 +1768,10 @@ export interface components {
         evidence_id: string;
         /** @enum {string} */
         evidence_kind?: "submitter_attachment" | "platform_record";
+        /** Format: date-time */
+        submitted_at?: string;
+        content_type?: string;
+        decision_basis?: boolean;
         file_id?: string | null;
       }[];
       actions?: components["schemas"]["CaseActionView"][];
@@ -1783,7 +1856,10 @@ export interface components {
       appeal_action_id?: string | null;
       /** @enum {string|null} */
       resolution?: "uphold" | "revoke" | "adjust" | null;
+      /** @description Legacy appeal basis text. Supply either this field or basis_refs. */
       basis_ref?: string | null;
+      /** @description Selected case materials or the current appeal. Only valid for a manager's appeal resolution. */
+      basis_refs?: string[];
       /** @description Required for revoke or adjust: the manager-selected original execution from pending_appeals[].original_enforcements. Omit for statement, appeal and uphold. */
       original_enforcement_id?: string | null;
       /** @description Only valid for adjust. Requires a concrete action on the same target as the selected original execution; omit for revoke, uphold, statement and appeal. */
@@ -1812,7 +1888,7 @@ export interface components {
       /** @enum {string} */
       decision_kind: "no_action" | "not_actionable" | "violation";
       reason: string;
-      basis_refs: string[];
+      basis_refs?: string[];
       enforcements?: {
         /** @enum {string} */
         action:
@@ -1951,6 +2027,57 @@ export interface operations {
     };
   };
   openCaseEvidenceFile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+        evidence_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized short-lived evidence file location */
+      302: {
+        headers: {
+          Location?: string;
+          "Cache-Control"?: "no-store";
+          "Referrer-Policy"?: "no-referrer";
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description AUTHENTICATION_REQUIRED */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description RESOURCE_NOT_VISIBLE */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+      /** @description STORAGE_UNAVAILABLE / STORAGE_CONFIGURATION_INVALID / DEPENDENCY_UNAVAILABLE */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorEnvelope"];
+        };
+      };
+    };
+  };
+  openOwnReportEvidenceFile: {
     parameters: {
       query?: never;
       header?: never;
@@ -4407,6 +4534,8 @@ export interface operations {
     parameters: {
       query?: {
         trade_id?: string;
+        /** @description 当前认领事项的 ID，与 trade_id 互斥 */
+        case_id?: string;
         page?: number;
         page_size?: number;
       };

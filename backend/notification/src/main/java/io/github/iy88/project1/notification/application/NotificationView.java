@@ -12,9 +12,16 @@ import java.time.Instant;
  * event hint and no jump target.
  */
 public record NotificationView(long notificationId, String eventType, Instant occurredAt, Instant readAt,
-                               String summary, ResourceRef source, String subject, String body, Long commentId) {
+                               String summary, ResourceRef source, String subject, String body, Long commentId,
+                               Long caseMessageId, String anchor) {
+    public NotificationView(long notificationId, String eventType, Instant occurredAt, Instant readAt,
+                            String summary, ResourceRef source, String subject, String body, Long commentId,
+                            Long caseMessageId) {
+        this(notificationId, eventType, occurredAt, readAt, summary, source, subject, body, commentId,
+                caseMessageId, null);
+    }
     public NotificationView(long notificationId, String eventType, Instant occurredAt, Instant readAt,
                             String summary, ResourceRef source, String subject, String body) {
-        this(notificationId, eventType, occurredAt, readAt, summary, source, subject, body, null);
+        this(notificationId, eventType, occurredAt, readAt, summary, source, subject, body, null, null);
     }
 }

@@ -25,6 +25,6 @@ public class AccountNotificationActorResolver implements NotificationActorResolv
     public Actor resolve(HttpServletRequest request) {
         var identity = current.require(request);
         return new Actor(identity.account().id(), identity.guard().id(),
-                (long) identity.guard().credentialVersion());
+                (long) identity.guard().credentialVersion(), "manager".equals(identity.account().role()));
     }
 }

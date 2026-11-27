@@ -1,6 +1,7 @@
 package io.github.iy88.project1.api.account;
 
 import io.github.iy88.project1.account.application.AccountService;
+import io.github.iy88.project1.account.application.AccountQueries;
 import io.github.iy88.project1.account.application.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -23,14 +24,16 @@ class AccountSessionController {
     private final SessionService sessions;
     private final io.github.iy88.project1.account.application.AccountAvatarService avatars;
     private final CurrentAccount current;
+    private final AccountQueries queries;
 
     AccountSessionController(AccountService accounts, SessionService sessions,
                              io.github.iy88.project1.account.application.AccountAvatarService avatars,
-                             CurrentAccount current) {
+                             CurrentAccount current, AccountQueries queries) {
         this.accounts = accounts;
         this.sessions = sessions;
         this.avatars = avatars;
         this.current = current;
+        this.queries = queries;
     }
 
     @PostMapping
@@ -42,7 +45,8 @@ class AccountSessionController {
                 AccountCookies.cookie(AccountCookies.CSRF, issued.csrfToken(), issued.absoluteExpiresAt()).toString());
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(AccountViews.identity(issued, avatars.currentUrl(issued.account().id())));
+                .body(AccountViews.identity(issued, avatars.currentUrl(issued.account().id()),
+                        queries.writeRestricted(issued.account().id())));
     }
 
     @GetMapping
@@ -51,7 +55,8 @@ class AccountSessionController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(AccountViews.identity(identity.account(), identity.guard(),
-                        avatars.currentUrl(identity.account().id())));
+                        avatars.currentUrl(identity.account().id()),
+                        queries.writeRestricted(identity.account().id())));
     }
 
     @DeleteMapping

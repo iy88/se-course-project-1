@@ -45,6 +45,7 @@ export interface AccountProfile {
   display_name: string;
   email: string;
   roles: AccountRole[];
+  write_restricted?: boolean;
   avatar_url?: string | null;
 }
 
@@ -746,6 +747,7 @@ export interface NotificationSummary {
 export interface NotificationDetail extends NotificationSummary {
   body?: string;
   comment_id?: string;
+  case_message_id?: string;
 }
 
 export type NotificationReadFilter = "all" | "unread" | "read";
@@ -777,6 +779,7 @@ export type ReportTargetType = "product" | "comment" | "message" | "evaluation" 
 
 export interface ReportTarget {
   target_type: ReportTargetType;
+  source_product_id?: string;
   target_id: string;
   conversation_kind?: ConversationKind;
   conversation_id?: string;
@@ -882,6 +885,13 @@ export interface PendingInquiry {
 }
 
 export interface CaseDetail {
+  reported_reason?: string | null;
+  report_materials?: {
+    original_note?: string | null;
+    product?: { id: string; title: string; description?: string | null };
+    supplements: { action_id: string; note: string; occurred_at: string }[];
+    attachments: { evidence_id: string; submitted_at: string; content_type?: string }[];
+  };
   case_id: string;
   case_type: CaseKind;
   case_status: CaseStatus;

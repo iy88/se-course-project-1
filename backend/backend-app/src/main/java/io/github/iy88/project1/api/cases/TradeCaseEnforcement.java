@@ -21,7 +21,8 @@ import java.util.TreeSet;
  * actions remain with their own modules.
  */
 final class TradeCaseEnforcement implements CasePorts.Enforcement {
-    private static final Set<String> SUPPORTED = Set.of("freeze_trade", "adjust_trade_status");
+    private static final Set<String> SUPPORTED = Set.of("freeze_trade", "lift_trade_freeze",
+            "adjust_trade_status");
 
     private final TradePorts.CaseEnforcement trades;
     private final TradePorts.Participation participation;
@@ -66,6 +67,8 @@ final class TradeCaseEnforcement implements CasePorts.Enforcement {
             String publishAction = item.action();
             var outcome = switch (item.action()) {
                 case "freeze_trade" -> trades.freezeLocked(transaction, caseId, item.targetId(), basisRef, reason);
+                case "lift_trade_freeze" -> trades.liftCaseFreezeLocked(transaction, caseId, item.targetId(),
+                        basisRef, reason);
                 case "adjust_trade_status" -> {
                     // API-CASE-007 keeps one adjust action; T2-29 is its in_progress target for an
                     // abnormal trade. It reuses the locked restore path instead of duplicating it.
@@ -79,11 +82,13 @@ final class TradeCaseEnforcement implements CasePorts.Enforcement {
                 default -> throw unavailable();
             };
             trades.publishLocked(transaction, caseId, item.targetId(), publishAction, outcome, reason);
+            List<String> remaining = "lift_trade_freeze".equals(item.action()) && outcome.frozenAfter()
+                    ? List.of("trade_freeze") : List.of();
             outcomes.add(new CaseRecords.EnforcementOutcome(item.enforcementId(), item.action(), "trade",
                     item.targetId(), "trade_transition", outcome.transitionId(), "applied",
                     state(outcome.previousStatus(), outcome.previousPhase(), outcome.frozenBefore()),
                     state(outcome.currentStatus(), outcome.currentPhase(), outcome.frozenAfter()),
-                    parties(item.targetId()), occurredAt));
+                    parties(item.targetId()), occurredAt, remaining));
         }
         return outcomes;
     }

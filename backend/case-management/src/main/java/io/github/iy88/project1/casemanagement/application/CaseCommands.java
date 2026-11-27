@@ -1,5 +1,6 @@
 package io.github.iy88.project1.casemanagement.application;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import io.github.iy88.project1.core.BusinessError;
 import java.util.List;
@@ -9,10 +10,18 @@ public final class CaseCommands {
     private CaseCommands() {
     }
 
-    public record Target(String targetType, long targetId, String conversationKind, Long conversationId) {
+    public record Target(String targetType, long targetId, String conversationKind, Long conversationId,
+                         Long sourceProductId) {
+        public Target(String targetType, long targetId, String conversationKind, Long conversationId) {
+            this(targetType, targetId, conversationKind, conversationId, null);
+        }
+
         public Target {
             if (targetType == null || targetType.isBlank()) {
                 throw new BusinessError("INPUT_INVALID", 422, "target_type 不能为空");
+            }
+            if (sourceProductId != null && (!"account".equals(targetType) || sourceProductId <= 0)) {
+                throw new BusinessError("TARGET_INVALID", 422, "来源商品无效");
             }
             if (targetId <= 0) {
                 throw new BusinessError("TARGET_INVALID", 422, "目标对象无效");
@@ -57,10 +66,19 @@ public final class CaseCommands {
      */
     public record Message(Long conversationId, String messageKind, String body, Long inquiryActionId,
                           Long appealActionId, String resolution, String basisRef,
-                          String originalEnforcementId, List<Enforcement> replacementEnforcements) {
+                          String originalEnforcementId, List<Enforcement> replacementEnforcements,
+                          @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> basisRefs) {
         public Message {
+            basisRefs = basisRefs == null ? List.of() : List.copyOf(basisRefs);
             replacementEnforcements = replacementEnforcements == null ? List.of()
                     : List.copyOf(replacementEnforcements);
+        }
+
+        public Message(Long conversationId, String messageKind, String body, Long inquiryActionId,
+                       Long appealActionId, String resolution, String basisRef,
+                       String originalEnforcementId, List<Enforcement> replacementEnforcements) {
+            this(conversationId, messageKind, body, inquiryActionId, appealActionId, resolution, basisRef,
+                    originalEnforcementId, replacementEnforcements, List.of());
         }
 
         /** Compatibility constructor for callers that do not select an original execution. */

@@ -29,6 +29,7 @@ import io.github.iy88.project1.notification.application.NotificationApplication;
 import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.product.application.ProductDisplayRestrictions;
 import io.github.iy88.project1.product.application.ProductInteractions;
+import io.github.iy88.project1.product.application.ProductService;
 import io.github.iy88.project1.product.persistence.ProductRepository;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.persistence.FileReferences;
@@ -68,9 +69,9 @@ public class CaseHttpConfiguration {
     CasePorts.Targets caseTargets(ProductRepository products, AccountRepository accounts,
                                   ConversationReader reader, ConversationStore conversations,
                                   TradePorts.Participation trades, ProductInteractions comments,
-                                  TradeReviewReadModel reviews, TradeReviewModeration moderation) {
+                                  TradeReviewReadModel reviews, TradeReviewModeration moderation, ProductService productService) {
         return new CaseTargetAdapter(products, accounts, reader, conversations, trades, comments, reviews,
-                moderation);
+                moderation, productService);
     }
 
     @Bean
@@ -136,8 +137,9 @@ public class CaseHttpConfiguration {
     @Bean
     CaseQueries caseQueries(org.springframework.jdbc.core.simple.JdbcClient jdbc, CaseLifecycleStore store,
                             CasePorts.Threads threads, CasePorts.Managers managers, CasePorts.Targets targets,
-                            CaseSettings settings, JsonMapper json, ObjectProvider<Clock> clocks) {
-        return new CaseQueries(jdbc, store, threads, managers, targets, settings, json,
+                            CasePorts.EvidenceFiles files, CaseSettings settings, JsonMapper json,
+                            ObjectProvider<Clock> clocks) {
+        return new CaseQueries(jdbc, store, threads, managers, targets, files, settings, json,
                 clocks.getIfAvailable(Clock::systemUTC));
     }
 
@@ -291,6 +293,11 @@ public class CaseHttpConfiguration {
 
     private record CaseEvidenceAdapter(FileReferences files) implements CasePorts.EvidenceFiles {
         @Override
+        public Optional<String> contentType(long caseId, long fileId) {
+            return files.referencedContentType(new UploadRegistration.Target("case", caseId), fileId);
+        }
+
+        @Override
         public void lockFile(long fileId) {
             try {
                 files.lockFiles(List.of(fileId));
@@ -329,7 +336,7 @@ public class CaseHttpConfiguration {
                                      ConversationReader reader, ConversationStore conversations,
                                      TradePorts.Participation trades, ProductInteractions comments,
                                      TradeReviewReadModel reviews,
-                                     TradeReviewModeration moderation) implements CasePorts.Targets {
+                                     TradeReviewModeration moderation, ProductService productService) implements CasePorts.Targets {
         @Override
         public void requireReportable(CaseCommands.Target target, long reporterAccountId) {
             switch (target.targetType()) {
@@ -342,7 +349,9 @@ public class CaseHttpConfiguration {
                 }
                 case "account" -> {
                     accounts.findById(target.targetId()).orElseThrow(CaseTargetAdapter::targetInvalid);
-                    if (target.targetId() == reporterAccountId) {
+                    if (target.targetId() == reporterAccountId || (target.sourceProductId() != null
+                            && (!productService.ownsProduct(target.targetId(), target.sourceProductId())
+                            || productService.notificationTitle(reporterAccountId, target.sourceProductId()).isEmpty()))) {
                         throw targetInvalid();
                     }
                 }
@@ -363,6 +372,15 @@ public class CaseHttpConfiguration {
         }
 
         @Override
+        public void captureReportSnapshot(long caseId, CaseCommands.Target target) {
+            if ("product".equals(target.targetType())) {
+                productService.captureReportSnapshot(caseId, target.targetId());
+            } else if (target.sourceProductId() != null) {
+                productService.captureReportSnapshot(caseId, target.sourceProductId());
+            }
+        }
+
+        @Override
         public Optional<CasePorts.Targets.TargetSnapshot> contentTarget(CaseRecords.Facts facts) {
             if (facts.targetId() == null) {
                 return Optional.empty();
@@ -370,14 +388,26 @@ public class CaseHttpConfiguration {
             return switch (facts.targetType() == null ? "" : facts.targetType()) {
                 case "comment" -> comments.commentSnapshot(facts.targetId())
                         .map(fact -> new CasePorts.Targets.TargetSnapshot("comment", fact.commentId(),
-                                fact.authorAccountId(), fact.parentCommentId(), fact.body(), fact.state(),
+                                fact.authorAccountId(), fact.parentCommentId(), fact.productId(), fact.body(), fact.state(),
                                 fact.createdAt(), fact.removedAt() != null));
                 case "evaluation" -> moderation.snapshot(facts.targetId())
                         .map(fact -> new CasePorts.Targets.TargetSnapshot("evaluation", fact.reviewId(),
-                                fact.authorAccountId(), null, fact.body(), fact.state(),
+                                fact.authorAccountId(), null, fact.tradeId(), fact.body(), fact.state(),
                                 fact.createdAt(), fact.removedAt() != null));
                 default -> Optional.empty();
             };
+        }
+
+        @Override
+        public java.util.Map<Long, String> accountNames(Set<Long> ids) {
+            return accounts.findByIdIn(ids).stream().collect(java.util.stream.Collectors.toMap(
+                    account -> account.id(), account -> account.displayName()));
+        }
+
+        @Override
+        public Optional<ReportProduct> reportProduct(long caseId) {
+            return productService.reportSnapshot(caseId)
+                    .map(item -> new ReportProduct(item.id(), item.title(), item.description()));
         }
 
         @Override

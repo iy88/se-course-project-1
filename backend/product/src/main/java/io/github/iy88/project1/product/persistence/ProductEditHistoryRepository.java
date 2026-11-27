@@ -24,5 +24,8 @@ public interface ProductEditHistoryRepository extends Repository<ProductEditHist
     Page<ProductEditHistory> findBuyerHistory(@Param("productId") long productId,
                                               @Param("editedAt") Instant editedAt, Pageable pageable);
 
+    Page<ProductEditHistory> findByProductIdAndBasisTypeAndBasisIdOrderByEditedAtDescIdDesc(
+            long productId, String basisType, long basisId, Pageable pageable);
+
     long countByProductId(long productId);
 }

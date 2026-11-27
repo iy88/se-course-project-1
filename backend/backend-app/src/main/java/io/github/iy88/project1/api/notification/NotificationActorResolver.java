@@ -14,7 +14,11 @@ import java.util.UUID;
 public interface NotificationActorResolver {
     Actor resolve(HttpServletRequest request);
 
-    record Actor(long accountId, UUID sessionId, Long credentialVersion) {
+    record Actor(long accountId, UUID sessionId, Long credentialVersion, boolean manager) {
+        public Actor(long accountId, UUID sessionId, Long credentialVersion) {
+            this(accountId, sessionId, credentialVersion, false);
+        }
+
         public Actor {
             if (accountId <= 0 || sessionId == null || credentialVersion == null || credentialVersion < 0) {
                 throw new IllegalArgumentException("Invalid notification actor");

@@ -1,5 +1,7 @@
 package io.github.iy88.project1.casemanagement.persistence;
 
+import io.github.iy88.project1.casemanagement.application.ManagementCaseChange;
+import org.springframework.context.ApplicationEventPublisher;
 import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import io.github.iy88.project1.casemanagement.application.CaseCommands;
 import io.github.iy88.project1.casemanagement.application.CaseRecords;
@@ -56,9 +58,11 @@ public class CaseLifecycleStore {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final JdbcClient jdbc;
+    private final ApplicationEventPublisher events;
 
-    public CaseLifecycleStore(JdbcClient jdbc) {
+    public CaseLifecycleStore(JdbcClient jdbc, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
+        this.events = events;
     }
 
     public static LockPlan.Key lockKey(long caseId) {
@@ -110,7 +114,7 @@ public class CaseLifecycleStore {
                                 reporter_account_id, reported_reason, case_status)
                             values ('report', ?, ?, 'message', ?, ?, ?, ?, ?, 'pending')
                             on conflict (reporter_account_id, target_conversation_kind, target_id)
-                                where archived_at is null and case_type = 'report' and target_type = 'message'
+                                where archived_at is null and case_status in ('pending', 'claimed') and case_type = 'report' and target_type = 'message'
                             do nothing
                             returning id
                             """)
@@ -124,7 +128,7 @@ public class CaseLifecycleStore {
                             target_id, reporter_account_id, reported_reason, case_status)
                         values ('report', ?, ?, ?, ?, ?, ?, 'pending')
                         on conflict (reporter_account_id, target_type, target_id)
-                            where archived_at is null and case_type = 'report' and target_type <> 'message'
+                            where archived_at is null and case_status in ('pending', 'claimed') and case_type = 'report' and target_type <> 'message'
                         do nothing
                         returning id
                         """)
@@ -173,20 +177,6 @@ public class CaseLifecycleStore {
                 + " and reporter_account_id = ? and target_type = ? and target_id = ?"
                 + ("message".equals(target.targetType())
                 ? " and target_conversation_kind = ?" : "");
-        var spec = jdbc.sql(sql).param(reporterAccountId).param(target.targetType()).param(target.targetId());
-        if ("message".equals(target.targetType())) {
-            spec = spec.param(target.conversationKind());
-        }
-        return spec.query(this::facts).optional();
-    }
-
-    /** A closed report by the same reporter blocks a new submission for the same object. */
-    public Optional<CaseRecords.Facts> findClosedReport(long reporterAccountId, CaseCommands.Target target) {
-        String sql = FACTS + " where case_type = 'report' and archived_at is not null"
-                + " and reporter_account_id = ? and target_type = ? and target_id = ?"
-                + ("message".equals(target.targetType())
-                ? " and target_conversation_kind = ?" : "")
-                + " order by id desc limit 1";
         var spec = jdbc.sql(sql).param(reporterAccountId).param(target.targetType()).param(target.targetId());
         if ("message".equals(target.targetType())) {
             spec = spec.param(target.conversationKind());
@@ -284,6 +274,10 @@ public class CaseLifecycleStore {
     }
 
     public long addAction(CaseRecords.Action action) {
+        return addAction(action, null);
+    }
+
+    public long addAction(CaseRecords.Action action, Long evidenceAnchorId) {
         var values = new LinkedHashMap<String, Object>();
         values.put("case_id", action.caseId());
         values.put("action_kind", action.actionKind());
@@ -313,7 +307,14 @@ public class CaseLifecycleStore {
         if (action.basisRef() != null) {
             values.put("basis_ref", action.basisRef());
         }
-        return insert("moderation_case_action", values, "id", "basis_ref");
+        long id = insert("moderation_case_action", values, "id", "basis_ref");
+        var change = CaseVocabulary.ACTION_SUBMIT.equals(action.actionKind())
+                ? ManagementCaseChange.opened(action.caseId(), action.occurredAt())
+                : new ManagementCaseChange(action.caseId(), action.actionKind(), "action:" + id,
+                        action.occurredAt(), action.messageId(), evidenceAnchorId,
+                        CaseVocabulary.ACTOR_MANAGER.equals(action.actorKind()) ? action.actorAccountId() : null);
+        events.publishEvent(change);
+        return id;
     }
 
     public List<CaseRecords.Action> actions(long caseId) {
@@ -327,8 +328,14 @@ public class CaseLifecycleStore {
 
     public Optional<CaseRecords.Action> appealOf(long caseId, long accountId) {
         return jdbc.sql(ACTIONS + " where case_id = ? and action_kind = 'appeal' and actor_account_id = ?"
-                        + " order by id limit 1")
+                        + " order by id desc limit 1")
                 .param(caseId).param(accountId).query(this::action).optional();
+    }
+
+    public boolean hasPendingAppeal(long caseId, long accountId) {
+        return appealOf(caseId, accountId)
+                .filter(appeal -> !appealResolved(caseId, appeal.actionId()))
+                .isPresent();
     }
 
     public Optional<CaseRecords.Action> latestPendingAppeal(long caseId) {
@@ -395,7 +402,9 @@ public class CaseLifecycleStore {
         values.put("required_scope", requiredScope);
         values.put("submitted_by", referencedBy);
         values.put("submitted_at", stamp(at));
-        return insert("case_evidence", values, "id");
+        long id = insert("case_evidence", values, "id");
+        events.publishEvent(new ManagementCaseChange(caseId, "evidence", "evidence:" + id, at));
+        return id;
     }
 
     public void addAppealEligibility(long caseId, long accountId, Instant deadline, String basisRef, Instant at) {

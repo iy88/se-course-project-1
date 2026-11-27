@@ -21,7 +21,7 @@ defineProps<{
             <BrandMark />
             {{ brand }}
           </p>
-          <h2 class="auth-layout__headline">{{ introTitle }}</h2>
+          <p class="auth-layout__headline">{{ introTitle }}</p>
         </header>
         <p class="auth-layout__description">{{ introDescription }}</p>
         <dl class="auth-layout__features">
