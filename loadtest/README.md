@@ -1,6 +1,6 @@
 <!--
-Version: 0.2.1
-Version-Datetime: 2026-11-27T15:32:00+08:00
+Version: 0.2.2
+Version-Datetime: 2026-11-27T16:07:00+08:00
 -->
 
 # Rust 真实接口压测
@@ -111,10 +111,10 @@ WebSocket hint 可能先于发送 POST 的 HTTP 响应到达。此时驱动保�
 报告分别给出：
 
 - `im_send`：发送 POST 的 HTTP 延迟。
-- `im_delivery`：发送 POST 开始 → 接收方 hint 实际到达；完成判定仍等待发送响应和 HTTP 回读交叉核对。
+- `im_delivery`：发送 POST 开始 → 接收方正文通过 HTTP 回读并完成校验。
 - `im_retrieval`：接收方收到 hint → GET 回读验证完成，单独延迟。
 
-验证后会追加一次已读进度 `POST /api/v1/conversations/chat/{id}/read-progress`（`displayed_seq`），并以观察项 `im_read` 单独记录；其延迟、样本量和错误仍保留在操作指标中，错误会影响总判定。未匹配的消息不会自动重试，超时即失败。
+hint 早于发送响应时，驱动在正文回读完成时冻结端到端耗时；等待发送响应的额外时间不计入该已完成样本。验证后会追加一次已读进度 `POST /api/v1/conversations/chat/{id}/read-progress`（`displayed_seq`），并以观察项 `im_read` 单独记录；其延迟、样本量和错误仍保留在操作指标中，错误会影响总判定。未匹配的消息不会自动重试，超时即失败。
 
 ## 当前 HTTP 契约
 
