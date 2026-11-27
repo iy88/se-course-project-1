@@ -1,0 +1,30 @@
+A-RUN-03 final verification
+
+Date: 2026-11-27 19:32:11 +08:00
+Working tree: test/evidence-account-product-iy88
+
+Backend:
+  Command:
+    mvn -B -f backend/pom.xml -Pintegration verify
+      -Dit.envFile=/Users/iy88/Work/SE/project1/backend/.env.dev
+  Result:
+    BUILD SUCCESS
+    Surefire: 543 tests, 0 failures, 0 errors, 0 skipped
+    Failsafe: 109 tests, 0 failures, 0 errors, 0 skipped
+
+Frontend:
+  pnpm --dir frontend test
+    admin-web: 44 tests, 0 failures
+    user-web: 168 tests, 0 failures
+  pnpm --dir frontend typecheck
+    admin-web and user-web passed
+  pnpm --dir frontend lint
+    passed
+  pnpm --dir frontend format:check
+    all 188 matched files passed
+  pnpm --dir frontend build
+    both applications passed; user-web PWA generated
+
+Document checks:
+  All evidence links in 测试报告.md and 自动化证据.md resolve to existing files.
+  git diff --check passed.

@@ -1,0 +1,81 @@
+A18 four-role scope and historical snapshot verification
+
+Environment: local PostgreSQL development database, read-only queries at
+2026-11-27 19:14:47 +08:00.
+
+Accounts:
+  #1  批次 A 测试管理员  role=manager
+  #2  A01-卖方          role=user
+  #3  A01-买方A         role=user
+  #5  A05-无关用户      role=user
+
+Product:
+  product #8  title=A-RUN03-限制-01
+              lifecycle_state=off_shelf
+              occupied_by_trade_id=NULL
+              content_version=1
+              deleted_at=NULL
+
+Moderation case #18:
+  case_type=report
+  target_type=product
+  target_id=8
+  reporter_account_id=3
+  reported_reason=#8举报
+  claimed_manager_id=1
+  claimed_at=2026-11-27 16:46:42.774969+08
+  case_status=decided
+  decision_kind=violation
+  reason_text=理由
+  decided_by=1
+  decided_at=2026-11-27 16:54:30.783625+08
+
+Product case snapshot:
+  case_id=18
+  product_id=8
+  content_version=1
+  title=A-RUN03-限制-01
+  price_cents=11600
+  captured_at=2026-11-27 16:46:28.006171+08
+
+Display restriction:
+  restriction #3
+  source_type=admin_case
+  source_ref_id=18
+  reason=理由
+  basis_ref=case:18
+  created_by=1
+  created_at=2026-11-27 16:54:30.783625+08
+  released_at=NULL
+
+Related buyer history:
+  trade #13
+    product_id=8
+    buyer_id=3
+    seller_id=2
+    status=closed
+    close_reason=product_delisted
+    requested_at=2026-11-27 16:41:38.15524+08
+    responded_at=2026-11-27 16:47:01.784656+08
+  trade_purchase_product_snapshot #13
+    content_version=1
+    title=A-RUN03-限制-01
+    price_cents=11600
+    captured_at=2026-11-27 16:41:38.15524+08
+  trade_conversation #6
+    trade_id=13
+    created_at=2026-11-27 16:41:38.156366+08
+    archived_at=2026-11-27 16:47:01.791516+08
+
+Assertions:
+  - The seller account owns product #8 and can still read its off-shelf detail.
+  - The related buyer retains trade #13, its captured product snapshot, and
+    archived conversation #6, while the current product remains restricted.
+  - The unrelated user is neither the seller nor buyer of trade #13 and has no
+    product access path through the case.
+  - The claimed manager is account #1, the report case is #18, and the product
+    case snapshot is tied to case #18.
+  - The active display restriction is explicitly based on case:18 and has not
+    been released.
+  - Public product retrieval is restricted even though the historical trade
+    records remain available to its parties.

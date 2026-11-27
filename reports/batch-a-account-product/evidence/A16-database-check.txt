@@ -1,0 +1,51 @@
+A16 completed-trade and terminal-notification verification
+
+Environment: local PostgreSQL development database, read-only queries at
+2026-11-27 19:14:47 +08:00.
+
+Completed trade:
+  trade #9
+    product_id=6
+    buyer_id=3 (A01-买方A)
+    seller_id=2 (A01-卖方)
+    status=completed
+    terminal_reason=completed
+    version=6
+    ended_at=2026-11-27 16:24:21.481375+08
+
+State history for trade #9:
+  request.create       15:35:55
+  request.accept       15:38:41  pending_acceptance -> in_progress
+  agreement.propose    16:23:28
+  agreement.accept     16:23:50
+  completion.confirm   16:24:02  buyer #3 confirms
+  completion.confirm   16:24:21  seller #2 confirms, in_progress -> completed
+  trade.completed      16:24:21  system terminal projection
+
+Conversation:
+  trade_conversation #2
+    trade_id=9
+    archived_at=2026-11-27 16:24:21.492205+08
+
+Terminal notifications:
+  #92  recipient=seller #2  trade.completion_confirmed  read
+  #93  recipient=seller #2  trade.completed             read
+  #94  recipient=buyer #3   trade.completed             unread
+
+Historical product snapshot:
+  trade #9 captured content_version=1
+  title=A-RUN03-MAIN-台灯-01
+  price_cents=11100
+
+Temporal note:
+  product #6 is currently occupied by A17 trade #61. This later in_trade state
+  does not alter the completed trade #9 record, its archived conversation, or
+  the terminal notifications produced at 16:24:21.
+
+Assertions:
+  - Both confirmations were retained and the seller's second confirmation
+    completed trade #9.
+  - Seller terminal notifications #92/#93 and buyer terminal notification #94
+    were generated at the expected transition.
+  - Conversation #2 was archived at the same terminal transition.
+  - The later A17 new trade is independent from the completed A16 transaction.

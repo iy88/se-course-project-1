@@ -1,0 +1,59 @@
+A13 relisting qualification verification
+
+Environment: local PostgreSQL development database, read-only queries at
+2026-11-27 19:14:47 +08:00.
+
+Passed-review relisting:
+  product #7  title=A-RUN03-主动下架-01
+              lifecycle_state=public
+              occupied_by_trade_id=NULL
+              content_version=1
+  product_audit #10  case_id=12
+                     status=passed
+                     decided_by_admin_id=1
+                     decided_at=2026-11-27 15:34:17.821013+08
+  No display restriction exists for product #7.
+  The seller and buyer public-search observations are retained in
+  A13-01/A13-02/A13-04.
+
+Withdrawn-review relisting rejection:
+  product #10  title=A-RUN03-未认领-01
+               lifecycle_state=off_shelf
+               occupied_by_trade_id=NULL
+               content_version=1
+  product_audit #13  case_id=15
+                     status=withdrawn
+                     withdrawn_at=2026-11-27 16:26:05.871177+08
+  Actual HTTP assertion retained in A13-05:
+    HTTP 409
+    error.code=PRODUCT_NOT_RELISTABLE
+    error.message=最新审核未通过，不能重新上架
+  The product remained off_shelf and could subsequently be edited and
+  resubmitted.
+
+Active-display-restriction relisting rejection:
+  product #8  title=A-RUN03-限制-01
+              lifecycle_state=off_shelf
+              occupied_by_trade_id=NULL
+              content_version=1
+  product_audit #11  case_id=13
+                     status=passed
+  product_display_restriction #3
+    source_type=admin_case
+    source_ref_id=18
+    basis_ref=case:18
+    created_by=1
+    created_at=2026-11-27 16:54:30.783625+08
+    released_at=NULL
+  Actual HTTP assertion retained in A13-11:
+    HTTP 409
+    error.code=DISPLAY_RESTRICTED
+    error.message=商品存在展示限制，不能上架
+  Repeated product retrieval remained off_shelf with content_version=1 and
+  buyer direct access returned HTTP 404.
+
+Assertions:
+  - Only the product whose latest review passed can return to public.
+  - A withdrawn/non-passed review blocks relisting with PRODUCT_NOT_RELISTABLE.
+  - An active case-backed display restriction blocks relisting with
+    DISPLAY_RESTRICTED, independent of the earlier passed review.

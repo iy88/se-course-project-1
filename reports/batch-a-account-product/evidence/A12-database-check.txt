@@ -1,0 +1,61 @@
+A12 review-withdrawal branches and active-request closure verification
+
+Environment: local PostgreSQL development database, read-only queries at
+2026-11-27 19:14:47 +08:00.
+
+Unclaimed review withdrawal:
+  product #10  lifecycle_state=off_shelf
+  product_audit #13
+    sequence_no=1
+    case_id=15
+    status=withdrawn
+    withdrawn_at=2026-11-27 16:26:05.871177+08
+  moderation_case #15
+    case_type=product_review
+    claimed_manager_id=NULL
+    claimed_at=NULL
+  notification #95
+    recipient_account_id=1
+    event_type=management.case_withdrawn
+    source_id=15
+
+Claimed review withdrawal conflict:
+  product #12 was pending_review when the seller attempted withdrawal.
+  moderation_case #17 was claimed by manager #1 at
+  2026-11-27 16:26:44.868735+08, before the blocked withdrawal.
+  The subsequent merchant decision occurred later, at
+  2026-11-27 17:01:48.182591+08, and rejected product #12.
+  The current review_rejected state is therefore a later A13 branch and does
+  not describe the state at the time of the A12 withdrawal conflict.
+  Actual HTTP assertion for the conflict:
+    POST /products/12/withdrawal
+    HTTP 409
+    error.code=REVIEW_ALREADY_CLAIMED
+
+Public-product off-shelf with two pending requests:
+  product #7 was off_shelf when the seller performed the A12 active delist and
+  was later relisted during A13.
+  trade #11: buyer_id=3, product_id=7, status=closed,
+             close_reason=product_delisted
+  trade #12: buyer_id=4, product_id=7, status=closed,
+             close_reason=product_delisted
+  Both state histories:
+    request.create at 16:30
+    request.close: pending_acceptance -> closed at
+      2026-11-27 16:31:44.652704+08
+    basis_ref=product:7
+  trade_conversation #4: trade_id=11, archived_at=16:31:44.654837+08
+  trade_conversation #5: trade_id=12, archived_at=16:31:44.658014+08
+
+Buyer notifications:
+  notification #99  recipient=3  event_type=trade.request_closed  source=trade 11
+  notification #100 recipient=4  event_type=trade.request_closed  source=trade 12
+
+Assertions:
+  - An unclaimed review can be withdrawn and the review case records the
+    withdrawal.
+  - Once a manager owns the review case, seller withdrawal is rejected with
+    REVIEW_ALREADY_CLAIMED and does not change the pending product.
+  - Delisting a public product closes all pending requests, archives both
+    independent conversation branches, records product_delisted, and notifies
+    each buyer.

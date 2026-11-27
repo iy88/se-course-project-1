@@ -1,0 +1,76 @@
+A11 in-trade edit restriction and category-correction audit verification
+
+Environment: local PostgreSQL development database, read-only queries at
+2026-11-27 19:14:47 +08:00.
+
+Current context after later Run 03 steps:
+  product #6 is now in_trade and occupied by trade #61.
+  None of the A17 state changes below are used to infer the A11 result.
+
+Product review case and correction:
+  case #11
+    case_type=product_review
+    claimed_manager_id=1
+    claimed_at=2026-11-27 15:33:52.706541+08
+  product_audit #9
+    product_id=6
+    case_id=11
+    status=passed
+    decided_by_admin_id=1
+    decided_at=2026-11-27 15:34:04.903421+08
+
+product_edit_history #9
+  product_id=6
+  operator_kind=admin
+  operator_account_id=1
+  edit_kind=category_correction
+  before category_ids=[8]  name=RUN03-CAT-A
+  after category_ids=[9]   name=RUN03-CAT-B
+  reason=纠正理由
+  basis_type=case
+  basis_id=11
+  edited_at=2026-11-27 16:21:15.02131+08
+
+audit_record #185
+  action=product.category_corrected
+  actor_id=1
+  target_type=product
+  target_id=6
+  basis_type=case
+  basis_id=11
+  content_version_before=2
+  content_version_after=3
+  previous_category_ids=[8]
+  current_category_ids=[9]
+  occurred_at=2026-11-27 16:21:15.066032+08
+
+Seller notification:
+  notification #89
+    recipient_account_id=2 (A01-卖方)
+    event_type=product.category_corrected
+    source_id=9
+    occurred_at=2026-11-27 16:21:15.02131+08
+    read_at=2026-11-27 16:21:32.888684+08
+
+Trade #9 remains independent of the correction:
+  State history:
+    request.accept: pending_acceptance -> in_progress at 15:38:41
+    agreement.propose at 16:23:28
+  No trade state transition occurred around the 16:21 category correction.
+  Purchase snapshot:
+    trade_id=9
+    content_version=1
+    title=A-RUN03-MAIN-台灯-01
+    price_cents=11100
+    captured_at=2026-11-27 15:35:55
+  Trade #9 later completed at 16:24:21 without a cancellation or replacement
+  caused by the correction.
+
+Assertions:
+  - The seller had no in-trade key-content edit entry at this stage.
+  - The manager correction retained before/after category values, reason,
+    operator, case basis, timestamps and a business audit record.
+  - The seller was notified and read the correction notification.
+  - The correction advanced product content_version from 2 to 3 while the
+    active trade remained in_progress and then continued through its normal
+    agreement and completion sequence.
