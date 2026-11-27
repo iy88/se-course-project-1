@@ -3,19 +3,33 @@ import { describe, it } from "node:test";
 import { parseLocation, routeHref } from "./routes";
 
 describe("admin routes", () => {
-  it("falls back to the shared review pool", () => {
-    assert.deepEqual(parseLocation(""), { name: "reviews", ownership: "unclaimed" });
-    assert.deepEqual(parseLocation("/"), { name: "reviews", ownership: "unclaimed" });
+  it("falls back to the workbench", () => {
+    assert.deepEqual(parseLocation(""), {
+      name: "cases",
+      ownership: "unclaimed",
+      kind: "all",
+      keyword: "",
+    });
+    assert.deepEqual(parseLocation("/"), {
+      name: "cases",
+      ownership: "unclaimed",
+      kind: "all",
+      keyword: "",
+    });
   });
 
-  it("reads the queue ownership filter", () => {
+  it("maps legacy review lists to the filtered workbench", () => {
     assert.deepEqual(parseLocation("/reviews?ownership=mine"), {
-      name: "reviews",
+      name: "cases",
       ownership: "mine",
+      kind: "product_review",
+      keyword: "",
     });
     assert.deepEqual(parseLocation("/reviews?ownership=unclaimed"), {
-      name: "reviews",
+      name: "cases",
       ownership: "unclaimed",
+      kind: "product_review",
+      keyword: "",
     });
   });
 
@@ -55,7 +69,7 @@ describe("admin routes", () => {
 
   it("builds canonical hrefs that parse back to the same route", () => {
     const routes = [
-      { name: "reviews", ownership: "mine" },
+      { name: "cases", ownership: "mine", kind: "product_review", keyword: "" },
       { name: "review", auditId: "1001" },
       { name: "cases", ownership: "completed_mine", kind: "report", keyword: "旧书" },
       { name: "cases", ownership: "unclaimed", kind: "all", keyword: "" },

@@ -11,14 +11,13 @@ import CaseDetailView from "./views/CaseDetailView.vue";
 import CaseQueueView from "./views/CaseQueueView.vue";
 import CategoriesView from "./views/CategoriesView.vue";
 import ReviewDetailView from "./views/ReviewDetailView.vue";
-import ReviewQueueView from "./views/ReviewQueueView.vue";
 import ManagementNotificationsView from "./views/ManagementNotificationsView.vue";
 import ManagementStatisticsView from "./views/ManagementStatisticsView.vue";
 import ErrorNotice from "./components/ErrorNotice.vue";
 import LoadingBlock from "./components/LoadingBlock.vue";
 import { dismiss, toasts } from "./app/toast";
 import { navigate, route } from "./app/router";
-import { routeHref } from "./app/routes";
+import { parseLocation, reviewWorkbench, routeHref } from "./app/routes";
 import { session } from "./app/session";
 import { listNotifications } from "./api/notifications";
 import "./styles/admin.css";
@@ -29,12 +28,6 @@ const navItems = [
     label: "事项工作台",
     icon: "inbox",
     href: routeHref({ name: "cases", ownership: "unclaimed", kind: "all", keyword: "" }),
-  },
-  {
-    key: "reviews",
-    label: "商品审核",
-    icon: "check",
-    href: routeHref({ name: "reviews", ownership: "unclaimed" }),
   },
   {
     key: "categories",
@@ -85,14 +78,11 @@ async function refreshUnread(): Promise<void> {
 }
 const signOutDialog = ref<HTMLDialogElement | null>(null);
 const activeKey = computed(() => {
-  if (page.value === "review") return "reviews";
+  if (page.value === "review") return "cases";
   if (page.value === "notifications") return "返回通知列表";
   if (page.value === "case") return "cases";
   return page.value;
 });
-const queueOwnership = computed(() =>
-  route.value.name === "reviews" ? route.value.ownership : "unclaimed",
-);
 const reviewAuditId = computed(() => (route.value.name === "review" ? route.value.auditId : ""));
 const workbench = computed(() =>
   route.value.name === "cases"
@@ -101,14 +91,13 @@ const workbench = computed(() =>
 );
 const canGoBack = computed(
   () =>
-    page.value !== "reviews" &&
     page.value !== "cases" &&
     (route.value.name !== "notifications" || Boolean(route.value.notificationId)),
 );
 const backLabel = computed(() => {
   if (page.value === "notifications") return "返回通知列表";
   if (page.value === "case") return "返回事项工作台";
-  return page.value === "review" ? "返回我的认领" : "返回商品审核";
+  return "返回事项工作台";
 });
 
 onMounted(() => {
@@ -165,10 +154,7 @@ function goBack(): void {
     navigate({ name: "cases", ownership, kind, keyword });
     return;
   }
-  navigate({
-    name: "reviews",
-    ownership: page.value === "review" ? "mine" : "unclaimed",
-  });
+  navigate(page.value === "review" ? reviewWorkbench("mine") : parseLocation("/"));
 }
 </script>
 
@@ -187,7 +173,7 @@ function goBack(): void {
             class="admin-brand"
             data-admin-route
             :class="{ 'admin-brand--with-back': canGoBack }"
-            :href="routeHref({ name: 'reviews', ownership: 'unclaimed' })"
+            :href="navItems[0].href"
           >
             <BrandMark />
             <span>
@@ -304,7 +290,6 @@ function goBack(): void {
             })
           "
         />
-        <ReviewQueueView v-else-if="page === 'reviews'" :ownership="queueOwnership" />
         <ReviewDetailView v-else-if="page === 'review'" :audit-id="reviewAuditId" />
         <CategoriesView v-else-if="page === 'categories'" />
         <BannedScopeView v-else-if="page === 'banned'" />

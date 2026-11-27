@@ -14,7 +14,7 @@ import { formatCents, formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { bannedGroupLabels, reviewDecisionLabels, reviewStatusLabels } from "../app/labels";
 import { problemMessage } from "../app/problems";
-import { routeHref } from "../app/routes";
+import { reviewWorkbench, routeHref } from "../app/routes";
 import { notify } from "../app/toast";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
@@ -37,7 +37,7 @@ let controller: AbortController | null = null;
 
 const pendingApplication = computed(() => detail.value?.category_application?.status === "pending");
 const decided = computed(() => detail.value !== null && detail.value.status !== "pending");
-const backHref = routeHref({ name: "reviews", ownership: "mine" });
+const backHref = routeHref(reviewWorkbench("mine"));
 
 const categories = ref<CategoryDetail[]>([]);
 const selectedCategoryIds = ref<string[]>([]);
@@ -209,7 +209,7 @@ async function submit(): Promise<void> {
       "
     >
       <template #actions>
-        <a :href="backHref" data-admin-route class="btn btn--ghost">返回我的认领</a>
+        <a :href="backHref" data-admin-route class="btn btn--ghost">返回事项工作台</a>
       </template>
     </PageHeader>
 

@@ -7,13 +7,22 @@ function currentLocation(): string {
   return pathname + search + hash;
 }
 
+function readLocation(): AdminRoute {
+  const location = currentLocation();
+  const next = parseLocation(location);
+  if (/^\/reviews\/?(?:[?#]|$)/.test(location)) {
+    window.history.replaceState(window.history.state, "", routeHref(next));
+  }
+  return next;
+}
+
 const current = ref<AdminRoute>(
-  parseLocation(typeof window === "undefined" ? "/" : currentLocation()),
+  typeof window === "undefined" ? parseLocation("/") : readLocation(),
 );
 
 if (typeof window !== "undefined") {
   const sync = () => {
-    current.value = parseLocation(currentLocation());
+    current.value = readLocation();
   };
   window.addEventListener("popstate", sync);
   window.addEventListener("hashchange", sync);

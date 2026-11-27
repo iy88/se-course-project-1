@@ -10,7 +10,6 @@ export interface WorkbenchFilters {
 }
 
 export type AdminRoute =
-  | { name: "reviews"; ownership: Ownership }
   | { name: "review"; auditId: string }
   | ({ name: "cases" } & WorkbenchFilters)
   | ({ name: "case"; caseId: string; anchor?: string } & WorkbenchFilters)
@@ -50,7 +49,7 @@ export function parseLocation(location: string): AdminRoute {
     return { name: "review", auditId: decodeURIComponent(segments[1]) };
   }
   if (segments[0] === "reviews") {
-    return { name: "reviews", ownership: parseOwnership(query.get("ownership")) };
+    return reviewWorkbench(parseOwnership(query.get("ownership")));
   }
   if (segments[0] === "cases") {
     const filters = {
@@ -77,16 +76,18 @@ export function parseLocation(location: string): AdminRoute {
   if (segments[0] === "categories") return { name: "categories" };
   if (segments[0] === "banned") return { name: "banned" };
   if (segments[0] === "statistics") return { name: "statistics" };
-  return { name: "reviews", ownership: "unclaimed" };
+  return { name: "cases", ownership: "unclaimed", kind: "all", keyword: "" };
 }
 
-/** Canonical hash for a route, used by links and programmatic navigation. */
+export function reviewWorkbench(ownership: Ownership): AdminRoute {
+  return { name: "cases", ownership, kind: "product_review", keyword: "" };
+}
+
+/** Canonical URL for a route, used by links and programmatic navigation. */
 export function routeHref(route: AdminRoute): string {
   switch (route.name) {
     case "review":
       return `/reviews/${encodeURIComponent(route.auditId)}`;
-    case "reviews":
-      return `/reviews?ownership=${route.ownership}`;
     case "cases":
     case "case": {
       const query = new URLSearchParams({ ownership: route.ownership, kind: route.kind });

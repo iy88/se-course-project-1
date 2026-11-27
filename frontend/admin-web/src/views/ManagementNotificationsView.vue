@@ -9,7 +9,7 @@ import {
 } from "../api/notifications";
 import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
-import { routeHref } from "../app/routes";
+import { reviewWorkbench, routeHref } from "../app/routes";
 import ContentState from "../../../shared/ContentState.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
@@ -55,8 +55,8 @@ const destination = computed(() => {
       };
     case "review_queue":
       return {
-        label: "查看商品审核列表",
-        href: routeHref({ name: "reviews", ownership: "unclaimed" }),
+        label: "查看商品审核事项",
+        href: routeHref(reviewWorkbench("unclaimed")),
       };
     case "case_queue":
       return {
