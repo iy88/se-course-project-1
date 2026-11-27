@@ -38,6 +38,7 @@ import {
   tradeStageLabel,
   tradeStatusLabels,
   tradeStatusTones,
+  tradeTerminalReasonLabel,
 } from "../../app/labels";
 import { session } from "../../app/session";
 import { notify } from "../../app/toast";
@@ -54,7 +55,17 @@ import TradeReviewSection from "../../components/interaction/TradeReviewSection.
 const route = useRoute();
 const router = useRouter();
 const tradeId = computed(() => String(route.params.tradeId ?? ""));
-const trade = useAsyncData<TradeView>((signal) => getTrade(tradeId.value, signal));
+const trade = useAsyncData<TradeView>((signal) => getTrade(tradeId.value, signal, "state_history"));
+const terminalReasonLabel = computed(() => {
+  const detail = trade.data.value;
+  return detail
+    ? tradeTerminalReasonLabel(
+        detail.terminal_reason,
+        detail.confirmations.both_current,
+        detail.state_history,
+      )
+    : null;
+});
 const keys = new IdempotencyKeys();
 
 const agreementForm = reactive({
@@ -313,15 +324,7 @@ function openConversation(): void {
             :label="tradeStatusLabels[trade.data.value.status]"
             :tone="tradeStatusTones[trade.data.value.status]"
           />
-          <span v-if="trade.data.value.terminal_reason" class="muted">
-            结束原因：{{
-              trade.data.value.terminal_reason === "completed"
-                ? "双方确认完成"
-                : trade.data.value.terminal_reason === "cancelled"
-                  ? "已取消"
-                  : "管理终止"
-            }}
-          </span>
+          <span v-if="terminalReasonLabel" class="muted">结束原因：{{ terminalReasonLabel }}</span>
         </div>
         <div class="parties">
           <div class="party">

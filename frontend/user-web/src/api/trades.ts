@@ -43,8 +43,12 @@ export function listMyTrades(query: MyTradesQuery, signal?: AbortSignal): Promis
   });
 }
 
-export function getTrade(tradeId: string, signal?: AbortSignal): Promise<TradeView> {
-  return request<TradeView>("GET", `/trades/${tradeId}`, { signal, query: {} });
+export function getTrade(
+  tradeId: string,
+  signal?: AbortSignal,
+  include?: "state_history",
+): Promise<TradeView> {
+  return request<TradeView>("GET", `/trades/${tradeId}`, { signal, query: { include } });
 }
 
 function tradeAction(
