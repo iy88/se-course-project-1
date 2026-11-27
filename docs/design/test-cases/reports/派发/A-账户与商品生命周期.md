@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.1
-Version-Datetime: 2026-11-26T21:30:33+08:00
+Version: 0.1.2
+Version-Datetime: 2026-11-27T20:03:26+08:00
 -->
 
 # [测试主验证][A] US-01／02／09 账户与商品生命周期
@@ -38,7 +38,7 @@ Version-Datetime: 2026-11-26T21:30:33+08:00
 
 ## 交付
 
-- 一份 `reports/batch-a-account-product/测试报告.md`，按 A-RUN 记录 18 项。
+- 一份 [batch-a-account-product/测试报告.md](../batch-a-account-product/测试报告.md)，按 A-RUN 记录 18 项。
 - 真实页面截图、测试邮件、OSS 日志、关键 API／DB 核对和测试命令。
 - 缺失的自动测试代码；单测可用 Mock，跨模块事务、并发和真实依赖用集成测试。
 - 一个关联 Issue 和一个 Draft PR。
