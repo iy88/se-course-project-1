@@ -260,6 +260,30 @@ class S2ProductionReviewIT {
     }
 
     @Test
+    void editingAPendingProductDoesNotNotifyManagers() throws Exception {
+        var seller = login("pending-edit-seller", false);
+        var manager = login("pending-edit-manager", true);
+        String category = createCategory(manager, "Pending edit " + RUN);
+        CATEGORY_IDS.add(Long.parseLong(category));
+        long image = uploadedImage(seller.account().id(), FilePurpose.PRODUCT_IMAGE, true);
+        var created = write(seller, "POST", "/products", """
+                {"title":"Pending edit %s","description":"First edition","price_cents":100,
+                 "category_ids":["%s"],"image_file_ids":["%d"]}
+                """.formatted(RUN, category, image), key(), 201);
+        String productId = text(created, "id");
+
+        write(seller, "PATCH", "/products/" + productId, """
+                {"description":"Second edition","expected_version":%d}
+                """.formatted(created.path("content_version").asInt()), key(), 200);
+
+        assertThat(db.sql("""
+                        SELECT count(*) FROM notification
+                        WHERE recipient_account_id = ?
+                          AND event_type = 'management.case_review_updated'
+                        """).param(manager.account().id()).query(Long.class).single()).isZero();
+    }
+
+    @Test
     void categoryCreateReplayWritesExactlyOneBusinessAudit() throws Exception {
         var manager = login("category-audit", true);
         String body = "{\"name\":\"Audit " + RUN + "\"}";
