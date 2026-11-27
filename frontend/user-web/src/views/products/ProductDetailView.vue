@@ -526,6 +526,8 @@ async function confirmOffShelf(): Promise<void> {
                 v-if="permissions?.can_withdraw_review"
                 label="撤回待审商品"
                 variant="ghost"
+                silent-failure
+                @failed="notify.error(problemMessage($event))"
                 :task="
                   async () => {
                     await runAction('withdraw', async () => {

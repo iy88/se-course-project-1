@@ -674,7 +674,7 @@ export interface ConversationPeer {
 export interface ConversationBranch {
   conversation_kind: ConversationKind;
   conversation_id: string;
-  source_ref?: ResourceRef | null;
+  source_ref?: ResourceRef | string | null;
   archived_at?: string | null;
   unread_count: number;
   last_message_at?: string | null;
