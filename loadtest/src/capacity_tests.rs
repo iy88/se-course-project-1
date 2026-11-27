@@ -210,10 +210,7 @@ async fn target(
   let root = std::env::temp_dir().join(format!(
     "campus-capacity-test-{}-{}",
     std::process::id(),
-    std::time::SystemTime::now()
-      .duration_since(std::time::UNIX_EPOCH)
-      .unwrap()
-      .as_nanos()
+    address.port()
   ));
   std::fs::create_dir_all(&root).unwrap();
   let mut args = Args::parse_from([
