@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.61
-Version-Datetime: 2026-11-26T13:44:33+08:00
+Version: 0.1.63
+Version-Datetime: 2026-11-27T15:15:00+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -150,6 +150,13 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 ```
 
 核对输出的目标数据库，按提示输入两次登录密码。密码输入无回显。命令使用配置的数据库 owner 创建 `manager` 账户并记录审计，密码采用和普通账户相同的长度规则与哈希算法。创建完成后，使用该邮箱和密码登录管理端。邮箱已注册时，命令报错并保留该账户原有角色和密码。
+
+## 种子数据与真实接口压测
+
+隔离环境下的 `maintenance.jar seed load`、`seed demo`、OSS 前缀清理、私有 manifest 和 Rust HTTP/WebSocket 压测流程见
+[种子数据与真实接口压测使用说明](docs/guides/seed-and-loadtest.md)。共享测试桶只能使用 `oss reset --prefix` 清理当前前缀；
+不带 `--prefix` 的整桶 reset 仅适用于专用桶。性能测试案例、执行过程与原始报告证据见
+[TC-PERF-001 性能与容量测试报告](docs/design/test-cases/reports/performance-capacity/测试报告.md)。
 
 ## 后端开发
 
