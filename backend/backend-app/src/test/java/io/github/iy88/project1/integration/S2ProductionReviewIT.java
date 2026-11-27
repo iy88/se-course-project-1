@@ -442,6 +442,9 @@ class S2ProductionReviewIT {
             db.sql("DELETE FROM " + table + " WHERE product_id IN (" + products + ")").param(owner).update();
         }
         for (long caseId : caseIds) {
+            // Case-opening notifications can also be delivered to pre-existing administrators.
+            db.sql("DELETE FROM notification WHERE source_type = 'case' AND source_id = ?")
+                    .param(caseId).update();
             db.sql("DELETE FROM moderation_case_action WHERE case_id = ?").param(caseId).update();
             db.sql("DELETE FROM moderation_case WHERE id = ?").param(caseId).update();
         }
