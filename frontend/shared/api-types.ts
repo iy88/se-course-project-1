@@ -1684,6 +1684,15 @@ export interface components {
         /** @description Whether the account can be selected for inquiry or account enforcement. */
         eligible: boolean;
       }[];
+      /** @description Disposition candidates for the assigned manager of an active claimed case with a target; not an authorization grant. */
+      disposition_targets?: {
+        target_type: string;
+        target_id: string;
+        products: {
+          id: string;
+          title: string;
+        }[];
+      };
       /** @description Reported object and recorded product snapshot for the assigned manager. */
       reported_object?: {
         /** @enum {string} */

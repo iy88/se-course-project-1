@@ -8033,6 +8033,34 @@
               }
             }
           },
+          "disposition_targets": {
+            "description": "Disposition candidates for the assigned manager of an active claimed case with a target; not an authorization grant.",
+            "type": "object",
+            "required": ["target_type", "target_id", "products"],
+            "properties": {
+              "target_type": {
+                "type": "string"
+              },
+              "target_id": {
+                "type": "string"
+              },
+              "products": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "title"],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "reported_object": {
             "description": "Reported object and recorded product snapshot for the assigned manager.",
             "type": "object",
