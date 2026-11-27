@@ -122,6 +122,158 @@ class S4ProductionEnforcementIT {
     }
 
     @Test
+    void decisionLiftsTheCaseTimeoutSourceAndKeepsAnOtherCaseFreeze() throws Exception {
+        var buyer = login("timeout-lift-buyer", "user");
+        var seller = login("timeout-lift-seller", "user");
+        var manager = login("timeout-lift-manager", "manager");
+        var otherManager = login("timeout-lift-other", "manager");
+        long trade = activeTrade(buyer, seller);
+        long timeoutCase = claimedTradeCase(buyer, manager, trade);
+        long timeoutFreeze = db.sql("""
+                insert into trade_freeze (trade_id, source, source_ref, reason, started_at)
+                values (?, 'timeout', ?, '单方确认超时', now()) returning id
+                """).param(trade).param(timeoutCase).query(Long.class).single();
+        db.sql("update trade set status = 'abnormal' where id = ?").param(trade).update();
+
+        long otherCase = claimedTradeCase(seller, otherManager, trade);
+        post(otherManager, decisionPath(otherCase), decision(freeze(trade)), key(), 201);
+        assertThat(activeSources(trade)).containsExactlyInAnyOrder(timeoutCase, otherCase);
+
+        long unrelatedTrade = activeTrade(buyer, seller);
+        var wrongTarget = post(manager, decisionPath(timeoutCase), noAction(lift(unrelatedTrade)), key(), 409);
+        assertThat(wrongTarget.at("/error/code").asString()).isEqualTo("TARGET_STATE_CONFLICT");
+        assertThat(activeSources(trade)).containsExactlyInAnyOrder(timeoutCase, otherCase);
+
+        String idempotency = key();
+        var lifted = post(manager, decisionPath(timeoutCase), noAction(lift(trade)), idempotency, 201);
+        assertThat(lifted.path("decision_kind").asString()).isEqualTo("no_action");
+        assertThat(lifted.at("/enforcements/0/action").asString()).isEqualTo("lift_trade_freeze");
+        assertThat(lifted.at("/enforcements/0/current_state").asString()).contains("frozen=true");
+        assertThat(post(manager, decisionPath(timeoutCase), noAction(lift(trade)), idempotency, 201))
+                .isEqualTo(lifted);
+        assertThat(activeSources(trade)).containsExactly(otherCase);
+        assertThat(db.sql("select status from trade where id = ?").param(trade)
+                .query(String.class).single()).isEqualTo("abnormal");
+        assertThat(db.sql("select ended_at is not null from trade_freeze where id = ?")
+                .param(timeoutFreeze).query(Boolean.class).single()).isTrue();
+        assertThat(db.sql("select count(*) from trade_freeze where trade_id = ? and ended_at is null")
+                .param(trade).query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("""
+                select count(*) from trade_state_history
+                where trade_id = ? and case_id = ? and action = 'trade.unfreeze'
+                """).param(trade).param(timeoutCase).query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("""
+                select count(*) from notification
+                where source_type = 'case' and source_id = ? and event_type = 'case.trade_unfrozen'
+                """).param(timeoutCase).query(Long.class).single()).isEqualTo(2);
+    }
+
+    @Test
+    void noActionDecisionRestoresTimedOutTradeAndCompletionConfirmationRestartsTheWait() throws Exception {
+        var buyer = login("timeout-confirm-buyer", "user");
+        var seller = login("timeout-confirm-seller", "user");
+        var manager = login("timeout-confirm-manager", "manager");
+        long trade = activeTrade(buyer, seller);
+        long agreement = effectiveAgreement(trade, buyer.account().id());
+        db.sql("""
+                insert into trade_confirmation (trade_id, agreement_id, confirmer_id, submitted_at,
+                                                business_event_id)
+                values (?, ?, ?, now() - interval '8 days', gen_random_uuid())
+                """).param(trade).param(agreement).param(buyer.account().id()).update();
+        db.sql("""
+                insert into confirmation_wait
+                    (trade_id, started_at, active_since, accumulated_seconds, wait_seconds, policy_version,
+                     ended_at, end_reason)
+                values (?, now() - interval '8 days', null, 604800, 604800, 's2-v1', now(), 'timeout')
+                """).param(trade).update();
+        long caseId = claimedTradeCase(buyer, manager, trade);
+        long timeoutFreeze = db.sql("""
+                insert into trade_freeze (trade_id, source, source_ref, reason, started_at)
+                values (?, 'timeout', ?, '单方确认超时', now()) returning id
+                """).param(trade).param(caseId).query(Long.class).single();
+        db.sql("update trade set status = 'abnormal' where id = ?").param(trade).update();
+
+        var decided = post(manager, decisionPath(caseId), noAction("""
+                {"action":"adjust_trade_status","target_type":"trade","target_id":"%d","expected_result":"in_progress"},
+                {"action":"lift_trade_freeze","target_type":"trade","target_id":"%d"}
+                """.formatted(trade, trade)), key(), 201);
+
+        assertThat(decided.path("decision_kind").asString()).isEqualTo("no_action");
+        assertThat(decided.path("enforcements").size()).isEqualTo(2);
+        assertThat(db.sql("select status from trade where id = ?").param(trade).query(String.class).single())
+                .isEqualTo("in_progress");
+        assertThat(activeSources(trade)).isEmpty();
+        assertThat(db.sql("select ended_at is not null from trade_freeze where id = ?")
+                .param(timeoutFreeze).query(Boolean.class).single()).isTrue();
+
+        int version = db.sql("select version from trade where id = ?").param(trade).query(Integer.class).single();
+        var confirmation = post(buyer, "/trades/" + trade + "/completion-confirmations", """
+                {"note":"恢复后重新提交完成确认","expected_version":%d}
+                """.formatted(version), key(), 201);
+        assertThat(confirmation.at("/trade/status").asString()).isEqualTo("in_progress");
+        assertThat(db.sql("""
+                select active_since is not null and ended_at is null and wait_seconds = 604800
+                       and accumulated_seconds = 0
+                from confirmation_wait where trade_id = ?
+                """).param(trade).query(Boolean.class).single()).isTrue();
+    }
+
+    @Test
+    void decisionLiftResumesThePausedWaitOnlyAfterTheLastCaseSource() throws Exception {
+        var buyer = login("timing-lift-buyer", "user");
+        var seller = login("timing-lift-seller", "user");
+        var manager = login("timing-lift-manager", "manager");
+        long trade = activeTrade(buyer, seller);
+        long agreement = db.sql("""
+                insert into agreement_version
+                    (trade_id, version_no, status, proposed_by, delivery_at, delivery_place_text,
+                     delivery_method, amount_cents, payment_method, payment_timing, proposed_at,
+                     business_event_id)
+                values (?, 1, 'effective', ?, now(), 'fixture place', 'face_to_face', 100,
+                        'offline', 'on_delivery', now(), gen_random_uuid())
+                returning id
+                """).param(trade).param(buyer.account().id()).query(Long.class).single();
+        db.sql("update trade set status = 'in_progress', active_agreement_id = ? where id = ?")
+                .param(agreement).param(trade).update();
+        db.sql("""
+                insert into trade_confirmation (trade_id, agreement_id, confirmer_id, submitted_at,
+                                                business_event_id)
+                values (?, ?, ?, now() - interval '2 days', gen_random_uuid())
+                """).param(trade).param(agreement).param(buyer.account().id()).update();
+        db.sql("""
+                insert into confirmation_wait
+                    (trade_id, started_at, active_since, accumulated_seconds, wait_seconds, policy_version)
+                values (?, now() - interval '2 days', null, 172800, 604800, 's2-v1')
+                """).param(trade).update();
+        long caseId = claimedTradeCase(buyer, manager, trade);
+        db.sql("""
+                insert into trade_freeze (trade_id, source, source_ref, reason, started_at)
+                values (?, 'admin_case', ?, '处置冻结', now())
+                """).param(trade).param(caseId).update();
+
+        var lifted = post(manager, decisionPath(caseId), decision(lift(trade)), key(), 201);
+
+        assertThat(lifted.at("/enforcements/0/previous_state").asString()).contains("frozen=true");
+        assertThat(lifted.at("/enforcements/0/current_state").asString()).contains("frozen=false");
+        assertThat(activeSources(trade)).isEmpty();
+        assertThat(db.sql("select status from trade where id = ?").param(trade)
+                .query(String.class).single()).isEqualTo("in_progress");
+        assertThat(db.sql("""
+                select active_since is not null and ended_at is null and accumulated_seconds = 172800
+                from confirmation_wait where trade_id = ?
+                """).param(trade).query(Boolean.class).single()).isTrue();
+        assertThat(db.sql("""
+                select count(*) from task_schedule
+                where task_kind = 'trade.timeout' and source_id = ?
+                  and completed_at is null and cancelled_at is null
+                """).param(trade).query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("""
+                select count(*) from trade_state_history
+                where trade_id = ? and case_id = ? and action = 'trade.unfreeze'
+                """).param(trade).param(caseId).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
     void decisionAcquiresTheCombinedLockPlanAndCommitsBothTradeActions() throws Exception {
         var buyer = login("batch-buyer", "user");
         var seller = login("batch-seller", "user");
@@ -702,6 +854,21 @@ class S4ProductionEnforcementIT {
         return trade;
     }
 
+    private static long effectiveAgreement(long trade, long buyerId) {
+        long agreement = db.sql("""
+                insert into agreement_version
+                    (trade_id, version_no, status, proposed_by, delivery_at, delivery_place_text,
+                     delivery_method, amount_cents, payment_method, payment_timing, proposed_at,
+                     business_event_id)
+                values (?, 1, 'effective', ?, now(), 'fixture place', 'face_to_face', 100,
+                        'offline', 'on_delivery', now(), gen_random_uuid())
+                returning id
+                """).param(trade).param(buyerId).query(Long.class).single();
+        db.sql("update trade set status = 'in_progress', active_agreement_id = ? where id = ?")
+                .param(agreement).param(trade).update();
+        return agreement;
+    }
+
     private static long publicProduct(SessionService.Issued seller) {
         return db.sql("""
                 insert into product (seller_account_id, title, description, price_cents, lifecycle_state)
@@ -734,9 +901,21 @@ class S4ProductionEnforcementIT {
                 """.formatted(instructions);
     }
 
+    private static String noAction(String instructions) {
+        return """
+                {"decision_kind":"no_action","reason":"核实后无需处置","basis_refs":[],"enforcements":[%s]}
+                """.formatted(instructions);
+    }
+
     private static String freeze(long trade) {
         return """
                 {"action":"freeze_trade","target_type":"trade","target_id":"%s"}
+                """.formatted(trade);
+    }
+
+    private static String lift(long trade) {
+        return """
+                {"action":"lift_trade_freeze","target_type":"trade","target_id":"%s"}
                 """.formatted(trade);
     }
 

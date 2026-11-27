@@ -227,6 +227,16 @@ public final class TradePorts {
                                                 long tradeId, long freezeTransitionId, String basisRef,
                                                 String reason);
 
+        /**
+         * Lifts the single active freeze that this case owns on the trade. API-CASE-007 carries no
+         * freeze-record selector, so the trade module resolves provenance instead of guessing from
+         * a display field: only an admin-case or system-timeout freeze whose {@code source_ref} is
+         * this case is eligible. Account bans and freezes owned by other cases stay active, and an
+         * absent or ambiguous source fails closed with {@code TRADE_FREEZE_NOT_ACTIVE}.
+         */
+        CaseEnforcementOutcome liftCaseFreezeLocked(WriteTransaction transaction, long caseId, long tradeId,
+                                                    String basisRef, String reason);
+
         CaseEnforcementOutcome adjustStatusLocked(WriteTransaction transaction, long caseId,
                                                   long tradeId, String targetStatus,
                                                   String basisRef, String reason);
