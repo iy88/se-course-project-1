@@ -12,7 +12,8 @@
  * same observable state.
  */
 
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 const BASE = process.env.ACCEPTANCE_API_BASE ?? "http://127.0.0.1:8080/api/v1";
@@ -41,7 +42,6 @@ const FX = {
   associatedCategory: 6,
   nonSellerProduct: 1,
   nonSellerComment: 1,
-  deletedComment: 9,
   tradeConversation: 2,
 };
 
@@ -119,7 +119,8 @@ const hashOf = (table, idColumn, id) =>
   sql(`select md5(row_to_json(t)::text) from ${table} t where t.${idColumn} = ${id}`);
 
 if (LOG) {
-  appendFileSync(LOG, `# 自动化补充断言 ${new Date().toISOString()}（目标 build main@5bbe4f0e，库 ${process.env.PGDATABASE ?? "project1_acceptance"}）\n`);
+  const scriptHash = createHash("sha256").update(readFileSync(new URL(import.meta.url))).digest("hex");
+  appendFileSync(LOG, `# 自动化补充断言 ${new Date().toISOString()}（声明行为基线 ${process.env.ACCEPTANCE_BUILD_SHA ?? "5bbe4f0e"}，库 ${process.env.PGDATABASE ?? "project1_acceptance"}，script_sha256=${scriptHash}）\n`);
 }
 
 const buyerA = await login(ACCOUNTS.buyerA);
@@ -133,16 +134,22 @@ const firstFavorite = await call(buyerA, "PUT", `/me/favorites/${FX.favoriteProd
 const duplicateFavorite = await call(buyerA, "PUT", `/me/favorites/${FX.favoriteProduct}`, undefined, "ev-fav-2");
 check("B05", "重复收藏返回首次时间",
   firstFavorite.status === 200 && duplicateFavorite.status === 200
-    && firstFavorite.json.favorited_at === duplicateFavorite.json.favorited_at,
+    && typeof firstFavorite.json?.favorited_at === "string" && firstFavorite.json.favorited_at.length > 0
+    && firstFavorite.json.favorited_at === duplicateFavorite.json?.favorited_at,
   `${firstFavorite.json?.favorited_at} == ${duplicateFavorite.json?.favorited_at}`);
 const favoriteRows = sql(
   `select count(*) from product_favorite where account_id = 4 and product_id = ${FX.favoriteProduct}`);
 check("B05", "同一账户与商品只有一条收藏记录", favoriteRows === "1", `rows=${favoriteRows}`);
-await call(buyerA, "DELETE", `/me/favorites/${FX.favoriteProduct}`, undefined, "ev-fav-cancel");
-await call(buyerA, "PUT", `/me/favorites/${FX.favoriteProduct}`, undefined, "ev-fav-3");
+const cancelled = await call(buyerA, "DELETE", `/me/favorites/${FX.favoriteProduct}`, undefined, "ev-fav-cancel");
+const rowsAfterCancel = sql(`select count(*) from product_favorite where account_id = 4 and product_id = ${FX.favoriteProduct}`);
+const productAfterCancel = hashOf("product", "product_id", FX.favoriteProduct);
+const readded = await call(buyerA, "PUT", `/me/favorites/${FX.favoriteProduct}`, undefined, "ev-fav-3");
+const rowsAfterReadd = sql(`select count(*) from product_favorite where account_id = 4 and product_id = ${FX.favoriteProduct}`);
 const productAfter = hashOf("product", "product_id", FX.favoriteProduct);
-check("B05", "取消后重新收藏仍一条且商品不变", favoriteRows === "1" && productBefore === productAfter,
-  `product_hash_equal=${productBefore === productAfter}`);
+const productUnchanged = !!productBefore && productBefore === productAfterCancel && productBefore === productAfter;
+check("B05", "取消后重新收藏仍一条且商品不变", cancelled.status === 204 && rowsAfterCancel === "0"
+  && readded.status === 200 && rowsAfterReadd === "1" && productUnchanged,
+  `cancel=${cancelled.status} rows_after_cancel=${rowsAfterCancel} readd=${readded.status} rows_after_readd=${rowsAfterReadd} product_hash_equal=${productUnchanged}`);
 
 // ---------------- B01 多分类 AND ----------------
 const correction4 = await call(manager, "POST", `/admin/products/${FX.multiCategoryProduct}/category-correction`,
@@ -154,10 +161,12 @@ const bothCategories = await call(buyerA, "GET",
 const mismatchCategories = await call(buyerA, "GET",
   `/products?category_ids=${FX.multiCategories[0]}&category_ids=${FX.singleCategory}&page_size=50`);
 check("B01", "同时选择两个分类只返回全部命中的商品", bothCategories.status === 200
-  && (bothCategories.json.items ?? []).some((item) => item.id === String(FX.multiCategoryProduct)),
+  && Array.isArray(bothCategories.json?.items)
+  && bothCategories.json.items.some((item) => item.id === String(FX.multiCategoryProduct)),
   `total=${bothCategories.json?.total}`);
 check("B01", "只命中一个分类时不返回", mismatchCategories.status === 200
-  && !(mismatchCategories.json.items ?? []).some((item) => item.id === String(FX.multiCategoryProduct)),
+  && Array.isArray(mismatchCategories.json?.items)
+  && !mismatchCategories.json.items.some((item) => item.id === String(FX.multiCategoryProduct)),
   `total=${mismatchCategories.json?.total}`);
 const activeLinks = sql(
   `select count(*) from product_category where product_id = ${FX.multiCategoryProduct} and removed_at is null`);
@@ -169,9 +178,43 @@ const nonSellerReply = await call(buyerB, "POST",
 check("B08", "非卖方回复被拒绝",
   nonSellerReply.status === 403 && nonSellerReply.json?.error?.code === "COMMENT_REPLY_NOT_ALLOWED",
   `status=${nonSellerReply.status} code=${nonSellerReply.json?.error?.code}`);
-const deletedComment = sql(
-  `select (deleted_at is not null)::text || '|' || body from product_comment where comment_id = ${FX.deletedComment}`);
-check("B08", "作者删除后记录保留、不再公开", deletedComment === "true|8", deletedComment);
+// Create a fresh comment on a known public product so both sides of the deletion can be checked.
+const commentBody = `验收删除验证-${RUN}`;
+const createdComment = await call(buyerA, "POST", `/products/${FX.favoriteProduct}/comments`,
+  { body: commentBody }, "ev-comment-create");
+const commentId = String(createdComment.json?.id ?? "");
+async function publicCommentPresence(productId, id) {
+  let seen = false;
+  let page = 1;
+  const pageSize = 20;
+  while (true) {
+    const response = await call(buyerB, "GET", `/products/${productId}/comments?page=${page}&page_size=${pageSize}`);
+    const data = response.json;
+    if (response.status !== 200 || !Array.isArray(data?.items) || !Number.isSafeInteger(data.total)
+        || data.total < 0 || data.page !== page || data.page_size !== pageSize
+        || data.items.length !== Math.min(pageSize, Math.max(0, data.total - (page - 1) * pageSize))) {
+      return { ok: false, seen };
+    }
+    seen ||= data.items.some((item) => String(item.id) === id
+      || (item.replies ?? []).some((reply) => String(reply.id) === id));
+    if (page * pageSize >= data.total) return { ok: true, seen };
+    page += 1;
+  }
+}
+let commentVerified = false;
+let commentDetail = `create=${createdComment.status}`;
+if (createdComment.status === 201 && /^[1-9][0-9]*$/.test(commentId)) {
+  const beforeDelete = await publicCommentPresence(FX.favoriteProduct, commentId);
+  const removed = await call(buyerA, "DELETE", `/products/${FX.favoriteProduct}/comments/${commentId}`,
+    undefined, "ev-comment-delete");
+  const stored = sql(`select (deleted_at is not null)::text || '|' || body from product_comment where comment_id = ${commentId} and product_id = ${FX.favoriteProduct} and author_account_id = 4`);
+  const afterDelete = await publicCommentPresence(FX.favoriteProduct, commentId);
+  const retained = stored === `true|${commentBody}`;
+  commentVerified = beforeDelete.ok && beforeDelete.seen && removed.status === 204
+    && retained && afterDelete.ok && !afterDelete.seen;
+  commentDetail += ` delete=${removed.status} visible_before=${beforeDelete.ok && beforeDelete.seen} retained=${retained} absent_after=${afterDelete.ok && !afterDelete.seen}`;
+}
+check("B08", "作者删除后记录保留、不再公开", commentVerified, commentDetail);
 
 // ---------------- B10 发送推进本人已读 ----------------
 const send = await call(seller, "POST", `/conversations/trade/${FX.tradeConversation}/messages`,
@@ -197,12 +240,18 @@ check("B10", "查看后该分支未读归零", buyerTrade2After?.unread_count ==
 
 // ---------------- B13 名称冲突与身份不变 ----------------
 const categoryBefore = hashOf("category", "category_id", FX.conflictCategory);
+const categoryLinksHash = () => sql(`select md5(coalesce(jsonb_agg(to_jsonb(pc) order by product_category_id), '[]'::jsonb)::text) from product_category pc where category_id = ${FX.conflictCategory}`);
+const categoryLinksBefore = categoryLinksHash();
 const conflict = await call(manager, "POST", "/admin/categories", { name: "教材资料" }, "ev-conflict-1");
 check("B13", "重复名称创建返回 409",
   conflict.status === 409 && conflict.json?.error?.code === "CATEGORY_NAME_CONFLICT",
   `status=${conflict.status} code=${conflict.json?.error?.code}`);
 const categoryAfter = hashOf("category", "category_id", FX.conflictCategory);
-check("B13", "冲突后分类身份与归属不变", categoryBefore === categoryAfter, `equal=${categoryBefore === categoryAfter}`);
+const categoryLinksAfter = categoryLinksHash();
+const categoryUnchanged = !!categoryBefore && categoryBefore === categoryAfter;
+const linksUnchanged = !!categoryLinksBefore && categoryLinksBefore === categoryLinksAfter;
+check("B13", "冲突后分类身份与归属不变", categoryUnchanged && linksUnchanged,
+  `category_same=${categoryUnchanged} links_same=${linksUnchanged}`);
 
 // ---------------- B14 重复移除别名 ----------------
 const aliasList = await call(manager, "GET", "/admin/categories?page=1&page_size=50");
@@ -224,7 +273,7 @@ const aliasAfterSecond = sql(
   `select (deactivated_at is not null)::text || '|' || deactivated_at from category_name where category_name_id = ${alias?.category_name_id}`);
 check("B14", "重复移除同一别名均幂等且保留历史",
   !!alias && firstRemoval.status === 204 && secondRemoval.status === 204
-    && aliasAfterFirst === aliasAfterSecond,
+    && /^true\|.+$/.test(aliasAfterFirst) && aliasAfterFirst === aliasAfterSecond,
   `first=${firstRemoval?.status} second=${secondRemoval?.status} same=${aliasAfterFirst === aliasAfterSecond}`);
 
 // ---------------- B18 曾关联计数（在 B17 改变关联前采集） ----------------
@@ -238,6 +287,8 @@ check("B18", "管理端曾关联计数与数据库一致", String(associated) ==
 // ---------------- B17 交易中纠类与交易快照不变 ----------------
 const tradeHashBefore = hashOf("trade", "id", FX.trade);
 const snapshotHashBefore = hashOf("trade_purchase_product_snapshot", "trade_id", FX.trade);
+const agreementHash = () => sql(`select case when count(*) > 0 then md5(jsonb_agg(to_jsonb(a) order by id)::text) else '' end from agreement_version a where trade_id = ${FX.trade}`);
+const agreementHashBefore = agreementHash();
 const tradeStateBefore = sql(`select status || '|' || version || '|' || coalesce(active_agreement_id::text,'null') || '|' || coalesce(ended_at::text,'null') from trade where id = ${FX.trade}`);
 const versionBefore = Number(sql(`select content_version from product where product_id = ${FX.tradeCategoryProduct}`));
 // Alternate the link set so a rerun still changes the row and bumps the content version.
@@ -255,9 +306,12 @@ const tradeStateAfter = sql(`select status || '|' || version || '|' || coalesce(
 check("B17", "交易中商品可纠类且版本递增",
   correction2.status === 200 && versionAfter === versionBefore + 1,
   `status=${correction2.status} version ${versionBefore}->${versionAfter}`);
-check("B17", "交易状态、约定与历史快照不变", tradeStateBefore === tradeStateAfter
-  && tradeHashBefore === tradeHashAfter && snapshotHashBefore === snapshotHashAfter,
-  `state=${tradeStateAfter} trade_same=${tradeHashBefore === tradeHashAfter} snapshot_same=${snapshotHashBefore === snapshotHashAfter}`);
+const agreementHashAfter = agreementHash();
+const tradeSame = !!tradeStateBefore && !!tradeHashBefore && tradeStateBefore === tradeStateAfter && tradeHashBefore === tradeHashAfter;
+const agreementSame = !!agreementHashBefore && agreementHashBefore === agreementHashAfter;
+const snapshotSame = !!snapshotHashBefore && snapshotHashBefore === snapshotHashAfter;
+check("B17", "交易状态、约定与历史快照不变", tradeSame && agreementSame && snapshotSame,
+  `state=${tradeStateAfter} trade_same=${tradeSame} agreement_same=${agreementSame} snapshot_same=${snapshotSame}`);
 
 const failed = results.filter((result) => !result.ok);
 if (LOG) appendFileSync(LOG, `# SUMMARY total=${results.length} pass=${results.length - failed.length} fail=${failed.length}\n`);
