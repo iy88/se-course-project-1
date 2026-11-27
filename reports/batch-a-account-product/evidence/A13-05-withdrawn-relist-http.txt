@@ -1,0 +1,13 @@
+A13 撤回审核后重新上架 HTTP 验证
+环境：本地后端、隔离 PostgreSQL 和 Redis。使用集成测试创建的新商品复现 RUN-03 商品 #10 的状态。
+用例：S2ProductionReviewIT#withdrawingAnUnclaimedReviewAllowsImageEditingAndResubmission
+操作：卖方撤回未认领审核后，以当前 expected_version 请求 POST /api/v1/products/{id}/on-shelf。
+通过的断言：
+  HTTP 409
+  error.code = PRODUCT_NOT_RELISTABLE
+  error.message = 最新审核未通过，不能重新上架
+  再次查询商品，lifecycle_state = off_shelf
+  卖方随后可编辑并重新提交审核
+[INFO] Running io.github.iy88.project1.integration.S2ProductionReviewIT
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.271 s -- in io.github.iy88.project1.integration.S2ProductionReviewIT
+[INFO] BUILD SUCCESS

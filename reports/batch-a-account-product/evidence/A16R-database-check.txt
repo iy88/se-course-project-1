@@ -1,0 +1,21 @@
+A16R negotiated-cancellation verification
+
+Environment: local PostgreSQL development database, read-only queries at
+2026-11-27 18:36:17 +08:00.
+
+Product and transaction facts:
+  product #9  lifecycle_state=public  occupied_by_trade_id=NULL  content_version=1
+  trade #14   status=terminated  terminal_reason=cancelled  ended_at=2026-11-27 17:09:41.855005+08
+  trade #58   status=terminated  terminal_reason=cancelled  ended_at=2026-11-27 18:33:01.044446+08
+
+Cancellation and conversation facts:
+  cancellation_proposal #5  trade_id=58  mode=approval  status=accepted  proposed_at=2026-11-27 18:32:39.317988+08
+  trade_conversation #7     trade_id=14  archived_at=2026-11-27 17:09:41.863894+08
+  trade_conversation #8     trade_id=58  archived_at=2026-11-27 18:33:01.054622+08
+
+Assertions:
+  - Negotiated cancellation released product #9 occupancy and returned it to public.
+  - The product was not put off shelf by transaction #58 termination.
+  - Trade #14 remains in its original terminal state after the new request.
+  - Reapplication created a new trade #58 and conversation #8; neither row was reused.
+  - Both terminated trade conversations remain archived and independently retained.

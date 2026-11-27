@@ -1,0 +1,50 @@
+RUN-03 / A15 database verification
+
+Captured: 2026-11-27 15:45 CST (UTC+8)
+Application SHA: 665dab5244fe740a1d257af48f58bf63125d2fb3
+Database: campus_market_v2_dev
+Access: read-only SQL
+
+Product occupancy
+- product_id=6
+- title=A-RUN03-MAIN-台灯-01-new
+- lifecycle_state=in_trade
+- occupied_by_trade_id=9
+- content_version=2
+
+Winner
+- trade_id=9
+- buyer_id=3 (A01-买方A)
+- seller_id=2 (A01-卖方)
+- status=in_progress
+- version=2
+- requested_at=2026-11-27 15:35:55.655763+08
+- responded_at=2026-11-27 15:38:41.763633+08
+- trade_state_history: request.accept, pending_acceptance -> in_progress,
+  actor=seller account_id=2.
+- trade_conversation_id=2 is not archived and contains request_created then request_accepted.
+
+Losing request
+- trade_id=10
+- buyer_id=4 (A01-买方B)
+- seller_id=2 (A01-卖方)
+- status=closed
+- close_reason=other_user_locked
+- version=2
+- requested_at=2026-11-27 15:36:20.536141+08
+- responded_at/ended_at=2026-11-27 15:38:41.763633+08
+- trade_state_history: request.close, pending_acceptance -> closed,
+  actor=system, reason=其他买方先取得商品占用.
+- trade_conversation_id=3 is archived and contains request_created then request_closed.
+
+Result notifications
+- notification_id=83, recipient=3 (A01-买方A), event_type=trade.request_accepted,
+  source_id=9, occurred_at=15:38:41.769625+08, first read 15:38:59.
+- notification_id=84, recipient=4 (A01-买方B), event_type=trade.request_closed,
+  source_id=10, occurred_at=15:38:41.774511+08, first read 15:39:18.
+
+Public search after acceptance
+- UI keyword=A-RUN03-MAIN-台灯-01-new
+- Result text=没有符合条件的商品
+- products?keyword=A-RUN03-MA... returned HTTP 200 with an empty result page.
+- Evidence image: A15-05-search-hidden.jpg

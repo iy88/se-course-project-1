@@ -1,0 +1,6 @@
+A13 生效中的展示限制阻止重新上架
+隔离环境以新商品复现 RUN-03 商品 #8 的状态，使用卖方会话及商品当前版本调用真实 HTTP 接口。
+管理员撤销展示返回 HTTP 201。重上架被拒绝后，卖方查询仍为 off_shelf 且版本相同，买方请求商品详情返回 HTTP 404。
+A13 HTTP 409 response for /products/1/on-shelf: {"error":{"code":"DISPLAY_RESTRICTED","message":"商品存在展示限制，不能上架","details":{}},"request_id":"ebb054a3-f658-489e-86eb-ce07041e6ab3"}
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 6.141 s -- in io.github.iy88.project1.integration.S4ProductionEnforcementIT
+[INFO] BUILD SUCCESS
