@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { AbortedError } from "../api/errors";
-import {
-  readStatistics,
-  type ManagementStatistics,
-  type StatisticsSelection,
-} from "../api/statistics";
+import type { StatisticsSelection } from "../api/statistics";
 import { formatDateTime } from "../app/format";
+import { TREND_DAY_LIMIT } from "../app/statistics-trend";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
+import { createStatisticsQuery } from "./statistics-query";
 
 type Scope = "7d" | "all" | "custom";
 
@@ -20,18 +17,24 @@ const scope = ref<Scope>("7d");
 const start = ref("");
 const end = ref("");
 const endInput = ref<HTMLInputElement>();
-const data = ref<ManagementStatistics>();
-const trend = ref<{ label: string; count: number }[]>([]);
-const error = ref<unknown>();
-const loading = ref(false);
-const trendLoading = ref(false);
-let lastSelection: StatisticsSelection | undefined;
-let pending: AbortController | undefined;
+const {
+  data,
+  trend,
+  error,
+  loading,
+  trendStatus,
+  trendError,
+  trendLoading,
+  trendDayCount,
+  load,
+  retry,
+  retryTrend,
+  dispose,
+} = createStatisticsQuery();
 
 const dayStart = (value: Date): Date =>
   new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 const toInput = (value: Date): string => value.toISOString().slice(0, 16);
-const dayLabel = (value: Date): string => `${value.getUTCMonth() + 1}/${value.getUTCDate()}`;
 
 const selectionLabel = computed(() => {
   const current = data.value?.selection;
@@ -72,7 +75,7 @@ const donutSegments = computed(() => {
     });
 });
 
-const tradeParts = computed(() => {
+const tradeCategoryParts = computed(() => {
   const trades = data.value?.trades;
   if (!trades) return [];
   return [
@@ -82,7 +85,9 @@ const tradeParts = computed(() => {
   ];
 });
 
-const tradeTotal = computed(() => tradeParts.value.reduce((sum, item) => sum + item.count, 0));
+const tradeCategoryTotal = computed(() =>
+  tradeCategoryParts.value.reduce((sum, item) => sum + item.count, 0),
+);
 
 const pendingParts = computed(() => {
   const pendingItems = data.value?.pending;
@@ -114,6 +119,24 @@ const trendPoints = computed(() => {
   }));
 });
 
+const trendHeadline = computed(() => {
+  if (trendLoading.value) return "读取中…";
+  if (trendStatus.value === "ready") return `${trend.value.length} 个 UTC 日`;
+  if (trendStatus.value === "too-many") return "未绘制";
+  return "按日趋势";
+});
+
+const trendEmptyMessage = computed(() => {
+  if (trendStatus.value === "all") {
+    return "全部时间不绘制按日趋势；全部时间完成交易总计见上方。需要按日趋势时，请选择近 7 天或不超过 31 个 UTC 日的自定义范围。";
+  }
+  if (trendStatus.value === "too-many") {
+    return `按日趋势最多支持 ${TREND_DAY_LIMIT} 个 UTC 日；当前范围跨 ${trendDayCount.value} 个 UTC 日，未绘制趋势。上方所选范围完成交易总计仍为完整范围，缩小范围后可查看按日趋势。`;
+  }
+  if (trendStatus.value === "ready") return "当前范围没有完成交易。";
+  return "";
+});
+
 function clearRangeError(): void {
   endInput.value?.setCustomValidity("");
 }
@@ -122,64 +145,6 @@ function defaultSelection(): StatisticsSelection {
   const now = new Date();
   const first = new Date(dayStart(now).getTime() - (TREND_DAYS - 1) * DAY_MS);
   return { time_scope: "range", start_at: first.toISOString(), end_at: now.toISOString() };
-}
-
-async function loadTrend(selection: StatisticsSelection): Promise<void> {
-  if (selection.time_scope !== "range") {
-    trend.value = [];
-    return;
-  }
-  const from = new Date(selection.start_at);
-  const to = new Date(selection.end_at);
-  const buckets: { label: string; start: Date; end: Date }[] = [];
-  for (
-    let cursor = dayStart(from);
-    cursor.getTime() < to.getTime() && buckets.length < 31;
-    cursor = new Date(cursor.getTime() + DAY_MS)
-  ) {
-    const bucketEnd = new Date(Math.min(cursor.getTime() + DAY_MS, to.getTime()));
-    buckets.push({ label: dayLabel(cursor), start: cursor, end: bucketEnd });
-  }
-  trendLoading.value = true;
-  try {
-    const results = await Promise.all(
-      buckets.map((bucket) =>
-        readStatistics({
-          time_scope: "range",
-          start_at: bucket.start.toISOString(),
-          end_at: bucket.end.toISOString(),
-        })
-          .then((value) => value.completed_in_selection)
-          .catch(() => 0),
-      ),
-    );
-    trend.value = buckets.map((bucket, index) => ({
-      label: bucket.label,
-      count: results[index] ?? 0,
-    }));
-  } finally {
-    trendLoading.value = false;
-  }
-}
-
-async function load(selection: StatisticsSelection): Promise<void> {
-  pending?.abort();
-  const controller = new AbortController();
-  pending = controller;
-  lastSelection = selection;
-  loading.value = true;
-  error.value = undefined;
-  try {
-    const result = await readStatistics(selection, controller.signal);
-    if (pending === controller) {
-      data.value = result;
-      void loadTrend(selection);
-    }
-  } catch (caught) {
-    if (pending === controller && !(caught instanceof AbortedError)) error.value = caught;
-  } finally {
-    if (pending === controller) loading.value = false;
-  }
 }
 
 function submit(): void {
@@ -214,14 +179,10 @@ function onScopeChange(): void {
   }
 }
 
-function retry(): void {
-  if (lastSelection) void load(lastSelection);
-}
-
 onMounted(() => {
   void load(defaultSelection());
 });
-onUnmounted(() => pending?.abort());
+onUnmounted(dispose);
 </script>
 
 <template>
@@ -290,10 +251,10 @@ onUnmounted(() => pending?.abort());
           </p>
         </article>
         <article class="card kpi">
-          <p class="kpi-label">交易总数</p>
-          <strong class="kpi-value">{{ tradeTotal.toLocaleString() }}</strong>
+          <p class="kpi-label">完成、终止、争议交易合计</p>
+          <strong class="kpi-value">{{ tradeCategoryTotal.toLocaleString() }}</strong>
           <p class="muted kpi-note">
-            完成 {{ data.trades.completed }} · 终止 {{ data.trades.terminated }} · 争议
+            已完成 {{ data.trades.completed }} · 已终止 {{ data.trades.terminated }} · 有争议
             {{ data.trades.disputed }}
           </p>
         </article>
@@ -302,15 +263,20 @@ onUnmounted(() => pending?.abort());
       <div class="chart-grid">
         <section class="card chart-card" aria-labelledby="trend-title">
           <header class="chart-head">
-            <h2 id="trend-title">完成交易趋势</h2>
-            <span class="muted">{{ trendLoading ? "读取中…" : `${trend.length} 天` }}</span>
+            <h2 id="trend-title">按日完成交易趋势（UTC）</h2>
+            <span class="muted">{{ trendHeadline }}</span>
           </header>
+          <LoadingBlock v-if="trendStatus === 'loading'" label="正在读取按日趋势…" />
+          <div v-else-if="trendStatus === 'error'" class="trend-error">
+            <p class="trend-error-title">按日趋势读取失败；上方汇总仍为有效结果。</p>
+            <ErrorNotice :error="trendError" @retry="retryTrend" />
+          </div>
           <svg
-            v-if="trend.length"
+            v-else-if="trend.length"
             class="trend"
             viewBox="0 0 336 112"
             role="img"
-            :aria-label="`完成交易趋势：${trend.map((item) => `${item.label} ${item.count}`).join('，')}`"
+            :aria-label="`按日完成交易趋势：${trend.map((item) => `${item.label} ${item.count}`).join('，')}`"
           >
             <line x1="8" y1="96" x2="328" y2="96" class="axis" />
             <g v-for="(point, index) in trendPoints" :key="trend[index].label">
@@ -330,7 +296,7 @@ onUnmounted(() => pending?.abort());
               </text>
             </g>
           </svg>
-          <p v-else class="muted">全部时间不绘制按日趋势。</p>
+          <p v-else class="muted trend-note">{{ trendEmptyMessage }}</p>
         </section>
 
         <section class="card chart-card" aria-labelledby="products-title">
@@ -380,25 +346,26 @@ onUnmounted(() => pending?.abort());
 
         <section class="card chart-card" aria-labelledby="trades-title">
           <header class="chart-head">
-            <h2 id="trades-title">交易结果</h2>
-            <span class="muted">共 {{ tradeTotal }} 笔</span>
+            <h2 id="trades-title">完成、终止、争议交易</h2>
+            <span class="muted">三类合计 {{ tradeCategoryTotal }} 笔</span>
           </header>
           <div
             class="stack-bar"
             role="img"
-            :aria-label="`交易结果：${tradeParts.map((item) => `${item.label} ${item.count}`).join('，')}`"
+            :aria-label="`完成、终止、争议交易：${tradeCategoryParts.map((item) => `${item.label} ${item.count}`).join('，')}`"
           >
             <span
-              v-for="item in tradeParts"
+              v-for="item in tradeCategoryParts"
               :key="item.label"
               :style="{
-                width: tradeTotal === 0 ? '0%' : `${(item.count / tradeTotal) * 100}%`,
+                width:
+                  tradeCategoryTotal === 0 ? '0%' : `${(item.count / tradeCategoryTotal) * 100}%`,
                 background: item.color,
               }"
             />
           </div>
           <ul class="legend legend--inline">
-            <li v-for="item in tradeParts" :key="item.label">
+            <li v-for="item in tradeCategoryParts" :key="item.label">
               <span class="dot" :style="{ background: item.color }" />
               <span class="legend-label">{{ item.label }}</span>
               <span class="legend-value">{{ item.count }}</span>
@@ -514,6 +481,20 @@ onUnmounted(() => pending?.abort());
 .trend {
   height: auto;
   width: 100%;
+}
+.trend-error {
+  display: grid;
+  gap: var(--space-2);
+}
+.trend-error :deep(.content-state) {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.trend-error-title,
+.trend-note {
+  font-size: 0.8rem;
+  margin: 0;
 }
 .trend .axis {
   stroke: var(--card-border, #cbd5e0);
