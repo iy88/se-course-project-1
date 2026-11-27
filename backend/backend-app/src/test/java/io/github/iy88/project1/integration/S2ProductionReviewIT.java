@@ -316,6 +316,10 @@ class S2ProductionReviewIT {
         write(seller, "POST", path + "/withdrawal", version(created), key(), 200);
         var withdrawn = get(seller, path, 200);
         assertThat(withdrawn.at("/permissions/can_submit_review").asBoolean()).isTrue();
+        var relistDenied = write(seller, "POST", path + "/on-shelf", version(withdrawn), key(), 409);
+        assertThat(text(relistDenied.path("error"), "code")).isEqualTo("PRODUCT_NOT_RELISTABLE");
+        assertThat(text(relistDenied.path("error"), "message")).isEqualTo("最新审核未通过，不能重新上架");
+        assertThat(text(get(seller, path, 200), "lifecycle_state")).isEqualTo("off_shelf");
         var edited = write(seller, "PATCH", path, """
                 {"expected_version":%d,"description":"Second edition","image_file_ids":["%d"]}
                 """.formatted(withdrawn.path("content_version").asInt(), nextImage), key(), 200);
