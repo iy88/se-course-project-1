@@ -14,8 +14,6 @@ public interface ProductReviewCaseLifecycle {
 
     void requireUnclaimed(long caseId);
 
-    default void contentUpdated(long caseId, long editId, Instant at) {}
-
     default void classificationWithdrawn(long caseId, long applicationId, Instant at) {}
 
     default void withdrawn(long caseId, Instant at) {}

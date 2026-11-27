@@ -226,10 +226,6 @@ public class ProductService {
             Set<Long> afterCategories = new LinkedHashSet<>(links.activeCategoryIds(productId));
             Map<String, Object> after = snapshot(product, afterCategories);
             ProductEditHistory edit = edits.save(new ProductEditHistory(productId, sellerId, before, after, now));
-            if (latest != null && "pending".equals(latest.status())) {
-                var lifecycle = reviewCases.getIfAvailable();
-                if (lifecycle != null) lifecycle.contentUpdated(latest.caseId(), edit.id(), now);
-            }
             editNotices.productEdited(caller, sellerId, productId, edit.id(), product.title(),
                     Product.PUBLIC.equals(product.lifecycleState()), now);
             ProductDetail detail = detail(product, sellerId, latest);
