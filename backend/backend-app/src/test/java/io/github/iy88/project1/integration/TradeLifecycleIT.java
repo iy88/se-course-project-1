@@ -338,6 +338,17 @@ class TradeLifecycleIT {
 
         int completedVersion = completed.data().path("trade").path("version").asInt();
         var reviewCommand = new TradeCommands.SubmitReview(tradeId, 5, "  很满意  ");
+        assertThatThrownBy(() -> trades.submitReview(account(MANAGER), "review-outsider-" + RUN, reviewCommand))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.status()).isEqualTo(403);
+                    assertThat(error.code()).isEqualTo("ACTION_NOT_ALLOWED");
+                });
+        assertThatThrownBy(() -> trades.submitReview(account(MANAGER), "review-missing-" + RUN,
+                new TradeCommands.SubmitReview(Long.MAX_VALUE, 5, "不存在的交易")))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.status()).isEqualTo(404);
+                    assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE");
+                });
         String buyerReviewKey = "review-buyer-" + RUN;
         var buyerReview = trades.submitReview(account(BUYER_ONE), buyerReviewKey, reviewCommand);
         assertThat(buyerReview.status()).isEqualTo(201);
