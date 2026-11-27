@@ -40,7 +40,7 @@ class ManagementTodoReadModel {
 
     private static final String LIFECYCLE_ROWS = """
             select c.id, c.case_type, c.created_at, c.updated_at, c.decision_kind,
-                   case when c.archived_at is null then c.claimed_manager_id else closed.actor_account_id end,
+                   coalesce(closed.actor_account_id, c.claimed_manager_id),
                    c.archived_at,
                    case c.case_type
                        when 'dispute' then '交易争议'
@@ -57,8 +57,7 @@ class ManagementTodoReadModel {
             from moderation_case c
             left join moderation_case_action closed on closed.case_id = c.id and closed.action_kind = 'close'
             where c.case_type in ('report', 'dispute', 'exception')
-              and (c.claimed_manager_id is not null or c.case_status = 'pending')
-              and (c.archived_at is null or closed.actor_account_id is not null)
+              and (c.archived_at is not null or c.claimed_manager_id is not null or c.case_status = 'pending')
             """;
 
     private final JdbcClient jdbc;

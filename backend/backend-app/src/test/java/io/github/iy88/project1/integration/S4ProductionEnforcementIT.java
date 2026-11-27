@@ -524,6 +524,16 @@ class S4ProductionEnforcementIT {
         assertThat(resolved.at("/dispute/status").asString()).isEqualTo("resolved");
         assertThat(get(manager, "/cases/" + caseId, 200).path("archived_at").isString()).isTrue();
         assertThat(get(manager, "/cases/" + otherCase, 200).path("archived_at").isNull()).isTrue();
+        String completedDisputes = "/management/todos?kind=dispute&keyword=" + caseId;
+        for (String ownership : List.of("completed_mine", "completed_all")) {
+            var completed = get(manager, completedDisputes + "&ownership=" + ownership, 200);
+            assertThat(completed.path("items")).anySatisfy(item -> {
+                assertThat(item.path("case_id").asLong()).isEqualTo(caseId);
+                assertThat(item.path("manager_id").asLong()).isEqualTo(manager.account().id());
+                assertThat(item.path("completed_at").isString()).isTrue();
+            });
+            assertThat(completed.at("/counts_by_kind/dispute").asLong()).isPositive();
+        }
         assertThat(db.sql("""
                 select actor_kind from moderation_case_action where case_id = ? and action_kind = 'close'
                 """).param(caseId).query(String.class).list()).containsExactly("system");
