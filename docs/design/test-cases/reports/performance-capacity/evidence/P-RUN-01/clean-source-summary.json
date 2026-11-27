@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "generated_at": "2026-11-27T15:31:46+0800",
+  "generated_at": "2026-11-27T16:07:20+0800",
   "host": {
     "os": "macOS arm64",
     "cpu": "Apple M5 Pro",
@@ -35,40 +35,40 @@
         "event_stream": 10000,
         "work_stream": 0,
         "work_pending": 0,
-        "unpublished_events": 44,
-        "all_events": 21732,
-        "db_sessions": 41,
+        "unpublished_events": 45,
+        "all_events": 21972,
+        "db_sessions": 42,
         "db_active": 11,
-        "db_locks": 94
+        "db_locks": 214
       },
       "process_peaks": {
         "scheduler": {
-          "cpu_pct": 1.8,
-          "rss_kib": 1216096
+          "cpu_pct": 1.1,
+          "rss_kib": 1192928
         },
         "worker-1": {
-          "cpu_pct": 0.8,
-          "rss_kib": 1185024
+          "cpu_pct": 1.0,
+          "rss_kib": 1187408
         },
         "api-1": {
-          "cpu_pct": 908.8,
-          "rss_kib": 1398688
+          "cpu_pct": 775.8,
+          "rss_kib": 1373664
         },
         "ws-1": {
-          "cpu_pct": 323.7,
-          "rss_kib": 1296560
+          "cpu_pct": 225.3,
+          "rss_kib": 1307056
         }
       },
       "aggregate_process_peaks": {
-        "cpu_pct": 962.2,
-        "rss_kib": 5089536
+        "cpu_pct": 928.8,
+        "rss_kib": 5048352
       },
       "upstream_counts": {
-        "127.0.0.1:60397": {
-          "200": 20021,
-          "201": 5463
+        "127.0.0.1:57967": {
+          "200": 20197,
+          "201": 5493
         },
-        "127.0.0.1:60455": {
+        "127.0.0.1:58022": {
           "101": 100
         }
       }

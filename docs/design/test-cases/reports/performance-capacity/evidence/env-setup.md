@@ -1,18 +1,18 @@
 # 性能与容量测试环境准备
 
-记录时间：2026-11-27T14:00—15:32 +08:00。
+记录时间：2026-11-27T14:00—16:07 +08:00。
 
 ## 代码与产物
 
 | 项目 | 实际值 |
 |---|---|
-| 干净复跑基线 | PR 提交 `d98552f2f6018f4e8665f94391e4573b488075e4`；从该提交建立独立 detached worktree `/private/tmp/p1-pr178-clean`，不携带其他未提交改动 |
-| 后端 JAR（P-RUN-01） | `backend-app-0.0.1-SNAPSHOT.jar`；SHA-256 `09c92cf7e61f49fc04d4e6c03df308766f452c41e5ff878f1ec791a4f916d09b` |
-| 维护 JAR | `maintenance-0.0.1-SNAPSHOT.jar`；SHA-256 `bf36dc15968ae6fe9dcbbcf822463f7e6c6782f88d9919b6ca87cd9932cd4b7b` |
-| 压测驱动（P-RUN-01） | `loadtest/target/release/campus-loadtest` 0.1.0；SHA-256 `c4b0d61c8f6f376c08286a7faac68f2e8044563e15875955a471fb1edb6335e1` |
+| 干净复跑基线 | PR 提交 `93f612b7f9963b919cc45a473cb60ad2de97f664`；从该提交建立独立 detached worktree `/private/tmp/p1-pr178-clean`，不携带其他未提交改动 |
+| 后端 JAR（P-RUN-01） | `backend-app-0.0.1-SNAPSHOT.jar`；SHA-256 `12b22171026b22ccc387927a17bacac90611f952b80edbbd2e4c13d1fedb13fd` |
+| 维护 JAR | `maintenance-0.0.1-SNAPSHOT.jar`；SHA-256 `2e81331c41232cf33c0e1af40470906ae5f7c59dc4a4560640139873df82aae5` |
+| 压测驱动（P-RUN-01） | `loadtest/target/release/campus-loadtest` 0.1.0；SHA-256 `5551b87ccb064f0976ed98b1c06e13d9ba66f1038d7670fe995331c7933c2d2a` |
 | 容量档驱动（P-RUN-02／03） | 初审前驱动；SHA-256 `8f32db78418de9d033db0086416418bc9d5e6889e49eec17d885a5633745906f` |
 | Java | OpenJDK 27.0.1.1 |
-| 驱动单测 | `cargo test --locked --manifest-path loadtest/Cargo.toml`：31/31 通过 |
+| 自动化测试 | loadtest 31/31；file-storage 17/17；backend-app 上下文 7/7；Clippy 无 warning |
 
 后端 JAR 使用可复现构建时间，文件系统时间固定为 1980-02-01，不能据此判断构建时刻；以摘要和报告参数为准。
 
@@ -23,7 +23,14 @@
 - 删除 `CaseResultController` 与跨事项 `CaseQueries.results`；
 - 调整案件详情公开字段及相关案件测试。
 
-这些文件不属于压测驱动的登录、商品、交易、上传、会话或实时 WebSocket 路径，但为避免仅靠静态归因，P-RUN-01 已按干净提交 `d98552f2` 重新构建并完整复跑。容量档 P-RUN-02／03 仍保留首次实验结果，实际被测后端 JAR 为旧摘要 `125d57f4…`，驱动也是修复 WS hint 早到竞态前的版本；因此 P-RUN-02／03 只作 Single Search 与横向扩容观察，IM 容量档为初审前历史数据，不用于最终送达结论或完整客户端验收。
+这些文件不属于压测驱动的登录、商品、交易、上传、会话或实时 WebSocket 路径。为同时覆盖复审要求和实测中发现的问题，最终 P-RUN-01 基于 `93f612b7` 重建并完整复跑，该提交包含：
+
+- 从发送 POST 前计时、到接收方正文 HTTP 回读完成才结束的 `im_delivery` 口径；
+- WS hint 早到时冻结正文回读完成时刻，发送响应返回后再核对 ID／seq／body；
+- bucket ACL／versioning 只由部署依赖探针校验，上传授权、完成核验和清理不重复查询；
+- 上传控制器复用进程级 OSS 客户端，避免高并发下每请求创建／销毁 SDK 客户端。
+
+容量档 P-RUN-02／03 仍保留首次实验数据，实际被测后端 JAR 为旧摘要 `125d57f4…`，驱动也是最终竞态和计时修复前的版本；因此 P-RUN-02／03 只作 Single Search 与横向扩容观察，IM 容量档为历史相对边界，不用于最终送达结论或完整客户端验收。
 
 ## 主机与依赖
 
@@ -43,6 +50,7 @@
 - 每个场景开始前从同一 PostgreSQL seed 快照恢复，并清空临时 Redis DB；避免上一容量档位的数据累积影响下一档。
 - OSS 写入、seed 完成和删除均通过维护工具与私有前置检查核对；最终确认随机前缀为空后删除临时 PostgreSQL、Redis、manifest、nginx 和 JVM。
 - `.env`、manifest、Cookie、CSRF、OSS 凭据和签名 URL 未进入证据目录。
+- 部署依赖探针负责一次性核验私有桶和版本控制状态；业务请求路径不再重复查询 Bucket ACL／versioning。
 
 ## 服务拓扑
 
