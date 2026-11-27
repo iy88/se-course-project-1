@@ -173,6 +173,41 @@ class TradeCaseEnforcementTests {
     }
 
     @Test
+    void ordinaryLiftResolvesTheCaseSourceAndPublishesTheTradeLift() {
+        when(trades.prepare(MANAGER, TRADE_ID, CASE_ID, false)).thenReturn(new TradePorts.CaseEnforcementPlan(
+                new LockPlan(Map.of(MANAGER, LockPlan.AccountMode.SHARED),
+                        Set.of(TRADE_KEY, CASE_KEY, CONVERSATION_KEY)), CONVERSATION_ID, null));
+
+        var callbacks = enforcement.lockCallbacks(context(), CASE_ID,
+                List.of(item("enf-1", "lift_trade_freeze", null)));
+        callbacks.acquire(transaction);
+
+        var keys = ArgumentCaptor.forClass(LockPlan.Key.class);
+        verify(transaction, times(2)).lock(keys.capture(), any());
+        assertThat(keys.getAllValues()).containsExactly(TRADE_KEY, CONVERSATION_KEY);
+        verify(trades, never()).lockCaseProductRow(any(), anyLong());
+
+        var subject = new TradePorts.CaseEnforcementOutcome(TRADE_ID, 59L, UUID.randomUUID(),
+                "in_progress", "in_progress", "first_agreement_pending", "first_agreement_pending",
+                true, true, false);
+        when(trades.liftCaseFreezeLocked(transaction, CASE_ID, TRADE_ID, "case:40", "reason"))
+                .thenReturn(subject);
+
+        var outcomes = enforcement.execute(transaction, context(), CASE_ID, "reason", "case:40",
+                List.of(item("enf-1", "lift_trade_freeze", null)), NOW);
+
+        assertThat(outcomes).singleElement().satisfies(outcome -> {
+            assertThat(outcome.action()).isEqualTo("lift_trade_freeze");
+            assertThat(outcome.resultType()).isEqualTo("trade_transition");
+            assertThat(outcome.resultId()).isEqualTo(59L);
+            assertThat(outcome.remainingRestrictions()).containsExactly("trade_freeze");
+        });
+        verify(trades).publishLocked(transaction, CASE_ID, TRADE_ID, "lift_trade_freeze", subject, "reason");
+        verify(trades, never()).liftFreezeLocked(any(), anyLong(), anyLong(), anyLong(), anyString(), anyString());
+        verify(trades, never()).restoreLocked(any(), anyLong(), anyLong(), anyString(), anyString());
+    }
+
+    @Test
     void legacyTradeReferenceResolvesTheUniqueTransitionAndReportsRemainingFreezes() {
         var recorded = new CaseRecords.Enforcement("enf-1", CASE_ID, "freeze_trade", "trade", TRADE_ID,
                 "case:40", MANAGER, NOW, "trade", TRADE_ID, "applied", "frozen", "frozen",

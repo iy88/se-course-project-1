@@ -32,18 +32,20 @@ public class CaseQueries {
     private final CasePorts.Threads threads;
     private final CasePorts.Managers managers;
     private final CasePorts.Targets targets;
+    private final CasePorts.EvidenceFiles files;
     private final CaseSettings settings;
     private final Clock clock;
     private final JsonMapper json;
 
     public CaseQueries(JdbcClient jdbc, CaseLifecycleStore store, CasePorts.Threads threads,
-                       CasePorts.Managers managers, CasePorts.Targets targets, CaseSettings settings,
+                       CasePorts.Managers managers, CasePorts.Targets targets, CasePorts.EvidenceFiles files, CaseSettings settings,
                        JsonMapper json, Clock clock) {
         this.jdbc = jdbc;
         this.store = store;
         this.threads = threads;
         this.managers = managers;
         this.targets = targets;
+        this.files = files;
         this.settings = settings;
         this.clock = clock;
         this.json = json;
@@ -152,7 +154,65 @@ public class CaseQueries {
                 : relatedView ? CaseVocabulary.VIEWPOINT_RELATED : CaseVocabulary.VIEWPOINT_MANAGER);
         body.put("reason_text", reasonText(facts, reporter, related, manager));
         body.put("reported_reason", reporter || manager ? facts.reportedReason() : null);
+        if (reporterView) {
+            var materials = body.putObject("report_materials");
+            targets.reportProduct(caseId).ifPresent(snapshot -> {
+                var product = materials.putObject("product");
+                product.put("id", Long.toString(snapshot.id()));
+                product.put("title", snapshot.title());
+                product.put("description", snapshot.description());
+            });
+            var supplements = materials.putArray("supplements");
+            for (var action : actions) {
+                if (!Long.valueOf(actor).equals(action.actorAccountId())) {
+                    continue;
+                }
+                if (CaseVocabulary.ACTION_SUBMIT.equals(action.actionKind())) {
+                    materials.put("original_note", action.note());
+                } else if (CaseVocabulary.ACTION_SUPPLEMENT.equals(action.actionKind()) && action.note() != null) {
+                    var item = supplements.addObject();
+                    item.put("action_id", Long.toString(action.actionId()));
+                    item.put("note", action.note());
+                    item.put("occurred_at", text(action.occurredAt()));
+                }
+            }
+            var attachments = materials.putArray("attachments");
+            for (var evidence : store.evidence(caseId)) {
+                if (evidence.submittedAttachmentBy(actor)) {
+                    var item = attachments.addObject();
+                    item.put("evidence_id", Long.toString(evidence.evidenceId()));
+                    item.put("submitted_at", text(evidence.submittedAt()));
+                    files.contentType(caseId, evidence.fileId()).ifPresent(type -> item.put("content_type", type));
+                }
+            }
+        }
         if (managerView) {
+            var relatedIds = targets.relatedAccountIds(facts);
+            var accountIds = new LinkedHashSet<>(relatedIds);
+            if (facts.reporterAccountId() != null) {
+                accountIds.add(facts.reporterAccountId());
+            }
+            var names = accountIds.isEmpty() ? java.util.Map.<Long, String>of() : targets.accountNames(accountIds);
+            var accounts = body.putArray("related_accounts");
+            for (long id : accountIds.stream().sorted().toList()) {
+                var account = accounts.addObject();
+                account.put("account_id", Long.toString(id));
+                account.put("display_name", names.get(id));
+                account.put("reporter", Long.valueOf(id).equals(facts.reporterAccountId()));
+                account.put("eligible", relatedIds.contains(id) && id != actor
+                        && !Long.valueOf(id).equals(facts.reporterAccountId()));
+            }
+            if (CaseVocabulary.REPORT.equals(facts.caseType()) && facts.targetId() != null) {
+                var object = body.putObject("reported_object");
+                object.put("target_type", facts.targetType());
+                object.put("target_id", Long.toString(facts.targetId()));
+                targets.reportProduct(caseId).ifPresent(snapshot -> {
+                    var product = object.putObject("product");
+                    product.put("id", Long.toString(snapshot.id()));
+                    product.put("title", snapshot.title());
+                    product.put("description", snapshot.description());
+                });
+            }
             if ("message".equals(facts.targetType()) && facts.targetId() != null
                     && facts.conversationId() != null && facts.conversationKind() != null) {
                 var message = body.putObject("reported_message");
@@ -168,11 +228,27 @@ public class CaseQueries {
                 if (snapshot.parentId() != null) {
                     target.put("parent_id", Long.toString(snapshot.parentId()));
                 }
+                if (snapshot.contextId() != null) {
+                    target.put("context_id", Long.toString(snapshot.contextId()));
+                }
                 target.put("body", snapshot.body());
                 target.put("state", snapshot.state());
                 target.put("created_at", text(snapshot.createdAt()));
                 target.put("removed", snapshot.removed());
             });
+        }
+        if (managerView) {
+            var choices = body.putArray("decision_basis_actions");
+            for (var action : actions) {
+                if (!action.decisionBasis()) {
+                    continue;
+                }
+                var item = choices.addObject();
+                item.put("action_id", Long.toString(action.actionId()));
+                item.put("action_kind", action.actionKind());
+                item.put("occurred_at", text(action.occurredAt()));
+                item.put("note", action.note());
+            }
         }
         var available = body.putArray("available_actions");
         var availableList = availableActions(facts, reporterView, relatedView, managerView, actor, inquiries, now);
@@ -196,6 +272,13 @@ public class CaseQueries {
             item.put("action_kind", action.actionKind());
             item.put("occurred_at", text(action.occurredAt()));
             item.put("actor_kind", action.actorKind());
+            if (managerView) {
+                item.put("action_id", Long.toString(action.actionId()));
+                if (action.messageId() != null && action.relatedAccountId() != null) {
+                    item.put("message_id", Long.toString(action.messageId()));
+                    item.put("related_account_id", Long.toString(action.relatedAccountId()));
+                }
+            }
         }
         var enforcementArray = body.putArray("enforcements");
         for (var enforcement : enforcements) {
@@ -211,7 +294,7 @@ public class CaseQueries {
         var deadline = store.appealEligibility(caseId, actor).map(CaseRecords.AppealEligibility::appealDeadlineAt)
                 .orElse(null);
         body.put("appeal_deadline_at", text(deadline));
-        if (thread.isPresent()) {
+        if (!reporterView && thread.isPresent()) {
             body.set("thread", thread(thread.getAsLong()));
         } else {
             body.set("thread", json.nullNode());
@@ -223,7 +306,12 @@ public class CaseQueries {
                     var entry = evidence.addObject();
                     entry.put("evidence_id", Long.toString(item.evidenceId()));
                     entry.put("evidence_kind", item.evidenceKind());
+                    entry.put("submitted_at", text(item.submittedAt()));
+                    entry.put("decision_basis", item.decisionBasis());
                     entry.put("file_id", item.fileId() == null ? null : Long.toString(item.fileId()));
+                    if (item.fileId() != null) {
+                        files.contentType(caseId, item.fileId()).ifPresent(type -> entry.put("content_type", type));
+                    }
                 }
             }
         }
@@ -406,7 +494,7 @@ public class CaseQueries {
                                          boolean managerView, long actor, List<CaseRecords.Action> inquiries,
                                          Instant now) {
         var actions = new LinkedHashSet<String>();
-        if (reporterView && !facts.archived()) {
+        if (reporterView && !facts.archived() && !facts.decided()) {
             actions.add(CaseVocabulary.SUPPLEMENT_EVIDENCE);
         }
         if (relatedView && !facts.archived()) {
@@ -417,7 +505,7 @@ public class CaseQueries {
             var eligibility = store.appealEligibility(facts.caseId(), actor);
             if (eligibility.isPresent() && !facts.archived() && facts.decided()
                     && !now.isAfter(eligibility.get().appealDeadlineAt())
-                    && store.appealOf(facts.caseId(), actor).isEmpty()) {
+                    && !store.hasPendingAppeal(facts.caseId(), actor)) {
                 actions.add(CaseVocabulary.SUBMIT_APPEAL);
             }
         }

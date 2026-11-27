@@ -24,9 +24,9 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -67,7 +67,6 @@ public class CaseApplication {
     private static final Set<String> REVERSIBLE_ACTIONS = Set.of("freeze_trade", "restrict_account",
             "withdraw_public_access");
     private static final Set<String> ADJUST_TRADE_TARGETS = Set.of("completed", "terminated", "in_progress");
-    private static final Pattern EVIDENCE_REF = Pattern.compile("(?:evidence:)?(\\d+)");
 
     private final WriteExecutor writes;
     private final CaseLifecycleStore store;
@@ -201,7 +200,12 @@ public class CaseApplication {
     private final class SubmitUseCase implements WriteExecutor.UseCase<CaseCommands.Report, CaseCommands.Report> {
         @Override
         public JsonNode digestInput(CaseCommands.Report request) {
-            return json.valueToTree(request);
+            ObjectNode digest = json.valueToTree(request);
+            if (request.target().sourceProductId() == null) {
+                ((ObjectNode) digest.get("target")).remove("source_product_id");
+                ((ObjectNode) digest.get("target")).remove("sourceProductId");
+            }
+            return digest;
         }
 
         @Override
@@ -248,34 +252,32 @@ public class CaseApplication {
                 long caseId = existing.get().caseId();
                 var facts = store.lock(transaction, caseId);
                 requireLifecycle(facts);
-                if (facts.archived()) {
-                    throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
+                if (!facts.archived() && !facts.decided()) {
+                    Long firstEvidence = attachEvidence(transaction, caseId, reporter, request.attachments());
+                    store.addAction(new CaseRecords.Action(0, caseId, CaseVocabulary.ACTION_SUPPLEMENT,
+                            CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
+                    store.touch(caseId, now);
+                    audit(transaction, "case.report.supplement", caseId, reporter);
+                    return new WriteResult.Response<>(200,
+                            submitted(caseId, facts.caseStatus(), true), new ResourceRef("case", caseId));
                 }
-                store.addAction(new CaseRecords.Action(0, caseId, CaseVocabulary.ACTION_SUPPLEMENT,
-                        CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null));
-                attachEvidence(transaction, caseId, reporter, request.attachments());
-                store.touch(caseId, now);
-                audit(transaction, "case.report.supplement", caseId, reporter);
-                return new WriteResult.Response<>(200,
-                        submitted(caseId, facts.caseStatus(), true), new ResourceRef("case", caseId));
-            }
-            if (store.findClosedReport(reporter, request.target()).isPresent()) {
-                throw new BusinessError("CASE_CLOSED", 409, "同对象举报已结案");
             }
             lockFiles(transaction, request.attachments());
             Long opened = store.openReportIfAbsent(request.target(), reporter, reason, now).orElse(null);
             if (opened == null) {
                 var current = store.findOpenReport(reporter, request.target()).orElseThrow(CaseApplication::conflict);
                 var facts = store.lock(transaction, current.caseId());
+                if (facts.archived() || facts.decided()) throw conflict();
+                Long firstEvidence = attachEvidence(transaction, facts.caseId(), reporter, request.attachments());
                 store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_SUPPLEMENT,
-                        CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null));
-                attachEvidence(transaction, facts.caseId(), reporter, request.attachments());
+                        CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
                 store.touch(facts.caseId(), now);
                 audit(transaction, "case.report.supplement", facts.caseId(), reporter);
                 return new WriteResult.Response<>(200, submitted(facts.caseId(), facts.caseStatus(), true),
                         new ResourceRef("case", facts.caseId()));
             }
             long caseId = opened;
+            targets.captureReportSnapshot(caseId, request.target());
             store.addAction(new CaseRecords.Action(0, caseId, CaseVocabulary.ACTION_SUBMIT,
                     CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null));
             attachEvidence(transaction, caseId, reporter, request.attachments());
@@ -326,15 +328,18 @@ public class CaseApplication {
             if (facts.archived()) {
                 throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
             }
+            if (facts.decided()) {
+                throw new BusinessError("STATE_CONFLICT", 409, "事项已作出决定，请重新提交举报");
+            }
             String note = optionalText(request.supplement().note(), settings.getMaxNoteLength(), "补充说明");
             if (note == null && request.supplement().attachments().isEmpty()) {
                 throw new BusinessError("INPUT_INVALID", 422, "补充材料不能为空");
             }
             lockFiles(transaction, request.supplement().attachments());
             Instant now = now();
+            Long firstEvidence = attachEvidence(transaction, facts.caseId(), reporter, request.supplement().attachments());
             store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_SUPPLEMENT,
-                    CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null));
-            attachEvidence(transaction, facts.caseId(), reporter, request.supplement().attachments());
+                    CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
             store.touch(facts.caseId(), now);
             audit(transaction, "case.report.supplement", facts.caseId(), reporter);
             long supplements = store.actions(facts.caseId()).stream()
@@ -510,8 +515,11 @@ public class CaseApplication {
                 resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
                         List.of(request.message().conversationId())));
             }
-            var plan = new LockPlan(Map.of(), resources);
             var message = request.message();
+            if (CaseVocabulary.KIND_MANAGER_REPLY.equals(message.messageKind())) {
+                addCaseThreadLocks(facts.caseId(), resources);
+            }
+            var plan = new LockPlan(Map.of(), resources);
             if (enforcement != null && reversal(message) && facts.claimedBy(actor(context))) {
                 var appellant = appellantFor(facts.caseId(), message.appealActionId());
                 if (appellant != null) {
@@ -640,8 +648,8 @@ public class CaseApplication {
             if (now.isAfter(eligibility.appealDeadlineAt())) {
                 throw new BusinessError("CASE_APPEAL_WINDOW_ENDED", 409, "申辩期已结束");
             }
-            if (store.appealOf(facts.caseId(), actor).isPresent()) {
-                throw new BusinessError("STATE_CONFLICT", 409, "申辩已提交");
+            if (store.hasPendingAppeal(facts.caseId(), actor)) {
+                throw new BusinessError("STATE_CONFLICT", 409, "上一条申辩仍待处理");
             }
             long conversationId = requireThread(facts.caseId(), actor, message.conversationId());
             var appended = threads.append(transaction, facts.caseId(), actor, CaseVocabulary.KIND_APPEAL,
@@ -683,10 +691,6 @@ public class CaseApplication {
                     throw new BusinessError("INPUT_INVALID", 422, "撤销处置不能同时给出替代处置");
                 }
             }
-            if (message.basisRef() == null || message.basisRef().isBlank()) {
-                throw new BusinessError("BASIS_REQUIRED", 422, "处理申辩须给出依据");
-            }
-            String basisRef = requiredText(message.basisRef(), settings.getMaxNoteLength(), "依据引用");
             var appeal = store.action(facts.caseId(), message.appealActionId())
                     .filter(action -> CaseVocabulary.ACTION_APPEAL.equals(action.actionKind()))
                     .orElseThrow(() -> new BusinessError("INPUT_INVALID", 422, "申辩不存在"));
@@ -696,23 +700,40 @@ public class CaseApplication {
             if (appeal.relatedAccountId() == null) {
                 throw new BusinessError("STATE_CONFLICT", 409, "申辩记录不完整");
             }
+            var basisRefs = message.basisRefs();
+            String basisRef;
+            if (basisRefs.isEmpty()) {
+                if (message.basisRef() == null || message.basisRef().isBlank()) {
+                    throw new BusinessError("BASIS_REQUIRED", 422, "处理申辩须给出依据");
+                }
+                basisRef = requiredText(message.basisRef(), settings.getMaxNoteLength(), "依据引用");
+                basisRefs = List.of(basisRef);
+            } else {
+                if (message.basisRef() != null) {
+                    throw new BusinessError("INPUT_INVALID", 422, "只能使用一种依据引用字段");
+                }
+                var allowed = decisionBasisRefs(facts.caseId());
+                allowed.add("action:" + appeal.actionId());
+                if (!allowed.containsAll(basisRefs)) {
+                    throw new BusinessError("BASIS_REQUIRED", 422, "请选择本事项的依据");
+                }
+                basisRefs = basisRefs.stream().distinct().toList();
+                basisRef = basisJson(basisRefs);
+            }
             long appellant = appeal.relatedAccountId();
             long conversationId = requireThread(facts.caseId(), appellant, message.conversationId());
             Instant now = now();
             String sourceNote = uphold ? null : reverse(transaction, facts, appellant, message, actor, now, plan,
-                    basisRef);
+                    basisRef, basisRefs);
             var appended = threads.append(transaction, facts.caseId(), appellant,
                     CaseVocabulary.KIND_MANAGER_REPLY, CaseVocabulary.ACTOR_MANAGER, actor, message.body());
             long actionId = store.addAction(new CaseRecords.Action(0, facts.caseId(),
                     CaseVocabulary.ACTION_MANAGER_REPLY, CaseVocabulary.ACTOR_MANAGER, actor, now,
                     appended.messageId(), appellant, null, appeal.actionId(), message.resolution(),
-                    sourceNote, basisJson(List.of(basisRef))));
-            notifications.create(transaction, CaseVocabulary.EVENT_APPEAL_RESOLVED,
-                    "case:" + facts.caseId() + ":appeal:" + appeal.actionId() + ":resolved",
-                    new ResourceRef("case", facts.caseId()), Set.of(appellant),
-                    Map.of("case_id", Long.toString(facts.caseId()), "resolution", message.resolution()), now);
+                    sourceNote, basisJson(basisRefs)));
             store.touch(facts.caseId(), now);
             audit(transaction, "case.appeal.resolve", facts.caseId(), actor);
+            archiveIfFullyReverted(transaction, facts, actor, now);
             return messageResponse(facts, conversationId, appended, actionId, CaseVocabulary.KIND_MANAGER_REPLY);
         }
 
@@ -725,7 +746,7 @@ public class CaseApplication {
          */
         private String reverse(WriteTransaction transaction, CaseRecords.Facts facts, long appellant,
                                CaseCommands.Message message, long manager, Instant now, LockPlan plan,
-                               String basisRef) {
+                               String basisRef, List<String> basisRefs) {
             if (enforcement == null) {
                 throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "撤销或调整须由处置执行提供");
             }
@@ -772,7 +793,7 @@ public class CaseApplication {
             store.markEnforcementLifted(facts.caseId(), recorded.enforcementId(), manager, basisRef, now);
             store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_LIFT,
                     CaseVocabulary.ACTOR_MANAGER, manager, now, null, appellant, null, null, null,
-                    sourceNote, basisJson(List.of(basisRef))));
+                    sourceNote, basisJson(basisRefs)));
             return sourceNote;
         }
 
@@ -873,16 +894,8 @@ public class CaseApplication {
                 throw new BusinessError("INPUT_INVALID", 422, "decision_kind 取值无效");
             }
             String reason = requiredText(decision.reason(), settings.getMaxReasonLength(), "决定理由");
-            if (decision.basisRefs().isEmpty()) {
-                throw new BusinessError("BASIS_REQUIRED", 422, "决定须给出依据");
-            }
-            var evidenceIds = store.evidence(facts.caseId()).stream()
-                    .map(CaseRecords.Evidence::evidenceId).collect(Collectors.toSet());
-            for (String basis : decision.basisRefs()) {
-                var matcher = EVIDENCE_REF.matcher(basis == null ? "" : basis.trim());
-                if (matcher.matches() && !evidenceIds.contains(Long.parseLong(matcher.group(1)))) {
-                    throw new BusinessError("BASIS_REQUIRED", 422, "依据不属于本事项");
-                }
+            if (!decision.basisRefs().isEmpty() && !decisionBasisRefs(facts.caseId()).containsAll(decision.basisRefs())) {
+                throw new BusinessError("BASIS_REQUIRED", 422, "请选择本事项的问询、回复或用户补充材料");
             }
             Instant now = now();
             if (instructions.isEmpty()) {
@@ -994,6 +1007,40 @@ public class CaseApplication {
 
     // ------------------------------------------------------------------ close
 
+    private void addCaseThreadLocks(long caseId, Set<LockPlan.Key> resources) {
+        for (long accountId : store.relatedAccountIds(caseId)) {
+            threads.findConversation(caseId, accountId)
+                    .ifPresent(id -> resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
+                            List.of(id))));
+        }
+    }
+
+    private CaseRecords.Facts archiveCase(WriteTransaction transaction, CaseRecords.Facts facts,
+                                         Long manager, Instant now) {
+        for (long accountId : store.relatedAccountIds(facts.caseId())) {
+            threads.archive(transaction, facts.caseId(), accountId);
+        }
+        var archived = store.archive(facts.caseId(), now);
+        store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_CLOSE,
+                manager == null ? CaseVocabulary.ACTOR_SYSTEM : CaseVocabulary.ACTOR_MANAGER,
+                manager, now, null, null, null, null, null, null, null));
+        return archived;
+    }
+
+    private void archiveIfFullyReverted(WriteTransaction transaction, CaseRecords.Facts facts, long manager,
+                                        Instant now) {
+        if (!facts.decided() || facts.archived() || store.latestPendingAppeal(facts.caseId()).isPresent()) {
+            return;
+        }
+        var applied = store.enforcements(facts.caseId()).stream()
+                .filter(item -> "applied".equals(item.resultStatus()) || "replayed".equals(item.resultStatus()))
+                .filter(item -> !LIFT_ACTIONS.contains(item.action())).toList();
+        if (!applied.isEmpty() && applied.stream().allMatch(item -> item.liftedAt() != null)) {
+            archiveCase(transaction, facts, null, now);
+            audit(transaction, "case.close", facts.caseId(), manager);
+        }
+    }
+
     private final class CloseUseCase implements WriteExecutor.UseCase<CloseRequest, CloseRequest> {
         @Override
         public JsonNode digestInput(CloseRequest request) {
@@ -1005,11 +1052,7 @@ public class CaseApplication {
             var facts = store.find(request.caseId()).orElseThrow(CaseApplication::notVisible);
             var resources = new TreeSet<LockPlan.Key>();
             resources.add(CaseLifecycleStore.lockKey(facts.caseId()));
-            for (long accountId : store.relatedAccountIds(facts.caseId())) {
-                threads.findConversation(facts.caseId(), accountId)
-                        .ifPresent(id -> resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
-                                List.of(id))));
-            }
+            addCaseThreadLocks(facts.caseId(), resources);
             return new LockPlan(Map.of(), resources);
         }
 
@@ -1055,12 +1098,7 @@ public class CaseApplication {
             if (store.latestPendingAppeal(facts.caseId()).isPresent()) {
                 throw new BusinessError("CASE_APPEAL_PENDING", 409, "存在未处理的申辩");
             }
-            for (long accountId : store.relatedAccountIds(facts.caseId())) {
-                threads.archive(transaction, facts.caseId(), accountId);
-            }
-            facts = store.archive(facts.caseId(), now);
-            store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_CLOSE,
-                    CaseVocabulary.ACTOR_MANAGER, manager, now, null, null, null, null, null, null, null));
+            facts = archiveCase(transaction, facts, manager, now);
             audit(transaction, "case.close", facts.caseId(), manager);
             return new WriteResult.Response<>(200, closed(facts), new ResourceRef("case", facts.caseId()));
         }
@@ -1153,6 +1191,7 @@ public class CaseApplication {
             var recorded = requireRecorded(request.caseId(), request.enforcementId());
             var resources = new TreeSet<LockPlan.Key>();
             resources.add(CaseLifecycleStore.lockKey(facts.caseId()));
+            addCaseThreadLocks(facts.caseId(), resources);
             var accounts = new TreeMap<Long, LockPlan.AccountMode>();
             for (long accountId : targets.relatedAccountIds(facts)) {
                 accounts.put(accountId, LockPlan.AccountMode.SHARED);
@@ -1218,6 +1257,7 @@ public class CaseApplication {
                     basisJson(List.of(reason))));
             store.touch(facts.caseId(), now);
             audit(transaction, "case.enforcement.lift", facts.caseId(), manager);
+            archiveIfFullyReverted(transaction, facts, manager, now);
             var lifted = store.lift(facts.caseId(), request.enforcementId())
                     .orElse(new CaseRecords.Lift(now, manager));
             return lifted(recorded, lifted, outcomes);
@@ -1465,7 +1505,7 @@ public class CaseApplication {
 
     private static void rejectResolutionFields(CaseCommands.Message message) {
         rejectSelectionFields(message);
-        if (message.appealActionId() != null || message.resolution() != null) {
+        if (message.appealActionId() != null || message.resolution() != null || !message.basisRefs().isEmpty()) {
             throw new BusinessError("INPUT_INVALID", 422, "当前发言不能给出申辩处理字段");
         }
     }
@@ -1601,17 +1641,20 @@ public class CaseApplication {
         return list;
     }
 
-    private void attachEvidence(WriteTransaction transaction, long caseId, long reporter, List<Long> fileIds) {
+    private Long attachEvidence(WriteTransaction transaction, long caseId, long reporter, List<Long> fileIds) {
         if (fileIds.isEmpty()) {
-            return;
+            return null;
         }
         var ordered = fileIds.stream().distinct().sorted().toList();
         var references = files.attach(transaction, caseId, reporter, ordered);
         Instant now = now();
+        Long first = null;
         for (int index = 0; index < ordered.size(); index++) {
             Long referenceId = index < references.size() ? references.get(index) : null;
-            store.addEvidence(caseId, ordered.get(index), referenceId, reporter, now);
+            long evidenceId = store.addEvidence(caseId, ordered.get(index), referenceId, reporter, now);
+            if (index == 0) first = evidenceId;
         }
+        return first;
     }
 
     private void lockFiles(WriteTransaction transaction, List<Long> fileIds) {
@@ -1662,6 +1705,15 @@ public class CaseApplication {
         body.put("case_status", facts.caseStatus());
         body.put("archived_at", facts.archivedAt().toString());
         return body;
+    }
+
+    private Set<String> decisionBasisRefs(long caseId) {
+        var allowed = new java.util.HashSet<String>();
+        store.actions(caseId).stream().filter(CaseRecords.Action::decisionBasis)
+                .forEach(action -> allowed.add("action:" + action.actionId()));
+        store.evidence(caseId).stream().filter(CaseRecords.Evidence::decisionBasis)
+                .forEach(evidence -> allowed.add("evidence:" + evidence.evidenceId()));
+        return allowed;
     }
 
     private String basisJson(List<String> basisRefs) {

@@ -26,8 +26,20 @@ public final class CasePorts {
         /** Rejects unknown, missing, self or unauthorized targets with the named case errors. */
         void requireReportable(CaseCommands.Target target, long reporterAccountId);
 
+        default void captureReportSnapshot(long caseId, CaseCommands.Target target) {}
+
         /** Accounts that may be inquired and disposed for this case. */
         Set<Long> relatedAccountIds(CaseRecords.Facts facts);
+
+        default Map<Long, String> accountNames(Set<Long> ids) {
+            return Map.of();
+        }
+
+        default Optional<ReportProduct> reportProduct(long caseId) {
+            return Optional.empty();
+        }
+
+        record ReportProduct(long id, String title, String description) {}
 
         /** Buyer and seller of one trade, or an empty set when it does not exist. */
         Set<Long> tradeParties(long tradeId);
@@ -41,7 +53,7 @@ public final class CasePorts {
             return Optional.empty();
         }
 
-        record TargetSnapshot(String targetType, long targetId, long authorAccountId, Long parentId,
+        record TargetSnapshot(String targetType, long targetId, long authorAccountId, Long parentId, Long contextId,
                               String body, String state, Instant createdAt, boolean removed) {
         }
 
@@ -89,6 +101,10 @@ public final class CasePorts {
 
     /** Case evidence files, registered through the shared file service. */
     public interface EvidenceFiles {
+        default Optional<String> contentType(long caseId, long fileId) {
+            return Optional.empty();
+        }
+
         void lockFile(long fileId);
 
         /** Registers each verified file against the case and returns the file reference ids. */

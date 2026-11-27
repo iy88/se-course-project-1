@@ -146,6 +146,9 @@ public class ProductService {
                 application = applications.save(new CategoryApplication(product.id(), sellerId, proposed, now));
             }
             attachImages(product.id(), sellerId, command.imageFileIds());
+            if (reviewCases.getIfAvailable() != null) {
+                captureCaseSnapshot(caseId, product);
+            }
             ProductDetail detail = detail(product, sellerId, audit);
             Map<String, Object> facts = new LinkedHashMap<>();
             facts.put("lifecycle_state", product.lifecycleState());
@@ -223,6 +226,10 @@ public class ProductService {
             Set<Long> afterCategories = new LinkedHashSet<>(links.activeCategoryIds(productId));
             Map<String, Object> after = snapshot(product, afterCategories);
             ProductEditHistory edit = edits.save(new ProductEditHistory(productId, sellerId, before, after, now));
+            if (latest != null && "pending".equals(latest.status())) {
+                var lifecycle = reviewCases.getIfAvailable();
+                if (lifecycle != null) lifecycle.contentUpdated(latest.caseId(), edit.id(), now);
+            }
             editNotices.productEdited(caller, sellerId, productId, edit.id(), product.title(),
                     Product.PUBLIC.equals(product.lifecycleState()), now);
             ProductDetail detail = detail(product, sellerId, latest);
@@ -257,6 +264,10 @@ public class ProductService {
                                             AuditContext auditContext) {
         String reason = correctionReason(command.reason());
         String basisType = command.basisType() == null ? "" : command.basisType().trim();
+        // TC-PRD-035 treats a missing basis as an authority failure, not a malformed request.
+        if (basisType.isEmpty() && command.basisId() <= 0) {
+            throw new BusinessError("ACTION_NOT_ALLOWED", 403, "需要认领事项作为纠正依据");
+        }
         if (!"case".equals(basisType) || command.basisId() <= 0) {
             throw new BusinessError("INPUT_INVALID", 422, "纠正依据无效");
         }
@@ -329,7 +340,11 @@ public class ProductService {
             }
             Instant now = Instant.now();
             int sequence = audits.maxSequence(productId) + 1;
-            ProductAudit audit = audits.save(new ProductAudit(productId, sequence, openCase(now), now));
+            long caseId = openCase(now);
+            ProductAudit audit = audits.save(new ProductAudit(productId, sequence, caseId, now));
+            if (reviewCases.getIfAvailable() != null) {
+                captureCaseSnapshot(caseId, product);
+            }
             product.transition(Product.PENDING_REVIEW, now);
             products.save(product);
             Map<String, Object> facts = new LinkedHashMap<>();
@@ -361,6 +376,9 @@ public class ProductService {
             Instant now = Instant.now();
             audit.withdraw(now);
             audits.save(audit);
+            if (lifecycle != null) {
+                lifecycle.withdrawn(audit.caseId(), now);
+            }
             CategoryApplication pending = applications.lockPending(productId).orElse(null);
             Long applicationId = null;
             if (pending != null) {
@@ -500,13 +518,19 @@ public class ProductService {
         transaction.executeWithoutResult(status -> {
             writeGuard.requireWritable(sellerId);
             Product product = lockForSeller(sellerId, productId);
-            if (!categoryApplicationAllowed(product, latestAudit(productId))) {
+            ProductAudit latest = latestAudit(productId);
+            if (!categoryApplicationAllowed(product, latest)) {
                 throw new BusinessError("CATEGORY_APPLICATION_NOT_PENDING", 409, "没有待处理分类申请");
             }
             CategoryApplication application = applications.lockPending(productId)
                     .orElseThrow(() -> new BusinessError("CATEGORY_APPLICATION_NOT_PENDING", 409, "没有待处理分类申请"));
-            application.withdraw(Instant.now());
+            Instant now = Instant.now();
+            application.withdraw(now);
             applications.save(application);
+            var lifecycle = reviewCases.getIfAvailable();
+            if (lifecycle != null && latest != null && "pending".equals(latest.status())) {
+                lifecycle.classificationWithdrawn(latest.caseId(), application.id(), now);
+            }
             Map<String, Object> facts = new LinkedHashMap<>();
             facts.put("product_id", Long.toString(productId));
             facts.put("status", application.status());
@@ -542,6 +566,85 @@ public class ProductService {
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
         boolean owner = product.sellerAccountId() == viewerId;
         return detail(product, owner ? viewerId : 0, owner ? latestAudit(productId) : null);
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public ProductDetail purchaseDetail(long buyerId, long productId, long tradeId) {
+        var snapshot = tradeHistory.purchaseSnapshot(productId, buyerId, tradeId)
+                .orElseThrow(ProductService::notVisible);
+        return historicalDetail(productId, snapshot);
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public ProductDetail caseDetail(long managerId, long productId, long caseId) {
+        if (!cases.claimedForProduct(managerId, caseId, productId)) {
+            throw notVisible();
+        }
+        var snapshot = jdbc.sql("""
+                        select content_version, title, description, price_cents, captured_at
+                          from product_case_snapshot
+                         where case_id = :caseId and product_id = :productId
+                        """).param("caseId", caseId).param("productId", productId)
+                .query((row, index) -> new ProductTradeHistory.PurchaseSnapshot(row.getInt("content_version"),
+                        row.getString("title"), row.getString("description"), row.getLong("price_cents"),
+                        row.getTimestamp("captured_at").toInstant())).optional().or(() -> reviewedCaseSnapshot(productId, caseId))
+                .orElseThrow(ProductService::notVisible);
+        return historicalDetail(productId, snapshot);
+    }
+
+    private Optional<ProductTradeHistory.PurchaseSnapshot> reviewedCaseSnapshot(long productId, long caseId) {
+        return audits.findByCaseId(caseId)
+                .filter(audit -> audit.productId() == productId && audit.decidedAt() != null
+                        && audit.reviewedContentVersion() != null)
+                .flatMap(audit -> {
+                    Map<String, Object> content = audit.reviewedContent();
+                    if (content.get("title") instanceof String title
+                            && content.get("description") instanceof String description
+                            && content.get("price_cents") instanceof Number price) {
+                        return Optional.of(new ProductTradeHistory.PurchaseSnapshot(audit.reviewedContentVersion(),
+                                title, description, price.longValue(), audit.decidedAt()));
+                    }
+                    return Optional.empty();
+                });
+    }
+
+    public Optional<ReportSnapshot> reportSnapshot(long caseId) {
+        return jdbc.sql("""
+                        select product_id, title, description from product_case_snapshot where case_id = ?
+                        """).param(caseId)
+                .query((row, index) -> new ReportSnapshot(row.getLong("product_id"),
+                        row.getString("title"), row.getString("description"))).optional();
+    }
+
+    public record ReportSnapshot(long id, String title, String description) {}
+
+    public void captureReportSnapshot(long caseId, long productId) {
+        products.findById(productId).filter(found -> !found.deleted())
+                .ifPresent(product -> captureCaseSnapshot(caseId, product));
+    }
+
+    private void captureCaseSnapshot(long caseId, Product product) {
+        jdbc.sql("""
+                        insert into product_case_snapshot
+                            (case_id, product_id, content_version, title, description, price_cents, captured_at)
+                        select id, :productId, :version, :title, :description, :price, statement_timestamp()
+                          from moderation_case where id = :caseId
+                        on conflict (case_id) do nothing
+                        """).param("caseId", caseId).param("productId", product.id())
+                .param("version", product.contentVersion()).param("title", product.title())
+                .param("description", product.description()).param("price", product.priceCents()).update();
+    }
+
+    private ProductDetail historicalDetail(long productId, ProductTradeHistory.PurchaseSnapshot snapshot) {
+        var product = products.findById(productId).orElseThrow(ProductService::notVisible);
+        var seller = new SellerRef(Long.toString(product.sellerAccountId()), "", null);
+        return new ProductDetail(Long.toString(productId), snapshot.title(), snapshot.description(),
+                snapshot.priceCents(), List.of(), List.of(), seller, product.lifecycleState(), snapshot.contentVersion(),
+                product.createdAt(), snapshot.capturedAt(), null, null, null, null, null);
+    }
+
+    private static BusinessError notVisible() {
+        return new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在");
     }
 
     public Optional<String> notificationTitle(long viewerId, long productId) {
@@ -651,6 +754,26 @@ public class ProductService {
         return new PageResult<>(items, currentPage, size, pageResult.getTotalElements());
     }
 
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public PageResult<EditView> caseEditHistory(long managerId, long productId, long caseId, Integer page,
+                                                Integer pageSize) {
+        if (!cases.claimedForProduct(managerId, caseId, productId)) {
+            throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在");
+        }
+        int currentPage = page == null ? 1 : page;
+        int size = pageSize == null ? settings.pageSize() : pageSize;
+        if (currentPage < 1 || size < 1 || size > settings.pageSizeMax()) {
+            throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
+        }
+        var result = edits.findByProductIdAndBasisTypeAndBasisIdOrderByEditedAtDescIdDesc(
+                productId, "case", caseId, PageRequest.of(currentPage - 1, size));
+        List<EditView> items = result.getContent().stream()
+                .map(edit -> new EditView(Long.toString(edit.id()), edit.editedAt(), edit.operatorKind(),
+                        edit.editKind(), buyerContent(edit.beforeContent()), buyerContent(edit.afterContent()), edit.reason()))
+                .toList();
+        return new PageResult<>(items, currentPage, size, result.getTotalElements());
+    }
+
     private static ExecutionContext internalContext() {
         return new ExecutionContext(java.util.UUID.randomUUID(), ExecutionContext.ActorKind.SYSTEM,
                 "product-edit", null, null, null, "internal");
@@ -709,10 +832,15 @@ public class ProductService {
                         found.status()))
                 .orElse(null)
                 : null;
+        List<DisplayRestrictionRef> restrictions = owner
+                ? displayRestrictions.findActive(product.id()).stream()
+                        .map(item -> new DisplayRestrictionRef(item.sourceType(), item.reason(), item.createdAt()))
+                        .toList()
+                : null;
         return new ProductDetail(Long.toString(product.id()), product.title(), product.description(),
                 product.priceCents(), images(product.id()), categories, sellerRef, product.lifecycleState(),
                 product.contentVersion(), product.createdAt(), product.updatedAt(), pending, latest, permissions,
-                categoryApplication);
+                categoryApplication, restrictions);
     }
 
     private List<CategoryRef> categoryRefs(Collection<Long> categoryIds) {
@@ -1072,7 +1200,13 @@ public class ProductService {
                                 List<ImageRef> images, List<CategoryRef> categories, SellerRef seller,
                                 String lifecycleState, int contentVersion, Instant createdAt, Instant updatedAt,
                                 ReviewRef pendingReview, ReviewRef latestReview, Permissions permissions,
-                                CategoryApplicationRef categoryApplication) {
+                                CategoryApplicationRef categoryApplication,
+                                @com.fasterxml.jackson.annotation.JsonInclude(
+                                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                                List<DisplayRestrictionRef> displayRestrictions) {
+    }
+
+    public record DisplayRestrictionRef(String sourceType, String reason, Instant createdAt) {
     }
 
     public record CategoryApplicationRef(String id, String proposedName, String status) {

@@ -218,6 +218,88 @@
         }
       }
     },
+    "/api/v1/cases/{case_id}/evidence/{evidence_id}/file": {
+      "get": {
+        "operationId": "openOwnReportEvidenceFile",
+        "summary": "打开举报人本人提交的事项附件",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          },
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Authorized short-lived evidence file location",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-referrer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "AUTHENTICATION_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "RESOURCE_NOT_VISIBLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "STORAGE_UNAVAILABLE / STORAGE_CONFIGURATION_INVALID / DEPENDENCY_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/product-reviews/{audit_id}": {
       "get": {
         "operationId": "getProductReview",
@@ -3875,6 +3957,16 @@
             "name": "trade_id",
             "in": "query",
             "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$"
+            }
+          },
+          {
+            "name": "case_id",
+            "in": "query",
+            "required": false,
+            "description": "当前认领事项的 ID，与 trade_id 互斥",
             "schema": {
               "type": "string",
               "pattern": "^[0-9]+$"
@@ -7704,6 +7796,11 @@
             "type": "string",
             "pattern": "^[1-9][0-9]*$"
           },
+          "source_product_id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "description": "Source product for a seller account report, verified against the seller and reporter's product visibility."
+          },
           "conversation_kind": {
             "type": "string",
             "enum": ["chat", "trade", "case"]
@@ -7913,6 +8010,112 @@
               ]
             }
           },
+          "related_accounts": {
+            "description": "Accounts associated with the case, visible to the assigned manager.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["account_id", "display_name", "reporter", "eligible"],
+              "properties": {
+                "account_id": {
+                  "type": "string"
+                },
+                "display_name": {
+                  "type": ["string", "null"]
+                },
+                "reporter": {
+                  "type": "boolean"
+                },
+                "eligible": {
+                  "type": "boolean",
+                  "description": "Whether the account can be selected for inquiry or account enforcement."
+                }
+              }
+            }
+          },
+          "reported_object": {
+            "description": "Reported object and recorded product snapshot for the assigned manager.",
+            "type": "object",
+            "required": ["target_type", "target_id"],
+            "properties": {
+              "target_type": {
+                "type": "string",
+                "enum": ["account", "product", "comment", "evaluation", "message", "trade"]
+              },
+              "target_id": {
+                "type": "string"
+              },
+              "product": {
+                "type": "object",
+                "required": ["id", "title", "description"],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "report_materials": {
+            "description": "Report material visible to its reporter.",
+            "type": "object",
+            "required": ["supplements", "attachments"],
+            "properties": {
+              "original_note": { "type": ["string", "null"] },
+              "product": {
+                "type": "object",
+                "required": ["id", "title"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "title": { "type": "string" },
+                  "description": { "type": ["string", "null"] }
+                }
+              },
+              "supplements": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["action_id", "note", "occurred_at"],
+                  "properties": {
+                    "action_id": { "type": "string" },
+                    "note": { "type": "string" },
+                    "occurred_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["evidence_id", "submitted_at"],
+                  "properties": {
+                    "evidence_id": { "type": "string" },
+                    "content_type": { "type": "string" },
+                    "submitted_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "decision_basis_actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["action_id", "action_kind", "occurred_at", "note"],
+              "properties": {
+                "action_id": { "type": "string" },
+                "action_kind": { "type": "string", "enum": ["inquire", "statement", "supplement"] },
+                "occurred_at": { "type": "string", "format": "date-time" },
+                "note": { "type": ["string", "null"] }
+              }
+            }
+          },
           "reported_message": {
             "description": "Exact reported message identity without body or sender, only for the assigned manager.",
             "$ref": "#/components/schemas/CaseEvidenceReferenceRequest"
@@ -7942,6 +8145,10 @@
               },
               "parent_id": {
                 "type": "string"
+              },
+              "context_id": {
+                "type": "string",
+                "description": "Product ID for a comment or trade ID for an evaluation."
               },
               "body": {
                 "type": "string"
@@ -8050,6 +8257,9 @@
                   "type": "string",
                   "enum": ["submitter_attachment", "platform_record"]
                 },
+                "submitted_at": { "type": "string", "format": "date-time" },
+                "content_type": { "type": "string" },
+                "decision_basis": { "type": "boolean" },
                 "file_id": {
                   "type": ["string", "null"]
                 }
@@ -8310,7 +8520,17 @@
             "enum": ["uphold", "revoke", "adjust", null]
           },
           "basis_ref": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "description": "Legacy appeal basis text. Supply either this field or basis_refs."
+          },
+          "basis_refs": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Selected case materials or the current appeal. Only valid for a manager's appeal resolution.",
+            "items": {
+              "type": "string",
+              "pattern": "^(action|evidence):[1-9][0-9]*$"
+            }
           },
           "original_enforcement_id": {
             "type": ["string", "null"],
@@ -8369,7 +8589,7 @@
       },
       "CaseDecisionRequest": {
         "type": "object",
-        "required": ["decision_kind", "reason", "basis_refs"],
+        "required": ["decision_kind", "reason"],
         "additionalProperties": false,
         "properties": {
           "decision_kind": {
@@ -8383,9 +8603,9 @@
           "basis_refs": {
             "type": "array",
             "items": {
-              "type": "string"
-            },
-            "minItems": 1
+              "type": "string",
+              "pattern": "^(action|evidence):[1-9][0-9]*$"
+            }
           },
           "enforcements": {
             "type": "array",

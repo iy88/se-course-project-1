@@ -101,13 +101,13 @@ class S4ProductionEnforcementIT {
         long trade = activeTrade(buyer, seller);
 
         long first = claimedTradeCase(buyer, manager, trade);
-        var freeze = post(manager, decisionPath(first), decision(first, freeze(trade)), key(), 201);
+        var freeze = post(manager, decisionPath(first), decision(freeze(trade)), key(), 201);
         String enforcement = freeze.at("/enforcements/0/enforcement_id").asString();
         assertThat(freeze.at("/enforcements/0/result_ref").asString()).startsWith("trade_transition:");
         db.sql("update case_enforcement set result_type = 'trade', result_id = ? where case_id = ? and enforcement_id = ?")
                 .param(trade).param(first).param(enforcement).update();
         long second = claimedTradeCase(seller, otherManager, trade);
-        var secondFreeze = post(otherManager, decisionPath(second), decision(second, freeze(trade)), key(), 201);
+        var secondFreeze = post(otherManager, decisionPath(second), decision(freeze(trade)), key(), 201);
         assertThat(activeSources(trade)).containsExactlyInAnyOrder(first, second);
 
         String original = "/admin/cases/" + first + "/enforcements/" + enforcement + "/lift";
@@ -131,6 +131,158 @@ class S4ProductionEnforcementIT {
     }
 
     @Test
+    void decisionLiftsTheCaseTimeoutSourceAndKeepsAnOtherCaseFreeze() throws Exception {
+        var buyer = login("timeout-lift-buyer", "user");
+        var seller = login("timeout-lift-seller", "user");
+        var manager = login("timeout-lift-manager", "manager");
+        var otherManager = login("timeout-lift-other", "manager");
+        long trade = activeTrade(buyer, seller);
+        long timeoutCase = claimedTradeCase(buyer, manager, trade);
+        long timeoutFreeze = db.sql("""
+                insert into trade_freeze (trade_id, source, source_ref, reason, started_at)
+                values (?, 'timeout', ?, '单方确认超时', now()) returning id
+                """).param(trade).param(timeoutCase).query(Long.class).single();
+        db.sql("update trade set status = 'abnormal' where id = ?").param(trade).update();
+
+        long otherCase = claimedTradeCase(seller, otherManager, trade);
+        post(otherManager, decisionPath(otherCase), decision(freeze(trade)), key(), 201);
+        assertThat(activeSources(trade)).containsExactlyInAnyOrder(timeoutCase, otherCase);
+
+        long unrelatedTrade = activeTrade(buyer, seller);
+        var wrongTarget = post(manager, decisionPath(timeoutCase), noAction(lift(unrelatedTrade)), key(), 409);
+        assertThat(wrongTarget.at("/error/code").asString()).isEqualTo("TARGET_STATE_CONFLICT");
+        assertThat(activeSources(trade)).containsExactlyInAnyOrder(timeoutCase, otherCase);
+
+        String idempotency = key();
+        var lifted = post(manager, decisionPath(timeoutCase), noAction(lift(trade)), idempotency, 201);
+        assertThat(lifted.path("decision_kind").asString()).isEqualTo("no_action");
+        assertThat(lifted.at("/enforcements/0/action").asString()).isEqualTo("lift_trade_freeze");
+        assertThat(lifted.at("/enforcements/0/current_state").asString()).contains("frozen=true");
+        assertThat(post(manager, decisionPath(timeoutCase), noAction(lift(trade)), idempotency, 201))
+                .isEqualTo(lifted);
+        assertThat(activeSources(trade)).containsExactly(otherCase);
+        assertThat(db.sql("select status from trade where id = ?").param(trade)
+                .query(String.class).single()).isEqualTo("abnormal");
+        assertThat(db.sql("select ended_at is not null from trade_freeze where id = ?")
+                .param(timeoutFreeze).query(Boolean.class).single()).isTrue();
+        assertThat(db.sql("select count(*) from trade_freeze where trade_id = ? and ended_at is null")
+                .param(trade).query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("""
+                select count(*) from trade_state_history
+                where trade_id = ? and case_id = ? and action = 'trade.unfreeze'
+                """).param(trade).param(timeoutCase).query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("""
+                select count(*) from notification
+                where source_type = 'case' and source_id = ? and event_type = 'case.trade_unfrozen'
+                """).param(timeoutCase).query(Long.class).single()).isEqualTo(2);
+    }
+
+    @Test
+    void noActionDecisionRestoresTimedOutTradeAndCompletionConfirmationRestartsTheWait() throws Exception {
+        var buyer = login("timeout-confirm-buyer", "user");
+        var seller = login("timeout-confirm-seller", "user");
+        var manager = login("timeout-confirm-manager", "manager");
+        long trade = activeTrade(buyer, seller);
+        long agreement = effectiveAgreement(trade, buyer.account().id());
+        db.sql("""
+                insert into trade_confirmation (trade_id, agreement_id, confirmer_id, submitted_at,
+                                                business_event_id)
+                values (?, ?, ?, now() - interval '8 days', gen_random_uuid())
+                """).param(trade).param(agreement).param(buyer.account().id()).update();
+        db.sql("""
+                insert into confirmation_wait
+                    (trade_id, started_at, active_since, accumulated_seconds, wait_seconds, policy_version,
+                     ended_at, end_reason)
+                values (?, now() - interval '8 days', null, 604800, 604800, 's2-v1', now(), 'timeout')
+                """).param(trade).update();
+        long caseId = claimedTradeCase(buyer, manager, trade);
+        long timeoutFreeze = db.sql("""
+                insert into trade_freeze (trade_id, source, source_ref, reason, started_at)
+                values (?, 'timeout', ?, '单方确认超时', now()) returning id
+                """).param(trade).param(caseId).query(Long.class).single();
+        db.sql("update trade set status = 'abnormal' where id = ?").param(trade).update();
+
+        var decided = post(manager, decisionPath(caseId), noAction("""
+                {"action":"adjust_trade_status","target_type":"trade","target_id":"%d","expected_result":"in_progress"},
+                {"action":"lift_trade_freeze","target_type":"trade","target_id":"%d"}
+                """.formatted(trade, trade)), key(), 201);
+
+        assertThat(decided.path("decision_kind").asString()).isEqualTo("no_action");
+        assertThat(decided.path("enforcements").size()).isEqualTo(2);
+        assertThat(db.sql("select status from trade where id = ?").param(trade).query(String.class).single())
+                .isEqualTo("in_progress");
+        assertThat(activeSources(trade)).isEmpty();
+        assertThat(db.sql("select ended_at is not null from trade_freeze where id = ?")
+                .param(timeoutFreeze).query(Boolean.class).single()).isTrue();
+
+        int version = db.sql("select version from trade where id = ?").param(trade).query(Integer.class).single();
+        var confirmation = post(buyer, "/trades/" + trade + "/completion-confirmations", """
+                {"note":"恢复后重新提交完成确认","expected_version":%d}
+                """.formatted(version), key(), 201);
+        assertThat(confirmation.at("/trade/status").asString()).isEqualTo("in_progress");
+        assertThat(db.sql("""
+                select active_since is not null and ended_at is null and wait_seconds = 604800
+                       and accumulated_seconds = 0
+                from confirmation_wait where trade_id = ?
+                """).param(trade).query(Boolean.class).single()).isTrue();
+    }
+
+    @Test
+    void decisionLiftResumesThePausedWaitOnlyAfterTheLastCaseSource() throws Exception {
+        var buyer = login("timing-lift-buyer", "user");
+        var seller = login("timing-lift-seller", "user");
+        var manager = login("timing-lift-manager", "manager");
+        long trade = activeTrade(buyer, seller);
+        long agreement = db.sql("""
+                insert into agreement_version
+                    (trade_id, version_no, status, proposed_by, delivery_at, delivery_place_text,
+                     delivery_method, amount_cents, payment_method, payment_timing, proposed_at,
+                     business_event_id)
+                values (?, 1, 'effective', ?, now(), 'fixture place', 'face_to_face', 100,
+                        'offline', 'on_delivery', now(), gen_random_uuid())
+                returning id
+                """).param(trade).param(buyer.account().id()).query(Long.class).single();
+        db.sql("update trade set status = 'in_progress', active_agreement_id = ? where id = ?")
+                .param(agreement).param(trade).update();
+        db.sql("""
+                insert into trade_confirmation (trade_id, agreement_id, confirmer_id, submitted_at,
+                                                business_event_id)
+                values (?, ?, ?, now() - interval '2 days', gen_random_uuid())
+                """).param(trade).param(agreement).param(buyer.account().id()).update();
+        db.sql("""
+                insert into confirmation_wait
+                    (trade_id, started_at, active_since, accumulated_seconds, wait_seconds, policy_version)
+                values (?, now() - interval '2 days', null, 172800, 604800, 's2-v1')
+                """).param(trade).update();
+        long caseId = claimedTradeCase(buyer, manager, trade);
+        db.sql("""
+                insert into trade_freeze (trade_id, source, source_ref, reason, started_at)
+                values (?, 'admin_case', ?, '处置冻结', now())
+                """).param(trade).param(caseId).update();
+
+        var lifted = post(manager, decisionPath(caseId), decision(lift(trade)), key(), 201);
+
+        assertThat(lifted.at("/enforcements/0/previous_state").asString()).contains("frozen=true");
+        assertThat(lifted.at("/enforcements/0/current_state").asString()).contains("frozen=false");
+        assertThat(activeSources(trade)).isEmpty();
+        assertThat(db.sql("select status from trade where id = ?").param(trade)
+                .query(String.class).single()).isEqualTo("in_progress");
+        assertThat(db.sql("""
+                select active_since is not null and ended_at is null and accumulated_seconds = 172800
+                from confirmation_wait where trade_id = ?
+                """).param(trade).query(Boolean.class).single()).isTrue();
+        assertThat(db.sql("""
+                select count(*) from task_schedule
+                where task_kind = 'trade.timeout' and source_id = ?
+                  and completed_at is null and cancelled_at is null
+                """).param(trade).query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("""
+                select count(*) from trade_state_history
+                where trade_id = ? and case_id = ? and action = 'trade.unfreeze'
+                """).param(trade).param(caseId).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
     void decisionAcquiresTheCombinedLockPlanAndCommitsBothTradeActions() throws Exception {
         var buyer = login("batch-buyer", "user");
         var seller = login("batch-seller", "user");
@@ -140,7 +292,7 @@ class S4ProductionEnforcementIT {
         var terminate = """
                 {"action":"adjust_trade_status","target_type":"trade","target_id":"%s","expected_result":"terminated"}
                 """.formatted(trade);
-        var response = post(manager, decisionPath(caseId), decision(caseId, freeze(trade) + "," + terminate),
+        var response = post(manager, decisionPath(caseId), decision(freeze(trade) + "," + terminate),
                 key(), 201);
         assertThat(response.path("enforcements").size()).isEqualTo(2);
         assertThat(db.sql("select status from trade where id = ?").param(trade).query(String.class).single())
@@ -160,7 +312,7 @@ class S4ProductionEnforcementIT {
         String invalid = """
                 {"action":"adjust_trade_status","target_type":"trade","target_id":"%d","expected_result":"in_progress"}
                 """.formatted(trade);
-        var rejected = post(manager, decisionPath(caseId), decision(caseId, freeze(trade) + "," + invalid),
+        var rejected = post(manager, decisionPath(caseId), decision(freeze(trade) + "," + invalid),
                 key(), 409);
         assertThat(rejected.at("/error/code").asString()).isEqualTo("TRANSITION_NOT_ALLOWED");
         assertThat(activeSources(trade)).isEmpty();
@@ -168,8 +320,14 @@ class S4ProductionEnforcementIT {
                 .query(String.class).single()).isEqualTo("claimed");
         assertThat(db.sql("select count(*) from case_enforcement where case_id = ?").param(caseId)
                 .query(Long.class).single()).isZero();
-        assertThat(db.sql("select count(*) from notification where source_type = 'case' and source_id = ?")
-                .param(caseId).query(Long.class).single()).isZero();
+        assertThat(db.sql("""
+                select count(*) from notification where source_type = 'case' and source_id = ?
+                  and event_type = 'management.case_decide'
+                """).param(caseId).query(Long.class).single()).isZero();
+        assertThat(db.sql("""
+                select count(*) from notification where source_type = 'case' and source_id = ?
+                  and event_type not like 'management.%'
+                """).param(caseId).query(Long.class).single()).isZero();
     }
 
     @Test
@@ -185,7 +343,7 @@ class S4ProductionEnforcementIT {
         String withdraw = """
                 {"action":"withdraw_public_access","target_type":"product","target_id":"%d"}
                 """.formatted(product);
-        var decided = post(manager, decisionPath(caseId), decision(caseId, freeze(trade) + "," + withdraw), key(), 201);
+        var decided = post(manager, decisionPath(caseId), decision(freeze(trade) + "," + withdraw), key(), 201);
         var enforcements = decided.path("enforcements");
         String freezeId = enforcements.path(0).path("enforcement_id").asString();
         String displayId = enforcements.path(1).path("enforcement_id").asString();
@@ -253,8 +411,8 @@ class S4ProductionEnforcementIT {
         long other = post(author, comments, "{\"body\":\"同商品的其他评论\"}", key(), 201).path("id").asLong();
         long caseId = claimedCase(reporter, manager, "comment", reported);
         String remove = "{\"action\":\"remove_content\",\"target_type\":\"comment\",\"target_id\":\"%d\"}";
-        post(manager, decisionPath(caseId), decision(caseId, remove.formatted(other)), key(), 403);
-        var decided = post(manager, decisionPath(caseId), decision(caseId, remove.formatted(reported)), key(), 201);
+        post(manager, decisionPath(caseId), decision(remove.formatted(other)), key(), 403);
+        var decided = post(manager, decisionPath(caseId), decision(remove.formatted(reported)), key(), 201);
         assertThat(decided.at("/enforcements/0/result_ref").asString()).isEqualTo("product_comment:" + reported);
         assertThat(get(reporter, comments, 200).toString()).contains("同商品的其他评论").doesNotContain("需要核实的评论原文");
         assertThat(db.sql("select body from product_comment where comment_id = ?")
@@ -273,7 +431,7 @@ class S4ProductionEnforcementIT {
         long trade = activeTrade(buyer, seller);
         db.sql("update trade set status = 'abnormal' where id = ?").param(trade).update();
         long caseId = claimedTradeCase(buyer, manager, trade);
-        var result = post(manager, decisionPath(caseId), decision(caseId, """
+        var result = post(manager, decisionPath(caseId), decision("""
                 {"action":"adjust_trade_status","target_type":"trade","target_id":"%d","expected_result":"in_progress"}
                 """.formatted(trade)), key(), 201);
         assertThat(result.at("/enforcements/0/result_ref").asString()).startsWith("trade_transition:");
@@ -289,8 +447,10 @@ class S4ProductionEnforcementIT {
                   and event_type = 'trade.restored'
                 """).param(trade).query(Long.class).list()).containsExactlyInAnyOrder(
                         buyer.account().id(), seller.account().id());
-        assertThat(db.sql("select count(*) from notification where source_type = 'case' and source_id = ?")
-                .param(caseId).query(Long.class).single()).isZero();
+        assertThat(db.sql("""
+                select count(*) from notification where source_type = 'case' and source_id = ?
+                  and event_type not like 'management.%'
+                """).param(caseId).query(Long.class).single()).isZero();
     }
 
     @Test
@@ -306,13 +466,56 @@ class S4ProductionEnforcementIT {
                 .at("/review/review_id").asLong();
         assertThat(get(seller, reviews, 200).toString()).contains("仅承办可读的评价原文");
         long caseId = claimedCase(seller, manager, "evaluation", review);
-        var decision = post(manager, decisionPath(caseId), decision(caseId, """
+        var decision = post(manager, decisionPath(caseId), decision("""
                 {"action":"remove_evaluation_content","target_type":"evaluation","target_id":"%d"}
                 """.formatted(review)), key(), 201);
         assertThat(decision.at("/enforcements/0/result_ref").asString()).isEqualTo("trade_review:" + review);
         assertThat(get(seller, reviews, 200).toString()).doesNotContain("仅承办可读的评价原文");
         assertThat(get(seller, "/cases/" + caseId, 200).path("target").isMissingNode()).isTrue();
         assertThat(get(manager, "/cases/" + caseId, 200).at("/target/body").asString()).isEqualTo("仅承办可读的评价原文");
+    }
+
+    @Test
+    void purchaseAndClaimedCaseKeepTheirOwnCapturedProductVersions() throws Exception {
+        var seller = login("snapshot-seller", "user");
+        var buyer = login("snapshot-buyer", "user");
+        var manager = login("snapshot-manager", "manager");
+        long product = publicProduct(seller);
+        String path = "/products/" + product;
+        long trade = post(buyer, path + "/purchase-requests", """
+                {"expected_product_version":1}
+                """, key(), 201).path("id").asLong();
+        db.sql("update product set title = ?, content_version = 2 where product_id = ?")
+                .param("Case version").param(product).update();
+        long caseId = claimedCase(buyer, manager, "product", product);
+        db.sql("update product set title = ?, content_version = 3 where product_id = ?")
+                .param("Current version").param(product).update();
+        post(seller, path + "/off-shelf", """
+                {"expected_version":3}
+                """, key(), 200);
+
+        var purchase = get(buyer, path + "?trade_id=" + trade, 200);
+        assertThat(purchase.path("title").asString()).isEqualTo("Trade fixture");
+        assertThat(purchase.path("content_version").asInt()).isEqualTo(1);
+        var report = get(manager, path + "?case_id=" + caseId, 200);
+        assertThat(report.path("title").asString()).isEqualTo("Case version");
+        assertThat(report.path("content_version").asInt()).isEqualTo(2);
+        assertThat(get(seller, path, 200).path("title").asString()).isEqualTo("Current version");
+        db.sql("""
+                insert into product_edit_history
+                       (product_id, operator_kind, operator_account_id, edit_kind, before_content, after_content,
+                        reason, basis_type, basis_id)
+                values (?, 'admin', ?, 'category_correction', '{"category_ids":["1"]}', '{"category_ids":["2"]}',
+                        'case correction', 'case', ?)
+                """).param(product).param(manager.account().id()).param(caseId).update();
+        db.sql("""
+                insert into product_edit_history
+                       (product_id, operator_kind, operator_account_id, edit_kind, before_content, after_content)
+                values (?, 'seller', ?, 'content_edit', '{"title":"Case version"}', '{"title":"Current version"}')
+                """).param(product).param(seller.account().id()).update();
+        var history = get(manager, path + "/edit-history?case_id=" + caseId, 200);
+        assertThat(history.path("total").asInt()).isEqualTo(1);
+        assertThat(history.at("/items/0/edit_kind").asString()).isEqualTo("category_correction");
     }
 
     @Test
@@ -535,12 +738,14 @@ class S4ProductionEnforcementIT {
         var pending = post(buyer, "/products/" + product + "/purchase-requests",
                 "{\"expected_product_version\":1}", key(), 201).path("id").asLong();
         long initialBanned = bannedAccounts(manager);
+        assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean(true)).isFalse();
         String ban = """
                 {"action":"restrict_account","target_type":"account","target_id":"%d"}
                 """.formatted(sellerId);
 
         long firstCase = claimedCase(buyer, manager, "account", sellerId);
-        var first = post(manager, decisionPath(firstCase), decision(firstCase, ban), key(), 201);
+        var first = post(manager, decisionPath(firstCase), decision(ban), key(), 201);
+        assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean()).isTrue();
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         assertThat(get(seller, "/account/overview", 200).at("/reports/received").asLong()).isEqualTo(1);
         var report = get(seller, "/account/resources?kind=report&direction=received", 200).at("/items/0");
@@ -548,7 +753,9 @@ class S4ProductionEnforcementIT {
         assertThat(report.path("summary").asString()).isEqualTo("收到的事项已作出处理决定");
         assertThat(report.toString()).doesNotContain("核实违规");
         get(buyer, "/products/" + product, 404);
-        assertThat(get(seller, "/products/" + product, 200).path("lifecycle_state").asString()).isEqualTo("public");
+        var ownerProduct = get(seller, "/products/" + product, 200);
+        assertThat(ownerProduct.path("lifecycle_state").asString()).isEqualTo("public");
+        assertThat(ownerProduct.at("/display_restrictions/0/source_type").asString()).isEqualTo("account_ban");
         assertThat(db.sql("select close_reason from trade where id = ?").param(pending).query(String.class).single())
                 .isEqualTo("account_banned");
         assertThat(db.sql("select archived_at is not null from trade_conversation where trade_id = ?")
@@ -556,18 +763,30 @@ class S4ProductionEnforcementIT {
         assertThat(activeSources(active)).hasSize(1);
 
         long secondCase = claimedCase(otherReporter, otherManager, "account", sellerId);
-        var second = post(otherManager, decisionPath(secondCase), decision(secondCase, ban), key(), 201);
+        var second = post(otherManager, decisionPath(secondCase), decision(ban), key(), 201);
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         assertThat(activeSources(active)).hasSize(2);
         lift(manager, firstCase, first);
+        assertThat(db.sql("""
+                select count(*) from notification where source_type = 'case' and source_id = ?
+                  and event_type in ('management.case_decide', 'management.case_execute', 'management.case_lift')
+                """).param(firstCase).query(Long.class).single()).isZero();
+        assertThat(get(manager, "/cases/" + firstCase, 200).path("archived_at").asText())
+                .isNotBlank();
+        assertThat(get(otherManager, "/cases/" + secondCase, 200).path("archived_at").isNull())
+                .isTrue();
+        assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean()).isTrue();
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned + 1);
         get(buyer, "/products/" + product, 404);
         assertThat(activeSources(active)).hasSize(1);
 
         lift(otherManager, secondCase, second);
+        assertThat(get(seller, "/account/session", 200).at("/account/write_restricted").asBoolean(true)).isFalse();
         assertThat(bannedAccounts(manager)).isEqualTo(initialBanned);
         assertThat(activeSources(active)).isEmpty();
-        get(buyer, "/products/" + product, 200);
+        var publicProduct = get(buyer, "/products/" + product, 200);
+        assertThat(publicProduct.has("display_restrictions")).isFalse();
+        assertThat(get(seller, "/products/" + product, 200).path("display_restrictions").size()).isZero();
         assertThat(db.sql("select status from trade where id = ?").param(pending).query(String.class).single())
                 .isEqualTo("closed");
     }
@@ -606,6 +825,16 @@ class S4ProductionEnforcementIT {
         assertThat(resolved.at("/dispute/status").asString()).isEqualTo("resolved");
         assertThat(get(manager, "/cases/" + caseId, 200).path("archived_at").isString()).isTrue();
         assertThat(get(manager, "/cases/" + otherCase, 200).path("archived_at").isNull()).isTrue();
+        String completedDisputes = "/management/todos?kind=dispute&keyword=" + caseId;
+        for (String ownership : List.of("completed_mine", "completed_all")) {
+            var completed = get(manager, completedDisputes + "&ownership=" + ownership, 200);
+            assertThat(completed.path("items")).anySatisfy(item -> {
+                assertThat(item.path("case_id").asLong()).isEqualTo(caseId);
+                assertThat(item.path("manager_id").asLong()).isEqualTo(manager.account().id());
+                assertThat(item.path("completed_at").isString()).isTrue();
+            });
+            assertThat(completed.at("/counts_by_kind/dispute").asLong()).isPositive();
+        }
         assertThat(db.sql("""
                 select actor_kind from moderation_case_action where case_id = ? and action_kind = 'close'
                 """).param(caseId).query(String.class).list()).containsExactly("system");
@@ -631,9 +860,11 @@ class S4ProductionEnforcementIT {
                 location, 150, "image/png", "s4-fixture", now, now.plusSeconds(60), now.plusSeconds(300))).fileId();
         registry.markVerified(file, owner, "s4-fixture-etag", new VerifiedContent(150, "image/png"));
         long caseId = post(reporter, "/cases", """
-                {"target":{"target_type":"account","target_id":"%d"},"reason":"请核实",
-                 "attachments":[{"file_id":"%d"}]}
-                """.formatted(target.account().id(), file), key(), 201).path("case_id").asLong();
+                {"target":{"target_type":"account","target_id":"%d"},"reason":"请核实"}
+                """.formatted(target.account().id()), key(), 201).path("case_id").asLong();
+        post(reporter, "/cases/" + caseId + "/supplements", """
+                {"note":"补充图片说明","attachments":[{"file_id":"%d"}]}
+                """.formatted(file), key(), 200);
         long evidence = db.sql("select id from case_evidence where case_id = ? and file_id = ?")
                 .param(caseId).param(file).query(Long.class).single();
         String path = "/admin/cases/" + caseId + "/evidence/" + evidence + "/file";
@@ -648,6 +879,46 @@ class S4ProductionEnforcementIT {
         var redirect = URI.create(response.headers().firstValue("Location").orElseThrow());
         assertThat(redirect.getPath()).endsWith(location.key());
         assertThat(redirect.getRawQuery()).isNotEmpty();
+        var pdfLocation = new OssFileObjects.Location(location.bucket(),
+                env.getRequiredProperty("OSS_PREFIX") + "/case_evidence/" + UUID.randomUUID());
+        long pdfFile = registry.register(new UploadRegistration.Draft(owner, FilePurpose.CASE_EVIDENCE, null,
+                pdfLocation, 150, "application/pdf", "s4-fixture", now,
+                now.plusSeconds(60), now.plusSeconds(300))).fileId();
+        registry.markVerified(pdfFile, owner, "s4-pdf-etag", new VerifiedContent(150, "application/pdf"));
+        post(reporter, "/cases/" + caseId + "/supplements", """
+                {"attachments":[{"file_id":"%d"}]}
+                """.formatted(pdfFile), key(), 200);
+        long pdfEvidence = db.sql("select id from case_evidence where case_id = ? and file_id = ?")
+                .param(caseId).param(pdfFile).query(Long.class).single();
+        String pdfPath = "/cases/" + caseId + "/evidence/" + pdfEvidence + "/file";
+        var pdfResponse = http.send(request(reporter, pdfPath).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(pdfResponse.statusCode()).isEqualTo(302);
+        assertThat(URI.create(pdfResponse.headers().firstValue("Location").orElseThrow()).getQuery())
+                .contains("response-content-disposition=inline")
+                .doesNotContain("response-content-type=");
+        var ownDetail = get(reporter, "/cases/" + caseId, 200);
+        assertThat(ownDetail.at("/report_materials/attachments/0/content_type").asString()).isEqualTo("image/png");
+        assertThat(ownDetail.at("/report_materials/attachments/1/content_type").asString()).isEqualTo("application/pdf");
+        assertThat(ownDetail.path("reported_reason").asString()).isEqualTo("请核实");
+        assertThat(ownDetail.at("/report_materials/supplements/0/note").asString()).isEqualTo("补充图片说明");
+        assertThat(ownDetail.at("/report_materials/attachments/0/evidence_id").asLong()).isEqualTo(evidence);
+        assertThat(ownDetail.path("thread").isNull()).isTrue();
+        assertThat(get(target, "/cases/" + caseId, 404).has("report_materials")).isFalse();
+        String ownFile = "/cases/" + caseId + "/evidence/" + evidence + "/file";
+        var ownResponse = http.send(request(reporter, ownFile).GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(ownResponse.statusCode()).isEqualTo(302);
+        assertThat(ownResponse.headers().firstValue("Cache-Control")).contains("no-store");
+        get(target, ownFile, 404);
+        get(manager, ownFile, 404);
+        get(reporter, "/cases/" + caseId + "/evidence/999999999/file", 404);
+        var detail = get(manager, "/cases/" + caseId, 200);
+        assertThat(detail.has("report_materials")).isFalse();
+        assertThat(detail.path("decision_basis_actions").get(0).path("note").asString()).isEqualTo("补充图片说明");
+        assertThat(detail.path("evidence").get(0).path("decision_basis").asBoolean()).isTrue();
+        post(manager, decisionPath(caseId), """
+                {"decision_kind":"no_action","reason":"已核实补充材料","basis_refs":["action:%s","evidence:%d"]}
+                """.formatted(detail.path("decision_basis_actions").get(0).path("action_id").asString(), evidence),
+                key(), 201);
         db.sql("update account set role = 'user' where account_id = ?").param(manager.account().id()).update();
         get(manager, path, 404);
     }
@@ -736,6 +1007,21 @@ class S4ProductionEnforcementIT {
         return trade;
     }
 
+    private static long effectiveAgreement(long trade, long buyerId) {
+        long agreement = db.sql("""
+                insert into agreement_version
+                    (trade_id, version_no, status, proposed_by, delivery_at, delivery_place_text,
+                     delivery_method, amount_cents, payment_method, payment_timing, proposed_at,
+                     business_event_id)
+                values (?, 1, 'effective', ?, now(), 'fixture place', 'face_to_face', 100,
+                        'offline', 'on_delivery', now(), gen_random_uuid())
+                returning id
+                """).param(trade).param(buyerId).query(Long.class).single();
+        db.sql("update trade set status = 'in_progress', active_agreement_id = ? where id = ?")
+                .param(agreement).param(trade).update();
+        return agreement;
+    }
+
     private static long publicProduct(SessionService.Issued seller) {
         return db.sql("""
                 insert into product (seller_account_id, title, description, price_cents, lifecycle_state)
@@ -762,15 +1048,27 @@ class S4ProductionEnforcementIT {
         return "/admin/cases/" + caseId + "/decisions";
     }
 
-    private static String decision(long caseId, String instructions) {
+    private static String decision(String instructions) {
         return """
-                {"decision_kind":"violation","reason":"核实违规","basis_refs":["case:%d"],"enforcements":[%s]}
-                """.formatted(caseId, instructions);
+                {"decision_kind":"violation","reason":"核实违规","basis_refs":[],"enforcements":[%s]}
+                """.formatted(instructions);
+    }
+
+    private static String noAction(String instructions) {
+        return """
+                {"decision_kind":"no_action","reason":"核实后无需处置","basis_refs":[],"enforcements":[%s]}
+                """.formatted(instructions);
     }
 
     private static String freeze(long trade) {
         return """
                 {"action":"freeze_trade","target_type":"trade","target_id":"%s"}
+                """.formatted(trade);
+    }
+
+    private static String lift(long trade) {
+        return """
+                {"action":"lift_trade_freeze","target_type":"trade","target_id":"%s"}
                 """.formatted(trade);
     }
 

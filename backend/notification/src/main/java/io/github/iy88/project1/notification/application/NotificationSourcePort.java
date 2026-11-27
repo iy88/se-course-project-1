@@ -30,7 +30,17 @@ public interface NotificationSourcePort {
      *                fields the reader is no longer allowed to see
      * @param source  the object the reader may open, or null to hide the jump
      */
-    record NotificationSourceView(String summary, ResourceRef source, String subject, String body, Long commentId) {
+    record NotificationSourceView(String summary, ResourceRef source, String subject, String body, Long commentId,
+                                  Long caseMessageId, String anchor) {
+        public NotificationSourceView(String summary, ResourceRef source, String subject, String body, Long commentId,
+                                      Long caseMessageId) {
+            this(summary, source, subject, body, commentId, caseMessageId, null);
+        }
+
+        public NotificationSourceView(String summary, ResourceRef source, String subject, String body, Long commentId) {
+            this(summary, source, subject, body, commentId, null);
+        }
+
         public NotificationSourceView(String summary, ResourceRef source, String subject, String body) {
             this(summary, source, subject, body, null);
         }
