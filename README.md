@@ -238,7 +238,7 @@ java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --spring.pro
 
 将示例收件地址替换为测试地址。探针完成后退出，失败时返回非零状态；SMTP 日志中的邮件 ID 可用于在收件箱中定位 `[Project1 S1] SMTP probe`。
 
-依赖探针是部署环境的一次性配置校验入口。私有桶和版本控制状态在这里核验；正常上传授权、完成核验和清理请求不会重复查询 Bucket ACL／versioning。
+依赖探针是部署环境的一次性配置校验入口。首次部署、切换 Bucket 或变更相关配置时，维护方须确认私有桶和版本控制状态预检通过后才开放文件业务；现有 Jenkins 自动发布不强制执行该探针。正常上传授权、完成核验和清理请求不会重复查询 Bucket ACL／versioning；配置变更由运维控制，不允许业务运行期间擅自修改。
 
 ### OSS 配置
 

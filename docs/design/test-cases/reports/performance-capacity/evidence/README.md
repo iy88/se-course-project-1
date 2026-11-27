@@ -36,7 +36,7 @@
 - 干净提交的代表性 100 用户稳态共记录 21,334 个测量 HTTP 请求，177.78 HTTP/s；必需 HTTP 操作 P95 最大值 341.72 ms，`im_delivery` P95 314.74 ms、`im_retrieval` P95 2.44 ms，零 HTTP 错误和零 WS 断连。
 - `im_delivery` 从发送 POST 前开始，到接收方正文通过 HTTP 回读并完成 `message_id + seq + body` 校验为止；`im_retrieval` 仅从接收 hint 开始。
 - Search 600 RPS 已接近可用边界，800 RPS 过载；API 4 在 600—800 RPS 没有扩容收益。
-- API／WS 历史容量档中 IM 400 场景/s 通过、600 场景/s 过载；这些档位来自最终计时修复前驱动，只作相对边界。最终送达证据以 P-RUN-01 为准，浏览器实际显示与目标部署跨实例仍待验收。
+- API／WS 历史容量档中 IM 400 场景/s 通过、600 场景/s 过载；这些档位来自初审前驱动，测量发送至接收方正文回读完成，但存在消息关联竞态；不是 hint 到达时延，只作相对边界。最终送达证据以 P-RUN-01 为准，浏览器实际显示与目标部署跨实例仍待验收。
 - mixed 100 场景/s 通过，200 场景/s 失败；worker 1／2 的 `work_stream=0`、pending=0、CPU 约 1%，只说明本次 mixed 负载不需要扩 worker，不评价 worker 自身饱和容量。
 
 ## 隐私与可复现性
