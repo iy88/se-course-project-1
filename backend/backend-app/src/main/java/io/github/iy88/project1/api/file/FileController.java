@@ -1,5 +1,6 @@
 package io.github.iy88.project1.api.file;
 
+import com.aliyun.sdk.service.oss2.OSSClient;
 import com.aliyun.sdk.service.oss2.credentials.Credentials;
 import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.api.account.CurrentAccount;
@@ -14,6 +15,7 @@ import io.github.iy88.project1.storage.content.FileContentVerifier.InvalidConten
 import io.github.iy88.project1.storage.persistence.FileRegistry;
 import io.github.iy88.project1.storage.persistence.FileRulesProperties;
 import io.github.iy88.project1.storage.persistence.UploadRegistration;
+import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.time.Instant;
@@ -49,6 +51,8 @@ class FileController {
     private final String bucket;
     private final String prefix;
     private final Credentials credentials;
+    private final OSSClient client;
+    private final OssFileObjects objects;
 
     FileController(CurrentAccount current, FileUpload uploads, FileRegistry registry,
                    FileVerification verification, FileRulesProperties rules, ProductService products,
@@ -65,6 +69,8 @@ class FileController {
         prefix = environment.getRequiredProperty("OSS_PREFIX");
         credentials = new Credentials(environment.getRequiredProperty("OSS_ACCESS_KEY_ID"),
                 environment.getRequiredProperty("OSS_ACCESS_KEY_SECRET"));
+        client = OssClients.open(endpoint, region, credentials.accessKeyId(), credentials.accessKeySecret());
+        objects = new OssFileObjects(client, bucket, prefix);
     }
 
     @GetMapping("/upload-capabilities")
@@ -157,9 +163,13 @@ class FileController {
         }
     }
 
+    @PreDestroy
+    void close() {
+        OssClients.close(client);
+    }
+
     private <T> T withOss(Function<OssFileObjects, T> action) {
-        return OssClients.use(endpoint, region, credentials.accessKeyId(), credentials.accessKeySecret(),
-                client -> action.apply(new OssFileObjects(client, bucket, prefix)));
+        return action.apply(objects);
     }
 
     private static <T> T storage(ThrowingSupplier<T> action) {

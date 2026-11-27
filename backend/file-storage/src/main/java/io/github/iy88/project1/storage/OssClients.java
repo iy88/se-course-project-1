@@ -18,15 +18,7 @@ public final class OssClients {
 
     public static <T> T use(String endpoint, String region, String accessKey, String secret,
                             Function<OSSClient, T> action) {
-        try (var session = new ClientSession(OSSClient.newBuilder()
-                .endpoint(endpoint)
-                .region(region)
-                .credentialsProvider(new StaticCredentialsProvider(accessKey, secret))
-                .signatureVersion("v4")
-                .connectTimeout(Duration.ofSeconds(5))
-                .readWriteTimeout(Duration.ofSeconds(5))
-                .retryer(new NopRetryer())
-                .build())) {
+        try (var session = new ClientSession(open(endpoint, region, accessKey, secret))) {
             return action.apply(session.client());
         } catch (OperationException failure) {
             if (failure.getCause() instanceof ServiceException serviceFailure) {
@@ -36,6 +28,22 @@ public final class OssClients {
         } catch (ServiceException failure) {
             throw serviceError(failure);
         }
+    }
+
+    public static OSSClient open(String endpoint, String region, String accessKey, String secret) {
+        return OSSClient.newBuilder()
+                .endpoint(endpoint)
+                .region(region)
+                .credentialsProvider(new StaticCredentialsProvider(accessKey, secret))
+                .signatureVersion("v4")
+                .connectTimeout(Duration.ofSeconds(5))
+                .readWriteTimeout(Duration.ofSeconds(5))
+                .retryer(new NopRetryer())
+                .build();
+    }
+
+    public static void close(OSSClient client) {
+        new ClientSession(client).close();
     }
 
     private record ClientSession(OSSClient client) implements AutoCloseable {
