@@ -13,6 +13,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -35,7 +37,7 @@ class CaseQueriesTests {
     private final CasePorts.Managers managers = mock(CasePorts.Managers.class);
     private final CasePorts.Targets targets = mock(CasePorts.Targets.class);
     private final CaseQueries queries = new CaseQueries(mock(JdbcClient.class), store, threads, managers,
-            targets, new CaseSettings(), JSON, Clock.fixed(NOW, ZoneOffset.UTC));
+            targets, mock(CasePorts.EvidenceFiles.class), new CaseSettings(), JSON, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
     void theClaimedManagerSeesTheExactContentSnapshot() {
@@ -43,9 +45,18 @@ class CaseQueriesTests {
         when(store.find(CASE)).thenReturn(Optional.of(facts));
         when(threads.findConversation(CASE, MANAGER)).thenReturn(OptionalLong.empty());
         when(targets.contentTarget(facts)).thenReturn(Optional.of(new CasePorts.Targets.TargetSnapshot(
-                "comment", COMMENT, AUTHOR, null, "被举报评论正文", "removed_by_admin", NOW, true)));
+                "comment", COMMENT, AUTHOR, null, 99L, "被举报评论正文", "removed_by_admin", NOW, true)));
+
+        when(targets.relatedAccountIds(facts)).thenReturn(Set.of(AUTHOR));
+        when(targets.accountNames(Set.of(REPORTER, AUTHOR))).thenReturn(Map.of(AUTHOR, "评论作者"));
 
         var detail = queries.detail(context(MANAGER), CASE);
+
+        assertThat(detail.path("related_accounts").get(0).path("reporter").asBoolean()).isTrue();
+        assertThat(detail.path("related_accounts").get(0).path("eligible").asBoolean()).isFalse();
+        assertThat(detail.path("related_accounts").get(1).path("display_name").asString()).isEqualTo("评论作者");
+        assertThat(detail.path("related_accounts").get(1).path("eligible").asBoolean()).isTrue();
+        assertThat(detail.path("target").path("context_id").asString()).isEqualTo("99");
 
         assertThat(detail.path("target").path("target_type").asString()).isEqualTo("comment");
         assertThat(detail.path("target").path("target_id").asString()).isEqualTo("501");
@@ -63,6 +74,8 @@ class CaseQueriesTests {
         var detail = queries.detail(context(AUTHOR), CASE);
 
         assertThat(detail.path("target").isMissingNode()).isTrue();
+        assertThat(detail.path("reported_object").isMissingNode()).isTrue();
+        assertThat(detail.path("related_accounts").isMissingNode()).isTrue();
     }
 
     private static CaseRecords.Facts claimedFacts() {

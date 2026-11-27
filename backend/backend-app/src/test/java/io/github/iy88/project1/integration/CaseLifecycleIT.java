@@ -126,6 +126,8 @@ class CaseLifecycleIT {
                 new CaseCommands.Target("account", related, null, null), "虚假信息", "请核实", List.of()));
         long caseId = Long.parseLong(report.data().get("case_id").asString());
         assertThat(report.status()).isEqualTo(201);
+        assertThat(managementNoticeRecipients(caseId, "opened"))
+                .contains(MANAGER_1.get(), MANAGER_2.get());
 
         // Two managers claim at the same time: exactly one wins, the loser sees CASE_ALREADY_CLAIMED.
         var start = new CountDownLatch(1);
@@ -169,17 +171,36 @@ class CaseLifecycleIT {
                 select notification_id from notification where recipient_account_id = ?
                     and source_type = 'case' and source_id = ? and event_type = 'case.inquiry_created'
                 """).param(related).param(caseId).query(Long.class).single();
-        assertInquiryNotification(caseId, noticeId);
+        assertInquiryNotification(caseId, noticeId, inquiry.data().path("case_message_id").asString());
+        assertThat(managementNoticeRecipients(caseId, "inquire")).isEmpty();
 
         // The related account answers the inquiry in the same thread.
         var statement = cases.postMessage(context(related), "statement-1", caseId,
                 new CaseCommands.Message(threadId, CaseVocabulary.KIND_STATEMENT, "商品描述属实", inquiryActionId,
                         null, null, null));
         assertThat(statement.status()).isEqualTo(201);
+        assertThat(managementNoticeRecipients(caseId, "statement")).containsExactly(manager);
+
+        var supplement = cases.supplement(context(reporter), "supplement-1", caseId,
+                new CaseCommands.Supplement("补充商品情况", List.of()));
+        assertThat(supplement.status()).isEqualTo(200);
+        assertThat(managementNoticeRecipients(caseId, "supplement")).containsExactly(manager);
+        var choices = queries.detail(context(manager), caseId).path("decision_basis_actions");
+        assertThat(choices.size()).isEqualTo(3);
+        assertThat(choices.get(2).path("note").asString()).isEqualTo("补充商品情况");
+        assertThat(queries.detail(context(reporter), caseId).has("decision_basis_actions")).isFalse();
+        for (String invalidBasis : List.of("case:" + caseId, "action:0", "evidence:0")) {
+            assertThatThrownBy(() -> cases.decide(context(manager), "invalid-basis-" + invalidBasis, caseId,
+                    new CaseCommands.Decision(CaseVocabulary.NO_ACTION, "核实", List.of(invalidBasis), List.of())))
+                    .isInstanceOfSatisfying(BusinessError.class,
+                            failure -> assertThat(failure.code()).isEqualTo("BASIS_REQUIRED"));
+        }
 
         // Decision executes the subject fake, records the enforcement link and appeal eligibility.
         var decision = cases.decide(context(manager), "decision-1", caseId, new CaseCommands.Decision(
-                CaseVocabulary.VIOLATION, "认定违规", List.of("case:" + caseId),
+                CaseVocabulary.VIOLATION, "认定违规", List.of("action:" + inquiryActionId,
+                        "action:" + choices.get(1).path("action_id").asString(),
+                        "action:" + choices.get(2).path("action_id").asString()),
                 List.of(new CaseCommands.Enforcement("restrict_account", "account", related, null))));
         assertThat(decision.status()).isEqualTo(201);
         assertThat(db.sql("select count(*) from case_enforcement where case_id = ?").param(caseId)
@@ -196,6 +217,19 @@ class CaseLifecycleIT {
                 new CaseCommands.Message(threadId, CaseVocabulary.KIND_APPEAL, "请求复核", null, null, null, null));
         assertThat(appeal.status()).isEqualTo(201);
         long appealActionId = store.appealOf(caseId, related).orElseThrow().actionId();
+        assertThat(managementNoticeRecipients(caseId, "appeal")).containsExactly(manager);
+        var notifications = app.getBean(io.github.iy88.project1.notification.application.NotificationQueries.class);
+        var inbox = notifications.list(context(manager),
+                new io.github.iy88.project1.notification.application.NotificationQuery(1, 20, null,
+                        "management.case_appeal"), true);
+        var notice = inbox.items().stream().filter(item -> item.source().id() == caseId).findFirst().orElseThrow();
+        assertThat(notice.summary()).isEqualTo("收到申辩");
+        assertThat(notifications.get(context(manager), notice.notificationId(), true).anchor())
+                .isEqualTo("case-message-" + appeal.data().path("case_message_id").asString());
+        assertThatThrownBy(() -> notifications.get(context(manager), notice.notificationId()))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
+        assertManagementInbox(manager, notice.notificationId(), caseId);
         assertThat(queries.detail(context(manager), caseId).path("pending_appeals"))
                 .singleElement().satisfies(item -> {
                     assertThat(item.path("appeal_action_id").asString()).isEqualTo(Long.toString(appealActionId));
@@ -205,11 +239,45 @@ class CaseLifecycleIT {
         assertThat(queries.detail(context(reporter), caseId).has("pending_appeals")).isFalse();
         assertThat(queries.detail(context(related), caseId).has("pending_appeals")).isFalse();
 
+        var basisRefs = List.of("action:" + appealActionId, "action:" + inquiryActionId);
+        assertThatThrownBy(() -> cases.postMessage(context(manager), "resolve-invalid-basis", caseId,
+                new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "维持原决定", null,
+                        appealActionId, CaseVocabulary.RESOLUTION_UPHOLD, null, null, List.of(),
+                        List.of("case:" + caseId))))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("BASIS_REQUIRED"));
         var resolution = cases.postMessage(context(manager), "resolve-1", caseId,
                 new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "维持原决定", null,
-                        appealActionId, CaseVocabulary.RESOLUTION_UPHOLD, "依据"));
+                        appealActionId, CaseVocabulary.RESOLUTION_UPHOLD, null, null, List.of(), basisRefs));
         assertThat(resolution.status()).isEqualTo(201);
+        var resolutionAction = store.action(caseId, resolution.data().path("case_action_id").asLong()).orElseThrow();
+        var recordedBasis = app.getBean(JsonMapper.class).readTree(resolutionAction.basisRef());
+        assertThat(recordedBasis).extracting(JsonNode::asString).containsExactlyElementsOf(basisRefs);
         assertThat(queries.detail(context(manager), caseId).path("pending_appeals")).isEmpty();
+
+        var repeat = new CaseCommands.Message(threadId, CaseVocabulary.KIND_APPEAL,
+                "补充申辩理由", null, null, null, null);
+        assertThat(queries.detail(context(related), caseId).path("available_actions"))
+                .extracting(JsonNode::asString).contains(CaseVocabulary.SUBMIT_APPEAL);
+        var secondAppeal = cases.postMessage(context(related), "appeal-second", caseId, repeat);
+        assertThat(secondAppeal.status()).isEqualTo(201);
+        long secondAppealId = secondAppeal.data().path("case_action_id").asLong();
+        assertThat(secondAppealId).isNotEqualTo(appealActionId);
+        assertThat(queries.detail(context(related), caseId).path("available_actions"))
+                .extracting(JsonNode::asString).doesNotContain(CaseVocabulary.SUBMIT_APPEAL);
+        assertThatThrownBy(() -> cases.postMessage(context(related), "appeal-third", caseId, repeat))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("STATE_CONFLICT"));
+        assertThat(cases.postMessage(context(manager), "resolve-second", caseId,
+                new CaseCommands.Message(threadId, CaseVocabulary.KIND_MANAGER_REPLY, "维持原决定", null,
+                        secondAppealId, CaseVocabulary.RESOLUTION_UPHOLD, null, null, List.of(),
+                        List.of("action:" + secondAppealId))).status()).isEqualTo(201);
+
+        assertThat(db.sql("""
+                        select count(*) from notification
+                        where source_type = 'case' and source_id = ?
+                          and event_type in ('case.appeal_resolved', 'management.case_manager_reply')
+                        """).param(caseId).query(Long.class).single()).isZero();
 
         // A resolved appeal no longer blocks, but the deadline still does.
         assertThatThrownBy(() -> cases.close(context(manager), "close-2", caseId))
@@ -256,7 +324,7 @@ class CaseLifecycleIT {
         long caseId = Long.parseLong(submitted.data().get("case_id").asString());
         cases.claim(context(MANAGER_1.get()), "claim-lift-" + RUN_ID, caseId);
         var decision = cases.decide(context(MANAGER_1.get()), "decision-lift-" + RUN_ID, caseId,
-                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:" + caseId),
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of(),
                         List.of(new CaseCommands.Enforcement("restrict_account", "account", related2, null))));
         String enforcementId = decision.data().get("enforcements").get(0).get("enforcement_id").asString();
 
@@ -284,7 +352,7 @@ class CaseLifecycleIT {
         long caseId = Long.parseLong(submitted.data().path("case_id").asString());
         cases.claim(context(MANAGER_1.get()), "claim-appeal-selection-" + RUN_ID, caseId);
         var decision = cases.decide(context(MANAGER_1.get()), "decision-appeal-selection-" + RUN_ID, caseId,
-                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of("case:" + caseId),
+                new CaseCommands.Decision(CaseVocabulary.VIOLATION, "认定违规", List.of(),
                         List.of(new CaseCommands.Enforcement("restrict_account", "account", related, null))));
         String enforcementId = decision.data().path("enforcements").get(0).path("enforcement_id").asString();
         long threadId = storeThread(caseId, related);
@@ -347,7 +415,7 @@ class CaseLifecycleIT {
     }
 
     @Test
-    void closedReportRejectsANewSubmissionForTheSameObject() {
+    void decidedAndArchivedReportsAllowANewSubmissionForTheSameObject() {
         long reporter = REPORTER.get();
         long related = account("closed-report-" + RUN_ID, "已结案目标", "user");
         var target = new CaseCommands.Target("account", related, null, null);
@@ -360,13 +428,66 @@ class CaseLifecycleIT {
                         returning id
                         """)
                 .param(related).param(reporter).param(MANAGER_1.get()).query(Long.class).single();
-        assertThatThrownBy(() -> cases.submit(context(reporter), "resubmit-" + RUN_ID,
-                new CaseCommands.Report(target, "再次举报", null, List.of())))
-                .isInstanceOfSatisfying(BusinessError.class,
-                        error -> assertThat(error.code()).isEqualTo("CASE_CLOSED"));
+        db.sql("update moderation_case set archived_at = null where id = ?").param(closedCase).update();
+        var afterDecision = cases.submit(context(reporter), "resubmit-after-decision-" + RUN_ID,
+                new CaseCommands.Report(target, "决定后再次举报", null, List.of()));
+        assertThat(afterDecision.status()).isEqualTo(201);
+        long nextCase = afterDecision.data().path("case_id").asLong();
+        assertThat(nextCase).isNotEqualTo(closedCase);
+        db.sql("update moderation_case set archived_at = statement_timestamp() where id = ?")
+                .param(closedCase).update();
+        db.sql("update moderation_case set case_status = 'decided', decision_kind = 'no_action', "
+                + "reason_text = '不予处理', decided_by = ?, decided_at = statement_timestamp(), "
+                + "archived_at = statement_timestamp() where id = ?")
+                .param(MANAGER_1.get()).param(nextCase).update();
+        var fresh = cases.submit(context(reporter), "resubmit-" + RUN_ID,
+                new CaseCommands.Report(target, "再次举报", null, List.of()));
+        assertThat(fresh.status()).isEqualTo(201);
+        assertThat(fresh.data().path("reused").asBoolean()).isFalse();
+        assertThat(fresh.data().path("case_id").asLong()).isNotEqualTo(closedCase);
         // The archived row is still readable through the reporter viewpoint.
         assertThat(queries.detail(context(reporter), closedCase).get("case_id").asString())
                 .isEqualTo(Long.toString(closedCase));
+    }
+
+    @Test
+    void sellerReportKeepsOnlyItsVerifiedSourceProductForTheClaimant() {
+        long reporter = REPORTER.get();
+        long seller = account("source-seller-" + RUN_ID, "来源商品卖方", "user");
+        long other = account("other-source-seller-" + RUN_ID, "其他卖方", "user");
+        long product = db.sql("""
+                insert into product (seller_account_id, title, description, price_cents, lifecycle_state)
+                values (?, '来源商品', '举报时的描述', 100, 'public') returning product_id
+                """).param(seller).query(Long.class).single();
+        assertInvalidReport(reporter, "wrong-source-seller",
+                new CaseCommands.Target("account", other, null, null, product));
+        var report = cases.submit(context(reporter), "valid-source-seller", reportFor(
+                new CaseCommands.Target("account", seller, null, null, product)));
+        assertThat(report.status()).isEqualTo(201);
+        long caseId = Long.parseLong(report.data().path("case_id").asString());
+        db.sql("update product set title = '修改后的标题' where product_id = ?").param(product).update();
+        var manager = context(MANAGER_1.get());
+        cases.claim(manager, "claim-source-seller", caseId);
+
+        var detail = queries.detail(manager, caseId);
+        assertThat(detail.path("reported_object").path("target_id").asString()).isEqualTo(Long.toString(seller));
+        var source = detail.path("reported_object").path("product");
+        assertThat(source.path("id").asString()).isEqualTo(Long.toString(product));
+        assertThat(source.path("title").asString()).isEqualTo("来源商品");
+        assertThat(source.path("description").asString()).isEqualTo("举报时的描述");
+        var accounts = detail.path("related_accounts");
+        assertThat(accounts.get(0).path("eligible").asBoolean()).isFalse();
+        assertThat(accounts.get(1).path("display_name").asString()).isEqualTo("来源商品卖方");
+        assertThat(accounts.get(1).path("eligible").asBoolean()).isTrue();
+        var ownDetail = queries.detail(context(reporter), caseId);
+        assertThat(ownDetail.has("reported_object")).isFalse();
+        assertThat(ownDetail.at("/report_materials/product/title").asString()).isEqualTo("来源商品");
+        assertThat(ownDetail.at("/report_materials/product/id").asLong()).isEqualTo(product);
+        assertThat(ownDetail.at("/report_materials/product/description").asString())
+                .isEqualTo("举报时的描述");
+        assertThatThrownBy(() -> queries.detail(context(MANAGER_2.get()), caseId))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        failure -> assertThat(failure.code()).isEqualTo("RESOURCE_NOT_VISIBLE"));
     }
 
     @Test
@@ -540,7 +661,7 @@ class CaseLifecycleIT {
                         error -> assertThat(error.code()).isEqualTo("EVIDENCE_OUT_OF_SCOPE"));
 
         cases.decide(context(manager), "evidence-decide-" + RUN_ID, caseId, new CaseCommands.Decision(
-                CaseVocabulary.NO_ACTION, "不予处理", List.of("case:" + caseId), List.of()));
+                CaseVocabulary.NO_ACTION, "不予处理", List.of(), List.of()));
         cases.close(context(manager), "evidence-close-" + RUN_ID, caseId);
         assertThat(queries.referencedEvidence(context(manager), caseId, evidenceId)
                 .at("/message/body").asString()).isEqualTo("reported private body");
@@ -601,7 +722,35 @@ class CaseLifecycleIT {
         return new CaseCommands.Report(target, "请核实内容", null, List.of());
     }
 
-    private static void assertInquiryNotification(long caseId, long noticeId) throws Exception {
+    private static void assertManagementInbox(long manager, long notificationId, long caseId) throws Exception {
+        var accounts = app.getBean(AccountService.class);
+        var email = manager == MANAGER_1.get() ? "manager1-" : "manager2-";
+        var claimant = accounts.login(email + RUN_ID + "@example.invalid", PASSWORD);
+        var user = accounts.login("related-" + RUN_ID + "@example.invalid", PASSWORD);
+        String path = "/account/notifications/" + notificationId;
+        try (var http = HttpClient.newHttpClient()) {
+            var detail = read(http, claimant, path + "?audience=management", 200);
+            assertThat(detail.at("/source/resource_id").asLong()).isEqualTo(caseId);
+            assertThat(detail.path("read_at").isNull()).isTrue();
+            read(http, claimant, path, 404);
+            read(http, user, path + "?audience=management", 403);
+            var filtered = read(http, claimant, "/account/notifications?event_type=management.case_appeal", 200);
+            assertThat(filtered.path("total").asLong()).isZero();
+        } finally {
+            var sessions = app.getBean(SessionService.class);
+            sessions.revoke(sessions.authenticate(claimant.token()));
+            sessions.revoke(sessions.authenticate(user.token()));
+        }
+    }
+
+    private static List<Long> managementNoticeRecipients(long caseId, String kind) {
+        return db.sql("""
+                select recipient_account_id from notification
+                where source_type = 'case' and source_id = ? and event_type = ?
+                """).param(caseId).param("management.case_" + kind).query(Long.class).list();
+    }
+
+    private static void assertInquiryNotification(long caseId, long noticeId, String messageId) throws Exception {
         var accounts = app.getBean(AccountService.class);
         var recipient = accounts.login("related-" + RUN_ID + "@example.invalid", PASSWORD);
         var reporter = accounts.login("reporter-" + RUN_ID + "@example.invalid", PASSWORD);
@@ -609,6 +758,10 @@ class CaseLifecycleIT {
         try (var http = HttpClient.newHttpClient()) {
             var detail = read(http, recipient, path, 200);
             assertThat(detail.path("summary").asString()).isEqualTo("收到事项问询");
+            assertThat(messageId).isNotBlank();
+            assertThat(detail.path("case_message_id").asString()).isEqualTo(messageId);
+            var page = read(http, recipient, "/account/notifications?page=1&page_size=20", 200);
+            assertThat(page.path("items").get(0).has("case_message_id")).isFalse();
             assertThat(detail.at("/source/resource_type").asString()).isEqualTo("case");
             assertThat(detail.at("/source/resource_id").asLong()).isEqualTo(caseId);
             assertThat(detail.path("body").asString()).doesNotContain("请说明商品问题");
@@ -702,7 +855,7 @@ class CaseLifecycleIT {
             var managerContext = context(manager);
             cases.claim(managerContext, "workbench-claim-" + label, caseId);
             cases.decide(managerContext, "workbench-decide-" + label, caseId, new CaseCommands.Decision(
-                    CaseVocabulary.NO_ACTION, "workbench-private-" + RUN_ID, List.of("case:" + caseId), List.of()));
+                    CaseVocabulary.NO_ACTION, "workbench-private-" + RUN_ID, List.of(), List.of()));
             if (close) {
                 cases.close(managerContext, "workbench-close-" + label, caseId);
             }

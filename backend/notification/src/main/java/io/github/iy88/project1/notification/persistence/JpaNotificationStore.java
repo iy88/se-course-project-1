@@ -64,21 +64,21 @@ class JpaNotificationStore implements NotificationStore {
 
     @Override
     public List<Stored> page(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType,
-                             int page, int pageSize) {
+                             int page, int pageSize, boolean management) {
         var pageable = PageRequest.of(page - 1, pageSize);
-        return repository.pageFor(recipientAccountId, readState(filter), eventType, pageable).stream()
+        return repository.pageFor(recipientAccountId, readState(filter), eventType, management, pageable).stream()
                 .map(NotificationRecord::snapshot)
                 .toList();
     }
 
     @Override
-    public long count(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType) {
-        return repository.countFor(recipientAccountId, readState(filter), eventType);
+    public long count(long recipientAccountId, NotificationQuery.ReadFilter filter, String eventType, boolean management) {
+        return repository.countFor(recipientAccountId, readState(filter), eventType, management);
     }
 
     @Override
-    public long unreadCount(long recipientAccountId) {
-        return repository.countUnread(recipientAccountId);
+    public long unreadCount(long recipientAccountId, boolean management) {
+        return repository.countUnread(recipientAccountId, management);
     }
 
     private static int readState(NotificationQuery.ReadFilter filter) {

@@ -5,6 +5,7 @@ const props = defineProps<{
   page: number;
   pageSize: number;
   total: number;
+  showSinglePage?: boolean;
 }>();
 
 const emit = defineEmits<{ change: [page: number] }>();
@@ -15,7 +16,7 @@ const canGoForward = computed(() => props.page < totalPages.value);
 </script>
 
 <template>
-  <nav v-if="total > pageSize" class="pager" aria-label="分页">
+  <nav v-if="total > pageSize || (showSinglePage && total > 0)" class="pager" aria-label="分页">
     <button
       type="button"
       class="btn btn--small"

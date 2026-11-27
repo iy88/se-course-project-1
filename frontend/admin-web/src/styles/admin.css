@@ -21,7 +21,7 @@
 
 .admin-header__inner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
   align-items: center;
   gap: var(--space-4);
   inline-size: 100%;
@@ -45,6 +45,7 @@
   color: var(--ink);
   font-weight: 650;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .admin-brand:hover {
@@ -62,7 +63,6 @@
   display: flex;
   align-self: stretch;
   gap: var(--space-4);
-  flex-wrap: wrap;
 }
 
 .admin-nav a {
@@ -75,6 +75,7 @@
   color: var(--ink-soft);
   text-align: center;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .admin-nav .ui-icon {
@@ -98,6 +99,12 @@
   align-items: center;
   gap: var(--space-2);
   justify-self: end;
+  min-inline-size: 0;
+}
+
+.admin-account .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .admin-account__name {
@@ -107,6 +114,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.admin-menu-toggle,
+.admin-nav__sign-out {
+  display: none;
+}
+
+.admin-sign-out-dialog {
+  inline-size: min(28rem, calc(100% - 2rem));
+  margin: auto;
+  color: var(--ink);
+  overscroll-behavior: contain;
+}
+
+.admin-sign-out-dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgb(24 36 32 / 45%);
+}
+
+.admin-sign-out-dialog h1 {
+  font-size: 1.125rem;
+}
+
+.admin-sign-out-dialog__actions {
+  justify-content: flex-end;
 }
 
 .admin-main {
@@ -182,36 +215,84 @@
   background: var(--info-soft);
 }
 
-@media (width < 48rem) {
+@media (width < 68rem) {
   .admin-header__inner {
     grid-template-columns: minmax(0, 1fr) auto;
-    row-gap: var(--space-1);
-    padding-block-start: var(--space-3);
+    gap: var(--space-2);
+    padding-block: var(--space-2);
   }
 
   .admin-nav {
+    display: none;
     grid-column: 1 / -1;
     grid-row: 2;
+    gap: 0;
+    padding-block-start: var(--space-2);
+    border-block-start: 1px solid var(--line);
+  }
+
+  .admin-nav--open {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-2);
-    min-block-size: var(--control-min-block);
-  }
-
-  .admin-brand--with-back {
-    display: none;
-  }
-
-  .admin-account__name {
-    display: none;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-nav a {
     gap: var(--space-1);
-    padding-inline: var(--space-1);
+    min-block-size: var(--control-min-block);
+    justify-content: flex-start;
+    padding-inline: var(--space-2);
+    border-block-end: 0;
+    border-radius: var(--radius-sm);
+  }
+
+  .admin-nav a[aria-current="page"] {
+    background: var(--brand-soft);
+    color: var(--brand-ink);
+  }
+
+  .admin-menu-toggle {
+    display: inline-flex;
+  }
+
+  .admin-account__sign-out {
+    display: none;
+  }
+
+  .admin-nav__sign-out {
+    display: inline-flex;
+    justify-self: start;
+    margin-block-start: var(--space-2);
+  }
+}
+
+@media (width < 48rem) {
+  .admin-brand--with-back,
+  .admin-account__name {
+    display: none;
   }
 
   .admin-main {
     padding-block-start: var(--space-4);
   }
+}
+
+@media (width < 22rem) {
+  .admin-menu-toggle span {
+    position: absolute;
+    clip-path: inset(50%);
+    overflow: hidden;
+    inline-size: 1px;
+    block-size: 1px;
+    white-space: nowrap;
+  }
+}
+
+:is(
+  [id^="case-action-"],
+  [id^="case-supplement-"],
+  [id^="case-evidence-"],
+  [id^="case-message-"]
+):target {
+  outline: 2px solid var(--brand-ink);
+  outline-offset: 2px;
 }
