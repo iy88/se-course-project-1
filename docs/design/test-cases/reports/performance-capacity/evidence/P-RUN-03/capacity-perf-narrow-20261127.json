@@ -1,0 +1,607 @@
+{
+  "format_version": 1,
+  "generated_at": "2026-11-27T15:04:20+0800",
+  "host": {
+    "os": "macOS arm64",
+    "cpu": "Apple M5 Pro",
+    "logical_cpu": 18,
+    "ram_bytes": 68719476736
+  },
+  "topology": {
+    "http_api": "nginx least_conn -> infrastructure JVMs",
+    "websocket": "separate nginx least_conn -> infrastructure JVMs",
+    "worker": "delivery-worker JVMs",
+    "scheduler": "one delivery-scheduler JVM",
+    "database": "isolated PostgreSQL 18.7 on loopback",
+    "redis": "isolated Redis 8.10.3 on loopback",
+    "oss": "real private Alibaba Cloud OSS with isolated random prefix"
+  },
+  "scenarios": [
+    {
+      "passed": false,
+      "case": "Single",
+      "single_operation": "Search",
+      "highest_validated_rate": null,
+      "first_observed_failing_rate": null,
+      "conclusion": "no_rate_validated",
+      "configured_ceiling_reached": true,
+      "stop_reason": "validation_failed_trying_lower_observed_rate",
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [
+        {
+          "index": 0,
+          "kind": "coarse",
+          "target_rate": 600.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 600.0,
+          "http_rps": 600.05,
+          "application_http_rps": 600.05,
+          "storage_http_put_rps": 0.0,
+          "scenario_completions_per_second": 599.45,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 365,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.013185769658064127,
+          "drain_seconds": 0.013841458,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 1,
+          "kind": "validation",
+          "target_rate": 600.0,
+          "outcome": "inconclusive_generator_or_in_flight_limit",
+          "passed": false,
+          "started_rate": 599.95,
+          "http_rps": 600.0,
+          "application_http_rps": 600.0,
+          "storage_http_put_rps": 0.0,
+          "scenario_completions_per_second": 599.4,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 44,
+          "late_arrivals_skipped": 1,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": 0.04615230835877265,
+          "drain_seconds": 0.014792375,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        }
+      ],
+      "operations": {
+        "search": {
+          "samples": 12001,
+          "errors": 0,
+          "p50_ms": 15.996333000000002,
+          "p95_ms": 221.301334,
+          "p99_ms": 371.094667
+        }
+      },
+      "max_runtime_metrics": {
+        "redis_dbsize": 101,
+        "event_stream": 0,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 0,
+        "all_events": 0,
+        "db_sessions": 41,
+        "db_active": 10,
+        "db_locks": 53
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 0.6,
+          "rss_kib": 1217504
+        },
+        "worker-1": {
+          "cpu_pct": 0.7,
+          "rss_kib": 1186688
+        },
+        "api-1": {
+          "cpu_pct": 898.0,
+          "rss_kib": 2643664
+        },
+        "ws-1": {
+          "cpu_pct": 36.0,
+          "rss_kib": 1240992
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 898.0,
+        "rss_kib": 6288624
+      },
+      "upstream_counts": {
+        "127.0.0.1:60247": {
+          "200": 30199
+        }
+      }
+    },
+    {
+      "passed": true,
+      "case": "Single",
+      "single_operation": "Search",
+      "highest_validated_rate": 600.0,
+      "first_observed_failing_rate": null,
+      "conclusion": "validated_lower_bound_only_upper_limit_unknown",
+      "configured_ceiling_reached": true,
+      "stop_reason": "configured_ceiling_reached",
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [
+        {
+          "index": 0,
+          "kind": "coarse",
+          "target_rate": 600.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 600.0,
+          "http_rps": 600.05,
+          "application_http_rps": 600.05,
+          "storage_http_put_rps": 0.0,
+          "scenario_completions_per_second": 599.45,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 1367,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -83.13190472890984,
+          "drain_seconds": 0.016033125,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 1,
+          "kind": "validation",
+          "target_rate": 600.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 600.0,
+          "http_rps": 600.0,
+          "application_http_rps": 600.0,
+          "storage_http_put_rps": 0.0,
+          "scenario_completions_per_second": 599.45,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 60,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": 0.010995381327201155,
+          "drain_seconds": 0.017500709,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        }
+      ],
+      "operations": {
+        "search": {
+          "samples": 12001,
+          "errors": 0,
+          "p50_ms": 940.470209,
+          "p95_ms": 2190.979583,
+          "p99_ms": 2377.318916
+        }
+      },
+      "max_runtime_metrics": {
+        "redis_dbsize": 101,
+        "event_stream": 0,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 0,
+        "all_events": 0,
+        "db_sessions": 51,
+        "db_active": 17,
+        "db_locks": 77
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 0.0,
+          "rss_kib": 1200800
+        },
+        "worker-1": {
+          "cpu_pct": 0.4,
+          "rss_kib": 1202368
+        },
+        "api-1": {
+          "cpu_pct": 750.8,
+          "rss_kib": 1385696
+        },
+        "api-2": {
+          "cpu_pct": 525.8,
+          "rss_kib": 1342288
+        },
+        "ws-1": {
+          "cpu_pct": 22.4,
+          "rss_kib": 1236688
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 1276.7,
+        "rss_kib": 6337376
+      },
+      "upstream_counts": {
+        "127.0.0.1:61910": {
+          "200": 15130
+        },
+        "127.0.0.1:61960": {
+          "200": 15070
+        }
+      }
+    },
+    {
+      "passed": false,
+      "case": "Single",
+      "single_operation": "Search",
+      "highest_validated_rate": null,
+      "first_observed_failing_rate": 600.0,
+      "conclusion": "no_rate_validated",
+      "configured_ceiling_reached": false,
+      "stop_reason": "service_failure_bracketed",
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [
+        {
+          "index": 0,
+          "kind": "coarse",
+          "target_rate": 600.0,
+          "outcome": "service_failed",
+          "passed": false,
+          "started_rate": 599.8837406311172,
+          "http_rps": 599.9837379207706,
+          "application_http_rps": 599.9837379207706,
+          "storage_http_put_rps": 0.0,
+          "scenario_completions_per_second": 345.2906411734035,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 2706,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": 59.49187422658517,
+          "drain_seconds": 2.8476415,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        }
+      ],
+      "operations": {},
+      "max_runtime_metrics": {
+        "redis_dbsize": 101,
+        "event_stream": 0,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 0,
+        "all_events": 0,
+        "db_sessions": 71,
+        "db_active": 19,
+        "db_locks": 135
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 0.1,
+          "rss_kib": 1209312
+        },
+        "worker-1": {
+          "cpu_pct": 0.1,
+          "rss_kib": 1194304
+        },
+        "api-1": {
+          "cpu_pct": 316.3,
+          "rss_kib": 1368624
+        },
+        "api-2": {
+          "cpu_pct": 256.8,
+          "rss_kib": 1392384
+        },
+        "api-3": {
+          "cpu_pct": 261.4,
+          "rss_kib": 1382576
+        },
+        "api-4": {
+          "cpu_pct": 273.1,
+          "rss_kib": 1362480
+        },
+        "ws-1": {
+          "cpu_pct": 79.1,
+          "rss_kib": 1262448
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 1086.1,
+        "rss_kib": 9161728
+      },
+      "upstream_counts": {
+        "127.0.0.1:49219": {
+          "200": 2317
+        },
+        "127.0.0.1:49266": {
+          "200": 2307
+        },
+        "127.0.0.1:49331": {
+          "200": 2276
+        },
+        "127.0.0.1:49388": {
+          "200": 2299
+        }
+      }
+    },
+    {
+      "passed": false,
+      "case": "Single",
+      "single_operation": "Im",
+      "highest_validated_rate": null,
+      "first_observed_failing_rate": 600.0,
+      "conclusion": "no_rate_validated",
+      "configured_ceiling_reached": false,
+      "stop_reason": "service_failure_bracketed",
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [
+        {
+          "index": 0,
+          "kind": "coarse",
+          "target_rate": 600.0,
+          "outcome": "service_failed",
+          "passed": false,
+          "started_rate": 599.9845979153838,
+          "http_rps": 1811.8534882714732,
+          "application_http_rps": 1811.8534882714732,
+          "storage_http_put_rps": 0.0,
+          "scenario_completions_per_second": 257.89337967062914,
+          "scenario_error_rate": 0.082,
+          "max_in_flight": 3610,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": 34.2429101086662,
+          "drain_seconds": 5.3149445,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        }
+      ],
+      "operations": {},
+      "max_runtime_metrics": {
+        "redis_dbsize": 302,
+        "event_stream": 4955,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 29496,
+        "all_events": 34469,
+        "db_sessions": 51,
+        "db_active": 11,
+        "db_locks": 576
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 6.4,
+          "rss_kib": 1205360
+        },
+        "worker-1": {
+          "cpu_pct": 0.0,
+          "rss_kib": 1181248
+        },
+        "api-1": {
+          "cpu_pct": 494.6,
+          "rss_kib": 1422608
+        },
+        "api-2": {
+          "cpu_pct": 452.3,
+          "rss_kib": 1383712
+        },
+        "ws-1": {
+          "cpu_pct": 266.1,
+          "rss_kib": 1331152
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 1213.3,
+        "rss_kib": 6477840
+      },
+      "upstream_counts": {
+        "127.0.0.1:55249": {
+          "200": 8506,
+          "201": 4433
+        },
+        "127.0.0.1:55336": {
+          "200": 8483,
+          "201": 4567
+        },
+        "127.0.0.1:55390": {
+          "101": 100
+        }
+      }
+    },
+    {
+      "passed": false,
+      "case": "Single",
+      "single_operation": "Im",
+      "highest_validated_rate": null,
+      "first_observed_failing_rate": 600.0,
+      "conclusion": "no_rate_validated",
+      "configured_ceiling_reached": false,
+      "stop_reason": "service_failure_bracketed",
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [
+        {
+          "index": 0,
+          "kind": "coarse",
+          "target_rate": 600.0,
+          "outcome": "service_failed",
+          "passed": false,
+          "started_rate": 599.9772633216269,
+          "http_rps": 1815.9311836534573,
+          "application_http_rps": 1815.9311836534573,
+          "storage_http_put_rps": 0.0,
+          "scenario_completions_per_second": 266.4899011253559,
+          "scenario_error_rate": 0.08766666666666667,
+          "max_in_flight": 3438,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": 47.3964189441564,
+          "drain_seconds": 5.422672917,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        }
+      ],
+      "operations": {},
+      "max_runtime_metrics": {
+        "redis_dbsize": 302,
+        "event_stream": 2284,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 31992,
+        "all_events": 34292,
+        "db_sessions": 61,
+        "db_active": 6,
+        "db_locks": 239
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 43.4,
+          "rss_kib": 1218016
+        },
+        "worker-1": {
+          "cpu_pct": 0.5,
+          "rss_kib": 1189520
+        },
+        "api-1": {
+          "cpu_pct": 479.2,
+          "rss_kib": 1376672
+        },
+        "api-2": {
+          "cpu_pct": 458.6,
+          "rss_kib": 1367088
+        },
+        "ws-1": {
+          "cpu_pct": 236.2,
+          "rss_kib": 1314416
+        },
+        "ws-2": {
+          "cpu_pct": 195.7,
+          "rss_kib": 1339024
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 1241.8,
+        "rss_kib": 7754560
+      },
+      "upstream_counts": {
+        "127.0.0.1:57051": {
+          "200": 8503,
+          "201": 4472
+        },
+        "127.0.0.1:57118": {
+          "200": 8579,
+          "201": 4528
+        },
+        "127.0.0.1:57237": {
+          "101": 50
+        },
+        "127.0.0.1:57173": {
+          "101": 50
+        }
+      }
+    },
+    {
+      "passed": false,
+      "case": "Single",
+      "single_operation": "Im",
+      "highest_validated_rate": null,
+      "first_observed_failing_rate": 600.0,
+      "conclusion": "no_rate_validated",
+      "configured_ceiling_reached": false,
+      "stop_reason": "service_failure_bracketed",
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [
+        {
+          "index": 0,
+          "kind": "coarse",
+          "target_rate": 600.0,
+          "outcome": "service_failed",
+          "passed": false,
+          "started_rate": 599.9440002071158,
+          "http_rps": 1864.2259899769113,
+          "application_http_rps": 1864.2259899769113,
+          "storage_http_put_rps": 0.0,
+          "scenario_completions_per_second": 360.4663534577754,
+          "scenario_error_rate": 0.014,
+          "max_in_flight": 2702,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -22.659090049846665,
+          "drain_seconds": 3.415207584,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        }
+      ],
+      "operations": {},
+      "max_runtime_metrics": {
+        "redis_dbsize": 302,
+        "event_stream": 1104,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 33814,
+        "all_events": 34942,
+        "db_sessions": 81,
+        "db_active": 8,
+        "db_locks": 187
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 21.6,
+          "rss_kib": 1238960
+        },
+        "worker-1": {
+          "cpu_pct": 0.3,
+          "rss_kib": 1219712
+        },
+        "api-1": {
+          "cpu_pct": 470.5,
+          "rss_kib": 1458384
+        },
+        "api-2": {
+          "cpu_pct": 432.8,
+          "rss_kib": 1390896
+        },
+        "ws-1": {
+          "cpu_pct": 164.9,
+          "rss_kib": 1316256
+        },
+        "ws-2": {
+          "cpu_pct": 180.8,
+          "rss_kib": 1287216
+        },
+        "ws-3": {
+          "cpu_pct": 153.5,
+          "rss_kib": 1300912
+        },
+        "ws-4": {
+          "cpu_pct": 156.9,
+          "rss_kib": 1282048
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 1358.1,
+        "rss_kib": 10452848
+      },
+      "upstream_counts": {
+        "127.0.0.1:59967": {
+          "200": 9024,
+          "201": 4435
+        },
+        "127.0.0.1:60019": {
+          "200": 8892,
+          "201": 4565
+        },
+        "127.0.0.1:60081": {
+          "101": 25
+        },
+        "127.0.0.1:60147": {
+          "101": 25
+        },
+        "127.0.0.1:60205": {
+          "101": 25
+        },
+        "127.0.0.1:60266": {
+          "101": 25
+        }
+      }
+    }
+  ]
+}

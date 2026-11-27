@@ -1,0 +1,761 @@
+{
+  "format_version": 1,
+  "source": "P-RUN-03/capacity-limits-20261127.json",
+  "purpose": "worker 1/2 mixed A/B summary",
+  "scenarios": [
+    {
+      "passed": true,
+      "case": "Mixed",
+      "single_operation": null,
+      "highest_validated_rate": 100.0,
+      "first_observed_failing_rate": 200.0,
+      "conclusion": "observed_capacity_bracket",
+      "configured_ceiling_reached": false,
+      "stop_reason": "inconclusive_refinement",
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [
+        {
+          "index": 0,
+          "kind": "coarse",
+          "target_rate": 100.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 100.0,
+          "http_rps": 190.15,
+          "application_http_rps": 185.15,
+          "storage_http_put_rps": 5.0,
+          "scenario_completions_per_second": 99.75,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 25,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.02416561115394997,
+          "drain_seconds": 0.264819667,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 1,
+          "kind": "coarse",
+          "target_rate": 200.0,
+          "outcome": "service_failed",
+          "passed": false,
+          "started_rate": 199.98256236048894,
+          "http_rps": 376.1671998000797,
+          "application_http_rps": 367.26797577503794,
+          "storage_http_put_rps": 8.899224025041757,
+          "scenario_completions_per_second": 196.38287623800014,
+          "scenario_error_rate": 0.01,
+          "max_in_flight": 58,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -2.1906776926595417,
+          "drain_seconds": 10.845805,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 2,
+          "kind": "refine",
+          "target_rate": 150.0,
+          "outcome": "inconclusive_samples",
+          "passed": false,
+          "started_rate": 149.97534093446328,
+          "http_rps": 270.3555479245258,
+          "application_http_rps": 267.2560575452136,
+          "storage_http_put_rps": 3.099490379312241,
+          "scenario_completions_per_second": 146.47591631265914,
+          "scenario_error_rate": 0.02266666666666667,
+          "max_in_flight": 45,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.8333986262991594,
+          "drain_seconds": 3.511213667,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 3,
+          "kind": "validation",
+          "target_rate": 100.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 100.0,
+          "http_rps": 190.05,
+          "application_http_rps": 185.05,
+          "storage_http_put_rps": 5.0,
+          "scenario_completions_per_second": 99.75,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 12,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.08351195816733122,
+          "drain_seconds": 0.19609675,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        }
+      ],
+      "operations": {
+        "detail": {
+          "samples": 500,
+          "errors": 0,
+          "p50_ms": 2.2508340000000002,
+          "p95_ms": 3.7616669999999996,
+          "p99_ms": 5.204667
+        },
+        "home": {
+          "samples": 600,
+          "errors": 0,
+          "p50_ms": 14.601459,
+          "p95_ms": 20.927999999999997,
+          "p99_ms": 24.190459
+        },
+        "im_delivery": {
+          "samples": 200,
+          "errors": 0,
+          "p50_ms": 68.396834,
+          "p95_ms": 80.115084,
+          "p99_ms": 87.198042
+        },
+        "im_read": {
+          "samples": 200,
+          "errors": 0,
+          "p50_ms": 58.735208,
+          "p95_ms": 61.795666,
+          "p99_ms": 63.386541
+        },
+        "im_retrieval": {
+          "samples": 200,
+          "errors": 0,
+          "p50_ms": 2.380917,
+          "p95_ms": 3.677333,
+          "p99_ms": 4.257792
+        },
+        "im_send": {
+          "samples": 200,
+          "errors": 0,
+          "p50_ms": 62.257042,
+          "p95_ms": 65.476417,
+          "p99_ms": 66.895917
+        },
+        "publish": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 7.307833,
+          "p95_ms": 12.105416,
+          "p99_ms": 13.023125
+        },
+        "search": {
+          "samples": 500,
+          "errors": 0,
+          "p50_ms": 13.936792,
+          "p95_ms": 21.270125,
+          "p99_ms": 24.912542
+        },
+        "trade_accept": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 8.642792,
+          "p95_ms": 12.654208,
+          "p99_ms": 13.985375
+        },
+        "trade_agree": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 7.409834,
+          "p95_ms": 12.695958000000001,
+          "p99_ms": 13.988792
+        },
+        "trade_agreement": {
+          "samples": 101,
+          "errors": 0,
+          "p50_ms": 7.554834,
+          "p95_ms": 11.163542,
+          "p99_ms": 12.12425
+        },
+        "trade_confirm_buyer": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 8.696458,
+          "p95_ms": 12.824167,
+          "p99_ms": 14.852374999999999
+        },
+        "trade_confirm_seller": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 9.899666999999999,
+          "p95_ms": 17.797209000000002,
+          "p99_ms": 20.625125
+        },
+        "trade_read": {
+          "samples": 402,
+          "errors": 0,
+          "p50_ms": 2.863375,
+          "p95_ms": 4.147666,
+          "p99_ms": 5.072958
+        },
+        "trade_relist": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 5.121292,
+          "p95_ms": 7.596458,
+          "p99_ms": 9.28575
+        },
+        "trade_request": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 8.265459,
+          "p95_ms": 12.29275,
+          "p99_ms": 13.520875
+        },
+        "trade_verify": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 3.1176250000000003,
+          "p95_ms": 4.913458,
+          "p99_ms": 5.496542
+        },
+        "upload_bytes": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 29.672250000000002,
+          "p95_ms": 66.30012500000001,
+          "p99_ms": 341.026916
+        },
+        "upload_complete": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 154.307084,
+          "p95_ms": 179.080458,
+          "p99_ms": 598.608167
+        },
+        "upload_lease": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 90.891167,
+          "p95_ms": 1121.829667,
+          "p99_ms": 2097.895041
+        }
+      },
+      "max_runtime_metrics": {
+        "redis_dbsize": 302,
+        "event_stream": 10000,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 1,
+        "all_events": 16274,
+        "db_sessions": 62,
+        "db_active": 3,
+        "db_locks": 238
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 0.3,
+          "rss_kib": 1227904
+        },
+        "worker-1": {
+          "cpu_pct": 1.0,
+          "rss_kib": 1204400
+        },
+        "api-1": {
+          "cpu_pct": 665.2,
+          "rss_kib": 1364304
+        },
+        "api-2": {
+          "cpu_pct": 498.8,
+          "rss_kib": 1370992
+        },
+        "ws-1": {
+          "cpu_pct": 124.8,
+          "rss_kib": 1274320
+        },
+        "ws-2": {
+          "cpu_pct": 140.4,
+          "rss_kib": 1272816
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 1367.0,
+        "rss_kib": 7674944
+      },
+      "upstream_counts": {
+        "127.0.0.1:52651": {
+          "200": 7417,
+          "201": 1953,
+          "503": 55
+        },
+        "127.0.0.1:52704": {
+          "200": 7634,
+          "201": 1940,
+          "503": 52
+        },
+        "127.0.0.1:52765": {
+          "101": 50
+        },
+        "127.0.0.1:52819": {
+          "101": 50
+        }
+      }
+    },
+    {
+      "passed": true,
+      "case": "Mixed",
+      "single_operation": null,
+      "highest_validated_rate": 99.0,
+      "first_observed_failing_rate": 100.0,
+      "conclusion": "observed_capacity_bracket",
+      "configured_ceiling_reached": false,
+      "stop_reason": "validation_failed_trying_lower_observed_rate",
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0,
+      "stages": [
+        {
+          "index": 0,
+          "kind": "coarse",
+          "target_rate": 100.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 100.0,
+          "http_rps": 190.15,
+          "application_http_rps": 185.15,
+          "storage_http_put_rps": 5.0,
+          "scenario_completions_per_second": 99.75,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 27,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.02857010077271641,
+          "drain_seconds": 0.219002166,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 1,
+          "kind": "coarse",
+          "target_rate": 200.0,
+          "outcome": "service_failed",
+          "passed": false,
+          "started_rate": 199.97553383333272,
+          "http_rps": 376.7539057419989,
+          "application_http_rps": 367.7550067194989,
+          "storage_http_put_rps": 8.998899022499973,
+          "scenario_completions_per_second": 198.2757417957494,
+          "scenario_error_rate": 0.004,
+          "max_in_flight": 42,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -2.047783465399445,
+          "drain_seconds": 0.946229833,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 2,
+          "kind": "refine",
+          "target_rate": 150.0,
+          "outcome": "inconclusive_samples",
+          "passed": false,
+          "started_rate": 149.98093866753715,
+          "http_rps": 269.76571501667684,
+          "application_http_rps": 267.0660581206612,
+          "storage_http_put_rps": 2.699656896015669,
+          "scenario_completions_per_second": 145.98144696973617,
+          "scenario_error_rate": 0.038,
+          "max_in_flight": 47,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": 4.571576088503094,
+          "drain_seconds": 4.776572458,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 3,
+          "kind": "validation",
+          "target_rate": 100.0,
+          "outcome": "service_failed",
+          "passed": false,
+          "started_rate": 99.98887651745629,
+          "http_rps": 190.31216163822512,
+          "application_http_rps": 185.17939931032905,
+          "storage_http_put_rps": 5.132762327896089,
+          "scenario_completions_per_second": 99.52226176037482,
+          "scenario_error_rate": 0.0006666666666666666,
+          "max_in_flight": 20,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": 0.8181236588183494,
+          "drain_seconds": 0.224051625,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 4,
+          "kind": "refine_after_validation",
+          "target_rate": 50.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 50.0,
+          "http_rps": 94.7,
+          "application_http_rps": 92.3,
+          "storage_http_put_rps": 2.4,
+          "scenario_completions_per_second": 49.9,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 7,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.032987923939014986,
+          "drain_seconds": 0.6418545,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 5,
+          "kind": "refine_after_validation",
+          "target_rate": 75.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 75.0,
+          "http_rps": 142.45,
+          "application_http_rps": 138.7,
+          "storage_http_put_rps": 3.75,
+          "scenario_completions_per_second": 74.95,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 11,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.19999787534622304,
+          "drain_seconds": 0.025883625,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 6,
+          "kind": "refine_after_validation",
+          "target_rate": 87.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 87.0,
+          "http_rps": 165.3,
+          "application_http_rps": 160.95,
+          "storage_http_put_rps": 4.35,
+          "scenario_completions_per_second": 86.95,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 13,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.05933784495799415,
+          "drain_seconds": 0.089508041,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 7,
+          "kind": "refine_after_validation",
+          "target_rate": 93.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 93.0,
+          "http_rps": 176.65,
+          "application_http_rps": 172.0,
+          "storage_http_put_rps": 4.65,
+          "scenario_completions_per_second": 92.8,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 15,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": 0.360470351811858,
+          "drain_seconds": 0.243251416,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 8,
+          "kind": "refine_after_validation",
+          "target_rate": 96.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 96.0,
+          "http_rps": 182.85,
+          "application_http_rps": 177.9,
+          "storage_http_put_rps": 4.95,
+          "scenario_completions_per_second": 95.75,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 13,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.02636629618776773,
+          "drain_seconds": 0.230033375,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 9,
+          "kind": "refine_after_validation",
+          "target_rate": 98.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 98.0,
+          "http_rps": 186.45,
+          "application_http_rps": 181.45,
+          "storage_http_put_rps": 5.0,
+          "scenario_completions_per_second": 97.85,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 11,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.026392036587351654,
+          "drain_seconds": 0.173424958,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 10,
+          "kind": "refine_after_validation",
+          "target_rate": 99.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 99.0,
+          "http_rps": 187.55,
+          "application_http_rps": 182.8,
+          "storage_http_put_rps": 4.75,
+          "scenario_completions_per_second": 98.8,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 12,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.09233603599299482,
+          "drain_seconds": 1.455130125,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        },
+        {
+          "index": 11,
+          "kind": "validation",
+          "target_rate": 99.0,
+          "outcome": "passed",
+          "passed": true,
+          "started_rate": 99.0,
+          "http_rps": 188.1,
+          "application_http_rps": 183.15,
+          "storage_http_put_rps": 4.95,
+          "scenario_completions_per_second": 98.95,
+          "scenario_error_rate": 0.0,
+          "max_in_flight": 10,
+          "late_arrivals_skipped": 0,
+          "in_flight_limit_drops": 0,
+          "backlog_growth_per_second": -0.1055015428151774,
+          "drain_seconds": 0.084955084,
+          "websocket_disconnects": 0,
+          "websocket_reconnect_failures": 0
+        }
+      ],
+      "operations": {
+        "detail": {
+          "samples": 435,
+          "errors": 0,
+          "p50_ms": 1.798125,
+          "p95_ms": 3.285666,
+          "p99_ms": 4.409709
+        },
+        "home": {
+          "samples": 600,
+          "errors": 0,
+          "p50_ms": 13.097167,
+          "p95_ms": 18.49,
+          "p99_ms": 20.689958
+        },
+        "im_delivery": {
+          "samples": 174,
+          "errors": 0,
+          "p50_ms": 63.422459,
+          "p95_ms": 77.07958400000001,
+          "p99_ms": 119.73
+        },
+        "im_read": {
+          "samples": 200,
+          "errors": 0,
+          "p50_ms": 58.417209,
+          "p95_ms": 60.94716699999999,
+          "p99_ms": 61.95125
+        },
+        "im_retrieval": {
+          "samples": 200,
+          "errors": 0,
+          "p50_ms": 2.155791,
+          "p95_ms": 3.358333,
+          "p99_ms": 3.9312920000000005
+        },
+        "im_send": {
+          "samples": 200,
+          "errors": 0,
+          "p50_ms": 60.694459,
+          "p95_ms": 64.364375,
+          "p99_ms": 65.224667
+        },
+        "publish": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 6.562374999999999,
+          "p95_ms": 10.1265,
+          "p99_ms": 11.900417
+        },
+        "search": {
+          "samples": 435,
+          "errors": 0,
+          "p50_ms": 10.788958,
+          "p95_ms": 17.745292,
+          "p99_ms": 32.6425
+        },
+        "trade_accept": {
+          "samples": 96,
+          "errors": 0,
+          "p50_ms": 6.202583000000001,
+          "p95_ms": 11.468375,
+          "p99_ms": 18.735667
+        },
+        "trade_agree": {
+          "samples": 101,
+          "errors": 0,
+          "p50_ms": 6.517875,
+          "p95_ms": 10.104375000000001,
+          "p99_ms": 10.70525
+        },
+        "trade_agreement": {
+          "samples": 96,
+          "errors": 0,
+          "p50_ms": 5.0825000000000005,
+          "p95_ms": 9.973125,
+          "p99_ms": 14.437375000000001
+        },
+        "trade_confirm_buyer": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 7.280709,
+          "p95_ms": 11.364916,
+          "p99_ms": 12.650500000000001
+        },
+        "trade_confirm_seller": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 8.803042000000001,
+          "p95_ms": 13.572042,
+          "p99_ms": 15.495417
+        },
+        "trade_read": {
+          "samples": 402,
+          "errors": 0,
+          "p50_ms": 2.380875,
+          "p95_ms": 3.685084,
+          "p99_ms": 4.456917000000001
+        },
+        "trade_relist": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 4.64175,
+          "p95_ms": 6.978708,
+          "p99_ms": 7.905875
+        },
+        "trade_request": {
+          "samples": 87,
+          "errors": 0,
+          "p50_ms": 6.831792,
+          "p95_ms": 12.134958,
+          "p99_ms": 17.175625
+        },
+        "trade_verify": {
+          "samples": 100,
+          "errors": 0,
+          "p50_ms": 2.7490829999999997,
+          "p95_ms": 4.326917,
+          "p99_ms": 4.512959
+        },
+        "upload_bytes": {
+          "samples": 93,
+          "errors": 0,
+          "p50_ms": 29.478041,
+          "p95_ms": 179.29500000000002,
+          "p99_ms": 641.627583
+        },
+        "upload_complete": {
+          "samples": 87,
+          "errors": 0,
+          "p50_ms": 155.650917,
+          "p95_ms": 334.13124999999997,
+          "p99_ms": 1766.185209
+        },
+        "upload_lease": {
+          "samples": 93,
+          "errors": 0,
+          "p50_ms": 85.968875,
+          "p95_ms": 1749.1606659999998,
+          "p99_ms": 3772.394333
+        }
+      },
+      "max_runtime_metrics": {
+        "redis_dbsize": 302,
+        "event_stream": 10000,
+        "work_stream": 0,
+        "work_pending": 0,
+        "unpublished_events": 9,
+        "all_events": 43225,
+        "db_sessions": 72,
+        "db_active": 4,
+        "db_locks": 129
+      },
+      "process_peaks": {
+        "scheduler": {
+          "cpu_pct": 5.7,
+          "rss_kib": 1210928
+        },
+        "worker-1": {
+          "cpu_pct": 1.0,
+          "rss_kib": 1183072
+        },
+        "worker-2": {
+          "cpu_pct": 0.6,
+          "rss_kib": 1179056
+        },
+        "api-1": {
+          "cpu_pct": 407.0,
+          "rss_kib": 1362896
+        },
+        "api-2": {
+          "cpu_pct": 486.5,
+          "rss_kib": 1371872
+        },
+        "ws-1": {
+          "cpu_pct": 71.8,
+          "rss_kib": 1264624
+        },
+        "ws-2": {
+          "cpu_pct": 66.8,
+          "rss_kib": 1276592
+        }
+      },
+      "aggregate_process_peaks": {
+        "cpu_pct": 925.6,
+        "rss_kib": 8817504
+      },
+      "upstream_counts": {
+        "127.0.0.1:55339": {
+          "200": 19927,
+          "201": 5335,
+          "503": 34
+        },
+        "127.0.0.1:55406": {
+          "200": 19665,
+          "201": 5373,
+          "503": 35
+        },
+        "127.0.0.1:55520": {
+          "101": 50
+        },
+        "127.0.0.1:55455": {
+          "101": 50
+        }
+      }
+    }
+  ]
+}

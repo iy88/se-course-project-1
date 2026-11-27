@@ -1,0 +1,6473 @@
+{
+  "boundary_bracketed": false,
+  "boundary_criteria": "latency SLA, configured error budget, complete load delivery and sustained validation; not a proof of hardware saturation",
+  "case": "Single",
+  "conclusion": "validated_lower_bound_only_upper_limit_unknown",
+  "configured_ceiling_reached": true,
+  "effective_start_rate": 200.0,
+  "first_observed_failing_rate": null,
+  "format_version": 1,
+  "highest_validated_rate": 400.0,
+  "login_ms": [
+    187.084834,
+    167.720125,
+    84.654625,
+    81.977084,
+    27.089667000000002,
+    26.360875,
+    25.719542,
+    25.049292,
+    25.288874999999997,
+    24.75875,
+    24.990875,
+    24.763666999999998,
+    24.644708,
+    24.372416,
+    24.121958,
+    24.211833,
+    25.468375,
+    24.480208,
+    24.676917,
+    24.867,
+    24.38325,
+    24.012541,
+    23.977958,
+    24.61775,
+    24.5045,
+    23.726792,
+    24.082083,
+    23.779833,
+    23.934417,
+    23.44125,
+    24.586833,
+    24.464833,
+    24.400292,
+    23.538041999999997,
+    24.573041,
+    24.750375000000002,
+    24.651791,
+    24.044125,
+    24.034375,
+    23.719125000000002,
+    23.800042,
+    23.591082999999998,
+    24.079375,
+    23.865209,
+    23.576832999999997,
+    23.217416,
+    24.33725,
+    23.661583,
+    23.617708,
+    22.972959,
+    23.677209,
+    24.067874999999997,
+    24.661584,
+    31.782541,
+    30.663833,
+    25.387166,
+    24.352417000000003,
+    24.007334,
+    24.131375,
+    24.4465,
+    23.770042,
+    23.25375,
+    24.402583,
+    23.7115,
+    23.646458,
+    23.597832999999998,
+    23.717792000000003,
+    23.140958,
+    23.863125,
+    23.498624999999997,
+    24.219084,
+    23.609291000000002,
+    23.30425,
+    23.057959,
+    22.695125,
+    22.826584,
+    22.804333,
+    22.791042,
+    23.658583,
+    22.65375,
+    23.118458,
+    22.826417000000003,
+    23.641375,
+    23.956875,
+    25.114042,
+    27.50875,
+    24.260041,
+    23.491417000000002,
+    23.587875,
+    23.227999999999998,
+    23.002333,
+    23.113708,
+    23.217333,
+    22.902833,
+    23.521125,
+    22.971459,
+    23.393625,
+    22.996834,
+    23.136459000000002,
+    23.322959
+  ],
+  "long_validation": true,
+  "mode": "capacity",
+  "notes": [
+    "No automatic request retries; expected arrival times never shift to hide latency.",
+    "Latency is HTTP request start through usable response; IM delivery and retrieval are separate end-to-end samples.",
+    "In-flight limits, skipped arrivals, fixture exhaustion and missing samples cannot establish a service upper bound.",
+    "Resource ps CPU/RSS samples are local observations; remote backend and PostgreSQL lock/connection monitoring require separate telemetry.",
+    "Published records and completed trades accumulate; failed trade fixtures are quarantined rather than silently reused.",
+    "Single publish reuses a setup-uploaded image and measures only POST /products; mixed publish measures the full multipart upload and publish flow."
+  ],
+  "parameters": {
+    "base_url": "http://127.0.0.1:53534",
+    "capacity": {
+      "capacity_case": "Single",
+      "capacity_max_arrivals": 200000,
+      "capacity_max_error_rate": 0.0,
+      "capacity_max_in_flight": 2048,
+      "capacity_max_lag_ms": 100,
+      "capacity_max_rate": 400.0,
+      "capacity_max_samples": 500000,
+      "capacity_refinements": 12,
+      "capacity_resolution": 1.0,
+      "capacity_stage_seconds": 30,
+      "capacity_start_rate": 0.0,
+      "capacity_validation_seconds": 300,
+      "capacity_warmup_seconds": 5,
+      "monitor_pid": [],
+      "single_operation": "Search"
+    },
+    "duration_seconds": 120,
+    "manifest": "/private/tmp/p1-seed-lab.28e4ac42ce33/load.json",
+    "min_samples": 20,
+    "mode": "Capacity",
+    "output": "/private/tmp/p1-seed-lab.28e4ac42ce33/capacity-api4-ws1-w1-search400.json",
+    "race_rounds": 5,
+    "think_ms": 1000,
+    "timeout_seconds": 60,
+    "users": 100,
+    "warmup_seconds": 30,
+    "ws_base_url": "http://127.0.0.1:53535"
+  },
+  "passed": true,
+  "quarantined_product_ids": [],
+  "rate_unit": "HTTP RPS",
+  "refinement_strategy": "integer_binary_search",
+  "single_operation": "Search",
+  "stages": [
+    {
+      "application_http_requests_started_in_window": 6000,
+      "application_http_rps": 200.0,
+      "application_successful_response_rps": 200.1,
+      "artifact": "/private/tmp/p1-seed-lab.28e4ac42ce33/capacity-api4-ws1-w1-search400-stages-load-load-20261127T060408197Z-1795760284943/00-coarse.json",
+      "backlog_growth_per_second": -0.009090999398273908,
+      "completed_scenarios_in_window": 5998,
+      "completion_scope": "legacy completion fields track measured-start cohort; successful_response fields include warmup carry-in responses completed during measurement",
+      "drain_seconds": 0.006915583,
+      "drained": true,
+      "early_stop_reason": null,
+      "enough_samples": true,
+      "error_budget_passed": true,
+      "expected_arrivals": 6000,
+      "fixture_drops": 0,
+      "growing_backlog": false,
+      "http_completions_in_window": 5998,
+      "http_requests_started_in_window": 6000,
+      "http_rps": 200.0,
+      "http_successful_response_rps": 200.1,
+      "http_successful_responses_completed_in_window": 6003,
+      "in_flight_limit_drops": 0,
+      "index": 0,
+      "kind": "coarse",
+      "late_arrivals_skipped": 0,
+      "latency_sla_passed": true,
+      "local_resources": [
+        {
+          "elapsed_seconds": 0.003319834,
+          "processes": [
+            {
+              "cpu_reported_pct": 0.3,
+              "pid": 45517,
+              "rss_kib": 7888
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 1.0079,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.3,
+              "pid": 45517,
+              "rss_kib": 14416
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 2.013510334,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.0,
+              "pid": 45517,
+              "rss_kib": 14544
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 3.019502042,
+          "processes": [
+            {
+              "cpu_reported_pct": 4.9,
+              "pid": 45517,
+              "rss_kib": 14656
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 4.031082875,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.2,
+              "pid": 45517,
+              "rss_kib": 14736
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 5.0353045,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.1,
+              "pid": 45517,
+              "rss_kib": 14800
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 6.040170709,
+          "processes": [
+            {
+              "cpu_reported_pct": 4.5,
+              "pid": 45517,
+              "rss_kib": 15200
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 7.044938167,
+          "processes": [
+            {
+              "cpu_reported_pct": 4.3,
+              "pid": 45517,
+              "rss_kib": 15296
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 8.050419042,
+          "processes": [
+            {
+              "cpu_reported_pct": 4.1,
+              "pid": 45517,
+              "rss_kib": 15392
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 9.054546292,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.4,
+              "pid": 45517,
+              "rss_kib": 15456
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 10.059195042,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.3,
+              "pid": 45517,
+              "rss_kib": 15552
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 11.06349425,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.8,
+              "pid": 45517,
+              "rss_kib": 15648
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 12.068359709,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.6,
+              "pid": 45517,
+              "rss_kib": 15792
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 13.071513542,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.1,
+              "pid": 45517,
+              "rss_kib": 15856
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 14.076472875,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.7,
+              "pid": 45517,
+              "rss_kib": 15952
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 15.079694292,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.1,
+              "pid": 45517,
+              "rss_kib": 16032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 16.083741209,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.6,
+              "pid": 45517,
+              "rss_kib": 16160
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 17.088503417,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.8,
+              "pid": 45517,
+              "rss_kib": 16224
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 18.093419042,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.1,
+              "pid": 45517,
+              "rss_kib": 16304
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 19.096137042,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.8,
+              "pid": 45517,
+              "rss_kib": 16368
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 20.0998755,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.5,
+              "pid": 45517,
+              "rss_kib": 16480
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 21.104022584,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.5,
+              "pid": 45517,
+              "rss_kib": 17712
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 22.107160709,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.7,
+              "pid": 45517,
+              "rss_kib": 17808
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 23.11046725,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.6,
+              "pid": 45517,
+              "rss_kib": 17888
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 24.113372417,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.9,
+              "pid": 45517,
+              "rss_kib": 17952
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 25.116165084,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.8,
+              "pid": 45517,
+              "rss_kib": 18048
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 26.119841334,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.0,
+              "pid": 45517,
+              "rss_kib": 18112
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 27.1240855,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.9,
+              "pid": 45517,
+              "rss_kib": 18224
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 28.127765625,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.1,
+              "pid": 45517,
+              "rss_kib": 18288
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 29.132105625,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.7,
+              "pid": 45517,
+              "rss_kib": 18352
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 30.134997959,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.5,
+              "pid": 45517,
+              "rss_kib": 18432
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 31.139187042,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.5,
+              "pid": 45517,
+              "rss_kib": 18528
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 32.142009709,
+          "processes": [
+            {
+              "cpu_reported_pct": 3.0,
+              "pid": 45517,
+              "rss_kib": 18624
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 33.145102917,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.9,
+              "pid": 45517,
+              "rss_kib": 18704
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 34.148401792,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.7,
+              "pid": 45517,
+              "rss_kib": 18752
+            }
+          ]
+        }
+      ],
+      "max_in_flight": 106,
+      "omitted_samples": 0,
+      "operations": {
+        "scenario_search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 83.17912500000001,
+          "min_ms": 10.679958,
+          "p50_ms": 13.129458,
+          "p95_ms": 19.779166,
+          "p99_ms": 25.666999999999998,
+          "passed": true,
+          "samples": 6000,
+          "statuses": {
+            "none": 6000
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 83.16975000000001,
+          "min_ms": 10.673125,
+          "p50_ms": 13.120709,
+          "p95_ms": 19.768375000000002,
+          "p99_ms": 25.657333,
+          "passed": true,
+          "samples": 6000,
+          "statuses": {
+            "200": 6000
+          },
+          "threshold_ms": 3000.0
+        }
+      },
+      "outcome": "passed",
+      "passed": true,
+      "pending_at_window_end": 2,
+      "planned_sample_seconds": 30,
+      "progress": [
+        {
+          "completed": 0,
+          "in_flight": 6,
+          "seconds": 0.000806625,
+          "started": 1
+        },
+        {
+          "completed": 197,
+          "in_flight": 4,
+          "seconds": 1.001399583,
+          "started": 201
+        },
+        {
+          "completed": 397,
+          "in_flight": 4,
+          "seconds": 2.00165375,
+          "started": 401
+        },
+        {
+          "completed": 596,
+          "in_flight": 5,
+          "seconds": 3.001310167,
+          "started": 601
+        },
+        {
+          "completed": 798,
+          "in_flight": 3,
+          "seconds": 4.001419292,
+          "started": 801
+        },
+        {
+          "completed": 998,
+          "in_flight": 3,
+          "seconds": 5.001163833,
+          "started": 1001
+        },
+        {
+          "completed": 1198,
+          "in_flight": 3,
+          "seconds": 6.00147025,
+          "started": 1201
+        },
+        {
+          "completed": 1398,
+          "in_flight": 3,
+          "seconds": 7.001210042,
+          "started": 1401
+        },
+        {
+          "completed": 1598,
+          "in_flight": 3,
+          "seconds": 8.001502375,
+          "started": 1601
+        },
+        {
+          "completed": 1796,
+          "in_flight": 5,
+          "seconds": 9.001337833,
+          "started": 1801
+        },
+        {
+          "completed": 1998,
+          "in_flight": 3,
+          "seconds": 10.001682042,
+          "started": 2001
+        },
+        {
+          "completed": 2198,
+          "in_flight": 3,
+          "seconds": 11.0010235,
+          "started": 2201
+        },
+        {
+          "completed": 2398,
+          "in_flight": 3,
+          "seconds": 12.000706625,
+          "started": 2401
+        },
+        {
+          "completed": 2597,
+          "in_flight": 4,
+          "seconds": 13.000571875,
+          "started": 2601
+        },
+        {
+          "completed": 2798,
+          "in_flight": 3,
+          "seconds": 14.001765083,
+          "started": 2801
+        },
+        {
+          "completed": 2998,
+          "in_flight": 3,
+          "seconds": 15.001203917,
+          "started": 3001
+        },
+        {
+          "completed": 3198,
+          "in_flight": 3,
+          "seconds": 16.000864917,
+          "started": 3201
+        },
+        {
+          "completed": 3398,
+          "in_flight": 3,
+          "seconds": 17.001202208,
+          "started": 3401
+        },
+        {
+          "completed": 3598,
+          "in_flight": 3,
+          "seconds": 18.001077667,
+          "started": 3601
+        },
+        {
+          "completed": 3798,
+          "in_flight": 3,
+          "seconds": 19.001526917,
+          "started": 3801
+        },
+        {
+          "completed": 3998,
+          "in_flight": 3,
+          "seconds": 20.001696333,
+          "started": 4001
+        },
+        {
+          "completed": 4198,
+          "in_flight": 3,
+          "seconds": 21.001209375,
+          "started": 4201
+        },
+        {
+          "completed": 4398,
+          "in_flight": 3,
+          "seconds": 22.001629083,
+          "started": 4401
+        },
+        {
+          "completed": 4597,
+          "in_flight": 4,
+          "seconds": 23.00096675,
+          "started": 4601
+        },
+        {
+          "completed": 4798,
+          "in_flight": 3,
+          "seconds": 24.000952292,
+          "started": 4801
+        },
+        {
+          "completed": 4998,
+          "in_flight": 3,
+          "seconds": 25.00162425,
+          "started": 5001
+        },
+        {
+          "completed": 5198,
+          "in_flight": 3,
+          "seconds": 26.001603792,
+          "started": 5201
+        },
+        {
+          "completed": 5397,
+          "in_flight": 4,
+          "seconds": 27.00088225,
+          "started": 5401
+        },
+        {
+          "completed": 5598,
+          "in_flight": 3,
+          "seconds": 28.001058542,
+          "started": 5601
+        },
+        {
+          "completed": 5798,
+          "in_flight": 3,
+          "seconds": 29.001137542,
+          "started": 5801
+        },
+        {
+          "completed": 5998,
+          "in_flight": 2,
+          "seconds": 30.0,
+          "started": 6000
+        }
+      ],
+      "sample_seconds": 30.0,
+      "scenario_completions_per_second": 199.93333333333334,
+      "scenario_error_rate": 0.0,
+      "scenario_errors": 0,
+      "scheduled_latency_passed": true,
+      "scheduled_to_complete_p50_ms": 14.460167,
+      "scheduled_to_complete_p95_ms": 21.144333,
+      "scheduled_to_complete_p99_ms": 27.204333000000002,
+      "scheduling_lag_max_ms": 8.558375,
+      "scheduling_lag_p95_ms": 1.845375,
+      "started_arrivals": 6000,
+      "started_at_unix_ms": 1795760285095,
+      "started_rate": 200.0,
+      "storage_http_put_rps": 0.0,
+      "storage_http_puts_started_in_window": 0,
+      "target_rate": 200.0,
+      "total_completed_including_warmup_and_drain": 7000,
+      "total_started_including_warmup": 7000,
+      "unit": "http_requests_per_second",
+      "warmup": {
+        "scenario_search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 938.533167,
+          "min_ms": 18.060333,
+          "p50_ms": 29.784542000000002,
+          "p95_ms": 459.239083,
+          "p99_ms": 743.251666,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "none": 1000
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 938.4924169999999,
+          "min_ms": 18.050250000000002,
+          "p50_ms": 29.772,
+          "p95_ms": 459.229667,
+          "p99_ms": 743.240958,
+          "passed": true,
+          "samples": 1000,
+          "statuses": {
+            "200": 1000
+          },
+          "threshold_ms": 3000.0
+        }
+      },
+      "warmup_admission_drops": 0,
+      "warmup_fixture_drops": 0,
+      "warmup_passed": true,
+      "warmup_seconds": 5,
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0
+    },
+    {
+      "application_http_requests_started_in_window": 12000,
+      "application_http_rps": 400.0,
+      "application_successful_response_rps": 400.0,
+      "artifact": "/private/tmp/p1-seed-lab.28e4ac42ce33/capacity-api4-ws1-w1-search400-stages-load-load-20261127T060408197Z-1795760284943/01-coarse.json",
+      "backlog_growth_per_second": -0.02337636384073181,
+      "completed_scenarios_in_window": 11994,
+      "completion_scope": "legacy completion fields track measured-start cohort; successful_response fields include warmup carry-in responses completed during measurement",
+      "drain_seconds": 0.011240417,
+      "drained": true,
+      "early_stop_reason": null,
+      "enough_samples": true,
+      "error_budget_passed": true,
+      "expected_arrivals": 12000,
+      "fixture_drops": 0,
+      "growing_backlog": false,
+      "http_completions_in_window": 11994,
+      "http_requests_started_in_window": 12000,
+      "http_rps": 400.0,
+      "http_successful_response_rps": 400.0,
+      "http_successful_responses_completed_in_window": 12000,
+      "in_flight_limit_drops": 0,
+      "index": 1,
+      "kind": "coarse",
+      "late_arrivals_skipped": 0,
+      "latency_sla_passed": true,
+      "local_resources": [
+        {
+          "elapsed_seconds": 0.002192459,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.9,
+              "pid": 45517,
+              "rss_kib": 36544
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 1.006858167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 2.011226375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 3.015608375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.6,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 4.019914,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 5.02488775,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.6,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 6.029361917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 7.03377175,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 8.038114834,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 9.04314925,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.9,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 10.048124542,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 36560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 11.05276225,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 36576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 12.056753792,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 36576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 13.061008709,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.7,
+              "pid": 45517,
+              "rss_kib": 36576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 14.065830209,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 36576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 15.070968834,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.6,
+              "pid": 45517,
+              "rss_kib": 36576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 16.075615584,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 36640
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 17.080193709,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 36640
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 18.084701125,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 36688
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 19.08929175,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 36832
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 20.0939655,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 36976
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 21.098278042,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 37136
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 22.102635375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 37264
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 23.106890834,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 37408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 24.112088334,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 37552
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 25.117207167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 37680
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 26.121641125,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 37840
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 27.125024875,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 37968
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 28.129093959,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 38112
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 29.133241917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 38256
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 30.137325584,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 38400
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 31.143060917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 38544
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 32.14771225,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 38672
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 33.15187675,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 38816
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 34.156449167,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 38944
+            }
+          ]
+        }
+      ],
+      "max_in_flight": 16,
+      "omitted_samples": 0,
+      "operations": {
+        "scenario_search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 36.503,
+          "min_ms": 13.145125,
+          "p50_ms": 16.342333,
+          "p95_ms": 18.400625,
+          "p99_ms": 19.551958000000003,
+          "passed": true,
+          "samples": 12000,
+          "statuses": {
+            "none": 12000
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 36.489291,
+          "min_ms": 13.138084,
+          "p50_ms": 16.331417000000002,
+          "p95_ms": 18.386125,
+          "p99_ms": 19.541833,
+          "passed": true,
+          "samples": 12000,
+          "statuses": {
+            "200": 12000
+          },
+          "threshold_ms": 3000.0
+        }
+      },
+      "outcome": "passed",
+      "passed": true,
+      "pending_at_window_end": 6,
+      "planned_sample_seconds": 30,
+      "progress": [
+        {
+          "completed": 0,
+          "in_flight": 7,
+          "seconds": 0.001772375,
+          "started": 1
+        },
+        {
+          "completed": 394,
+          "in_flight": 7,
+          "seconds": 1.001363958,
+          "started": 401
+        },
+        {
+          "completed": 794,
+          "in_flight": 7,
+          "seconds": 2.001017291,
+          "started": 801
+        },
+        {
+          "completed": 1194,
+          "in_flight": 7,
+          "seconds": 3.001371291,
+          "started": 1201
+        },
+        {
+          "completed": 1594,
+          "in_flight": 7,
+          "seconds": 4.0019595,
+          "started": 1601
+        },
+        {
+          "completed": 1994,
+          "in_flight": 7,
+          "seconds": 5.001691125,
+          "started": 2001
+        },
+        {
+          "completed": 2394,
+          "in_flight": 7,
+          "seconds": 6.001532041,
+          "started": 2401
+        },
+        {
+          "completed": 2794,
+          "in_flight": 7,
+          "seconds": 7.001286125,
+          "started": 2801
+        },
+        {
+          "completed": 3193,
+          "in_flight": 8,
+          "seconds": 8.001105416,
+          "started": 3201
+        },
+        {
+          "completed": 3593,
+          "in_flight": 8,
+          "seconds": 9.001261583,
+          "started": 3601
+        },
+        {
+          "completed": 3994,
+          "in_flight": 7,
+          "seconds": 10.001432416,
+          "started": 4001
+        },
+        {
+          "completed": 4394,
+          "in_flight": 7,
+          "seconds": 11.001282833,
+          "started": 4401
+        },
+        {
+          "completed": 4794,
+          "in_flight": 7,
+          "seconds": 12.0017595,
+          "started": 4801
+        },
+        {
+          "completed": 5194,
+          "in_flight": 7,
+          "seconds": 13.001390875,
+          "started": 5201
+        },
+        {
+          "completed": 5594,
+          "in_flight": 7,
+          "seconds": 14.001110458,
+          "started": 5601
+        },
+        {
+          "completed": 5994,
+          "in_flight": 7,
+          "seconds": 15.001239083,
+          "started": 6001
+        },
+        {
+          "completed": 6394,
+          "in_flight": 7,
+          "seconds": 16.001422083,
+          "started": 6401
+        },
+        {
+          "completed": 6794,
+          "in_flight": 7,
+          "seconds": 17.002083208,
+          "started": 6801
+        },
+        {
+          "completed": 7194,
+          "in_flight": 7,
+          "seconds": 18.001288291,
+          "started": 7201
+        },
+        {
+          "completed": 7594,
+          "in_flight": 7,
+          "seconds": 19.001619166,
+          "started": 7601
+        },
+        {
+          "completed": 7994,
+          "in_flight": 7,
+          "seconds": 20.001865,
+          "started": 8001
+        },
+        {
+          "completed": 8394,
+          "in_flight": 7,
+          "seconds": 21.001215916,
+          "started": 8401
+        },
+        {
+          "completed": 8794,
+          "in_flight": 7,
+          "seconds": 22.001937375,
+          "started": 8801
+        },
+        {
+          "completed": 9195,
+          "in_flight": 6,
+          "seconds": 23.00173275,
+          "started": 9201
+        },
+        {
+          "completed": 9594,
+          "in_flight": 7,
+          "seconds": 24.001111625,
+          "started": 9601
+        },
+        {
+          "completed": 9995,
+          "in_flight": 6,
+          "seconds": 25.00180475,
+          "started": 10001
+        },
+        {
+          "completed": 10394,
+          "in_flight": 7,
+          "seconds": 26.000877166,
+          "started": 10401
+        },
+        {
+          "completed": 10794,
+          "in_flight": 7,
+          "seconds": 27.001461541,
+          "started": 10801
+        },
+        {
+          "completed": 11194,
+          "in_flight": 7,
+          "seconds": 28.00131425,
+          "started": 11201
+        },
+        {
+          "completed": 11594,
+          "in_flight": 7,
+          "seconds": 29.001944708,
+          "started": 11601
+        },
+        {
+          "completed": 11994,
+          "in_flight": 6,
+          "seconds": 30.0,
+          "started": 12000
+        }
+      ],
+      "sample_seconds": 30.0,
+      "scenario_completions_per_second": 399.8,
+      "scenario_error_rate": 0.0,
+      "scenario_errors": 0,
+      "scheduled_latency_passed": true,
+      "scheduled_to_complete_p50_ms": 17.56075,
+      "scheduled_to_complete_p95_ms": 19.682499999999997,
+      "scheduled_to_complete_p99_ms": 20.893915999999997,
+      "scheduling_lag_max_ms": 5.63025,
+      "scheduling_lag_p95_ms": 1.9264160000000001,
+      "started_arrivals": 12000,
+      "started_at_unix_ms": 1795760320167,
+      "started_rate": 400.0,
+      "storage_http_put_rps": 0.0,
+      "storage_http_puts_started_in_window": 0,
+      "target_rate": 400.0,
+      "total_completed_including_warmup_and_drain": 14000,
+      "total_started_including_warmup": 14000,
+      "unit": "http_requests_per_second",
+      "warmup": {
+        "scenario_search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 27.520875,
+          "min_ms": 14.125,
+          "p50_ms": 16.695291,
+          "p95_ms": 18.899709,
+          "p99_ms": 20.53075,
+          "passed": true,
+          "samples": 2000,
+          "statuses": {
+            "none": 2000
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 27.509333,
+          "min_ms": 14.115459,
+          "p50_ms": 16.683042,
+          "p95_ms": 18.889583000000002,
+          "p99_ms": 20.51025,
+          "passed": true,
+          "samples": 2000,
+          "statuses": {
+            "200": 2000
+          },
+          "threshold_ms": 3000.0
+        }
+      },
+      "warmup_admission_drops": 0,
+      "warmup_fixture_drops": 0,
+      "warmup_passed": true,
+      "warmup_seconds": 5,
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0
+    },
+    {
+      "application_http_requests_started_in_window": 120000,
+      "application_http_rps": 400.0,
+      "application_successful_response_rps": 399.99666666666667,
+      "artifact": "/private/tmp/p1-seed-lab.28e4ac42ce33/capacity-api4-ws1-w1-search400-stages-load-load-20261127T060408197Z-1795760284943/02-validation.json",
+      "backlog_growth_per_second": 0.0010033773340241733,
+      "completed_scenarios_in_window": 119993,
+      "completion_scope": "legacy completion fields track measured-start cohort; successful_response fields include warmup carry-in responses completed during measurement",
+      "drain_seconds": 0.012139791,
+      "drained": true,
+      "early_stop_reason": null,
+      "enough_samples": true,
+      "error_budget_passed": true,
+      "expected_arrivals": 120000,
+      "fixture_drops": 0,
+      "growing_backlog": false,
+      "http_completions_in_window": 119993,
+      "http_requests_started_in_window": 120000,
+      "http_rps": 400.0,
+      "http_successful_response_rps": 399.99666666666667,
+      "http_successful_responses_completed_in_window": 119999,
+      "in_flight_limit_drops": 0,
+      "index": 2,
+      "kind": "validation",
+      "late_arrivals_skipped": 0,
+      "latency_sla_passed": true,
+      "local_resources": [
+        {
+          "elapsed_seconds": 0.002156083,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 57920
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 1.006627375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.6,
+              "pid": 45517,
+              "rss_kib": 57952
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 2.011239958,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 57952
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 3.015351417,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 57968
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 4.0199735,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 58000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 5.0243035,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.9,
+              "pid": 45517,
+              "rss_kib": 58000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 6.028678583,
+          "processes": [
+            {
+              "cpu_reported_pct": 9.3,
+              "pid": 45517,
+              "rss_kib": 58000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 7.033266875,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 58000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 8.037149708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 58000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 9.041439667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 58000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 10.046839125,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.7,
+              "pid": 45517,
+              "rss_kib": 58000
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 11.051491833,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.1,
+              "pid": 45517,
+              "rss_kib": 59264
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 12.058366625,
+          "processes": [
+            {
+              "cpu_reported_pct": 9.4,
+              "pid": 45517,
+              "rss_kib": 59408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 13.06371375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 59520
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 14.068201417,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.9,
+              "pid": 45517,
+              "rss_kib": 59632
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 15.07243175,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 59744
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 16.077803,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 59920
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 17.082951292,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.9,
+              "pid": 45517,
+              "rss_kib": 60032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 18.087805,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.9,
+              "pid": 45517,
+              "rss_kib": 60144
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 19.091873042,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.3,
+              "pid": 45517,
+              "rss_kib": 60256
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 20.09668,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.5,
+              "pid": 45517,
+              "rss_kib": 60368
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 21.101675167,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.8,
+              "pid": 45517,
+              "rss_kib": 60496
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 22.106006417,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 60608
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 23.110905042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 60736
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 24.115865167,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 60848
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 25.120575917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 60960
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 26.1254765,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 61088
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 27.130585875,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 61200
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 28.134747167,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.9,
+              "pid": 45517,
+              "rss_kib": 61312
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 29.139043917,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.2,
+              "pid": 45517,
+              "rss_kib": 61424
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 30.143158167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 61536
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 31.147527458,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 61664
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 32.152895917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.6,
+              "pid": 45517,
+              "rss_kib": 61776
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 33.157938,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.3,
+              "pid": 45517,
+              "rss_kib": 61888
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 34.162518125,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.3,
+              "pid": 45517,
+              "rss_kib": 62016
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 35.167460375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 62128
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 36.172200875,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 62288
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 37.17569225,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 62416
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 38.179575292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 62576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 39.184296542,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 62720
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 40.189085708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 62848
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 41.193681875,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 63008
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 42.198446,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 63136
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 43.2031265,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 63280
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 44.207508958,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.7,
+              "pid": 45517,
+              "rss_kib": 63408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 45.212027042,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 63552
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 46.2164475,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 59760
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 47.220986542,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 59904
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 48.224823667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 60032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 49.229218083,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 60160
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 50.240513625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 60320
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 51.245312583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 60464
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 52.250355833,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 60608
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 53.254939583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 60752
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 54.259425,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 60912
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 55.263557125,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 45517,
+              "rss_kib": 61040
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 56.26757275,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 61184
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 57.273043417,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 61328
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 58.277966708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 61456
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 59.283241792,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 61600
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 60.287190417,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 61744
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 61.291402542,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 61888
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 62.296227042,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 62064
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 63.29999275,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 62192
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 64.304420583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 62336
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 65.308536917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 62464
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 66.312988625,
+          "processes": [
+            {
+              "cpu_reported_pct": 9.1,
+              "pid": 45517,
+              "rss_kib": 62592
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 67.31785,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.4,
+              "pid": 45517,
+              "rss_kib": 62768
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 68.322511042,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 62896
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 69.327627333,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 63056
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 70.332488542,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 63200
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 71.337091833,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 63344
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 72.341758458,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.9,
+              "pid": 45517,
+              "rss_kib": 63488
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 73.345913875,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 63632
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 74.350586042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 63760
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 75.356438083,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 63904
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 76.361092875,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 64032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 77.364621333,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 64192
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 78.370111542,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 64336
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 79.374003167,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 64480
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 80.378675667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 64624
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 81.38333125,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 64752
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 82.3869345,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 64912
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 83.391433667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 65040
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 84.39643225,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 65168
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 85.402145417,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.9,
+              "pid": 45517,
+              "rss_kib": 65312
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 86.405937625,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 65456
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 87.409843042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 65632
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 88.414107708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 65760
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 89.418714792,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 65888
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 90.4232825,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.7,
+              "pid": 45517,
+              "rss_kib": 66032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 91.427743458,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 66160
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 92.433116792,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 66320
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 93.438560833,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 66448
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 94.443744333,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 66592
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 95.448398958,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 66736
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 96.453352917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 66880
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 97.458500917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 67024
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 98.463694375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 67168
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 99.468603167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 67296
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 100.473247208,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 67424
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 101.477277542,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 67584
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 102.482048875,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 67744
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 103.485898792,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 67872
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 104.490151375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 68016
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 105.49450825,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 68144
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 106.499092083,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 68288
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 107.503407208,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 68448
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 108.507660792,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 68576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 109.51244325,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 68720
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 110.518212375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 68864
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 111.522271333,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 68992
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 112.525791833,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.9,
+              "pid": 45517,
+              "rss_kib": 69136
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 113.53048075,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 69296
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 114.535181,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 69424
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 115.538767708,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.8,
+              "pid": 45517,
+              "rss_kib": 69552
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 116.542521083,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 69696
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 117.547462125,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 69840
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 118.551996292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 45517,
+              "rss_kib": 69984
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 119.556284667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 70144
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 120.560425208,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 70272
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 121.565490958,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 70400
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 122.5706575,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 70544
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 123.5750845,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 70688
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 124.578791625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 70848
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 125.583543708,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 70992
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 126.588332542,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 71136
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 127.592657,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.9,
+              "pid": 45517,
+              "rss_kib": 71296
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 128.596838042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 71472
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 129.601419208,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 71616
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 130.60621975,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.7,
+              "pid": 45517,
+              "rss_kib": 71760
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 131.610031333,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.7,
+              "pid": 45517,
+              "rss_kib": 71904
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 132.614751625,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 72048
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 133.618190708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 72240
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 134.621268583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 72400
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 135.625419292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 72528
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 136.629789917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 72688
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 137.634952667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 72832
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 138.639330917,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.8,
+              "pid": 45517,
+              "rss_kib": 72992
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 139.643690458,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 73168
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 140.647818917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 73328
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 141.652698292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 73456
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 142.65844575,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 73600
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 143.663189083,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 73776
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 144.667235417,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 73920
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 145.671681833,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 74080
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 146.67561975,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 74224
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 147.682383125,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.6,
+              "pid": 45517,
+              "rss_kib": 74368
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 148.687947625,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 74640
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 149.692119458,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 74800
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 150.69589425,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 74944
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 151.700157458,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 75104
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 152.704965583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 75248
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 153.709645917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 75408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 154.714161625,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 75568
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 155.718536708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 75712
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 156.722638375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 75856
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 157.727138417,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 76016
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 158.731711542,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 76176
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 159.73638175,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 76320
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 160.746659875,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 76480
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 161.750415917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 76608
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 162.755608917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 76752
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 163.761039125,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 45517,
+              "rss_kib": 76912
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 164.764922375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 77104
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 165.768618875,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 77248
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 166.772901125,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 77408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 167.777538333,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 77552
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 168.782413708,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 77680
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 169.787151667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 77872
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 170.790845542,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 78016
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 171.794545583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 78176
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 172.799241375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 78320
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 173.80291975,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 78464
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 174.807174917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 78640
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 175.811930458,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 78784
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 176.816353042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 78944
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 177.822027417,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 79088
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 178.826537292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 79232
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 179.831173458,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 79392
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 180.835008083,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 79568
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 181.839664375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 79696
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 182.844180083,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.8,
+              "pid": 45517,
+              "rss_kib": 79840
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 183.848514833,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 80016
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 184.853283208,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.9,
+              "pid": 45517,
+              "rss_kib": 80176
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 185.857851292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 80336
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 186.863218958,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 80496
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 187.867204292,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 80624
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 188.8715,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 80784
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 189.876663375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 80944
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 190.88187025,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 81088
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 191.88577425,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 81248
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 192.890342042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 81408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 193.894171583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 81552
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 194.898367625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 81712
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 195.903096042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 81856
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 196.908251583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 82032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 197.912826,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 82176
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 198.91774325,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 82320
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 199.925444167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 82496
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 200.929746542,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 82640
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 201.933801208,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.7,
+              "pid": 45517,
+              "rss_kib": 82784
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 202.937532667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.1,
+              "pid": 45517,
+              "rss_kib": 82944
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 203.941945,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 83072
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 204.946103708,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 83264
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 205.950710708,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.9,
+              "pid": 45517,
+              "rss_kib": 83424
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 206.95501975,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.9,
+              "pid": 45517,
+              "rss_kib": 83552
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 207.960207,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 83712
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 208.96426075,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 83856
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 209.968315375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 84032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 210.97243375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 84176
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 211.977543958,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 84352
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 212.981563333,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 84496
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 213.986995458,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 84640
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 214.991240667,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 84800
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 215.995250375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.6,
+              "pid": 45517,
+              "rss_kib": 84944
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 216.999966167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 85104
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 218.003766375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 85248
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 219.007517708,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 85392
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 220.012702333,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 85536
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 221.017674083,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 85696
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 222.021739083,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 85872
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 223.025428042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 86016
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 224.030138792,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 86160
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 225.033450167,
+          "processes": [
+            {
+              "cpu_reported_pct": 5.9,
+              "pid": 45517,
+              "rss_kib": 86304
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 226.03957225,
+          "processes": [
+            {
+              "cpu_reported_pct": 9.8,
+              "pid": 45517,
+              "rss_kib": 86480
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 227.044303125,
+          "processes": [
+            {
+              "cpu_reported_pct": 9.5,
+              "pid": 45517,
+              "rss_kib": 86640
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 228.048474,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 86784
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 229.052824125,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 86960
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 230.057321417,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 87104
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 231.06072425,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 45517,
+              "rss_kib": 87280
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 232.065175583,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 87408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 233.070136625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 87568
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 234.073942625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 87728
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 235.078110375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 87872
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 236.082713583,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 88032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 237.087284083,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 88176
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 238.091090917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 88336
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 239.095661917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 88464
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 240.100877375,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 88624
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 241.105622167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 88800
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 242.110162167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 88944
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 243.113969292,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 89104
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 244.117521958,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 89264
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 245.121803667,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.2,
+              "pid": 45517,
+              "rss_kib": 89408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 246.125435292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 45517,
+              "rss_kib": 89568
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 247.130966292,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 89728
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 248.13569275,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 89904
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 249.1402895,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.2,
+              "pid": 45517,
+              "rss_kib": 90064
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 250.144554917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.9,
+              "pid": 45517,
+              "rss_kib": 90240
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 251.149093958,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 90384
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 252.153311708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 90544
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 253.158047917,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 90704
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 254.162776125,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 90848
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 255.167573708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.0,
+              "pid": 45517,
+              "rss_kib": 91008
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 256.173835375,
+          "processes": [
+            {
+              "cpu_reported_pct": 10.0,
+              "pid": 45517,
+              "rss_kib": 91216
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 257.179094292,
+          "processes": [
+            {
+              "cpu_reported_pct": 11.1,
+              "pid": 45517,
+              "rss_kib": 91344
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 258.183475125,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.5,
+              "pid": 45517,
+              "rss_kib": 91488
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 259.188664458,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 91648
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 260.193596208,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 91856
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 261.198484917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 92048
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 262.20373975,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.2,
+              "pid": 45517,
+              "rss_kib": 92176
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 263.207909625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 92352
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 264.211895167,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 92512
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 265.216602208,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 92640
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 266.222033542,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.2,
+              "pid": 45517,
+              "rss_kib": 92816
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 267.226395583,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.2,
+              "pid": 45517,
+              "rss_kib": 92976
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 268.231142792,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.5,
+              "pid": 45517,
+              "rss_kib": 93104
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 269.236703208,
+          "processes": [
+            {
+              "cpu_reported_pct": 9.1,
+              "pid": 45517,
+              "rss_kib": 93280
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 270.242021333,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.1,
+              "pid": 45517,
+              "rss_kib": 93408
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 271.245801792,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 93584
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 272.250200917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 93744
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 273.255410625,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 93920
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 274.260531333,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.6,
+              "pid": 45517,
+              "rss_kib": 94096
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 275.26543825,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.5,
+              "pid": 45517,
+              "rss_kib": 94256
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 276.269861292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 94416
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 277.273971042,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 94576
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 278.277934667,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 94736
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 279.282670958,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 94880
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 280.286679125,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 95056
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 281.291432958,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 95216
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 282.296513583,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.8,
+              "pid": 45517,
+              "rss_kib": 95392
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 283.300811208,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.3,
+              "pid": 45517,
+              "rss_kib": 95568
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 284.30596875,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.7,
+              "pid": 45517,
+              "rss_kib": 95712
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 285.310424875,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.4,
+              "pid": 45517,
+              "rss_kib": 95872
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 286.315648792,
+          "processes": [
+            {
+              "cpu_reported_pct": 8.4,
+              "pid": 45517,
+              "rss_kib": 96032
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 287.320341292,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.3,
+              "pid": 45517,
+              "rss_kib": 96208
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 288.325312583,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 96368
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 289.32892025,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 96560
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 290.333281792,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.4,
+              "pid": 45517,
+              "rss_kib": 96704
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 291.337729875,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 96880
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 292.342269042,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 97072
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 293.346749417,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.8,
+              "pid": 45517,
+              "rss_kib": 97248
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 294.350768583,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.8,
+              "pid": 45517,
+              "rss_kib": 97392
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 295.355118167,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.6,
+              "pid": 45517,
+              "rss_kib": 97552
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 296.359338917,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 97728
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 297.363426375,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.4,
+              "pid": 45517,
+              "rss_kib": 97872
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 298.368509333,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.9,
+              "pid": 45517,
+              "rss_kib": 98048
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 299.373150708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.9,
+              "pid": 45517,
+              "rss_kib": 98208
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 300.376507167,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.7,
+              "pid": 45517,
+              "rss_kib": 98352
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 301.381041167,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.0,
+              "pid": 45517,
+              "rss_kib": 98512
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 302.38543225,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.3,
+              "pid": 45517,
+              "rss_kib": 98704
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 303.389435333,
+          "processes": [
+            {
+              "cpu_reported_pct": 7.1,
+              "pid": 45517,
+              "rss_kib": 98832
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 304.394170708,
+          "processes": [
+            {
+              "cpu_reported_pct": 6.5,
+              "pid": 45517,
+              "rss_kib": 99024
+            }
+          ]
+        }
+      ],
+      "max_in_flight": 59,
+      "omitted_samples": 0,
+      "operations": {
+        "scenario_search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 165.726584,
+          "min_ms": 11.605916,
+          "p50_ms": 15.831583,
+          "p95_ms": 19.2745,
+          "p99_ms": 23.306832999999997,
+          "passed": true,
+          "samples": 120000,
+          "statuses": {
+            "none": 120000
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 165.71229100000002,
+          "min_ms": 11.59725,
+          "p50_ms": 15.818959000000001,
+          "p95_ms": 19.255375,
+          "p99_ms": 23.289625,
+          "passed": true,
+          "samples": 120000,
+          "statuses": {
+            "200": 120000
+          },
+          "threshold_ms": 3000.0
+        }
+      },
+      "outcome": "passed",
+      "passed": true,
+      "pending_at_window_end": 6,
+      "planned_sample_seconds": 300,
+      "progress": [
+        {
+          "completed": 0,
+          "in_flight": 7,
+          "seconds": 0.001202917,
+          "started": 1
+        },
+        {
+          "completed": 390,
+          "in_flight": 11,
+          "seconds": 1.000416667,
+          "started": 401
+        },
+        {
+          "completed": 794,
+          "in_flight": 7,
+          "seconds": 2.000943708,
+          "started": 801
+        },
+        {
+          "completed": 1194,
+          "in_flight": 7,
+          "seconds": 3.000908958,
+          "started": 1201
+        },
+        {
+          "completed": 1594,
+          "in_flight": 7,
+          "seconds": 4.001142125,
+          "started": 1601
+        },
+        {
+          "completed": 1993,
+          "in_flight": 8,
+          "seconds": 5.000828208,
+          "started": 2001
+        },
+        {
+          "completed": 2393,
+          "in_flight": 8,
+          "seconds": 6.000599667,
+          "started": 2401
+        },
+        {
+          "completed": 2793,
+          "in_flight": 8,
+          "seconds": 7.001257292,
+          "started": 2801
+        },
+        {
+          "completed": 3194,
+          "in_flight": 7,
+          "seconds": 8.0011625,
+          "started": 3201
+        },
+        {
+          "completed": 3593,
+          "in_flight": 8,
+          "seconds": 9.00051575,
+          "started": 3601
+        },
+        {
+          "completed": 3995,
+          "in_flight": 6,
+          "seconds": 10.001321125,
+          "started": 4001
+        },
+        {
+          "completed": 4394,
+          "in_flight": 7,
+          "seconds": 11.001348583,
+          "started": 4401
+        },
+        {
+          "completed": 4794,
+          "in_flight": 7,
+          "seconds": 12.000483708,
+          "started": 4801
+        },
+        {
+          "completed": 5193,
+          "in_flight": 8,
+          "seconds": 13.000791375,
+          "started": 5201
+        },
+        {
+          "completed": 5594,
+          "in_flight": 7,
+          "seconds": 14.00131325,
+          "started": 5601
+        },
+        {
+          "completed": 5993,
+          "in_flight": 8,
+          "seconds": 15.00126475,
+          "started": 6001
+        },
+        {
+          "completed": 6393,
+          "in_flight": 8,
+          "seconds": 16.00066875,
+          "started": 6401
+        },
+        {
+          "completed": 6794,
+          "in_flight": 7,
+          "seconds": 17.001042042,
+          "started": 6801
+        },
+        {
+          "completed": 7194,
+          "in_flight": 7,
+          "seconds": 18.00063125,
+          "started": 7201
+        },
+        {
+          "completed": 7594,
+          "in_flight": 7,
+          "seconds": 19.000934708,
+          "started": 7601
+        },
+        {
+          "completed": 7994,
+          "in_flight": 7,
+          "seconds": 20.001330458,
+          "started": 8001
+        },
+        {
+          "completed": 8394,
+          "in_flight": 7,
+          "seconds": 21.001557292,
+          "started": 8401
+        },
+        {
+          "completed": 8795,
+          "in_flight": 6,
+          "seconds": 22.000618708,
+          "started": 8801
+        },
+        {
+          "completed": 9193,
+          "in_flight": 8,
+          "seconds": 23.0008225,
+          "started": 9201
+        },
+        {
+          "completed": 9593,
+          "in_flight": 8,
+          "seconds": 24.000748583,
+          "started": 9601
+        },
+        {
+          "completed": 9994,
+          "in_flight": 7,
+          "seconds": 25.000567458,
+          "started": 10001
+        },
+        {
+          "completed": 10393,
+          "in_flight": 8,
+          "seconds": 26.000575333,
+          "started": 10401
+        },
+        {
+          "completed": 10794,
+          "in_flight": 7,
+          "seconds": 27.001232083,
+          "started": 10801
+        },
+        {
+          "completed": 11194,
+          "in_flight": 7,
+          "seconds": 28.001349458,
+          "started": 11201
+        },
+        {
+          "completed": 11594,
+          "in_flight": 7,
+          "seconds": 29.00105575,
+          "started": 11601
+        },
+        {
+          "completed": 11994,
+          "in_flight": 7,
+          "seconds": 30.000867083,
+          "started": 12001
+        },
+        {
+          "completed": 12393,
+          "in_flight": 8,
+          "seconds": 31.001478458,
+          "started": 12401
+        },
+        {
+          "completed": 12793,
+          "in_flight": 8,
+          "seconds": 32.00062625,
+          "started": 12801
+        },
+        {
+          "completed": 13194,
+          "in_flight": 7,
+          "seconds": 33.000665708,
+          "started": 13201
+        },
+        {
+          "completed": 13590,
+          "in_flight": 11,
+          "seconds": 34.001545833,
+          "started": 13601
+        },
+        {
+          "completed": 13994,
+          "in_flight": 7,
+          "seconds": 35.000555125,
+          "started": 14001
+        },
+        {
+          "completed": 14393,
+          "in_flight": 8,
+          "seconds": 36.000551,
+          "started": 14401
+        },
+        {
+          "completed": 14794,
+          "in_flight": 7,
+          "seconds": 37.000439125,
+          "started": 14801
+        },
+        {
+          "completed": 15193,
+          "in_flight": 8,
+          "seconds": 38.000391208,
+          "started": 15201
+        },
+        {
+          "completed": 15589,
+          "in_flight": 12,
+          "seconds": 39.001196833,
+          "started": 15601
+        },
+        {
+          "completed": 15995,
+          "in_flight": 6,
+          "seconds": 40.001445167,
+          "started": 16001
+        },
+        {
+          "completed": 16393,
+          "in_flight": 8,
+          "seconds": 41.000582917,
+          "started": 16401
+        },
+        {
+          "completed": 16794,
+          "in_flight": 7,
+          "seconds": 42.000761417,
+          "started": 16801
+        },
+        {
+          "completed": 17194,
+          "in_flight": 7,
+          "seconds": 43.001185083,
+          "started": 17201
+        },
+        {
+          "completed": 17594,
+          "in_flight": 7,
+          "seconds": 44.001281125,
+          "started": 17601
+        },
+        {
+          "completed": 17995,
+          "in_flight": 6,
+          "seconds": 45.000518542,
+          "started": 18001
+        },
+        {
+          "completed": 18394,
+          "in_flight": 7,
+          "seconds": 46.000566375,
+          "started": 18401
+        },
+        {
+          "completed": 18793,
+          "in_flight": 8,
+          "seconds": 47.000791708,
+          "started": 18801
+        },
+        {
+          "completed": 19195,
+          "in_flight": 6,
+          "seconds": 48.000900458,
+          "started": 19201
+        },
+        {
+          "completed": 19594,
+          "in_flight": 7,
+          "seconds": 49.001596042,
+          "started": 19601
+        },
+        {
+          "completed": 19995,
+          "in_flight": 6,
+          "seconds": 50.001010792,
+          "started": 20001
+        },
+        {
+          "completed": 20394,
+          "in_flight": 7,
+          "seconds": 51.001263917,
+          "started": 20401
+        },
+        {
+          "completed": 20795,
+          "in_flight": 6,
+          "seconds": 52.001203083,
+          "started": 20801
+        },
+        {
+          "completed": 21195,
+          "in_flight": 6,
+          "seconds": 53.001274042,
+          "started": 21201
+        },
+        {
+          "completed": 21594,
+          "in_flight": 7,
+          "seconds": 54.001532833,
+          "started": 21601
+        },
+        {
+          "completed": 21995,
+          "in_flight": 6,
+          "seconds": 55.001147833,
+          "started": 22001
+        },
+        {
+          "completed": 22394,
+          "in_flight": 7,
+          "seconds": 56.001490125,
+          "started": 22401
+        },
+        {
+          "completed": 22794,
+          "in_flight": 7,
+          "seconds": 57.000857458,
+          "started": 22801
+        },
+        {
+          "completed": 23194,
+          "in_flight": 7,
+          "seconds": 58.0004505,
+          "started": 23201
+        },
+        {
+          "completed": 23594,
+          "in_flight": 7,
+          "seconds": 59.000844542,
+          "started": 23601
+        },
+        {
+          "completed": 23995,
+          "in_flight": 6,
+          "seconds": 60.000618083,
+          "started": 24001
+        },
+        {
+          "completed": 24391,
+          "in_flight": 10,
+          "seconds": 61.00070925,
+          "started": 24401
+        },
+        {
+          "completed": 24793,
+          "in_flight": 8,
+          "seconds": 62.000816292,
+          "started": 24801
+        },
+        {
+          "completed": 25194,
+          "in_flight": 7,
+          "seconds": 63.000546167,
+          "started": 25201
+        },
+        {
+          "completed": 25594,
+          "in_flight": 7,
+          "seconds": 64.000684292,
+          "started": 25601
+        },
+        {
+          "completed": 25995,
+          "in_flight": 6,
+          "seconds": 65.001224,
+          "started": 26001
+        },
+        {
+          "completed": 26393,
+          "in_flight": 8,
+          "seconds": 66.001217125,
+          "started": 26401
+        },
+        {
+          "completed": 26793,
+          "in_flight": 8,
+          "seconds": 67.000842875,
+          "started": 26801
+        },
+        {
+          "completed": 27194,
+          "in_flight": 7,
+          "seconds": 68.000671458,
+          "started": 27201
+        },
+        {
+          "completed": 27595,
+          "in_flight": 6,
+          "seconds": 69.000899958,
+          "started": 27601
+        },
+        {
+          "completed": 27993,
+          "in_flight": 8,
+          "seconds": 70.00083,
+          "started": 28001
+        },
+        {
+          "completed": 28393,
+          "in_flight": 8,
+          "seconds": 71.001051625,
+          "started": 28401
+        },
+        {
+          "completed": 28795,
+          "in_flight": 6,
+          "seconds": 72.001290917,
+          "started": 28801
+        },
+        {
+          "completed": 29193,
+          "in_flight": 8,
+          "seconds": 73.000861083,
+          "started": 29201
+        },
+        {
+          "completed": 29594,
+          "in_flight": 7,
+          "seconds": 74.000841708,
+          "started": 29601
+        },
+        {
+          "completed": 29995,
+          "in_flight": 6,
+          "seconds": 75.000516042,
+          "started": 30001
+        },
+        {
+          "completed": 30393,
+          "in_flight": 8,
+          "seconds": 76.001020458,
+          "started": 30401
+        },
+        {
+          "completed": 30795,
+          "in_flight": 6,
+          "seconds": 77.001235583,
+          "started": 30801
+        },
+        {
+          "completed": 31195,
+          "in_flight": 6,
+          "seconds": 78.001326667,
+          "started": 31201
+        },
+        {
+          "completed": 31595,
+          "in_flight": 6,
+          "seconds": 79.001470333,
+          "started": 31601
+        },
+        {
+          "completed": 31994,
+          "in_flight": 7,
+          "seconds": 80.000710917,
+          "started": 32001
+        },
+        {
+          "completed": 32393,
+          "in_flight": 8,
+          "seconds": 81.000732417,
+          "started": 32401
+        },
+        {
+          "completed": 32794,
+          "in_flight": 7,
+          "seconds": 82.001167583,
+          "started": 32801
+        },
+        {
+          "completed": 33194,
+          "in_flight": 7,
+          "seconds": 83.001064125,
+          "started": 33201
+        },
+        {
+          "completed": 33593,
+          "in_flight": 8,
+          "seconds": 84.000600833,
+          "started": 33601
+        },
+        {
+          "completed": 33993,
+          "in_flight": 8,
+          "seconds": 85.000789917,
+          "started": 34001
+        },
+        {
+          "completed": 34393,
+          "in_flight": 8,
+          "seconds": 86.000700417,
+          "started": 34401
+        },
+        {
+          "completed": 34795,
+          "in_flight": 6,
+          "seconds": 87.000831208,
+          "started": 34801
+        },
+        {
+          "completed": 35194,
+          "in_flight": 7,
+          "seconds": 88.00066,
+          "started": 35201
+        },
+        {
+          "completed": 35595,
+          "in_flight": 6,
+          "seconds": 89.001262542,
+          "started": 35601
+        },
+        {
+          "completed": 35995,
+          "in_flight": 6,
+          "seconds": 90.0004715,
+          "started": 36001
+        },
+        {
+          "completed": 36393,
+          "in_flight": 8,
+          "seconds": 91.001370292,
+          "started": 36401
+        },
+        {
+          "completed": 36795,
+          "in_flight": 6,
+          "seconds": 92.001633167,
+          "started": 36801
+        },
+        {
+          "completed": 37193,
+          "in_flight": 8,
+          "seconds": 93.000540625,
+          "started": 37201
+        },
+        {
+          "completed": 37593,
+          "in_flight": 8,
+          "seconds": 94.000839542,
+          "started": 37601
+        },
+        {
+          "completed": 37993,
+          "in_flight": 8,
+          "seconds": 95.000391708,
+          "started": 38001
+        },
+        {
+          "completed": 38394,
+          "in_flight": 7,
+          "seconds": 96.001146083,
+          "started": 38401
+        },
+        {
+          "completed": 38795,
+          "in_flight": 6,
+          "seconds": 97.00056175,
+          "started": 38801
+        },
+        {
+          "completed": 39193,
+          "in_flight": 8,
+          "seconds": 98.001020875,
+          "started": 39201
+        },
+        {
+          "completed": 39595,
+          "in_flight": 6,
+          "seconds": 99.001215125,
+          "started": 39601
+        },
+        {
+          "completed": 39994,
+          "in_flight": 7,
+          "seconds": 100.001485875,
+          "started": 40001
+        },
+        {
+          "completed": 40393,
+          "in_flight": 8,
+          "seconds": 101.00054425,
+          "started": 40401
+        },
+        {
+          "completed": 40794,
+          "in_flight": 7,
+          "seconds": 102.00065425,
+          "started": 40801
+        },
+        {
+          "completed": 41195,
+          "in_flight": 6,
+          "seconds": 103.00056675,
+          "started": 41201
+        },
+        {
+          "completed": 41595,
+          "in_flight": 6,
+          "seconds": 104.000922167,
+          "started": 41601
+        },
+        {
+          "completed": 41995,
+          "in_flight": 6,
+          "seconds": 105.00111575,
+          "started": 42001
+        },
+        {
+          "completed": 42393,
+          "in_flight": 8,
+          "seconds": 106.000598458,
+          "started": 42401
+        },
+        {
+          "completed": 42795,
+          "in_flight": 6,
+          "seconds": 107.001065292,
+          "started": 42801
+        },
+        {
+          "completed": 43194,
+          "in_flight": 7,
+          "seconds": 108.000792083,
+          "started": 43201
+        },
+        {
+          "completed": 43594,
+          "in_flight": 7,
+          "seconds": 109.001446917,
+          "started": 43601
+        },
+        {
+          "completed": 43993,
+          "in_flight": 8,
+          "seconds": 110.0006235,
+          "started": 44001
+        },
+        {
+          "completed": 44393,
+          "in_flight": 8,
+          "seconds": 111.0008405,
+          "started": 44401
+        },
+        {
+          "completed": 44794,
+          "in_flight": 7,
+          "seconds": 112.001182292,
+          "started": 44801
+        },
+        {
+          "completed": 45195,
+          "in_flight": 6,
+          "seconds": 113.001405708,
+          "started": 45201
+        },
+        {
+          "completed": 45595,
+          "in_flight": 6,
+          "seconds": 114.001207083,
+          "started": 45601
+        },
+        {
+          "completed": 45994,
+          "in_flight": 7,
+          "seconds": 115.000923083,
+          "started": 46001
+        },
+        {
+          "completed": 46393,
+          "in_flight": 8,
+          "seconds": 116.00079575,
+          "started": 46401
+        },
+        {
+          "completed": 46794,
+          "in_flight": 7,
+          "seconds": 117.00134125,
+          "started": 46801
+        },
+        {
+          "completed": 47193,
+          "in_flight": 8,
+          "seconds": 118.000614625,
+          "started": 47201
+        },
+        {
+          "completed": 47593,
+          "in_flight": 8,
+          "seconds": 119.000809792,
+          "started": 47601
+        },
+        {
+          "completed": 47994,
+          "in_flight": 7,
+          "seconds": 120.000558583,
+          "started": 48001
+        },
+        {
+          "completed": 48393,
+          "in_flight": 8,
+          "seconds": 121.000605833,
+          "started": 48401
+        },
+        {
+          "completed": 48795,
+          "in_flight": 6,
+          "seconds": 122.001547875,
+          "started": 48801
+        },
+        {
+          "completed": 49195,
+          "in_flight": 6,
+          "seconds": 123.00118625,
+          "started": 49201
+        },
+        {
+          "completed": 49594,
+          "in_flight": 7,
+          "seconds": 124.001204583,
+          "started": 49601
+        },
+        {
+          "completed": 49993,
+          "in_flight": 8,
+          "seconds": 125.000386417,
+          "started": 50001
+        },
+        {
+          "completed": 50394,
+          "in_flight": 7,
+          "seconds": 126.000718167,
+          "started": 50401
+        },
+        {
+          "completed": 50793,
+          "in_flight": 8,
+          "seconds": 127.000809958,
+          "started": 50801
+        },
+        {
+          "completed": 51194,
+          "in_flight": 7,
+          "seconds": 128.001005333,
+          "started": 51201
+        },
+        {
+          "completed": 51595,
+          "in_flight": 6,
+          "seconds": 129.000577833,
+          "started": 51601
+        },
+        {
+          "completed": 51995,
+          "in_flight": 6,
+          "seconds": 130.000712292,
+          "started": 52001
+        },
+        {
+          "completed": 52393,
+          "in_flight": 8,
+          "seconds": 131.001000458,
+          "started": 52401
+        },
+        {
+          "completed": 52795,
+          "in_flight": 6,
+          "seconds": 132.001150958,
+          "started": 52801
+        },
+        {
+          "completed": 53194,
+          "in_flight": 7,
+          "seconds": 133.001344,
+          "started": 53201
+        },
+        {
+          "completed": 53594,
+          "in_flight": 7,
+          "seconds": 134.001119583,
+          "started": 53601
+        },
+        {
+          "completed": 53995,
+          "in_flight": 6,
+          "seconds": 135.001314708,
+          "started": 54001
+        },
+        {
+          "completed": 54394,
+          "in_flight": 7,
+          "seconds": 136.00115725,
+          "started": 54401
+        },
+        {
+          "completed": 54795,
+          "in_flight": 6,
+          "seconds": 137.000613208,
+          "started": 54801
+        },
+        {
+          "completed": 55194,
+          "in_flight": 7,
+          "seconds": 138.0014425,
+          "started": 55201
+        },
+        {
+          "completed": 55595,
+          "in_flight": 6,
+          "seconds": 139.000787875,
+          "started": 55601
+        },
+        {
+          "completed": 55994,
+          "in_flight": 7,
+          "seconds": 140.000733583,
+          "started": 56001
+        },
+        {
+          "completed": 56394,
+          "in_flight": 7,
+          "seconds": 141.000749292,
+          "started": 56401
+        },
+        {
+          "completed": 56795,
+          "in_flight": 6,
+          "seconds": 142.000990792,
+          "started": 56801
+        },
+        {
+          "completed": 57192,
+          "in_flight": 9,
+          "seconds": 143.000908167,
+          "started": 57201
+        },
+        {
+          "completed": 57594,
+          "in_flight": 7,
+          "seconds": 144.000980083,
+          "started": 57601
+        },
+        {
+          "completed": 57993,
+          "in_flight": 8,
+          "seconds": 145.0009095,
+          "started": 58001
+        },
+        {
+          "completed": 58394,
+          "in_flight": 7,
+          "seconds": 146.001208833,
+          "started": 58401
+        },
+        {
+          "completed": 58795,
+          "in_flight": 6,
+          "seconds": 147.000725542,
+          "started": 58801
+        },
+        {
+          "completed": 59194,
+          "in_flight": 7,
+          "seconds": 148.000569792,
+          "started": 59201
+        },
+        {
+          "completed": 59593,
+          "in_flight": 8,
+          "seconds": 149.000549292,
+          "started": 59601
+        },
+        {
+          "completed": 59995,
+          "in_flight": 6,
+          "seconds": 150.001263417,
+          "started": 60001
+        },
+        {
+          "completed": 60393,
+          "in_flight": 8,
+          "seconds": 151.000899167,
+          "started": 60401
+        },
+        {
+          "completed": 60794,
+          "in_flight": 7,
+          "seconds": 152.000605458,
+          "started": 60801
+        },
+        {
+          "completed": 61194,
+          "in_flight": 7,
+          "seconds": 153.001292625,
+          "started": 61201
+        },
+        {
+          "completed": 61594,
+          "in_flight": 7,
+          "seconds": 154.00104725,
+          "started": 61601
+        },
+        {
+          "completed": 61995,
+          "in_flight": 6,
+          "seconds": 155.0014125,
+          "started": 62001
+        },
+        {
+          "completed": 62394,
+          "in_flight": 7,
+          "seconds": 156.000914333,
+          "started": 62401
+        },
+        {
+          "completed": 62795,
+          "in_flight": 6,
+          "seconds": 157.000633292,
+          "started": 62801
+        },
+        {
+          "completed": 63195,
+          "in_flight": 6,
+          "seconds": 158.001409333,
+          "started": 63201
+        },
+        {
+          "completed": 63595,
+          "in_flight": 6,
+          "seconds": 159.001457958,
+          "started": 63601
+        },
+        {
+          "completed": 63995,
+          "in_flight": 6,
+          "seconds": 160.00147525,
+          "started": 64001
+        },
+        {
+          "completed": 64394,
+          "in_flight": 7,
+          "seconds": 161.000748917,
+          "started": 64401
+        },
+        {
+          "completed": 64794,
+          "in_flight": 7,
+          "seconds": 162.000788833,
+          "started": 64801
+        },
+        {
+          "completed": 65193,
+          "in_flight": 8,
+          "seconds": 163.000587125,
+          "started": 65201
+        },
+        {
+          "completed": 65594,
+          "in_flight": 7,
+          "seconds": 164.00101375,
+          "started": 65601
+        },
+        {
+          "completed": 65995,
+          "in_flight": 6,
+          "seconds": 165.000988208,
+          "started": 66001
+        },
+        {
+          "completed": 66394,
+          "in_flight": 7,
+          "seconds": 166.000716167,
+          "started": 66401
+        },
+        {
+          "completed": 66793,
+          "in_flight": 8,
+          "seconds": 167.001086708,
+          "started": 66801
+        },
+        {
+          "completed": 67194,
+          "in_flight": 7,
+          "seconds": 168.001088417,
+          "started": 67201
+        },
+        {
+          "completed": 67594,
+          "in_flight": 7,
+          "seconds": 169.00109875,
+          "started": 67601
+        },
+        {
+          "completed": 67993,
+          "in_flight": 8,
+          "seconds": 170.001274625,
+          "started": 68001
+        },
+        {
+          "completed": 68393,
+          "in_flight": 8,
+          "seconds": 171.000547,
+          "started": 68401
+        },
+        {
+          "completed": 68794,
+          "in_flight": 7,
+          "seconds": 172.001375125,
+          "started": 68801
+        },
+        {
+          "completed": 69194,
+          "in_flight": 7,
+          "seconds": 173.001407708,
+          "started": 69201
+        },
+        {
+          "completed": 69595,
+          "in_flight": 6,
+          "seconds": 174.000949292,
+          "started": 69601
+        },
+        {
+          "completed": 69995,
+          "in_flight": 6,
+          "seconds": 175.001016667,
+          "started": 70001
+        },
+        {
+          "completed": 70394,
+          "in_flight": 7,
+          "seconds": 176.000835,
+          "started": 70401
+        },
+        {
+          "completed": 70795,
+          "in_flight": 6,
+          "seconds": 177.001486583,
+          "started": 70801
+        },
+        {
+          "completed": 71195,
+          "in_flight": 6,
+          "seconds": 178.000677458,
+          "started": 71201
+        },
+        {
+          "completed": 71594,
+          "in_flight": 7,
+          "seconds": 179.001364417,
+          "started": 71601
+        },
+        {
+          "completed": 71993,
+          "in_flight": 8,
+          "seconds": 180.001344417,
+          "started": 72001
+        },
+        {
+          "completed": 72393,
+          "in_flight": 8,
+          "seconds": 181.000501708,
+          "started": 72401
+        },
+        {
+          "completed": 72793,
+          "in_flight": 8,
+          "seconds": 182.000677542,
+          "started": 72801
+        },
+        {
+          "completed": 73195,
+          "in_flight": 6,
+          "seconds": 183.001303167,
+          "started": 73201
+        },
+        {
+          "completed": 73595,
+          "in_flight": 6,
+          "seconds": 184.000545167,
+          "started": 73601
+        },
+        {
+          "completed": 73994,
+          "in_flight": 7,
+          "seconds": 185.001492792,
+          "started": 74001
+        },
+        {
+          "completed": 74393,
+          "in_flight": 8,
+          "seconds": 186.000887583,
+          "started": 74401
+        },
+        {
+          "completed": 74793,
+          "in_flight": 8,
+          "seconds": 187.001498292,
+          "started": 74801
+        },
+        {
+          "completed": 75195,
+          "in_flight": 6,
+          "seconds": 188.001463583,
+          "started": 75201
+        },
+        {
+          "completed": 75595,
+          "in_flight": 6,
+          "seconds": 189.001578917,
+          "started": 75601
+        },
+        {
+          "completed": 75995,
+          "in_flight": 6,
+          "seconds": 190.001326208,
+          "started": 76001
+        },
+        {
+          "completed": 76394,
+          "in_flight": 7,
+          "seconds": 191.001216458,
+          "started": 76401
+        },
+        {
+          "completed": 76795,
+          "in_flight": 6,
+          "seconds": 192.000834958,
+          "started": 76801
+        },
+        {
+          "completed": 77194,
+          "in_flight": 7,
+          "seconds": 193.001144708,
+          "started": 77201
+        },
+        {
+          "completed": 77593,
+          "in_flight": 8,
+          "seconds": 194.001137417,
+          "started": 77601
+        },
+        {
+          "completed": 77994,
+          "in_flight": 7,
+          "seconds": 195.000457667,
+          "started": 78001
+        },
+        {
+          "completed": 78394,
+          "in_flight": 7,
+          "seconds": 196.000655542,
+          "started": 78401
+        },
+        {
+          "completed": 78794,
+          "in_flight": 7,
+          "seconds": 197.000472583,
+          "started": 78801
+        },
+        {
+          "completed": 79195,
+          "in_flight": 6,
+          "seconds": 198.001173542,
+          "started": 79201
+        },
+        {
+          "completed": 79593,
+          "in_flight": 8,
+          "seconds": 199.000459958,
+          "started": 79601
+        },
+        {
+          "completed": 79994,
+          "in_flight": 7,
+          "seconds": 200.000477,
+          "started": 80001
+        },
+        {
+          "completed": 80395,
+          "in_flight": 6,
+          "seconds": 201.000421125,
+          "started": 80401
+        },
+        {
+          "completed": 80794,
+          "in_flight": 7,
+          "seconds": 202.000450917,
+          "started": 80801
+        },
+        {
+          "completed": 81195,
+          "in_flight": 6,
+          "seconds": 203.001166375,
+          "started": 81201
+        },
+        {
+          "completed": 81594,
+          "in_flight": 7,
+          "seconds": 204.000907833,
+          "started": 81601
+        },
+        {
+          "completed": 81993,
+          "in_flight": 8,
+          "seconds": 205.000602458,
+          "started": 82001
+        },
+        {
+          "completed": 82394,
+          "in_flight": 7,
+          "seconds": 206.0007065,
+          "started": 82401
+        },
+        {
+          "completed": 82794,
+          "in_flight": 7,
+          "seconds": 207.00078975,
+          "started": 82801
+        },
+        {
+          "completed": 83194,
+          "in_flight": 7,
+          "seconds": 208.001326417,
+          "started": 83201
+        },
+        {
+          "completed": 83594,
+          "in_flight": 7,
+          "seconds": 209.0005825,
+          "started": 83601
+        },
+        {
+          "completed": 83993,
+          "in_flight": 8,
+          "seconds": 210.000582458,
+          "started": 84001
+        },
+        {
+          "completed": 84394,
+          "in_flight": 7,
+          "seconds": 211.000653458,
+          "started": 84401
+        },
+        {
+          "completed": 84794,
+          "in_flight": 7,
+          "seconds": 212.000830375,
+          "started": 84801
+        },
+        {
+          "completed": 85195,
+          "in_flight": 6,
+          "seconds": 213.001480958,
+          "started": 85201
+        },
+        {
+          "completed": 85593,
+          "in_flight": 8,
+          "seconds": 214.000545667,
+          "started": 85601
+        },
+        {
+          "completed": 85994,
+          "in_flight": 7,
+          "seconds": 215.000469042,
+          "started": 86001
+        },
+        {
+          "completed": 86394,
+          "in_flight": 7,
+          "seconds": 216.000581958,
+          "started": 86401
+        },
+        {
+          "completed": 86795,
+          "in_flight": 6,
+          "seconds": 217.001422625,
+          "started": 86801
+        },
+        {
+          "completed": 87194,
+          "in_flight": 7,
+          "seconds": 218.000833,
+          "started": 87201
+        },
+        {
+          "completed": 87594,
+          "in_flight": 7,
+          "seconds": 219.000895625,
+          "started": 87601
+        },
+        {
+          "completed": 87995,
+          "in_flight": 6,
+          "seconds": 220.000665583,
+          "started": 88001
+        },
+        {
+          "completed": 88390,
+          "in_flight": 11,
+          "seconds": 221.000730042,
+          "started": 88401
+        },
+        {
+          "completed": 88792,
+          "in_flight": 9,
+          "seconds": 222.000751708,
+          "started": 88801
+        },
+        {
+          "completed": 89195,
+          "in_flight": 6,
+          "seconds": 223.001503083,
+          "started": 89201
+        },
+        {
+          "completed": 89594,
+          "in_flight": 7,
+          "seconds": 224.000740375,
+          "started": 89601
+        },
+        {
+          "completed": 89995,
+          "in_flight": 6,
+          "seconds": 225.0015525,
+          "started": 90001
+        },
+        {
+          "completed": 90395,
+          "in_flight": 6,
+          "seconds": 226.0010155,
+          "started": 90401
+        },
+        {
+          "completed": 90794,
+          "in_flight": 7,
+          "seconds": 227.00060825,
+          "started": 90801
+        },
+        {
+          "completed": 91194,
+          "in_flight": 7,
+          "seconds": 228.000896792,
+          "started": 91201
+        },
+        {
+          "completed": 91595,
+          "in_flight": 6,
+          "seconds": 229.001248417,
+          "started": 91601
+        },
+        {
+          "completed": 91995,
+          "in_flight": 6,
+          "seconds": 230.000543583,
+          "started": 92001
+        },
+        {
+          "completed": 92393,
+          "in_flight": 8,
+          "seconds": 231.000999,
+          "started": 92401
+        },
+        {
+          "completed": 92795,
+          "in_flight": 6,
+          "seconds": 232.000667333,
+          "started": 92801
+        },
+        {
+          "completed": 93195,
+          "in_flight": 6,
+          "seconds": 233.000981375,
+          "started": 93201
+        },
+        {
+          "completed": 93594,
+          "in_flight": 7,
+          "seconds": 234.000578708,
+          "started": 93601
+        },
+        {
+          "completed": 93994,
+          "in_flight": 7,
+          "seconds": 235.001134792,
+          "started": 94001
+        },
+        {
+          "completed": 94390,
+          "in_flight": 11,
+          "seconds": 236.001101792,
+          "started": 94401
+        },
+        {
+          "completed": 94793,
+          "in_flight": 8,
+          "seconds": 237.0007655,
+          "started": 94801
+        },
+        {
+          "completed": 95193,
+          "in_flight": 8,
+          "seconds": 238.000442958,
+          "started": 95201
+        },
+        {
+          "completed": 95595,
+          "in_flight": 6,
+          "seconds": 239.001474583,
+          "started": 95601
+        },
+        {
+          "completed": 95995,
+          "in_flight": 6,
+          "seconds": 240.001505583,
+          "started": 96001
+        },
+        {
+          "completed": 96395,
+          "in_flight": 6,
+          "seconds": 241.00124675,
+          "started": 96401
+        },
+        {
+          "completed": 96794,
+          "in_flight": 7,
+          "seconds": 242.000676417,
+          "started": 96801
+        },
+        {
+          "completed": 97193,
+          "in_flight": 8,
+          "seconds": 243.000700833,
+          "started": 97201
+        },
+        {
+          "completed": 97594,
+          "in_flight": 7,
+          "seconds": 244.0007,
+          "started": 97601
+        },
+        {
+          "completed": 97994,
+          "in_flight": 7,
+          "seconds": 245.001221375,
+          "started": 98001
+        },
+        {
+          "completed": 98393,
+          "in_flight": 8,
+          "seconds": 246.000511875,
+          "started": 98401
+        },
+        {
+          "completed": 98794,
+          "in_flight": 7,
+          "seconds": 247.000915208,
+          "started": 98801
+        },
+        {
+          "completed": 99194,
+          "in_flight": 7,
+          "seconds": 248.00101125,
+          "started": 99201
+        },
+        {
+          "completed": 99594,
+          "in_flight": 7,
+          "seconds": 249.000721875,
+          "started": 99601
+        },
+        {
+          "completed": 99995,
+          "in_flight": 6,
+          "seconds": 250.001055458,
+          "started": 100001
+        },
+        {
+          "completed": 100393,
+          "in_flight": 8,
+          "seconds": 251.001377833,
+          "started": 100401
+        },
+        {
+          "completed": 100791,
+          "in_flight": 10,
+          "seconds": 252.001051042,
+          "started": 100801
+        },
+        {
+          "completed": 101193,
+          "in_flight": 8,
+          "seconds": 253.001093042,
+          "started": 101201
+        },
+        {
+          "completed": 101595,
+          "in_flight": 6,
+          "seconds": 254.001594417,
+          "started": 101601
+        },
+        {
+          "completed": 101994,
+          "in_flight": 7,
+          "seconds": 255.000924167,
+          "started": 102001
+        },
+        {
+          "completed": 102393,
+          "in_flight": 8,
+          "seconds": 256.000403167,
+          "started": 102401
+        },
+        {
+          "completed": 102794,
+          "in_flight": 7,
+          "seconds": 257.001083917,
+          "started": 102801
+        },
+        {
+          "completed": 103194,
+          "in_flight": 7,
+          "seconds": 258.000513875,
+          "started": 103201
+        },
+        {
+          "completed": 103595,
+          "in_flight": 6,
+          "seconds": 259.000875708,
+          "started": 103601
+        },
+        {
+          "completed": 103994,
+          "in_flight": 7,
+          "seconds": 260.000404833,
+          "started": 104001
+        },
+        {
+          "completed": 104394,
+          "in_flight": 7,
+          "seconds": 261.001029458,
+          "started": 104401
+        },
+        {
+          "completed": 104793,
+          "in_flight": 8,
+          "seconds": 262.000806208,
+          "started": 104801
+        },
+        {
+          "completed": 105193,
+          "in_flight": 8,
+          "seconds": 263.00109775,
+          "started": 105201
+        },
+        {
+          "completed": 105593,
+          "in_flight": 8,
+          "seconds": 264.001453958,
+          "started": 105601
+        },
+        {
+          "completed": 105993,
+          "in_flight": 8,
+          "seconds": 265.000762167,
+          "started": 106001
+        },
+        {
+          "completed": 106394,
+          "in_flight": 7,
+          "seconds": 266.000677,
+          "started": 106401
+        },
+        {
+          "completed": 106794,
+          "in_flight": 7,
+          "seconds": 267.000582917,
+          "started": 106801
+        },
+        {
+          "completed": 107194,
+          "in_flight": 7,
+          "seconds": 268.000961333,
+          "started": 107201
+        },
+        {
+          "completed": 107593,
+          "in_flight": 8,
+          "seconds": 269.000658333,
+          "started": 107601
+        },
+        {
+          "completed": 107994,
+          "in_flight": 7,
+          "seconds": 270.000607083,
+          "started": 108001
+        },
+        {
+          "completed": 108395,
+          "in_flight": 6,
+          "seconds": 271.001061375,
+          "started": 108401
+        },
+        {
+          "completed": 108794,
+          "in_flight": 7,
+          "seconds": 272.000909708,
+          "started": 108801
+        },
+        {
+          "completed": 109194,
+          "in_flight": 7,
+          "seconds": 273.001371,
+          "started": 109201
+        },
+        {
+          "completed": 109594,
+          "in_flight": 7,
+          "seconds": 274.000496583,
+          "started": 109601
+        },
+        {
+          "completed": 109994,
+          "in_flight": 7,
+          "seconds": 275.001195125,
+          "started": 110001
+        },
+        {
+          "completed": 110394,
+          "in_flight": 7,
+          "seconds": 276.000989958,
+          "started": 110401
+        },
+        {
+          "completed": 110794,
+          "in_flight": 7,
+          "seconds": 277.001086833,
+          "started": 110801
+        },
+        {
+          "completed": 111193,
+          "in_flight": 8,
+          "seconds": 278.00115525,
+          "started": 111201
+        },
+        {
+          "completed": 111593,
+          "in_flight": 8,
+          "seconds": 279.00090475,
+          "started": 111601
+        },
+        {
+          "completed": 111993,
+          "in_flight": 8,
+          "seconds": 280.000997208,
+          "started": 112001
+        },
+        {
+          "completed": 112394,
+          "in_flight": 7,
+          "seconds": 281.001252583,
+          "started": 112401
+        },
+        {
+          "completed": 112795,
+          "in_flight": 6,
+          "seconds": 282.001013792,
+          "started": 112801
+        },
+        {
+          "completed": 113194,
+          "in_flight": 7,
+          "seconds": 283.001528208,
+          "started": 113201
+        },
+        {
+          "completed": 113594,
+          "in_flight": 7,
+          "seconds": 284.001075292,
+          "started": 113601
+        },
+        {
+          "completed": 113994,
+          "in_flight": 7,
+          "seconds": 285.001301917,
+          "started": 114001
+        },
+        {
+          "completed": 114394,
+          "in_flight": 7,
+          "seconds": 286.000524792,
+          "started": 114401
+        },
+        {
+          "completed": 114793,
+          "in_flight": 8,
+          "seconds": 287.000868083,
+          "started": 114801
+        },
+        {
+          "completed": 115195,
+          "in_flight": 6,
+          "seconds": 288.001218875,
+          "started": 115201
+        },
+        {
+          "completed": 115594,
+          "in_flight": 7,
+          "seconds": 289.000856333,
+          "started": 115601
+        },
+        {
+          "completed": 115994,
+          "in_flight": 7,
+          "seconds": 290.000868792,
+          "started": 116001
+        },
+        {
+          "completed": 116395,
+          "in_flight": 6,
+          "seconds": 291.001449958,
+          "started": 116401
+        },
+        {
+          "completed": 116795,
+          "in_flight": 6,
+          "seconds": 292.00123025,
+          "started": 116801
+        },
+        {
+          "completed": 117193,
+          "in_flight": 8,
+          "seconds": 293.001321333,
+          "started": 117201
+        },
+        {
+          "completed": 117594,
+          "in_flight": 7,
+          "seconds": 294.000925125,
+          "started": 117601
+        },
+        {
+          "completed": 117994,
+          "in_flight": 7,
+          "seconds": 295.000491792,
+          "started": 118001
+        },
+        {
+          "completed": 118395,
+          "in_flight": 6,
+          "seconds": 296.001349792,
+          "started": 118401
+        },
+        {
+          "completed": 118794,
+          "in_flight": 7,
+          "seconds": 297.00128025,
+          "started": 118801
+        },
+        {
+          "completed": 119194,
+          "in_flight": 7,
+          "seconds": 298.001044458,
+          "started": 119201
+        },
+        {
+          "completed": 119594,
+          "in_flight": 7,
+          "seconds": 299.000408375,
+          "started": 119601
+        },
+        {
+          "completed": 119993,
+          "in_flight": 6,
+          "seconds": 300.0,
+          "started": 120000
+        }
+      ],
+      "sample_seconds": 300.0,
+      "scenario_completions_per_second": 399.9766666666667,
+      "scenario_error_rate": 0.0,
+      "scenario_errors": 0,
+      "scheduled_latency_passed": true,
+      "scheduled_to_complete_p50_ms": 17.077542,
+      "scheduled_to_complete_p95_ms": 20.626833,
+      "scheduled_to_complete_p99_ms": 24.649292,
+      "scheduling_lag_max_ms": 58.847375,
+      "scheduling_lag_p95_ms": 1.9480000000000002,
+      "started_arrivals": 120000,
+      "started_at_unix_ms": 1795760355251,
+      "started_rate": 400.0,
+      "storage_http_put_rps": 0.0,
+      "storage_http_puts_started_in_window": 0,
+      "target_rate": 400.0,
+      "total_completed_including_warmup_and_drain": 122000,
+      "total_started_including_warmup": 122000,
+      "unit": "http_requests_per_second",
+      "warmup": {
+        "scenario_search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 48.232208,
+          "min_ms": 13.132125,
+          "p50_ms": 16.289375,
+          "p95_ms": 18.699541,
+          "p99_ms": 30.798916,
+          "passed": true,
+          "samples": 2000,
+          "statuses": {
+            "none": 2000
+          },
+          "threshold_ms": null
+        },
+        "search": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 48.217666,
+          "min_ms": 13.112584,
+          "p50_ms": 16.278625,
+          "p95_ms": 18.6565,
+          "p99_ms": 30.790291,
+          "passed": true,
+          "samples": 2000,
+          "statuses": {
+            "200": 2000
+          },
+          "threshold_ms": 3000.0
+        }
+      },
+      "warmup_admission_drops": 0,
+      "warmup_fixture_drops": 0,
+      "warmup_passed": true,
+      "warmup_seconds": 5,
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0
+    }
+  ],
+  "stop_reason": "configured_ceiling_reached",
+  "validation_seconds": 300,
+  "websocket_disconnects": 0,
+  "websocket_reconnect_failures": 0
+}

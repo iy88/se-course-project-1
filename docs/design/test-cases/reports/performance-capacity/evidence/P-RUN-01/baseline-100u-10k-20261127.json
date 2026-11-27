@@ -1,0 +1,947 @@
+{
+  "active_users": 100,
+  "dataset": {
+    "browse_products": 9900,
+    "conversations": 100,
+    "image_bytes": 75875,
+    "products": 10000,
+    "tag": "load",
+    "trade_pairs": 100,
+    "users": 100
+  },
+  "format_version": 2,
+  "http_requests_per_second": 171.88333333333333,
+  "issue_34_api_ws_passed": true,
+  "issue_34_scale_met": true,
+  "login_ms": [
+    36.626792,
+    28.008708,
+    25.511667,
+    24.599791,
+    24.221833,
+    23.416333,
+    22.652291,
+    23.20175,
+    22.457749999999997,
+    23.255625,
+    24.912582999999998,
+    24.076332999999998,
+    23.513792,
+    23.5835,
+    22.828999999999997,
+    23.937625,
+    23.498624999999997,
+    23.205666,
+    22.612750000000002,
+    26.986667,
+    28.99175,
+    22.203332999999997,
+    22.306958,
+    22.041541000000002,
+    22.387917,
+    21.964666,
+    22.614459,
+    22.185459,
+    21.773667,
+    21.48825,
+    22.009458,
+    21.535833,
+    21.482833,
+    21.130583,
+    22.188208,
+    21.499792,
+    22.5325,
+    24.142084,
+    22.923665999999997,
+    23.135042000000002,
+    22.905459,
+    22.367,
+    22.75125,
+    22.486791999999998,
+    22.333375,
+    23.653167,
+    22.491083,
+    21.652833,
+    21.665917,
+    21.8065,
+    21.772875,
+    22.199541999999997,
+    21.877,
+    23.09025,
+    23.110208,
+    22.728,
+    23.151292,
+    22.322374999999997,
+    23.690625,
+    24.368291,
+    22.56225,
+    21.969583,
+    21.370542,
+    21.201083,
+    20.715958,
+    26.088290999999998,
+    20.772167,
+    21.077542,
+    20.763959,
+    20.440459,
+    20.886916,
+    20.48725,
+    20.228417,
+    20.026084,
+    20.456,
+    21.090375,
+    21.971083,
+    22.401083,
+    21.933125,
+    20.98375,
+    21.372958,
+    21.254542,
+    20.394417,
+    20.945041,
+    38.953292,
+    20.562832999999998,
+    20.656458999999998,
+    20.511666,
+    20.953792,
+    20.604709,
+    20.479375,
+    20.406917,
+    20.518666,
+    20.799667,
+    21.555208,
+    21.595541,
+    21.710791999999998,
+    22.109666,
+    21.113667,
+    21.479041000000002
+  ],
+  "measured_http_requests": 20626,
+  "model": "closed-loop; 20-slot cycle per user, staggered by user index; 6 home, 5 search, 5 detail, 1 publish, 1 full trade, 2 IM; think after each scenario",
+  "operations": {
+    "detail": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 438.623208,
+      "min_ms": 0.8011659999999999,
+      "p50_ms": 2.123375,
+      "p95_ms": 125.77758299999999,
+      "p99_ms": 318.684625,
+      "passed": true,
+      "samples": 2700,
+      "statuses": {
+        "200": 2700
+      },
+      "threshold_ms": 3000.0
+    },
+    "home": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 485.53254200000003,
+      "min_ms": 4.675999999999999,
+      "p50_ms": 10.7405,
+      "p95_ms": 422.187959,
+      "p99_ms": 459.289,
+      "passed": true,
+      "samples": 3256,
+      "statuses": {
+        "200": 3256
+      },
+      "threshold_ms": 3000.0
+    },
+    "im_delivery": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 475.002542,
+      "min_ms": 56.142792,
+      "p50_ms": 66.277958,
+      "p95_ms": 371.70354199999997,
+      "p99_ms": 429.276875,
+      "passed": true,
+      "samples": 1090,
+      "statuses": {
+        "none": 1090
+      },
+      "threshold_ms": 2000.0
+    },
+    "im_read": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 78.27704200000001,
+      "min_ms": 51.908500000000004,
+      "p50_ms": 57.00020799999999,
+      "p95_ms": 59.235833,
+      "p99_ms": 61.088499999999996,
+      "passed": true,
+      "samples": 1090,
+      "statuses": {
+        "200": 1090
+      },
+      "threshold_ms": 3000.0
+    },
+    "im_retrieval": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 11.223042000000001,
+      "min_ms": 0.571416,
+      "p50_ms": 1.0594999999999999,
+      "p95_ms": 1.90375,
+      "p99_ms": 3.2675,
+      "passed": true,
+      "samples": 1090,
+      "statuses": {
+        "none": 1090
+      },
+      "threshold_ms": 2000.0
+    },
+    "im_send": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 441.3275,
+      "min_ms": 53.177791,
+      "p50_ms": 59.584625,
+      "p95_ms": 335.269834,
+      "p99_ms": 391.21475,
+      "passed": true,
+      "samples": 1090,
+      "statuses": {
+        "201": 1090
+      },
+      "threshold_ms": 3000.0
+    },
+    "publish": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 229.92854200000002,
+      "min_ms": 2.55075,
+      "p50_ms": 4.641125000000001,
+      "p95_ms": 10.935334,
+      "p99_ms": 36.148541,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "201": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "scenario_detail": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 438.62570800000003,
+      "min_ms": 0.802917,
+      "p50_ms": 2.129458,
+      "p95_ms": 125.78362500000001,
+      "p99_ms": 318.687333,
+      "passed": true,
+      "samples": 2700,
+      "statuses": {
+        "none": 2700
+      },
+      "threshold_ms": null
+    },
+    "scenario_home": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 485.54162499999995,
+      "min_ms": 4.681667,
+      "p50_ms": 10.751875,
+      "p95_ms": 422.195667,
+      "p99_ms": 459.301958,
+      "passed": true,
+      "samples": 3256,
+      "statuses": {
+        "none": 3256
+      },
+      "threshold_ms": null
+    },
+    "scenario_im": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 533.411834,
+      "min_ms": 109.200208,
+      "p50_ms": 123.388666,
+      "p95_ms": 428.61100000000005,
+      "p99_ms": 486.95133400000003,
+      "passed": true,
+      "samples": 1090,
+      "statuses": {
+        "none": 1090
+      },
+      "threshold_ms": null
+    },
+    "scenario_publish": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 2226.3875,
+      "min_ms": 234.2405,
+      "p50_ms": 283.290209,
+      "p95_ms": 543.5817920000001,
+      "p99_ms": 1918.420625,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "none": 545
+      },
+      "threshold_ms": null
+    },
+    "scenario_search": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 485.253125,
+      "min_ms": 11.777666,
+      "p50_ms": 32.536,
+      "p95_ms": 418.870792,
+      "p99_ms": 454.487625,
+      "passed": true,
+      "samples": 2679,
+      "statuses": {
+        "none": 2679
+      },
+      "threshold_ms": null
+    },
+    "scenario_trade": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 491.103417,
+      "min_ms": 31.278124999999996,
+      "p50_ms": 62.802499999999995,
+      "p95_ms": 342.938833,
+      "p99_ms": 407.90620900000005,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "none": 545
+      },
+      "threshold_ms": null
+    },
+    "search": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 485.241917,
+      "min_ms": 11.767,
+      "p50_ms": 32.529959,
+      "p95_ms": 418.85562500000003,
+      "p99_ms": 454.477208,
+      "passed": true,
+      "samples": 2679,
+      "statuses": {
+        "200": 2679
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_accept": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 113.79383299999999,
+      "min_ms": 3.550125,
+      "p50_ms": 7.906833000000001,
+      "p95_ms": 32.648666999999996,
+      "p99_ms": 48.478208,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "200": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_agree": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 149.121584,
+      "min_ms": 3.384209,
+      "p50_ms": 7.0935,
+      "p95_ms": 11.950208,
+      "p99_ms": 19.311124999999997,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "200": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_agreement": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 338.78258300000005,
+      "min_ms": 3.3423749999999997,
+      "p50_ms": 7.3105,
+      "p95_ms": 19.536583,
+      "p99_ms": 26.399290999999998,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "201": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_confirm_buyer": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 146.90366699999998,
+      "min_ms": 3.623292,
+      "p50_ms": 7.372084,
+      "p95_ms": 11.468083,
+      "p99_ms": 16.612875,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "201": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_confirm_seller": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 33.138374999999996,
+      "min_ms": 4.324708,
+      "p50_ms": 8.511542,
+      "p95_ms": 13.008624999999999,
+      "p99_ms": 16.920082999999998,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "201": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_read": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 212.986125,
+      "min_ms": 0.941084,
+      "p50_ms": 2.123833,
+      "p95_ms": 4.2776250000000005,
+      "p99_ms": 7.636083,
+      "passed": true,
+      "samples": 2180,
+      "statuses": {
+        "200": 2180
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_relist": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 27.705583999999998,
+      "min_ms": 1.64825,
+      "p50_ms": 3.109459,
+      "p95_ms": 5.068375,
+      "p99_ms": 7.846125000000001,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "200": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_request": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 327.957833,
+      "min_ms": 3.8775,
+      "p50_ms": 8.7895,
+      "p95_ms": 237.185583,
+      "p99_ms": 282.489416,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "201": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_verify": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 9.195042,
+      "min_ms": 0.963333,
+      "p50_ms": 1.936417,
+      "p95_ms": 2.918791,
+      "p99_ms": 4.109709,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "200": 545
+      },
+      "threshold_ms": 3000.0
+    },
+    "upload_bytes": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 95.77175,
+      "min_ms": 23.464917,
+      "p50_ms": 32.154542,
+      "p95_ms": 56.250417,
+      "p99_ms": 77.952208,
+      "passed": true,
+      "samples": 546,
+      "statuses": {
+        "204": 546
+      },
+      "threshold_ms": null
+    },
+    "upload_complete": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 2069.391958,
+      "min_ms": 129.622917,
+      "p50_ms": 157.069125,
+      "p95_ms": 273.023125,
+      "p99_ms": 392.369292,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "200": 545
+      },
+      "threshold_ms": null
+    },
+    "upload_lease": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 1862.649333,
+      "min_ms": 65.770292,
+      "p50_ms": 85.173667,
+      "p95_ms": 261.470708,
+      "p99_ms": 1150.6935839999999,
+      "passed": true,
+      "samples": 545,
+      "statuses": {
+        "201": 545
+      },
+      "threshold_ms": null
+    }
+  },
+  "parameters": {
+    "base_url": "http://127.0.0.1:59183",
+    "capacity": {
+      "capacity_case": "Single",
+      "capacity_max_arrivals": 200000,
+      "capacity_max_error_rate": 0.0,
+      "capacity_max_in_flight": 2048,
+      "capacity_max_lag_ms": 100,
+      "capacity_max_rate": 400.0,
+      "capacity_max_samples": 500000,
+      "capacity_refinements": 12,
+      "capacity_resolution": 1.0,
+      "capacity_stage_seconds": 30,
+      "capacity_start_rate": 0.0,
+      "capacity_validation_seconds": 300,
+      "capacity_warmup_seconds": 5,
+      "monitor_pid": [],
+      "single_operation": "Search"
+    },
+    "duration_seconds": 120,
+    "manifest": "/private/tmp/p1-seed-lab.RMl3nk/load.json",
+    "min_samples": 20,
+    "mode": "Steady",
+    "output": "/private/tmp/p1-seed-lab.RMl3nk/report.json",
+    "race_rounds": 5,
+    "think_ms": 1000,
+    "timeout_seconds": 15,
+    "users": 100,
+    "warmup_seconds": 30,
+    "ws_base_url": null
+  },
+  "passed": true,
+  "race_checks": [],
+  "scope": "real session HTTP/API and recipient WebSocket; excludes browser rendering, UI display, WAN simulation, SMTP and external payment/delivery",
+  "started_at_unix_ms": 1795754047490,
+  "steady_state_passed": true,
+  "task_panics": false,
+  "timing": "monotonic client clock; request start through full response body; IM delivery from before POST through verified recipient retrieval; IM retrieval from received event hint through verified HTTP read; samples attributed by operation start, final in-flight operations drain",
+  "tool_version": "0.1.0",
+  "warmup": {
+    "detail": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 368.505834,
+      "min_ms": 1.033042,
+      "p50_ms": 2.9267920000000003,
+      "p95_ms": 270.462125,
+      "p99_ms": 349.85,
+      "passed": true,
+      "samples": 608,
+      "statuses": {
+        "200": 608
+      },
+      "threshold_ms": 3000.0
+    },
+    "home": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 443.49204199999997,
+      "min_ms": 11.113415999999999,
+      "p50_ms": 378.61850000000004,
+      "p95_ms": 423.101375,
+      "p99_ms": 436.51779200000004,
+      "passed": true,
+      "samples": 708,
+      "statuses": {
+        "200": 708
+      },
+      "threshold_ms": 3000.0
+    },
+    "im_delivery": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 584.776209,
+      "min_ms": 58.347375,
+      "p50_ms": 286.984416,
+      "p95_ms": 415.036375,
+      "p99_ms": 550.422917,
+      "passed": true,
+      "samples": 243,
+      "statuses": {
+        "none": 243
+      },
+      "threshold_ms": 2000.0
+    },
+    "im_read": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 93.52983300000001,
+      "min_ms": 53.105584,
+      "p50_ms": 58.015209,
+      "p95_ms": 62.263459,
+      "p99_ms": 72.71691600000001,
+      "passed": true,
+      "samples": 243,
+      "statuses": {
+        "200": 243
+      },
+      "threshold_ms": 3000.0
+    },
+    "im_retrieval": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 35.610084,
+      "min_ms": 0.718875,
+      "p50_ms": 1.607375,
+      "p95_ms": 4.218334,
+      "p99_ms": 23.414666,
+      "passed": true,
+      "samples": 243,
+      "statuses": {
+        "none": 243
+      },
+      "threshold_ms": 2000.0
+    },
+    "im_send": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 386.199167,
+      "min_ms": 54.549458,
+      "p50_ms": 250.372084,
+      "p95_ms": 358.6665,
+      "p99_ms": 380.55283299999996,
+      "passed": true,
+      "samples": 243,
+      "statuses": {
+        "201": 243
+      },
+      "threshold_ms": 3000.0
+    },
+    "publish": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 263.23999999999995,
+      "min_ms": 3.315458,
+      "p50_ms": 5.402958,
+      "p95_ms": 32.576333999999996,
+      "p99_ms": 216.428083,
+      "passed": true,
+      "samples": 121,
+      "statuses": {
+        "201": 121
+      },
+      "threshold_ms": 3000.0
+    },
+    "scenario_detail": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 368.510083,
+      "min_ms": 1.0347920000000002,
+      "p50_ms": 2.933625,
+      "p95_ms": 270.4655,
+      "p99_ms": 349.853959,
+      "passed": true,
+      "samples": 608,
+      "statuses": {
+        "none": 608
+      },
+      "threshold_ms": null
+    },
+    "scenario_home": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 443.497625,
+      "min_ms": 11.122458,
+      "p50_ms": 378.650417,
+      "p95_ms": 423.122333,
+      "p99_ms": 436.52408399999996,
+      "passed": true,
+      "samples": 708,
+      "statuses": {
+        "none": 708
+      },
+      "threshold_ms": null
+    },
+    "scenario_im": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 646.077334,
+      "min_ms": 114.35175,
+      "p50_ms": 345.074083,
+      "p95_ms": 476.502166,
+      "p99_ms": 612.01075,
+      "passed": true,
+      "samples": 243,
+      "statuses": {
+        "none": 243
+      },
+      "threshold_ms": null
+    },
+    "scenario_publish": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 837.487,
+      "min_ms": 246.38291700000002,
+      "p50_ms": 370.452959,
+      "p95_ms": 714.137709,
+      "p99_ms": 829.080334,
+      "passed": true,
+      "samples": 122,
+      "statuses": {
+        "none": 122
+      },
+      "threshold_ms": null
+    },
+    "scenario_search": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 439.582958,
+      "min_ms": 10.922167,
+      "p50_ms": 373.435542,
+      "p95_ms": 422.496541,
+      "p99_ms": 432.122375,
+      "passed": true,
+      "samples": 601,
+      "statuses": {
+        "none": 601
+      },
+      "threshold_ms": null
+    },
+    "scenario_trade": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 532.128792,
+      "min_ms": 41.979958999999994,
+      "p50_ms": 153.231167,
+      "p95_ms": 404.37758299999996,
+      "p99_ms": 531.524125,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "none": 124
+      },
+      "threshold_ms": null
+    },
+    "search": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 439.569125,
+      "min_ms": 10.915750000000001,
+      "p50_ms": 373.425167,
+      "p95_ms": 422.486875,
+      "p99_ms": 432.10675,
+      "passed": true,
+      "samples": 601,
+      "statuses": {
+        "200": 601
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_accept": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 142.730583,
+      "min_ms": 5.083125,
+      "p50_ms": 14.956209,
+      "p95_ms": 54.61375,
+      "p99_ms": 114.82362499999999,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "200": 124
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_agree": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 58.588167,
+      "min_ms": 4.406416,
+      "p50_ms": 7.705832999999999,
+      "p95_ms": 21.208333,
+      "p99_ms": 33.301916,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "200": 124
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_agreement": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 337.006167,
+      "min_ms": 4.241959,
+      "p50_ms": 10.244207999999999,
+      "p95_ms": 31.602041999999997,
+      "p99_ms": 69.659709,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "201": 124
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_confirm_buyer": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 26.751792,
+      "min_ms": 4.6453750000000005,
+      "p50_ms": 7.8807089999999995,
+      "p95_ms": 16.230874999999997,
+      "p99_ms": 26.015584,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "201": 124
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_confirm_seller": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 38.581916,
+      "min_ms": 5.259291,
+      "p50_ms": 9.167333,
+      "p95_ms": 17.568333,
+      "p99_ms": 35.731208,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "201": 124
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_read": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 29.333292,
+      "min_ms": 1.18275,
+      "p50_ms": 2.4446250000000003,
+      "p95_ms": 6.958291999999999,
+      "p99_ms": 14.660084,
+      "passed": true,
+      "samples": 496,
+      "statuses": {
+        "200": 496
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_relist": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 71.095625,
+      "min_ms": 1.927834,
+      "p50_ms": 3.504209,
+      "p95_ms": 5.9097919999999995,
+      "p99_ms": 14.657416,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "200": 124
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_request": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 322.273709,
+      "min_ms": 5.145375,
+      "p50_ms": 27.273334,
+      "p95_ms": 268.171375,
+      "p99_ms": 294.473541,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "201": 124
+      },
+      "threshold_ms": 3000.0
+    },
+    "trade_verify": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 252.51712500000002,
+      "min_ms": 1.309833,
+      "p50_ms": 2.080584,
+      "p95_ms": 3.676416,
+      "p99_ms": 4.88875,
+      "passed": true,
+      "samples": 124,
+      "statuses": {
+        "200": 124
+      },
+      "threshold_ms": 3000.0
+    },
+    "upload_bytes": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 138.48262499999998,
+      "min_ms": 24.681749999999997,
+      "p50_ms": 36.575458999999995,
+      "p95_ms": 90.65875,
+      "p99_ms": 137.202084,
+      "passed": true,
+      "samples": 121,
+      "statuses": {
+        "204": 121
+      },
+      "threshold_ms": null
+    },
+    "upload_complete": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 449.919208,
+      "min_ms": 129.367833,
+      "p50_ms": 172.414208,
+      "p95_ms": 305.942625,
+      "p99_ms": 396.822,
+      "passed": true,
+      "samples": 121,
+      "statuses": {
+        "200": 121
+      },
+      "threshold_ms": null
+    },
+    "upload_lease": {
+      "enough_samples": true,
+      "errors": 0,
+      "max_ms": 402.987875,
+      "min_ms": 73.41075,
+      "p50_ms": 111.55554199999999,
+      "p95_ms": 341.853666,
+      "p99_ms": 386.742833,
+      "passed": true,
+      "samples": 122,
+      "statuses": {
+        "201": 122
+      },
+      "threshold_ms": null
+    }
+  },
+  "warmup_passed": true,
+  "warmup_request_errors": 0,
+  "websocket_disconnects": 0,
+  "websocket_reconnect_failures": 0
+}

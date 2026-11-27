@@ -1,0 +1,12 @@
+Command: cargo test --locked --manifest-path loadtest/Cargo.toml
+Date: 2026-11-27T15:05+0800
+Execution: sandboxed
+Result: 23 passed; 6 failed
+Failure cause: Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }
+Affected tests: local TCP listener bind in capacity_* and http::login_* tests
+Conclusion: environment permission failure, not assertion failure
+
+Command: cargo test --locked --manifest-path loadtest/Cargo.toml
+Date: 2026-11-27T15:05+0800
+Execution: local network permissions
+Result: 29 passed; 0 failed; 0 ignored; finished in 10.06s

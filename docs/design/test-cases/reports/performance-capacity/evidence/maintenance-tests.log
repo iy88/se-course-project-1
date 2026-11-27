@@ -1,0 +1,8 @@
+Command: mvn -f backend/pom.xml -pl maintenance -am test
+Date: 2026-11-27T15:14:51+08:00
+Result: BUILD SUCCESS
+backend-core: 12 passed; 0 failed
+file-storage: 16 passed; 0 failed
+account: 25 passed; 0 failed
+maintenance: 25 passed; 0 failed
+total: 78 passed; 0 failed; 0 errors; 0 skipped
