@@ -434,7 +434,7 @@ impl Driver {
     let (tx, rx) = oneshot::channel();
     self.pending.lock().unwrap().insert(
       content.clone(),
-      Pending::new(recipient, "chat".into(), conversation, tx),
+      Pending::new(recipient, "chat".into(), conversation, start, tx),
     );
     let sent = self
       .api(

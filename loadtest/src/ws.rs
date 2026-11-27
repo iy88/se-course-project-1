@@ -24,6 +24,7 @@ pub(crate) struct Pending {
   pub(crate) recipient: usize,
   pub(crate) conversation_kind: String,
   pub(crate) conversation: u64,
+  started: Instant,
   expected: Option<DeliveryObservation>,
   early: Option<EarlyDelivery>,
   tx: oneshot::Sender<DeliveryResult>,
@@ -58,12 +59,14 @@ impl Pending {
     recipient: usize,
     conversation_kind: String,
     conversation: u64,
+    started: Instant,
     tx: oneshot::Sender<DeliveryResult>,
   ) -> Self {
     Self {
       recipient,
       conversation_kind,
       conversation,
+      started,
       expected: None,
       early: None,
       tx,
@@ -80,7 +83,11 @@ impl Pending {
   /// A recipient hint can be delivered before the sender has the HTTP response.
   /// Keep its real arrival time, then validate it after the send response binds
   /// the expected message ID and sequence.
-  fn received(&mut self, hint: &DeliveryHint, elapsed_ms: f64) -> PendingProgress {
+  pub(crate) fn elapsed_ms(&self) -> f64 {
+    self.started.elapsed().as_secs_f64() * 1000.
+  }
+
+  fn retrieved(&mut self, hint: &DeliveryHint, elapsed_ms: f64) -> PendingProgress {
     let observation = Self::observation(hint);
     if let Some(expected) = &self.expected {
       return PendingProgress::Complete(DeliveryResult {
@@ -613,10 +620,9 @@ fn spawn_retrieval(driver: Driver, user: usize, hint: DeliveryHint) {
     let Some(key) = key else {
       return;
     };
-    let progress = pending
-      .get_mut(&key)
-      .expect("pending key from same map")
-      .received(&hint, received.elapsed().as_secs_f64() * 1000.);
+    let candidate = pending.get_mut(&key).expect("pending key from same map");
+    let elapsed_ms = candidate.elapsed_ms();
+    let progress = candidate.retrieved(&hint, elapsed_ms);
     if let PendingProgress::Complete(result) = progress
       && let Some(candidate) = pending.remove(&key)
     {
@@ -712,15 +718,18 @@ mod tests {
   #[test]
   fn early_delivery_waits_for_send_response_and_keeps_received_time() {
     let (tx, mut rx) = oneshot::channel();
-    let mut pending = Pending::new(1, "chat".into(), 99, tx);
+    let started = Instant::now() - Duration::from_millis(250);
+    let mut pending = Pending::new(1, "chat".into(), 99, started, tx);
     let hint = DeliveryHint {
       conversation_kind: "chat".into(),
       conversation_id: 99,
       message_id: "1234".into(),
       message_seq: 5,
     };
+    let elapsed_ms = pending.elapsed_ms();
+    assert!(elapsed_ms >= 250.);
     assert!(matches!(
-      pending.received(&hint, 12.5),
+      pending.retrieved(&hint, elapsed_ms),
       PendingProgress::Waiting
     ));
     assert!(matches!(
@@ -730,20 +739,15 @@ mod tests {
     let PendingProgress::Complete(result) = pending.sent("1234".into(), 5) else {
       panic!("early delivery was not completed after the send response");
     };
-    assert_eq!(
-      result,
-      DeliveryResult {
-        elapsed_ms: 12.5,
-        matched: true
-      }
-    );
+    assert!(result.matched);
+    assert!(result.elapsed_ms >= 250.);
   }
 
   #[test]
   fn early_delivery_rejects_sender_id_or_sequence_mismatch() {
     for (message_id, message_seq) in [("9999", 5), ("1234", 6)] {
       let (tx, _rx) = oneshot::channel();
-      let mut pending = Pending::new(1, "chat".into(), 99, tx);
+      let mut pending = Pending::new(1, "chat".into(), 99, Instant::now(), tx);
       let hint = DeliveryHint {
         conversation_kind: "chat".into(),
         conversation_id: 99,
@@ -751,7 +755,7 @@ mod tests {
         message_seq: 5,
       };
       assert!(matches!(
-        pending.received(&hint, 7.25),
+        pending.retrieved(&hint, 7.25),
         PendingProgress::Waiting
       ));
       let PendingProgress::Complete(result) = pending.sent(message_id.into(), message_seq) else {
