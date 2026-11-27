@@ -1236,12 +1236,9 @@ public class CaseApplication {
             String reason = requiredText(request.reason(), settings.getMaxNoteLength(), "解除原因");
             var recorded = requireRecorded(facts.caseId(), request.enforcementId());
             requireRecordedTarget(facts, recorded);
-            var existing = store.lift(facts.caseId(), request.enforcementId());
-            if (existing.isPresent()) {
-                return lifted(recorded, existing.get(), List.of());
-            }
-            if (!"applied".equals(recorded.resultStatus())) {
-                throw new BusinessError("RESTRICTION_NOT_ACTIVE", 409, "执行记录不在生效状态");
+            if (store.lift(facts.caseId(), request.enforcementId()).isPresent()
+                    || !"applied".equals(recorded.resultStatus())) {
+                throw enforcementNotActive(recorded);
             }
             if (enforcement == null) {
                 throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "解除须由处置执行提供");
@@ -1567,6 +1564,14 @@ public class CaseApplication {
         }
         return store.enforcement(caseId, enforcementId)
                 .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "执行记录不存在"));
+    }
+
+    /** The subject module names the conflict of a lift whose original enforcement is not active. */
+    private static BusinessError enforcementNotActive(CaseRecords.Enforcement recorded) {
+        if ("freeze_trade".equals(recorded.action())) {
+            return new BusinessError("TRADE_FREEZE_NOT_ACTIVE", 409, "原交易冻结已解除或不存在");
+        }
+        return new BusinessError("RESTRICTION_NOT_ACTIVE", 409, "原限制记录不存在或已解除");
     }
 
     /** Persists compensating enforcement links and notifies their affected accounts. */

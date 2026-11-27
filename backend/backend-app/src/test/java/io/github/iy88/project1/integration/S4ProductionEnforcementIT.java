@@ -119,10 +119,15 @@ class S4ProductionEnforcementIT {
         assertThat(lifted.path("enforcement_id").asString()).isEqualTo(enforcement);
         assertThat(lifted.path("remaining_restrictions").isEmpty()).isFalse();
         assertThat(post(manager, original, reason, liftKey, 200)).isEqualTo(lifted);
+        assertThat(post(manager, original, reason, key(), 409).at("/error/code").asString())
+                .isEqualTo("TRADE_FREEZE_NOT_ACTIVE");
         assertThat(activeSources(trade)).containsExactly(second);
         assertThat(db.sql("""
                 select count(*) from trade_state_history where trade_id = ? and case_id = ? and action = 'trade.unfreeze'
                 """).param(trade).param(first).query(Long.class).single()).isEqualTo(1);
+        assertThat(db.sql("""
+                select count(*) from case_enforcement where case_id = ? and action = 'lift_trade_freeze'
+                """).param(first).query(Long.class).single()).isEqualTo(1);
         String secondEnforcement = secondFreeze.at("/enforcements/0/enforcement_id").asString();
         var last = post(otherManager, "/admin/cases/" + second + "/enforcements/" + secondEnforcement + "/lift",
                 reason, key(), 200);
