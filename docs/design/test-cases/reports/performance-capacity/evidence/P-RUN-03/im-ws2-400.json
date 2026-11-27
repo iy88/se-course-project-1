@@ -1,0 +1,614 @@
+{
+  "boundary_bracketed": false,
+  "boundary_criteria": "latency SLA, configured error budget, complete load delivery and sustained validation; not a proof of hardware saturation",
+  "case": "Single",
+  "conclusion": "no_rate_validated",
+  "configured_ceiling_reached": false,
+  "effective_start_rate": 400.0,
+  "first_observed_failing_rate": 400.0,
+  "format_version": 1,
+  "highest_validated_rate": null,
+  "login_ms": [
+    233.92070900000002,
+    91.60508300000001,
+    32.381875,
+    28.230124999999997,
+    30.744917,
+    29.787125,
+    31.672125,
+    31.592958999999997,
+    32.06775,
+    29.753167,
+    31.84625,
+    33.152291,
+    31.580333000000003,
+    27.550542,
+    26.688167,
+    27.281958,
+    27.185667,
+    29.046417,
+    28.313666,
+    28.36725,
+    29.528833000000002,
+    30.054417,
+    34.817459,
+    30.060292,
+    29.446375,
+    30.555084,
+    29.927209,
+    28.345042,
+    29.410333,
+    28.891333000000003,
+    26.636792,
+    25.751165999999998,
+    22.816042000000003,
+    22.714208,
+    22.397750000000002,
+    23.779708,
+    25.608875,
+    27.189791,
+    27.169999999999998,
+    26.721249999999998,
+    28.30525,
+    28.018,
+    28.5545,
+    25.413375,
+    25.529459,
+    25.54875,
+    25.428583,
+    27.417542,
+    29.285,
+    26.158082999999998,
+    32.254083,
+    30.151666000000002,
+    29.11925,
+    30.145458,
+    29.516875000000002,
+    30.07575,
+    28.626375,
+    30.051333,
+    29.468708,
+    31.597082999999998,
+    32.251792,
+    30.454917000000002,
+    28.58775,
+    31.299625,
+    28.034209,
+    29.307416999999997,
+    30.966708,
+    30.571125000000002,
+    30.211166000000002,
+    34.170041999999995,
+    27.033375,
+    27.808959,
+    26.078709,
+    27.61725,
+    28.036708,
+    28.952167,
+    27.829583000000003,
+    26.3385,
+    26.492708,
+    26.099708,
+    25.213666999999997,
+    28.232332999999997,
+    24.593625,
+    26.156042,
+    26.737542,
+    27.252417,
+    26.028416,
+    27.276374999999998,
+    29.68675,
+    28.15275,
+    27.293084,
+    29.913208,
+    26.642833,
+    26.350583,
+    24.453167,
+    28.235084,
+    28.224125,
+    26.510958000000002,
+    24.945334,
+    23.45925
+  ],
+  "long_validation": false,
+  "mode": "capacity",
+  "notes": [
+    "No automatic request retries; expected arrival times never shift to hide latency.",
+    "Latency is HTTP request start through usable response; IM delivery and retrieval are separate end-to-end samples.",
+    "In-flight limits, skipped arrivals, fixture exhaustion and missing samples cannot establish a service upper bound.",
+    "Resource ps CPU/RSS samples are local observations; remote backend and PostgreSQL lock/connection monitoring require separate telemetry.",
+    "Published records and completed trades accumulate; failed trade fixtures are quarantined rather than silently reused.",
+    "Single publish reuses a setup-uploaded image and measures only POST /products; mixed publish measures the full multipart upload and publish flow."
+  ],
+  "parameters": {
+    "base_url": "http://127.0.0.1:<port>",
+    "capacity": {
+      "capacity_case": "Single",
+      "capacity_max_arrivals": 200000,
+      "capacity_max_error_rate": 0.0,
+      "capacity_max_in_flight": 8192,
+      "capacity_max_lag_ms": 500,
+      "capacity_max_rate": 400.0,
+      "capacity_max_samples": 500000,
+      "capacity_refinements": 0,
+      "capacity_resolution": 1.0,
+      "capacity_stage_seconds": 20,
+      "capacity_start_rate": 400.0,
+      "capacity_validation_seconds": 20,
+      "capacity_warmup_seconds": 5,
+      "monitor_pid": [],
+      "single_operation": "Im"
+    },
+    "duration_seconds": 120,
+    "min_samples": 20,
+    "mode": "Capacity",
+    "race_rounds": 5,
+    "think_ms": 1000,
+    "timeout_seconds": 60,
+    "users": 100,
+    "warmup_seconds": 30,
+    "ws_base_url": "http://127.0.0.1:<port>"
+  },
+  "passed": false,
+  "rate_unit": "HTTP RPS",
+  "refinement_strategy": "integer_binary_search",
+  "single_operation": "Im",
+  "stages": [
+    {
+      "application_http_requests_started_in_window": 13472,
+      "application_http_rps": 1347.1788661315375,
+      "application_successful_response_rps": 865.1864273879204,
+      "backlog_growth_per_second": -89.91989791537694,
+      "completed_scenarios_in_window": 3818,
+      "completion_scope": "legacy completion fields track measured-start cohort; successful_response fields include warmup carry-in responses completed during measurement",
+      "drain_seconds": 0.745713459,
+      "drained": true,
+      "early_stop_reason": "operation_latency_sla_exceeded",
+      "enough_samples": true,
+      "error_budget_passed": true,
+      "expected_arrivals": 4000,
+      "fixture_drops": 0,
+      "growing_backlog": false,
+      "http_completions_in_window": 8604,
+      "http_requests_started_in_window": 13472,
+      "http_rps": 1347.1788661315375,
+      "http_successful_response_rps": 865.1864273879204,
+      "http_successful_responses_completed_in_window": 8652,
+      "in_flight_limit_drops": 0,
+      "index": 0,
+      "kind": "coarse",
+      "late_arrivals_skipped": 0,
+      "latency_sla_passed": false,
+      "local_resources": [
+        {
+          "elapsed_seconds": 0.003530167,
+          "processes": [
+            {
+              "cpu_reported_pct": 2.3,
+              "pid": 10810,
+              "rss_kib": 23024
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 1.008948667,
+          "processes": [
+            {
+              "cpu_reported_pct": 10.0,
+              "pid": 10810,
+              "rss_kib": 29632
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 2.014139667,
+          "processes": [
+            {
+              "cpu_reported_pct": 12.5,
+              "pid": 10810,
+              "rss_kib": 31200
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 3.019931125,
+          "processes": [
+            {
+              "cpu_reported_pct": 15.9,
+              "pid": 10810,
+              "rss_kib": 32400
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 4.024031625,
+          "processes": [
+            {
+              "cpu_reported_pct": 14.6,
+              "pid": 10810,
+              "rss_kib": 33680
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 5.029004417,
+          "processes": [
+            {
+              "cpu_reported_pct": 17.3,
+              "pid": 10810,
+              "rss_kib": 34736
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 6.033734,
+          "processes": [
+            {
+              "cpu_reported_pct": 20.0,
+              "pid": 10810,
+              "rss_kib": 36448
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 7.038712708,
+          "processes": [
+            {
+              "cpu_reported_pct": 22.0,
+              "pid": 10810,
+              "rss_kib": 37024
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 8.042950917,
+          "processes": [
+            {
+              "cpu_reported_pct": 23.6,
+              "pid": 10810,
+              "rss_kib": 37472
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 9.048299667,
+          "processes": [
+            {
+              "cpu_reported_pct": 22.0,
+              "pid": 10810,
+              "rss_kib": 38096
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 10.053036792,
+          "processes": [
+            {
+              "cpu_reported_pct": 20.2,
+              "pid": 10810,
+              "rss_kib": 38608
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 11.057183958,
+          "processes": [
+            {
+              "cpu_reported_pct": 24.3,
+              "pid": 10810,
+              "rss_kib": 39088
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 12.06199775,
+          "processes": [
+            {
+              "cpu_reported_pct": 22.5,
+              "pid": 10810,
+              "rss_kib": 39600
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 13.066330875,
+          "processes": [
+            {
+              "cpu_reported_pct": 23.6,
+              "pid": 10810,
+              "rss_kib": 40064
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 14.071453417,
+          "processes": [
+            {
+              "cpu_reported_pct": 17.0,
+              "pid": 10810,
+              "rss_kib": 40512
+            }
+          ]
+        },
+        {
+          "elapsed_seconds": 15.076322958,
+          "processes": [
+            {
+              "cpu_reported_pct": 18.4,
+              "pid": 10810,
+              "rss_kib": 40896
+            }
+          ]
+        }
+      ],
+      "max_in_flight": 871,
+      "omitted_samples": 0,
+      "operations": {
+        "im_delivery": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 5769.137875,
+          "min_ms": 59.701083000000004,
+          "p50_ms": 621.41225,
+          "p95_ms": 2759.1912079999997,
+          "p99_ms": 4090.3855829999998,
+          "passed": false,
+          "samples": 4000,
+          "statuses": {
+            "none": 4000
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_read": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 114.345375,
+          "min_ms": 52.989125,
+          "p50_ms": 60.260583,
+          "p95_ms": 70.670417,
+          "p99_ms": 83.729125,
+          "passed": true,
+          "samples": 4662,
+          "statuses": {
+            "200": 4662
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_retrieval": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 61.636917,
+          "min_ms": 1.0920420000000002,
+          "p50_ms": 2.9831250000000002,
+          "p95_ms": 7.588166999999999,
+          "p99_ms": 15.256958,
+          "passed": true,
+          "samples": 4810,
+          "statuses": {
+            "none": 4810
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_send": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 148.81008300000002,
+          "min_ms": 55.190957999999995,
+          "p50_ms": 63.188333,
+          "p95_ms": 78.843375,
+          "p99_ms": 96.284875,
+          "passed": true,
+          "samples": 4000,
+          "statuses": {
+            "201": 4000
+          },
+          "threshold_ms": 3000.0
+        },
+        "scenario_im": {
+          "enough_samples": true,
+          "error_rate": 0.0,
+          "error_rate_limit": 0.0,
+          "errors": 0,
+          "max_ms": 5828.598125,
+          "min_ms": 115.349333,
+          "p50_ms": 681.8199999999999,
+          "p95_ms": 2826.9779590000003,
+          "p99_ms": 4148.706792,
+          "passed": true,
+          "samples": 4000,
+          "statuses": {
+            "none": 4000
+          },
+          "threshold_ms": null
+        }
+      },
+      "outcome": "service_failed",
+      "passed": false,
+      "pending_at_window_end": 181,
+      "planned_sample_seconds": 20,
+      "progress": [
+        {
+          "completed": 0,
+          "in_flight": 832,
+          "seconds": 0.000367583,
+          "started": 1
+        },
+        {
+          "completed": 72,
+          "in_flight": 836,
+          "seconds": 1.000313375,
+          "started": 401
+        },
+        {
+          "completed": 290,
+          "in_flight": 837,
+          "seconds": 2.001098916,
+          "started": 801
+        },
+        {
+          "completed": 630,
+          "in_flight": 753,
+          "seconds": 3.000401416,
+          "started": 1201
+        },
+        {
+          "completed": 1021,
+          "in_flight": 664,
+          "seconds": 4.000286916,
+          "started": 1601
+        },
+        {
+          "completed": 1449,
+          "in_flight": 578,
+          "seconds": 5.000796041,
+          "started": 2001
+        },
+        {
+          "completed": 1957,
+          "in_flight": 444,
+          "seconds": 6.000298541,
+          "started": 2401
+        },
+        {
+          "completed": 2425,
+          "in_flight": 376,
+          "seconds": 7.000183,
+          "started": 2801
+        },
+        {
+          "completed": 2985,
+          "in_flight": 216,
+          "seconds": 8.000484375,
+          "started": 3201
+        },
+        {
+          "completed": 3416,
+          "in_flight": 185,
+          "seconds": 9.000292625,
+          "started": 3601
+        },
+        {
+          "completed": 3818,
+          "in_flight": 181,
+          "seconds": 10.000156875,
+          "started": 4000
+        }
+      ],
+      "sample_seconds": 10.000156875,
+      "scenario_completions_per_second": 381.7940106064586,
+      "scenario_error_rate": 0.0,
+      "scenario_errors": 0,
+      "scheduled_latency_passed": false,
+      "scheduled_to_complete_p50_ms": 682.4968329999999,
+      "scheduled_to_complete_p95_ms": 2827.50375,
+      "scheduled_to_complete_p99_ms": 4149.987375000001,
+      "scheduling_lag_max_ms": 5.060416,
+      "scheduling_lag_p95_ms": 1.427291,
+      "started_arrivals": 4000,
+      "started_at_unix_ms": 1795769771568,
+      "started_rate": 399.9937250984375,
+      "storage_http_put_rps": 0.0,
+      "storage_http_puts_started_in_window": 0,
+      "target_rate": 400.0,
+      "total_completed_including_warmup_and_drain": 6000,
+      "total_started_including_warmup": 6000,
+      "unit": "http_requests_per_second",
+      "warmup": {
+        "im_delivery": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 9374.884875,
+          "min_ms": 69.30320800000001,
+          "p50_ms": 1670.518167,
+          "p95_ms": 5666.3748749999995,
+          "p99_ms": 7640.617042,
+          "passed": false,
+          "samples": 2000,
+          "statuses": {
+            "none": 2000
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_read": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 157.980292,
+          "min_ms": 55.651041,
+          "p50_ms": 64.11470800000001,
+          "p95_ms": 94.73724999999999,
+          "p99_ms": 121.81150000000001,
+          "passed": true,
+          "samples": 1189,
+          "statuses": {
+            "200": 1189
+          },
+          "threshold_ms": 3000.0
+        },
+        "im_retrieval": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 192.27949999999998,
+          "min_ms": 2.0885830000000003,
+          "p50_ms": 5.063542,
+          "p95_ms": 19.994459,
+          "p99_ms": 53.168625,
+          "passed": true,
+          "samples": 1190,
+          "statuses": {
+            "none": 1190
+          },
+          "threshold_ms": 2000.0
+        },
+        "im_send": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 392.45725,
+          "min_ms": 56.153124999999996,
+          "p50_ms": 70.135125,
+          "p95_ms": 127.940584,
+          "p99_ms": 289.834292,
+          "passed": true,
+          "samples": 2000,
+          "statuses": {
+            "201": 2000
+          },
+          "threshold_ms": 3000.0
+        },
+        "scenario_im": {
+          "enough_samples": true,
+          "errors": 0,
+          "max_ms": 9433.711458,
+          "min_ms": 127.80070800000001,
+          "p50_ms": 1734.78575,
+          "p95_ms": 5724.850125,
+          "p99_ms": 7702.4646250000005,
+          "passed": true,
+          "samples": 2000,
+          "statuses": {
+            "none": 2000
+          },
+          "threshold_ms": null
+        }
+      },
+      "warmup_admission_drops": 0,
+      "warmup_fixture_drops": 0,
+      "warmup_passed": true,
+      "warmup_seconds": 5,
+      "websocket_disconnects": 0,
+      "websocket_reconnect_failures": 0
+    }
+  ],
+  "stop_reason": "service_failure_bracketed",
+  "validation_seconds": 20,
+  "websocket_disconnects": 0,
+  "websocket_reconnect_failures": 0,
+  "target_rate_unit": "scenario_starts_per_second"
+}

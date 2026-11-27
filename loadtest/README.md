@@ -163,7 +163,7 @@ hint 早于发送响应时，驱动在正文回读完成时冻结端到端耗时
 
 - 覆盖真实 Session/CSRF、HTTP API、OSS 签名上传和接收方 WebSocket；不覆盖浏览器渲染、页面文字、WAN 模拟、SMTP、支付/交付和数据库/Redis 内部指标。
 - 驱动不需要 DB/Redis/OSS AK，但目标环境必须已启动对应依赖；OSS 不可达会使发布场景失败，而不是被重试隐藏。
-- 单 worker 容量数据不能直接外推多 worker；历史 100 用户/400 混合场景数据也不代表 split 后的容量。
+- worker 的扩缩容观测以实测拓扑和负载组合为准。参见[性能与容量测试报告](../docs/design/test-cases/reports/performance-capacity/测试报告.md)。
 - v1/v2 清单只保证解析和旧环形交易回退；当前 seed/验收应使用 v3。
 - Session 过期或服务端返回 4401/4403 时驱动不会重新登录，会记录失败并停止该用户实时任务；长稳压测应保证会话有效期覆盖整轮。
 - 交易完成后商品自动下架，驱动用 manifest `product_version` 重新上架；被编辑过 `content_version` 的商品不能直接复用该固定版本。
