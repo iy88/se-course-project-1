@@ -1,0 +1,26 @@
+A17 relisting and independent-history verification
+
+Environment: local PostgreSQL development database, read-only queries at
+2026-11-27 19:04:34 +08:00.
+
+Product facts:
+  product #6  title=A-RUN03-MAIN-台灯-01-new
+              lifecycle_state=in_trade
+              occupied_by_trade_id=61
+              content_version=3
+
+Trade facts:
+  trade #9   status=completed  terminal_reason=completed
+             ended_at=2026-11-27 16:24:21.481375+08
+  trade #61  status=in_progress
+
+Conversation facts:
+  trade_conversation #2   trade_id=9   archived_at=2026-11-27 16:24:21.492205+08
+  trade_conversation #11  trade_id=61  archived_at=NULL
+
+Assertions:
+  - Completed trade #9 remains unchanged after product #6 is relisted.
+  - The buyer's new purchase request created trade #61 instead of reusing trade #9.
+  - Accepting trade #61 set product #6 to in_trade with occupancy held by trade #61.
+  - Old trade conversation #2 remains archived and read-only.
+  - New trade conversation #11 is independent and remains open.

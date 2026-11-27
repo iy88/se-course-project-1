@@ -7,14 +7,17 @@
  * through the case screen and are not listed here. The pane works both as the
  * narrow-screen page body and as the left column of the wide layout.
  */
-import { onBeforeUnmount, onMounted } from "vue";
+import { onBeforeUnmount, onMounted, shallowReactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { listConversations } from "../../api/conversations";
 import type { ConversationBranch, ConversationEntry, ConversationKind } from "../../api/contracts";
+import { getTrade } from "../../api/trades";
 import { usePagedList } from "../../app/async";
 import { conversationKey, rememberPeer } from "../../app/conversation-directory";
 import { formatRelative, truncate } from "../../app/format";
 import { registerSnapshotReloader, subscribeRealtime } from "../../app/realtime";
+import { session } from "../../app/session";
+import { cachedTradeTitle, loadTradeTitles } from "../../app/trade-title-cache";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
@@ -27,6 +30,23 @@ const router = useRouter();
 const list = usePagedList<ConversationEntry>((page, pageSize, signal) =>
   listConversations(page, pageSize, signal),
 );
+
+const tradeProductTitles = shallowReactive(new Map<string, string | null>());
+const metadataRequests = new AbortController();
+
+function tradeProductTitle(branch: ConversationBranch): string | null | undefined {
+  return cachedTradeTitle(tradeProductTitles, session.accountId.value, branch);
+}
+
+watch([list.items, session.accountId], ([entries, accountId]) => {
+  void loadTradeTitles(
+    tradeProductTitles,
+    accountId,
+    entries.flatMap((entry) => entry.branches),
+    async (id, signal) => (await getTrade(id, signal)).product.title ?? null,
+    metadataRequests.signal,
+  );
+});
 
 const activeKey = () => {
   const kind = String(route.params.kind ?? "");
@@ -87,6 +107,7 @@ onBeforeUnmount(() => {
   clearTimeout(refreshTimer);
   pendingPage = null;
   list.cancel();
+  metadataRequests.abort();
 });
 
 function branchLabel(branch: ConversationBranch): string {
@@ -156,6 +177,13 @@ function remember(entry: ConversationEntry, branch: ConversationBranch): void {
                   <span class="inline">
                     <span class="chip">{{ branchLabel(branch) }}</span>
                     <span v-if="branch.archived_at" class="state state--neutral">已归档</span>
+                  </span>
+                  <span
+                    v-if="tradeProductTitle(branch)"
+                    class="branch__product"
+                    :title="tradeProductTitle(branch) ?? undefined"
+                  >
+                    {{ tradeProductTitle(branch) }}
                   </span>
                   <span class="branch__preview muted clamp-1">
                     {{
@@ -253,6 +281,14 @@ function remember(entry: ConversationEntry, branch: ConversationBranch): void {
   flex-direction: column;
   gap: 0.125rem;
   min-inline-size: 0;
+}
+
+.branch__product {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .branch__preview {

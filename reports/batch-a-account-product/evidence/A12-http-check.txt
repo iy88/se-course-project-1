@@ -1,0 +1,24 @@
+A12 claimed-review withdrawal HTTP verification
+
+Date: 2026-11-27 19:26:54 +08:00
+Environment: local PostgreSQL and Redis through the backend integration profile.
+
+Test:
+  S2ProductionReviewIT#realSessionsCanRejectResubmitApproveAndReadTheSellerNotifications
+
+Command:
+  mvn -B -f backend/pom.xml -Pintegration -pl backend-app -am verify
+    -Dit.envFile=/Users/iy88/Work/SE/project1/backend/.env.dev
+    -Dit.test=S2ProductionReviewIT#realSessionsCanRejectResubmitApproveAndReadTheSellerNotifications
+    -Dfailsafe.failIfNoSpecifiedTests=false
+
+Result:
+  BUILD SUCCESS
+  Failsafe: 1 test, 0 failures, 0 errors, 0 skipped
+
+HTTP assertion:
+  POST /products/{id}/withdrawal after manager claim returns HTTP 409.
+  error.code=REVIEW_ALREADY_CLAIMED
+
+The browser evidence A12-05/A12-06 independently records HTTP 409 and the
+visible message “审核已被管理员认领，不能撤回商品”.

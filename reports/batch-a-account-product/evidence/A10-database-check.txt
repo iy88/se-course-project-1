@@ -1,0 +1,41 @@
+RUN-03 / A10 database verification
+
+Captured: 2026-11-27 15:45 CST (UTC+8)
+Application SHA: 665dab5244fe740a1d257af48f58bf63125d2fb3
+Database: campus_market_v2_dev
+Access: read-only SQL
+
+Product
+- product_id=6
+- original title=A-RUN03-MAIN-台灯-01
+- current title=A-RUN03-MAIN-台灯-01-new
+- content_version=2
+- The product was public and displayed "在售" in the after-edit screenshot.
+
+Edit history
+- edit_id=7
+- operator=seller account_id=2
+- edit_kind=content_edit
+- edited_at=2026-11-27 15:37:03.854947+08
+- before_content.title=A-RUN03-MAIN-台灯-01
+- after_content.title=A-RUN03-MAIN-台灯-01-new
+- before_content.image_file_ids=[17]
+- after_content.image_file_ids=[22]
+- description and price_cents stayed unchanged (aaa, 11100)
+
+Pending requests at edit time
+- trade_id=9, buyer_id=3 (A01-买方A), seller_id=2, request created 15:35:55
+- trade_id=10, buyer_id=4 (A01-买方B), seller_id=2, request created 15:36:20
+- trade_state_history for #9 and #10 contains only request.create rows before 15:38:41,
+  so both requests were still pending acceptance when edit_id=7 was saved at 15:37:03.
+
+Buyer notifications
+- notification_id=81, recipient=3 (A01-买方A), event_type=trade.product_updated,
+  source_id=9, occurred_at=15:37:03.854947+08
+- notification_id=82, recipient=4 (A01-买方B), event_type=trade.product_updated,
+  source_id=10, occurred_at=15:37:03.854947+08
+
+Review independence
+- product_id=6 still has exactly one product_audit row:
+  audit_id=9, case_id=11, sequence_no=1, status=passed.
+- No additional audit was created by the content edit.

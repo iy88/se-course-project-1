@@ -1,0 +1,6 @@
+Source: supplied mailbox screenshot, preserved locally as smtp-probe-original.png.
+Observed time: 2026-11-26 19:04 (UTC+08:00).
+Subject: [Project1 S1] SMTP probe 9acc09bf-edcb-4947-b3ad-41dcd3a37b58
+Probe identifier agrees with the message body and server log.
+Original SHA-256: d469da003a5d8cd1e1f9fb598c328ac1f8cd19e98fc7c40816b3302ff99e5136
+Sender and recipient addresses omitted from this transcript.

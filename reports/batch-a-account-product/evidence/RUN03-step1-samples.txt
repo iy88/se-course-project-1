@@ -1,0 +1,31 @@
+RUN-03 / Step 1 sample verification
+
+Captured: 2026-11-27 16:02 CST (UTC+8)
+Application SHA: 665dab5244fe740a1d257af48f58bf63125d2fb3
+Database: campus_market_v2_dev
+Access: read-only SQL
+
+Categories
+- category_id=8, name=RUN03-CAT-A, active
+- category_id=9, name=RUN03-CAT-B, active
+
+Samples
+| Alias | Product | Audit | Case | Content version | Verified state |
+|---|---:|---:|---:|---:|---|
+| P-MAIN | 6 | 9 | 11 | 2 | audit passed; later entered in_trade through A15 |
+| P-OFF | 7 | 10 | 12 | 1 | audit passed; currently public |
+| P-RESTRICTED | 8 | 11 | 13 | 1 | audit passed; currently public |
+| P-TERM | 9 | 12 | 14 | 1 | audit passed; currently public |
+| P-UNCLAIMED | 10 | 13 | 15 | 1 | currently pending_review |
+| P-CLAIMED | 11 | 14 | 16 | 1 | pending at 15:54:42; passed and public at 15:55:00 |
+
+Evidence mapping
+- RUN03-step1-01-category.jpg: RUN03-CAT-A/B management page.
+- RUN03-step1-02-main.jpg: product 6 pending review with original title and image.
+- RUN03-step1-03-off-shelf.jpg: product 7 after approval.
+- RUN03-step1-04-restricted.jpg: product 8 after approval.
+- RUN03-step1-05-term.jpg: product 9 after approval.
+- RUN03-step1-06-unclaimed-pending.jpg: product 10 pending review.
+- RUN03-step1-07-claimed-pending.jpg: product 11 pending review.
+- RUN03-step1-08-claimed-approved.jpg: product 11 passed and public.
+- A14-01-pending-public-search.jpg: public search returns no result while the P-MAIN title was still the pre-edit title.

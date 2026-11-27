@@ -1,0 +1,22 @@
+A16R negotiated-cancellation integration verification
+
+Date: 2026-11-27 18:48 +08:00
+Base: test/evidence-account-product-iy88 synchronized with main merge 1f555002
+Test: S4ProductionEnforcementIT#cancellationKeepsProductPublicAndCreatesAnIndependentTradeConversation
+Database: local PostgreSQL development database
+
+Command:
+  mvn -B -f backend/pom.xml -Pintegration -pl backend-app -am verify
+    -Dit.envFile=/Users/iy88/Work/SE/project1/backend/.env.dev
+    -Dit.test=S4ProductionEnforcementIT#cancellationKeepsProductPublicAndCreatesAnIndependentTradeConversation
+    -Dfailsafe.failIfNoSpecifiedTests=false
+
+Result:
+  BUILD SUCCESS
+  Failsafe: 1 test, 0 failures, 0 errors, 0 skipped
+
+Assertions covered:
+  - Negotiated cancellation returns the product to public and clears occupancy.
+  - The former off-shelf-and-relist setup is no longer part of the test.
+  - A new purchase request creates a different trade while the terminated trade remains unchanged.
+  - The old conversation is archived and the new conversation remains open.

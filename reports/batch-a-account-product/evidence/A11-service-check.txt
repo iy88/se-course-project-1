@@ -1,0 +1,19 @@
+A11 in-trade edit rejection verification
+
+Date: 2026-11-27 19:26:54 +08:00
+
+Automated assertion:
+  ProductServiceLifecycleTests#editingAProductInTradeIsRejectedWithoutHistoryOrNotice
+
+Result:
+  BUILD SUCCESS during the targeted S2ProductionReviewIT Maven run; all
+  reactor Surefire and Failsafe tests completed with zero failures or errors.
+
+Assertions covered:
+  - ProductService rejects a seller edit while the product is in_trade.
+  - No ProductEditHistory row is created for the rejected edit.
+  - No trade-product edit notification is emitted.
+  - Product content_version is not changed by the rejected edit.
+
+The manual page A11-01 independently shows that the seller UI exposes no edit
+action while the product is in trade.

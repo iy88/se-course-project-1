@@ -39,6 +39,12 @@ public final class CasePorts {
             return Optional.empty();
         }
 
+        default List<DispositionProduct> dispositionProducts(CaseRecords.Facts facts) {
+            return List.of();
+        }
+
+        record DispositionProduct(long id, String title) {}
+
         record ReportProduct(long id, String title, String description) {}
 
         /** Buyer and seller of one trade, or an empty set when it does not exist. */
