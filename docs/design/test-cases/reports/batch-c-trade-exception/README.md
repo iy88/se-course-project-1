@@ -13,7 +13,7 @@ Version-Datetime: 2026-11-28T00:05:00+08:00
 | 负责人／审查人 | 孙含佳（`shjj11`）／袁尚峰（`iy88`） |
 | 用户故事 | US-05、US-06、US-14 |
 | 执行项 | C01—C18（共 18 项） |
-| 代码版本 | 被测代码 `main@6296eb4e`（含 #169 `07f0e42f` 解冻执行器、#184 `2fcdde63` 完成原因文案）；首轮执行基于 `main@5bbe4f0e` 系列；本分支证据提交在 `9f721206` 之后按第二轮复测补齐 |
+| 代码版本 | 被测代码 `main@6296eb4e`（含 #169 `07f0e42f` 解冻执行器、#184 `2fcdde63` 完成原因文案）；首轮执行基于 `main@5bbe4f0e` 系列；证据提交 `c294b8d4`（第二轮复测，基于 `9f721206`） |
 | 执行日期 | 2026-11-26 至 2026-11-27 首轮；2026-11-27 23:10—23:55 在 `main@6296eb4e` 完成第二轮复测（部署环境见 `evidence/RUN-C3/RUN-C3-retest-2nd.md`） |
 | 环境 | 用户端 `http://127.0.0.1:3000`；管理端 `http://127.0.0.1:3001`；API `http://127.0.0.1:18081`（复测版本为 `main@6296eb4e` 构建的 `backend-app-0.0.1-SNAPSHOT.jar`，进程 `infrastructure`／`delivery-scheduler`／`delivery-worker`）；PostgreSQL 5432（库 `project1_accept`，容器 `project1-postgres`，复测前补应用迁移 V25_147、V26—V29）；Redis 6379（命名空间 `project1:accept:s4`） |
 | 浏览器 | Microsoft Edge 无头模式（CDP 驱动），视口 1440×1000—1440×1200；每个角色独立用户目录（买方 C／买方 A／卖方 B／管理员） |
