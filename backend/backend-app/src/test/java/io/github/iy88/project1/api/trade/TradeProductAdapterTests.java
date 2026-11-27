@@ -2,12 +2,18 @@ package io.github.iy88.project1.api.trade;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.iy88.project1.core.BusinessError;
+import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.application.ProductTradeStore;
 import io.github.iy88.project1.trade.application.TradePorts;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -52,6 +58,17 @@ class TradeProductAdapterTests {
         when(store.read(5)).thenReturn(Optional.of(product("off_shelf")));
         assertThat(adapter.visibleSummary(5, 3)).isEmpty();
         assertThat(adapter.visibleSummary(5, 9)).isPresent();
+    }
+
+    @Test
+    void publicReleaseDoesNotUseTheOffShelfReleasePath() {
+        var transaction = mock(WriteTransaction.class);
+        var state = state("in_trade", 77L, 9);
+
+        adapter.releaseToPublic(transaction, state, 77, "cancelled");
+
+        verify(store).releaseToPublic(eq(5L), eq(77L), any(Instant.class));
+        verify(store, never()).release(eq(5L), eq(77L), any(Instant.class));
     }
 
     private static ProductTradeStore.TradeProduct product(String lifecycle) {

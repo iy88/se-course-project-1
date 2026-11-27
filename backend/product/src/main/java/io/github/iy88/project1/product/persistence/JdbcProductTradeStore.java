@@ -81,6 +81,20 @@ public class JdbcProductTradeStore implements ProductTradeStore {
         }
     }
 
+    @Override
+    public void releaseToPublic(long productId, long tradeId, Instant now) {
+        requireTransaction();
+        int changed = jdbc.sql("""
+                        update product
+                           set lifecycle_state = 'public', occupied_by_trade_id = null, updated_at = ?
+                         where product_id = ? and lifecycle_state = 'in_trade' and occupied_by_trade_id = ?
+                        """)
+                .param(at(now)).param(productId).param(tradeId).update();
+        if (changed == 0) {
+            throw new BusinessError("OCCUPANCY_NOT_HELD", 409, "交易未持有商品占用");
+        }
+    }
+
     private TradeProduct row(ResultSet row, int index) throws SQLException {
         return new TradeProduct(row.getLong("product_id"), row.getLong("seller_account_id"),
                 row.getInt("content_version"), row.getString("lifecycle_state"),
