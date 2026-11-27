@@ -79,7 +79,7 @@ class TradeNotificationConfiguration {
                 case "trade.cancellation_withdrawn" -> new TradeNotice("取消申请已撤回",
                         "对方撤回了取消交易的申请。你可以前往交易详情查看当前进度。");
                 case "trade.terminated" -> new TradeNotice("交易已取消",
-                        "这笔交易已取消，关联商品已下架。你可以前往交易详情查看结束记录。");
+                        "这笔交易已终止。你可以前往交易详情查看结束记录。");
                 case "trade.frozen" -> new TradeNotice("交易已冻结",
                         "这笔交易进入冻结处理。你可以前往交易详情查看冻结信息及当前可用操作。");
                 case "trade.unfrozen" -> new TradeNotice("一项交易冻结已解除",

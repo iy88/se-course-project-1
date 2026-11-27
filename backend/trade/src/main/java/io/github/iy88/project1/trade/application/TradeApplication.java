@@ -504,7 +504,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         endWait(transaction, trade.id(), WaitEndReason.TERMINATED, now);
                         endFreezes(transaction, trade.id(), now);
                         repository.terminateOpenDisputes(trade.id(), now);
-                        product.release(transaction, state, trade.id(), "cancelled");
+                        product.releaseToPublic(transaction, state, trade.id(), "cancelled");
                     historyCancellation(transaction, trade, terminated, "cancellation.request", trade.actorKind(actor),
                         actor, reason, null, null, proposalId, null, requestEvent, now);
                         conversations.append(transaction, conversationId, requestEvent, "cancellation_requested",
@@ -517,7 +517,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         long terminatedHistory = historyCancellation(transaction, trade, terminated, "trade.terminated",
                             ActorKind.SYSTEM, null, reason, null, null, proposalId, decisionId, terminatedEvent, now);
                         conversations.append(transaction, conversationId, terminatedEvent, "trade_terminated",
-                                "交易已终止，商品已下架。如需继续出售，可前往商品详情重新上架。", new ResourceRef("trade_transition", terminatedHistory));
+                                "交易已终止，商品仍保持上架。", new ResourceRef("trade_transition", terminatedHistory));
                         notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()),
                                 "trade.terminated", terminatedEvent);
                         archive(transaction, conversationId, trade.id(), "cancelled");
@@ -585,7 +585,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         endWait(transaction, trade.id(), WaitEndReason.TERMINATED, now);
                         endFreezes(transaction, trade.id(), now);
                         repository.terminateOpenDisputes(trade.id(), now);
-                        product.release(transaction, state, trade.id(), "cancelled");
+                        product.releaseToPublic(transaction, state, trade.id(), "cancelled");
                     historyCancellation(transaction, trade, terminated, "cancellation.accept", trade.actorKind(actor),
                         actor, null, null, null, proposal.id(), decisionId, decisionEvent, now);
                         conversations.append(transaction, conversationId, decisionEvent, "cancellation_accepted",
@@ -594,7 +594,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         long terminatedHistory = historyCancellation(transaction, trade, terminated, "trade.terminated",
                             ActorKind.SYSTEM, null, null, null, null, proposal.id(), decisionId, terminatedEvent, now);
                         conversations.append(transaction, conversationId, terminatedEvent, "trade_terminated",
-                                "交易已终止，商品已下架。如需继续出售，可前往商品详情重新上架。", new ResourceRef("trade_transition", terminatedHistory));
+                                "交易已终止，商品仍保持上架。", new ResourceRef("trade_transition", terminatedHistory));
                         notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.terminated",
                                 terminatedEvent);
                         archive(transaction, conversationId, trade.id(), "cancelled");

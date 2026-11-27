@@ -35,4 +35,7 @@ public interface ProductTradeStore {
 
     /** Clears the occupancy held by {@code tradeId} and puts the product off shelf. */
     void release(long productId, long tradeId, Instant now);
+
+    /** Clears the occupancy held by {@code tradeId} and returns the product to {@code public}. */
+    void releaseToPublic(long productId, long tradeId, Instant now);
 }
