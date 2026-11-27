@@ -23,6 +23,7 @@ import {
   type PendingCaseAppeal,
 } from "../api/cases";
 import { AbortedError } from "../api/errors";
+import { dispositionTargets, resolveDispositionTarget } from "../app/disposition-targets";
 import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { decisionKindLabels, todoKindLabels } from "../app/labels";
@@ -146,31 +147,7 @@ function accountLabel(account: CaseRelatedAccount): string {
 }
 
 const dispositionChoices = computed(() =>
-  enforcementOptions.map(({ target }) => {
-    const disposition = detail.value?.disposition_targets;
-    const reported = reportedObject.value;
-    if (target === "account") {
-      return eligibleAccounts.value.map((account) => ({
-        id: account.account_id,
-        label: accountLabel(account),
-      }));
-    }
-    if (target === "product") {
-      const products =
-        disposition?.products ??
-        (reported?.target_type === "product"
-          ? [{ id: reported.target_id, title: reported.product?.title ?? "商品" }]
-          : []);
-      return products.map((product) => ({
-        id: product.id,
-        label: `${product.title} #${product.id}`,
-      }));
-    }
-    const subject = disposition ?? reported;
-    return subject?.target_type === target
-      ? [{ id: subject.target_id, label: `${reportedKinds[target]} #${subject.target_id}` }]
-      : [];
-  }),
+  enforcementOptions.map(({ target }) => dispositionTargets(detail.value, target, accountLabel)),
 );
 
 function accountDisplayName(accountId: string): string {
@@ -528,8 +505,7 @@ function submitDecision(): void {
     for (const entry of instructions.value) {
       const option = enforcementOptions[entry.option];
       const choices = dispositionChoices.value[entry.option];
-      const target =
-        choices.length === 1 ? choices[0] : choices.find(({ id }) => id === entry.targetId);
+      const target = resolveDispositionTarget(choices, entry.targetId);
       if (!target) {
         writeError.value = "请选择有效的处置对象。";
         return;
