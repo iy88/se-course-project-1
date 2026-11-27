@@ -39,40 +39,52 @@ final class PostgresMaintenance {
         return "PostgreSQL " + target.target() + " (owner " + owner + ", app " + appUser + ")";
     }
 
+    /** Owner connection used by the seed commands after the target emptiness check. */
+    Connection openOwner() throws SQLException {
+        Connection connection = connect(target.jdbcUrl(), target.database(), owner, ownerPassword);
+        if (!owner.equals(databaseOwner(connection))) {
+            connection.close();
+            throw new IllegalStateException("The configured owner does not own the target database.");
+        }
+        return connection;
+    }
+
     long createManager(String email, String displayName, String passwordHash, String configVersion)
             throws SQLException {
-        try (Connection connection = connect(target.jdbcUrl(), target.database(), owner, ownerPassword)) {
-            if (!owner.equals(databaseOwner(connection))) {
-                throw new IllegalStateException("The configured owner does not own the target database.");
-            }
-            // A single statement makes account creation and its audit entry atomic.
-            try (var statement = connection.prepareStatement("""
-                    WITH created AS (
-                        INSERT INTO public.account (email, display_name, password_hash, role, created_at)
-                        VALUES (?, ?, ?, 'manager', statement_timestamp())
-                        ON CONFLICT (public.normalize_email(email)) DO NOTHING
-                        RETURNING account_id
-                    )
-                    INSERT INTO public.audit_record (request_id, operation_id, actor_kind, actor_id,
-                                                     action, target_type, target_id, facts, config_version)
-                    SELECT ?, ?, 'system', 'maintenance:' || current_user,
-                           'account.manager_created', 'account', account_id, '{"role":"manager"}'::jsonb, ?
-                    FROM created
-                    RETURNING target_id
-                    """)) {
-                statement.setString(1, email);
-                statement.setString(2, displayName);
-                statement.setString(3, passwordHash);
-                UUID operationId = UUID.randomUUID();
-                statement.setObject(4, operationId);
-                statement.setObject(5, operationId);
-                statement.setString(6, configVersion);
-                try (var rows = statement.executeQuery()) {
-                    if (!rows.next()) {
-                        throw new IllegalStateException("An account already exists for this email.");
-                    }
-                    return rows.getLong(1);
+        try (Connection connection = openOwner()) {
+            return createManager(connection, email, displayName, passwordHash, configVersion);
+        }
+    }
+
+    static long createManager(Connection connection, String email, String displayName, String passwordHash,
+                              String configVersion) throws SQLException {
+        // A single statement makes account creation and its audit entry atomic.
+        try (var statement = connection.prepareStatement("""
+                WITH created AS (
+                    INSERT INTO public.account (email, display_name, password_hash, role, created_at)
+                    VALUES (?, ?, ?, 'manager', statement_timestamp())
+                    ON CONFLICT (public.normalize_email(email)) DO NOTHING
+                    RETURNING account_id
+                )
+                INSERT INTO public.audit_record (request_id, operation_id, actor_kind, actor_id,
+                                                 action, target_type, target_id, facts, config_version)
+                SELECT ?, ?, 'system', 'maintenance:' || current_user,
+                       'account.manager_created', 'account', account_id, '{"role":"manager"}'::jsonb, ?
+                FROM created
+                RETURNING target_id
+                """)) {
+            statement.setString(1, email);
+            statement.setString(2, displayName);
+            statement.setString(3, passwordHash);
+            UUID operationId = UUID.randomUUID();
+            statement.setObject(4, operationId);
+            statement.setObject(5, operationId);
+            statement.setString(6, configVersion);
+            try (var rows = statement.executeQuery()) {
+                if (!rows.next()) {
+                    throw new IllegalStateException("An account already exists for this email.");
                 }
+                return rows.getLong(1);
             }
         }
     }

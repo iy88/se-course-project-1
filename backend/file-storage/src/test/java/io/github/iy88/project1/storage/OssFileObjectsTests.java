@@ -1,11 +1,13 @@
 package io.github.iy88.project1.storage;
 
 import com.aliyun.sdk.service.oss2.OSSClient;
+import com.aliyun.sdk.service.oss2.credentials.Credentials;
 import com.aliyun.sdk.service.oss2.models.GetObjectRequest;
 import com.aliyun.sdk.service.oss2.models.GetObjectResult;
 import com.aliyun.sdk.service.oss2.models.HeadObjectRequest;
 import com.aliyun.sdk.service.oss2.models.HeadObjectResult;
 import java.io.ByteArrayInputStream;
+import java.time.Instant;
 import java.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -38,6 +40,20 @@ class OssFileObjectsTests {
         assertThatThrownBy(() -> objects.delete(new OssFileObjects.Location(image.bucket(), "project1/dev/probe/external")))
                 .isInstanceOf(OssFileObjects.Failure.class)
                 .hasMessage("INVALID_CONFIGURATION");
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void signsAnUploadWithoutRunningDeploymentBucketChecks() {
+        var location = objects.newLocation(FilePurpose.PRODUCT_IMAGE);
+        var signedAt = Instant.parse("2026-01-01T00:00:00Z");
+
+        var form = objects.signUpload(location, "cn-hangzhou", new Credentials("key-id", "secret"),
+                signedAt, signedAt.plusSeconds(600), 1024, "image/jpeg");
+
+        assertThat(form.url()).hasToString("https://v2-dev-fixture.oss-cn-hangzhou.aliyuncs.com/");
+        assertThat(form.fields()).containsEntry("key", location.key());
+        assertThat(form.fields()).containsKeys("policy", "x-oss-signature");
         verifyNoInteractions(client);
     }
 

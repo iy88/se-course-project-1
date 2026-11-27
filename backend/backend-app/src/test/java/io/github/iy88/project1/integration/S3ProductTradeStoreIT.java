@@ -63,7 +63,7 @@ class S3ProductTradeStoreIT {
     }
 
     @Test
-    void occupancyIsAcquiredByOneConcurrentTradeAndReleasedOffShelf() throws Exception {
+    void occupancyIsAcquiredByOneConcurrentTradeAndReleasedByEndState() throws Exception {
         long seller = account("seller");
         long buyerOne = account("buyer-one");
         long buyerTwo = account("buyer-two");
@@ -107,6 +107,13 @@ class S3ProductTradeStoreIT {
             var released = store.read(product).orElseThrow();
             assertThat(released.lifecycleState()).isEqualTo("off_shelf");
             assertThat(released.occupiedByTradeId()).isNull();
+
+            long publicProduct = product(seller, category);
+            transaction.executeWithoutResult(status -> store.acquire(publicProduct, tradeOne, Instant.now()));
+            transaction.executeWithoutResult(status -> store.releaseToPublic(publicProduct, tradeOne, Instant.now()));
+            var publicAgain = store.read(publicProduct).orElseThrow();
+            assertThat(publicAgain.lifecycleState()).isEqualTo("public");
+            assertThat(publicAgain.occupiedByTradeId()).isNull();
         } finally {
             threads.shutdownNow();
         }

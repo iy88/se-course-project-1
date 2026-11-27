@@ -705,11 +705,38 @@ class TradeLifecycleIT {
         assertThat(terminated.data().path("trade").path("status").stringValue()).isEqualTo("terminated");
         assertThat(terminated.data().path("trade").path("terminal_reason").stringValue()).isEqualTo("cancelled");
         assertThat(ports.occupancy(product)).isNull();
+        assertThat(ports.read(product).orElseThrow().lifecycleState()).isEqualTo("on_sale");
         assertThat(ports.archived(tradeId)).isTrue();
         assertThat(db.sql("SELECT status FROM trade_dispute WHERE id = ?").param(secondDisputeId)
                 .query(String.class).single()).isEqualTo("terminated");
         assertThat(db.sql("SELECT status FROM trade_dispute WHERE id = ?").param(disputeId)
                 .query(String.class).single()).isEqualTo("resolved");
+
+        var reapplied = trades.createPurchaseRequest(account(BUYER_ONE), "cancel-reapply-" + RUN,
+                new TradeCommands.CreatePurchaseRequest(product, null, 7));
+        long reappliedId = Long.parseLong(reapplied.data().path("id").stringValue());
+        assertThat(reappliedId).isNotEqualTo(tradeId);
+        assertThat(db.sql("SELECT status FROM trade WHERE id = ?").param(tradeId)
+                .query(String.class).single()).isEqualTo("terminated");
+        assertThat(db.sql("SELECT status FROM trade WHERE id = ?").param(reappliedId)
+                .query(String.class).single()).isEqualTo("pending_acceptance");
+    }
+
+    @Test
+    void directCancellationLeavesTheProductPublic() {
+        long product = product(SELLER);
+        long tradeId = create(product, BUYER_ONE);
+        var accepted = trades.accept(account(SELLER), "direct-cancel-accept-" + RUN,
+                new TradeCommands.Versioned(tradeId, 1));
+        int version = accepted.data().path("version").asInt();
+
+        var cancelled = trades.proposeCancellation(account(BUYER_ONE), "direct-cancel-" + RUN,
+                new TradeCommands.ProposeCancellation(tradeId, "changed plans", version));
+
+        assertThat(cancelled.data().path("mode").stringValue()).isEqualTo("direct");
+        assertThat(cancelled.data().path("trade").path("status").stringValue()).isEqualTo("terminated");
+        assertThat(ports.occupancy(product)).isNull();
+        assertThat(ports.read(product).orElseThrow().lifecycleState()).isEqualTo("on_sale");
     }
 
     @Test
@@ -1066,9 +1093,13 @@ class TradeLifecycleIT {
         private TradePorts.ProductState withProductWrites(TradePorts.ProductState state) {
             var writes = lastProductWrite(state.productId());
             boolean released = writes.isPresent() && "fixture.product.release".equals(writes.orElseThrow().action());
-            Long holder = released ? null : writes.map(ProductWrite::tradeId).orElse(null);
+            boolean releasedToPublic = writes.isPresent()
+                    && "fixture.product.release_to_public".equals(writes.orElseThrow().action());
+            Long holder = released || releasedToPublic ? null : writes.map(ProductWrite::tradeId).orElse(null);
+            String lifecycle = released ? "off_shelf"
+                    : releasedToPublic ? "on_sale" : state.lifecycleState();
             return new TradePorts.ProductState(state.productId(), state.sellerId(), state.contentVersion(),
-                    released ? "off_shelf" : state.lifecycleState(), holder, state.title(), state.description(),
+                    lifecycle, holder, state.title(), state.description(),
                     state.priceCents(), state.categoryNames(), state.imageFileIds());
         }
 
@@ -1079,7 +1110,9 @@ class TradeLifecycleIT {
         private Optional<ProductWrite> lastProductWrite(long productId) {
             return db.sql("""
                     SELECT action, target_id FROM audit_record
-                    WHERE target_type = 'trade' AND action IN ('fixture.product.acquire', 'fixture.product.release')
+                    WHERE target_type = 'trade' AND action IN (
+                        'fixture.product.acquire', 'fixture.product.release',
+                        'fixture.product.release_to_public')
                         AND facts ->> 'product_id' = ?
                     ORDER BY audit_id DESC LIMIT 1
                     """).param(Long.toString(productId))
@@ -1115,6 +1148,15 @@ class TradeLifecycleIT {
                 throw new BusinessError("OCCUPANCY_NOT_HELD", 409, "交易未持有商品占用");
             }
             writeProduct(transaction, "fixture.product.release", state.productId(), tradeId);
+        }
+
+        @Override
+        public void releaseToPublic(WriteTransaction transaction, TradePorts.ProductState state, long tradeId,
+                                    String reason) {
+            if (state.occupancyTradeId() == null || state.occupancyTradeId() != tradeId) {
+                throw new BusinessError("OCCUPANCY_NOT_HELD", 409, "交易未持有商品占用");
+            }
+            writeProduct(transaction, "fixture.product.release_to_public", state.productId(), tradeId);
         }
 
         private void writeProduct(WriteTransaction transaction, String action, long productId, long tradeId) {
