@@ -22,7 +22,13 @@ describe("trade conversation title cache", () => {
       assert.equal(receivedSignal, signal);
       return "Book";
     };
-    const first = loadTradeTitles(cache, "1", [branch, duplicate, chat, invalid], fetchTitle, signal);
+    const first = loadTradeTitles(
+      cache,
+      "1",
+      [branch, duplicate, chat, invalid],
+      fetchTitle,
+      signal,
+    );
     const second = loadTradeTitles(cache, "1", [branch], fetchTitle, signal);
     await Promise.all([first, second]);
     await loadTradeTitles(cache, "1", [branch], fetchTitle, signal);
