@@ -22,7 +22,7 @@ import { createPurchaseRequest } from "../../api/trades";
 import type { ProductDetail } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
 import { formatCents, formatDateTime, formatRelative } from "../../app/format";
-import { productLifecycleLabels, productLifecycleTones } from "../../app/labels";
+import { productLifecycleLabels, productLifecycleTones, reviewReasonLabel } from "../../app/labels";
 import { IdempotencyKeys } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
 import { notify } from "../../app/toast";
@@ -451,8 +451,16 @@ async function confirmOffShelf(): Promise<void> {
                       · {{ formatDateTime(product.data.value.latest_review.decided_at) }}
                     </span>
                   </span>
-                  <span v-if="product.data.value.latest_review.reason" class="banner banner--warn">
-                    拒绝原因：{{ product.data.value.latest_review.reason }}
+                  <span
+                    v-if="product.data.value.latest_review.reason"
+                    class="banner"
+                    :class="{
+                      'banner--warn': product.data.value.latest_review.status === 'rejected',
+                    }"
+                  >
+                    {{ reviewReasonLabel(product.data.value.latest_review.status) }}：{{
+                      product.data.value.latest_review.reason
+                    }}
                   </span>
                 </dd>
               </template>
