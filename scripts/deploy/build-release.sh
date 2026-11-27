@@ -25,7 +25,13 @@ payload="$build_dir/payload"
 artifacts="$build_dir/artifacts"
 mkdir -p "$source_dir" "$payload/backend" "$artifacts"
 
-git -C "$repo" archive "$revision" -- .node-version backend frontend scripts/deploy | tar -xf - -C "$source_dir"
+# Use a separate index to export the committed release paths without fetching docs blobs.
+(
+    export GIT_INDEX_FILE="$build_dir/source.index"
+    git -C "$repo" read-tree "$revision"
+    git -C "$repo" ls-files -z -- .node-version backend frontend scripts/deploy |
+        git -C "$repo" checkout-index -z --stdin --prefix="$source_dir/"
+)
 
 (
     cd "$source_dir/backend"

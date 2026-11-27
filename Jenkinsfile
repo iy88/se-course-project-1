@@ -23,14 +23,17 @@ pipeline {
         stage('Checkout') {
             steps {
                 deleteDir()
-                script {
-                    checkout scm
-                    env.RELEASE_REVISION = sh(script: '''
+                sshagent(credentials: ['project1-v2-gitea-readonly']) {
+                    sh '''
                         set -eu
-                        revision=$(git rev-parse HEAD)
-                        test "$revision" = "$(git rev-parse refs/remotes/origin/main)"
-                        echo "$revision"
-                    ''', returnStdout: true).trim()
+                        export GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=yes'
+                        git -c protocol.version=2 clone --depth=1 --single-branch --branch main --no-tags --filter=blob:none --no-checkout git@192.168.3.223:iy88/se-course-project-1.git .
+                        git sparse-checkout set --cone backend frontend scripts/deploy
+                        git checkout --detach refs/remotes/origin/main
+                    '''
+                }
+                script {
+                    env.RELEASE_REVISION = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                 }
             }
         }
