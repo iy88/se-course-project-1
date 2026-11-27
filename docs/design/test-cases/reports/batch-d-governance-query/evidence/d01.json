@@ -1,0 +1,94 @@
+[
+  {
+    "step": "E1 buyer-a -> seller (T1)",
+    "status": 201,
+    "code": null,
+    "tradeStatus": null,
+    "reviewId": null,
+    "expect": {
+      "status": 201
+    },
+    "pass": true
+  },
+  {
+    "step": "E2 seller -> buyer-a (T1)",
+    "status": 201,
+    "code": null,
+    "tradeStatus": null,
+    "reviewId": null,
+    "expect": {
+      "status": 201
+    },
+    "pass": true
+  },
+  {
+    "step": "duplicate buyer-a (T1, new key)",
+    "status": 409,
+    "code": "REVIEW_ALREADY_SUBMITTED",
+    "tradeStatus": null,
+    "reviewId": null,
+    "expect": {
+      "status": 409,
+      "code": "REVIEW_ALREADY_SUBMITTED"
+    },
+    "pass": true
+  },
+  {
+    "step": "in-progress trade T3",
+    "status": 409,
+    "code": "TRADE_NOT_COMPLETED",
+    "tradeStatus": null,
+    "reviewId": null,
+    "expect": {
+      "status": 409,
+      "code": "TRADE_NOT_COMPLETED"
+    },
+    "pass": true
+  },
+  {
+    "step": "terminated trade T4",
+    "status": 409,
+    "code": "TRADE_NOT_COMPLETED",
+    "tradeStatus": null,
+    "reviewId": null,
+    "expect": {
+      "status": 409,
+      "code": "TRADE_NOT_COMPLETED"
+    },
+    "pass": true
+  },
+  {
+    "step": "outsider on T1",
+    "status": 404,
+    "code": "RESOURCE_NOT_VISIBLE",
+    "tradeStatus": null,
+    "reviewId": null,
+    "expect": {
+      "status": 403,
+      "code": "ACTION_NOT_ALLOWED"
+    },
+    "pass": false
+  },
+  {
+    "step": "GET /me/reviews written",
+    "status": 200,
+    "code": null,
+    "tradeStatus": null,
+    "reviewId": null,
+    "expect": {
+      "status": 200
+    },
+    "pass": true
+  },
+  {
+    "step": "GET /me/reviews received",
+    "status": 200,
+    "code": null,
+    "tradeStatus": null,
+    "reviewId": null,
+    "expect": {
+      "status": 200
+    },
+    "pass": true
+  }
+]

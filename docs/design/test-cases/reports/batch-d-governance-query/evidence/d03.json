@@ -1,0 +1,113 @@
+{
+  "results": [
+    {
+      "step": "R1 product P3",
+      "status": 201,
+      "code": null,
+      "caseId": "9",
+      "reused": false,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "R2 comment C1",
+      "status": 422,
+      "code": "TARGET_INVALID",
+      "caseId": null,
+      "reused": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": false
+    },
+    {
+      "step": "R3 message MSG1",
+      "status": 201,
+      "code": null,
+      "caseId": "10",
+      "reused": false,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "R4 evaluation E1",
+      "status": 422,
+      "code": "INPUT_INVALID",
+      "caseId": null,
+      "reused": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": false
+    },
+    {
+      "step": "self comment (buyer-b own C1)",
+      "status": 422,
+      "code": "TARGET_INVALID",
+      "caseId": null,
+      "reused": null,
+      "expect": {
+        "status": 422,
+        "code": "TARGET_INVALID"
+      },
+      "pass": true
+    },
+    {
+      "step": "R2 comment C1 (outsider)",
+      "status": 201,
+      "code": null,
+      "caseId": "11",
+      "reused": false,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "R4 evaluation E1 (outsider)",
+      "status": 422,
+      "code": "TARGET_INVALID",
+      "caseId": null,
+      "reused": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": false
+    }
+  ],
+  "evaluationId": "1",
+  "evidenceFileId": "9",
+  "pool": {
+    "items": [
+      {
+        "case_id": "2",
+        "kind": "product_review",
+        "case_type": "product_review",
+        "decision_kind": null,
+        "manager_id": null,
+        "completed_at": null,
+        "created_at": "2026-11-26T14:30:25.951337Z",
+        "updated_at": "2026-11-26T14:30:25.951337Z",
+        "summary": {
+          "title": "批次D P2 待审商品",
+          "audit_id": "2",
+          "product_id": "2"
+        }
+      }
+    ],
+    "page": 1,
+    "page_size": 20,
+    "total": 1,
+    "counts_by_kind": {
+      "product_review": 1,
+      "report": 3,
+      "dispute": 0,
+      "exception": 0
+    },
+    "as_of": "2026-11-26T14:38:51.795569Z"
+  }
+}

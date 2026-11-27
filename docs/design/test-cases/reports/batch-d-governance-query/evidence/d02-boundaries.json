@@ -1,0 +1,211 @@
+{
+  "results": [
+    {
+      "step": "case 11 decide remove_content(comment 1)",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true,
+      "body": {
+        "case_id": "11",
+        "decision_kind": "violation",
+        "decided_at": "2026-11-26T14:41:06.768808Z",
+        "case_status": "decided",
+        "enforcements": [
+          {
+            "enforcement_id": "0b1daea1-013c-4b10-a5bc-4c70890f7d80",
+            "action": "remove_content",
+            "target_ref": "comment:1",
+            "result_ref": "product_comment:1",
+            "result_status": "applied",
+            "previous_state": "published",
+            "current_state": "removed_by_admin",
+            "affected_scope": [
+              {
+                "resource_type": "comment",
+                "resource_id": "1"
+              },
+              {
+                "resource_type": "account",
+                "resource_id": "1"
+              }
+            ]
+          }
+        ],
+        "notified_account_ids": [
+          "1"
+        ]
+      }
+    },
+    {
+      "step": "report account 3",
+      "status": 422,
+      "code": "TARGET_INVALID",
+      "expect": {
+        "status": 201
+      },
+      "pass": false,
+      "body": {
+        "error": {
+          "code": "TARGET_INVALID",
+          "message": "举报对象无效",
+          "details": {}
+        },
+        "request_id": "5578edae-393c-4b94-89ff-a6249ba15e3d",
+        "operation_id": "4ff280f3-4292-4fe3-ad7d-ef423d4e1369"
+      }
+    },
+    {
+      "step": "supplement account case",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 200
+      },
+      "pass": false,
+      "body": {
+        "error": {
+          "code": "RESOURCE_NOT_VISIBLE",
+          "message": "标识无效",
+          "details": {}
+        },
+        "request_id": "2b305559-875f-4ed5-ad86-c5dd2bd45d29"
+      }
+    },
+    {
+      "step": "claim account case",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 200
+      },
+      "pass": false,
+      "body": {
+        "error": {
+          "code": "RESOURCE_NOT_VISIBLE",
+          "message": "标识无效",
+          "details": {}
+        },
+        "request_id": "7d8a40e3-6425-46aa-b642-37cf825fbb20"
+      }
+    },
+    {
+      "step": "decide account case restrict_account(3)",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 201
+      },
+      "pass": false,
+      "body": {
+        "error": {
+          "code": "RESOURCE_NOT_VISIBLE",
+          "message": "标识无效",
+          "details": {}
+        },
+        "request_id": "e8eca29d-911b-4801-9430-532a6f1a2bcd"
+      }
+    },
+    {
+      "step": "banned buyer-b evaluates trade 7",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 403,
+        "code": "ACCOUNT_WRITE_RESTRICTED"
+      },
+      "pass": false,
+      "body": {
+        "review": {
+          "review_id": "5",
+          "trade_id": "7",
+          "reviewer": {
+            "id": "1",
+            "display_name": "QA Buyer B",
+            "avatar_url": null
+          },
+          "reviewee": {
+            "id": "2",
+            "display_name": "QA Seller",
+            "avatar_url": null
+          },
+          "rating": 3,
+          "content": "封禁账户不应可评价。",
+          "visible": true,
+          "created_at": "2026-11-26T14:41:08.653219Z"
+        }
+      }
+    },
+    {
+      "step": "case 10 decide freeze_trade(3)",
+      "status": 409,
+      "code": "TARGET_STATE_CONFLICT",
+      "expect": {
+        "status": 201
+      },
+      "pass": false,
+      "body": {
+        "error": {
+          "code": "TARGET_STATE_CONFLICT",
+          "message": "事项目标与交易不一致",
+          "details": {}
+        },
+        "request_id": "82ed1504-ee82-4fd4-93ff-0ab4be97892f",
+        "operation_id": "8e1a4aef-2b39-4fa2-8963-9bcb102569be"
+      }
+    },
+    {
+      "step": "seller sends during freeze",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 403,
+        "code": "MESSAGE_SEND_FORBIDDEN"
+      },
+      "pass": false,
+      "body": {
+        "message_id": "6",
+        "seq": 1,
+        "created_at": "2026-11-26T14:41:08.957007100Z",
+        "sender": {
+          "account_id": "2",
+          "display_name": "QA Seller",
+          "sender_kind": "account"
+        },
+        "unread_count": 1
+      }
+    },
+    {
+      "step": "buyer-a evaluates trade 8 while trade 3 frozen",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true,
+      "body": {
+        "review": {
+          "review_id": "6",
+          "trade_id": "8",
+          "reviewer": {
+            "id": "4",
+            "display_name": "QA Buyer A",
+            "avatar_url": null
+          },
+          "reviewee": {
+            "id": "2",
+            "display_name": "QA Seller",
+            "avatar_url": null
+          },
+          "rating": 4,
+          "content": "冻结不影响另一笔已完成交易的评价。",
+          "visible": true,
+          "created_at": "2026-11-26T14:41:09.036316Z"
+        }
+      }
+    }
+  ],
+  "accountFile": "15"
+}
