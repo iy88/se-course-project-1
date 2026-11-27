@@ -1,0 +1,182 @@
+{
+  "results": [
+    {
+      "step": "supplement case 11",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "case_id": "11",
+        "supplement_count": 1,
+        "updated_at": "2026-11-26T14:40:26.761590Z"
+      }
+    },
+    {
+      "step": "claim case 11",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "case_id": "11",
+        "case_status": "claimed",
+        "claimed_manager_id": "5",
+        "claimed_at": "2026-11-26T14:40:26.826085Z",
+        "already_claimed": false
+      }
+    },
+    {
+      "step": "decide case 11 (violation: remove comment + ban buyer-b)",
+      "status": 403,
+      "code": "OWNERSHIP_MISMATCH",
+      "expect": {
+        "status": 201
+      },
+      "pass": false,
+      "body": {
+        "error": {
+          "code": "OWNERSHIP_MISMATCH",
+          "message": "目标不属于本事项的实际关联主体",
+          "details": {}
+        },
+        "request_id": "9bf5ccd7-af59-45b6-9126-2d8a2b4e4e7f",
+        "operation_id": "62e7b482-70f7-4e8c-b25a-d80acc7d4dcf"
+      }
+    },
+    {
+      "step": "banned buyer-b evaluates T5",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 403,
+        "code": "ACCOUNT_WRITE_RESTRICTED"
+      },
+      "pass": false,
+      "body": {
+        "review": {
+          "review_id": "3",
+          "trade_id": "5",
+          "reviewer": {
+            "id": "1",
+            "display_name": "QA Buyer B",
+            "avatar_url": null
+          },
+          "reviewee": {
+            "id": "2",
+            "display_name": "QA Seller",
+            "avatar_url": null
+          },
+          "rating": 3,
+          "content": "封禁账户不应可评价。",
+          "visible": true,
+          "created_at": "2026-11-26T14:40:26.978219Z"
+        }
+      }
+    },
+    {
+      "step": "supplement case 10",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "case_id": "10",
+        "supplement_count": 1,
+        "updated_at": "2026-11-26T14:40:28.103515Z"
+      }
+    },
+    {
+      "step": "claim case 10",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "case_id": "10",
+        "case_status": "claimed",
+        "claimed_manager_id": "5",
+        "claimed_at": "2026-11-26T14:40:28.195345Z",
+        "already_claimed": false
+      }
+    },
+    {
+      "step": "decide case 10 (violation: freeze trade 6)",
+      "status": 409,
+      "code": "TARGET_STATE_CONFLICT",
+      "expect": {
+        "status": 201
+      },
+      "pass": false,
+      "body": {
+        "error": {
+          "code": "TARGET_STATE_CONFLICT",
+          "message": "事项目标与交易不一致",
+          "details": {}
+        },
+        "request_id": "b8b814ad-add4-410b-aaf7-2ab2adf8a46a",
+        "operation_id": "618ba251-ee17-41a0-853d-7935421c3869"
+      }
+    },
+    {
+      "step": "frozen trade T6: outsider evaluates T6",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true,
+      "body": {
+        "review": {
+          "review_id": "4",
+          "trade_id": "6",
+          "reviewer": {
+            "id": "3",
+            "display_name": "QA Outsider",
+            "avatar_url": null
+          },
+          "reviewee": {
+            "id": "2",
+            "display_name": "QA Seller",
+            "avatar_url": null
+          },
+          "rating": 5,
+          "content": "冻结不影响已完成交易的评价。",
+          "visible": true,
+          "created_at": "2026-11-26T14:40:28.425587Z"
+        }
+      }
+    },
+    {
+      "step": "conversation send while frozen",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 403,
+        "code": "MESSAGE_SEND_FORBIDDEN"
+      },
+      "pass": false,
+      "body": {
+        "message_id": "4",
+        "seq": 2,
+        "created_at": "2026-11-26T14:40:28.587819500Z",
+        "sender": {
+          "account_id": "2",
+          "display_name": "QA Seller",
+          "sender_kind": "account"
+        },
+        "unread_count": 2
+      }
+    }
+  ],
+  "file11": "11",
+  "file10": "12"
+}

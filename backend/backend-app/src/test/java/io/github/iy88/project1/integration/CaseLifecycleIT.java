@@ -336,11 +336,21 @@ class CaseLifecycleIT {
         assertThat(store.actions(caseId).stream()
                 .anyMatch(action -> CaseVocabulary.ACTION_LIFT.equals(action.actionKind()))).isTrue();
 
-        var repeated = cases.lift(context(MANAGER_1.get()), "lift-again-" + RUN_ID, caseId, enforcementId,
-                "再次解除");
-        assertThat(repeated.status()).isEqualTo(200);
-        assertThat(repeated.data().get("lifted_at").asString())
-                .isEqualTo(lifted.data().get("lifted_at").asString());
+        var replayed = cases.lift(context(MANAGER_1.get()), "lift-" + RUN_ID, caseId, enforcementId,
+                "解除限制");
+        assertThat(replayed.status()).isEqualTo(200);
+        assertThat(replayed.data()).isEqualTo(lifted.data());
+        assertThatThrownBy(() -> cases.lift(context(MANAGER_1.get()), "lift-again-" + RUN_ID, caseId,
+                enforcementId, "再次解除"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESTRICTION_NOT_ACTIVE"));
+        assertThat(db.sql("select count(*) from case_enforcement where case_id = ?").param(caseId)
+                .query(Long.class).single()).isEqualTo(2);
+        assertThat(store.actions(caseId).stream()
+                .filter(action -> CaseVocabulary.ACTION_LIFT.equals(action.actionKind())).count()).isEqualTo(1);
+        assertThat(db.sql("select count(*) from audit_record where action = 'case.enforcement.lift'"
+                + " and target_type = 'case' and target_id = ?").param(caseId).query(Long.class).single())
+                .isEqualTo(1);
     }
 
     @Test

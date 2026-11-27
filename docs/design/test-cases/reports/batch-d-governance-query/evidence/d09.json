@@ -1,0 +1,144 @@
+{
+  "results": [
+    {
+      "step": "report P3 (second reporter)",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true,
+      "body": {
+        "case_id": "19",
+        "case_status": "pending",
+        "reused": false
+      }
+    },
+    {
+      "step": "supplement",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "case_id": "19",
+        "supplement_count": 1,
+        "updated_at": "2026-11-26T14:42:49.994527Z"
+      }
+    },
+    {
+      "step": "claim",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "case_id": "19",
+        "case_status": "claimed",
+        "claimed_manager_id": "5",
+        "claimed_at": "2026-11-26T14:42:50.065253Z",
+        "already_claimed": false
+      }
+    },
+    {
+      "step": "decision with failing freeze",
+      "status": 409,
+      "code": "TARGET_STATE_CONFLICT",
+      "expect": {
+        "status": 409
+      },
+      "pass": true,
+      "body": {
+        "error": {
+          "code": "TARGET_STATE_CONFLICT",
+          "message": "事项目标与交易不一致",
+          "details": {}
+        },
+        "request_id": "a45a39bd-c3c8-4ba9-b38c-82f7a5f3750b",
+        "operation_id": "158a7ff9-b373-4693-86d8-4a73ca5b9a58"
+      }
+    },
+    {
+      "step": "decision withdraw only",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true,
+      "body": {
+        "case_id": "19",
+        "decision_kind": "violation",
+        "decided_at": "2026-11-26T14:42:50.426777Z",
+        "case_status": "decided",
+        "enforcements": [
+          {
+            "enforcement_id": "aa161337-f7b4-4e2e-806b-d426c5094686",
+            "action": "withdraw_public_access",
+            "target_ref": "product:3",
+            "result_ref": "product_display_restriction:1",
+            "result_status": "applied",
+            "previous_state": "display=visible",
+            "current_state": "display=restricted",
+            "affected_scope": [
+              {
+                "resource_type": "product",
+                "resource_id": "3"
+              },
+              {
+                "resource_type": "account",
+                "resource_id": "2"
+              }
+            ]
+          }
+        ],
+        "notified_account_ids": [
+          "2"
+        ]
+      }
+    },
+    {
+      "step": "lift withdraw",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true,
+      "body": {
+        "enforcement_id": "aa161337-f7b4-4e2e-806b-d426c5094686",
+        "lifted_at": "2026-11-26T14:42:50.525553Z",
+        "lifted_by": "5",
+        "restored_scope": [
+          "account:2"
+        ],
+        "remaining_restrictions": []
+      }
+    },
+    {
+      "step": "repeat lift",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 409
+      },
+      "pass": false,
+      "body": {
+        "enforcement_id": "aa161337-f7b4-4e2e-806b-d426c5094686",
+        "lifted_at": "2026-11-26T14:42:50.525553Z",
+        "lifted_by": "5",
+        "restored_scope": [],
+        "remaining_restrictions": []
+      }
+    }
+  ],
+  "caseId": "19",
+  "basis": "8",
+  "enforcementId": "aa161337-f7b4-4e2e-806b-d426c5094686",
+  "visibleAfterBroken": 200,
+  "visibleAfterLift": 200
+}

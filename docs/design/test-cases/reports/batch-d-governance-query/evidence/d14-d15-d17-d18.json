@@ -1,0 +1,318 @@
+{
+  "results": [
+    {
+      "step": "buyer-a notification list",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "notification sources present",
+      "pass": true,
+      "types": [
+        "case.appeal_resolved",
+        "case.content_removed",
+        "case.inquiry_created",
+        "case.trade_frozen",
+        "trade.frozen",
+        "trade.completed",
+        "trade.agreement_confirmed",
+        "trade.request_accepted",
+        "case.trade_unfrozen",
+        "trade.unfrozen",
+        "case.evaluation_removed"
+      ]
+    },
+    {
+      "step": "manager receives no user notifications",
+      "pass": true
+    },
+    {
+      "step": "open notification detail",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "mark notification read",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "read_at stable",
+      "pass": false
+    },
+    {
+      "step": "listing does not mark read",
+      "pass": true
+    },
+    {
+      "step": "unread_count independent of filter",
+      "pass": true
+    },
+    {
+      "step": "read does not complete todos",
+      "pass": true,
+      "todoTotal": 0
+    },
+    {
+      "step": "banned buyer-b reads notifications",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "banned buyer-b marks notification read",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "other user's notification",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 404
+      },
+      "pass": true
+    },
+    {
+      "step": "overview",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "resources trade",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "resources evaluation written",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "resources evaluation received",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "resources report written",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "resources missing direction",
+      "status": 422,
+      "code": "INPUT_INVALID",
+      "expect": {
+        "status": 422
+      },
+      "pass": true
+    },
+    {
+      "step": "overview by anonymous",
+      "status": 401,
+      "code": "AUTHENTICATION_REQUIRED",
+      "expect": {
+        "status": 401
+      },
+      "pass": true
+    },
+    {
+      "step": "ended trade readable by participant",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "ended trade invisible to outsider",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 404
+      },
+      "pass": true
+    },
+    {
+      "step": "product edit history by buyer",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "product edit history by outsider",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 404
+      },
+      "pass": true
+    },
+    {
+      "step": "banned user writes comment",
+      "status": 403,
+      "code": "ACCOUNT_WRITE_RESTRICTED",
+      "expect": {
+        "status": 403,
+        "code": "ACCOUNT_WRITE_RESTRICTED"
+      },
+      "pass": true
+    },
+    {
+      "step": "old notification still readable",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "events head endpoint",
+      "status": 200,
+      "pass": true
+    }
+  ],
+  "overview": {
+    "as_of": "2026-11-26T14:55:54.733511900Z",
+    "products": {
+      "total": 0,
+      "by_state": {}
+    },
+    "trades": {
+      "total": 5,
+      "buying": 5,
+      "selling": 0,
+      "by_state": {
+        "completed": 3,
+        "in_progress": 2
+      }
+    },
+    "favorites": {
+      "total": 0,
+      "valid": 0,
+      "invalid": 0
+    },
+    "evaluations": {
+      "written": 3,
+      "received": 1
+    },
+    "reports": {
+      "submitted": 2,
+      "received": 3
+    },
+    "todo_count": 0
+  },
+  "trades": {
+    "kind": "trade",
+    "items": [
+      {
+        "trade_id": "2",
+        "role": "buyer",
+        "state": "in_progress",
+        "updated_at": "2026-11-26T14:42:37.706729Z",
+        "product_summary": {
+          "product_id": "4",
+          "title": "批次D P4 冻结对象",
+          "price_cents": 12900
+        }
+      },
+      {
+        "trade_id": "9",
+        "role": "buyer",
+        "state": "completed",
+        "updated_at": "2026-11-26T14:42:29.169997Z",
+        "product_summary": {
+          "product_id": "11",
+          "title": "批次D P11 冻结期评价对象",
+          "price_cents": 17900
+        }
+      },
+      {
+        "trade_id": "3",
+        "role": "buyer",
+        "state": "in_progress",
+        "updated_at": "2026-11-26T14:42:19.001519Z",
+        "product_summary": {
+          "product_id": "5",
+          "title": "批次D P5 进行中交易",
+          "price_cents": 15900
+        }
+      },
+      {
+        "trade_id": "8",
+        "role": "buyer",
+        "state": "completed",
+        "updated_at": "2026-11-26T14:40:52.348185Z",
+        "product_summary": {
+          "product_id": "10",
+          "title": "批次D P10 买方A评价边界",
+          "price_cents": 21900
+        }
+      },
+      {
+        "trade_id": "1",
+        "role": "buyer",
+        "state": "completed",
+        "updated_at": "2026-11-26T14:37:05.326725Z",
+        "product_summary": {
+          "product_id": "1",
+          "title": "批次D P1 商品",
+          "price_cents": 19900
+        }
+      }
+    ],
+    "page": 1,
+    "page_size": 100,
+    "total": 5,
+    "as_of": "2026-11-26T14:55:54.778081100Z"
+  },
+  "head": {
+    "epoch": "63814d18-80a1-4101-8bb0-3dc4f1911e23",
+    "head_seq": 17,
+    "replay_floor": 0
+  }
+}

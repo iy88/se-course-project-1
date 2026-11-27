@@ -609,6 +609,21 @@ class CaseApplicationTests {
     }
 
     @Test
+    void newKeyForAnAlreadyLiftedAccountEnforcementConflictsAfterAutoArchive() {
+        var harness = harness(archived());
+        when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recordedEnforcement()));
+        when(harness.store.lift(CASE_ID, "enf-1")).thenReturn(Optional.of(new CaseRecords.Lift(NOW, MANAGER)));
+
+        assertThatThrownBy(() -> harness.application.lift(context(MANAGER), "lift-new", CASE_ID, "enf-1", "解除"))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("RESTRICTION_NOT_ACTIVE"));
+
+        verify(harness.store, never()).markEnforcementLifted(anyLong(), anyString(), anyLong(), anyString(), any());
+        verify(harness.store, never()).addAction(any());
+        verify(harness.transaction, never()).audit(anyString(), any(), any(), any());
+    }
+
+    @Test
     void restoreDecisionUsesAdjustInProgressAndReturnsStructuredScopeWithoutADuplicateNotice() {
         var enforcement = mock(CasePorts.Enforcement.class);
         var decidedAt = NOW.plusSeconds(42);

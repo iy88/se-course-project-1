@@ -1,0 +1,92 @@
+{
+  "results": [
+    {
+      "step": "anonymous reads banned scope",
+      "status": 401,
+      "code": "AUTHENTICATION_REQUIRED",
+      "expect": {
+        "status": 401
+      },
+      "pass": true
+    },
+    {
+      "step": "normal user reads banned scope",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "normal user patches banned item",
+      "status": 403,
+      "code": "ACTION_NOT_ALLOWED",
+      "expect": {
+        "status": 403
+      },
+      "pass": true
+    },
+    {
+      "step": "manager adds banned item",
+      "status": 422,
+      "code": "INPUT_INVALID",
+      "expect": {
+        "status": 201
+      },
+      "pass": false
+    },
+    {
+      "step": "latest scope visible",
+      "pass": false
+    },
+    {
+      "step": "reference message as platform record",
+      "status": 201,
+      "code": null,
+      "expect": {
+        "status": 201
+      },
+      "pass": true
+    },
+    {
+      "step": "non-claimant reads evidence",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 404
+      },
+      "pass": true
+    },
+    {
+      "step": "claimant reads evidence",
+      "status": 200,
+      "code": null,
+      "expect": {
+        "status": 200
+      },
+      "pass": true
+    },
+    {
+      "step": "report with unverified file",
+      "status": 422,
+      "code": "EVIDENCE_OUT_OF_SCOPE",
+      "expect": {
+        "status": 422,
+        "code": "EVIDENCE_OUT_OF_SCOPE"
+      },
+      "pass": true
+    },
+    {
+      "step": "claimant reads evidence file",
+      "status": 404,
+      "code": "RESOURCE_NOT_VISIBLE",
+      "expect": {
+        "status": 302
+      },
+      "pass": false
+    }
+  ],
+  "evidenceId": "11",
+  "unverifiedFileId": "26"
+}

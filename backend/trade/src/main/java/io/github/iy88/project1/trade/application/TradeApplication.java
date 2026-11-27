@@ -630,13 +630,13 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         long reviewer = actor(context);
         return run(context, "trade.review.submit", key, command,
                 (ctx, request) -> prepareReview(reviewer, request.tradeId()),
-                (ctx, request) -> qualifyTrade(ctx, request.tradeId()),
+                (ctx, request) -> qualifyReview(ctx, request.tradeId()),
                 this::replayTrade,
                 (transaction, request, qualification) -> {
                     int rating = rating(request.rating());
                     String content = requiredTrimmedText(request.content(), 2000, "评价内容");
                     var trade = repository.lockTrade(transaction, request.tradeId());
-                    trade.requireParticipant(reviewer);
+                    requireReviewParticipant(trade, reviewer);
                     requireWrite(reviewer);
                     if (trade.status() != TradeStatus.COMPLETED) {
                         throw reviewNotCompleted();
@@ -1754,6 +1754,19 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         accounts.requireCurrentSession(context);
         repository.find(tradeId).orElseThrow(Trade::notVisible).requireParticipant(actor(context));
         return null;
+    }
+
+    private Void qualifyReview(ExecutionContext context, long tradeId) {
+        accounts.requireCurrentSession(context);
+        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
+        requireReviewParticipant(trade, actor(context));
+        return null;
+    }
+
+    private static void requireReviewParticipant(Trade trade, long reviewer) {
+        if (!trade.isParticipant(reviewer)) {
+            throw Trade.actionNotAllowed();
+        }
     }
 
     private Void qualifyGovernance(ExecutionContext context, long tradeId) {
