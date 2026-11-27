@@ -178,6 +178,7 @@ onBeforeUnmount(() => {
       ref="input"
       type="file"
       :accept="accept"
+      :aria-label="`选择${label}`"
       multiple
       class="visually-hidden"
       @change="onFilesSelected"
