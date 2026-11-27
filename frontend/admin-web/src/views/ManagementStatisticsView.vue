@@ -17,20 +17,8 @@ const scope = ref<Scope>("7d");
 const start = ref("");
 const end = ref("");
 const endInput = ref<HTMLInputElement>();
-const {
-  data,
-  trend,
-  error,
-  loading,
-  trendStatus,
-  trendError,
-  trendLoading,
-  trendDayCount,
-  load,
-  retry,
-  retryTrend,
-  dispose,
-} = createStatisticsQuery();
+const { data, trend, error, loading, trendStatus, trendDayCount, load, retry, dispose } =
+  createStatisticsQuery();
 
 const dayStart = (value: Date): Date =>
   new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
@@ -120,7 +108,6 @@ const trendPoints = computed(() => {
 });
 
 const trendHeadline = computed(() => {
-  if (trendLoading.value) return "读取中…";
   if (trendStatus.value === "ready") return `${trend.value.length} 个 UTC 日`;
   if (trendStatus.value === "too-many") return "未绘制";
   return "按日趋势";
@@ -266,13 +253,8 @@ onUnmounted(dispose);
             <h2 id="trend-title">按日完成交易趋势（UTC）</h2>
             <span class="muted">{{ trendHeadline }}</span>
           </header>
-          <LoadingBlock v-if="trendStatus === 'loading'" label="正在读取按日趋势…" />
-          <div v-else-if="trendStatus === 'error'" class="trend-error">
-            <p class="trend-error-title">按日趋势读取失败；上方汇总仍为有效结果。</p>
-            <ErrorNotice :error="trendError" @retry="retryTrend" />
-          </div>
           <svg
-            v-else-if="trend.length"
+            v-if="trend.length"
             class="trend"
             viewBox="0 0 336 112"
             role="img"
@@ -482,16 +464,6 @@ onUnmounted(dispose);
   height: auto;
   width: 100%;
 }
-.trend-error {
-  display: grid;
-  gap: var(--space-2);
-}
-.trend-error :deep(.content-state) {
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
-.trend-error-title,
 .trend-note {
   font-size: 0.8rem;
   margin: 0;

@@ -617,7 +617,7 @@
       "get": {
         "operationId": "getManagementStatistics",
         "summary": "Get management statistics",
-        "description": "Requires a current manager session. Only completed_in_selection uses the selected time range.",
+        "description": "Requires a current manager session. completed_in_selection and completed_by_day use the selected time range.",
         "parameters": [
           {
             "name": "time_scope",
@@ -6357,7 +6357,8 @@
           "products_by_state",
           "pending",
           "trades",
-          "completed_in_selection"
+          "completed_in_selection",
+          "completed_by_day"
         ],
         "properties": {
           "as_of": {
@@ -6470,6 +6471,25 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          },
+          "completed_by_day": {
+            "type": "array",
+            "description": "One UTC day bucket for a selected range of at most 31 days; empty for all time or a larger range.",
+            "items": {
+              "type": "object",
+              "required": ["day", "completed"],
+              "properties": {
+                "day": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "completed": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                }
+              }
+            }
           }
         }
       },
