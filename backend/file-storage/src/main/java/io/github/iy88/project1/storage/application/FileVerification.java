@@ -42,7 +42,6 @@ public class FileVerification {
         if (!Instant.now().isBefore(upload.expiresAt())) {
             throw new FileRegistry.Rejected("UPLOAD_AUTH_EXPIRED");
         }
-        objects.requireWritableBucket();
         var head = objects.head(upload.location())
                 .orElseThrow(() -> new FileRegistry.Rejected("FILE_UPLOAD_INCOMPLETE"));
         if (head.sizeBytes() == null || head.sizeBytes() != upload.declaredSize()

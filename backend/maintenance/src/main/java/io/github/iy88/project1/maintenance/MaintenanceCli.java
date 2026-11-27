@@ -27,14 +27,22 @@ public final class MaintenanceCli {
                    java -jar maintenance.jar db validate --env-file PATH
                    java -jar maintenance.jar db reset --env-file PATH
                    java -jar maintenance.jar db reset --env-file PATH --confirm TOKEN [--admin-user USER]
-                   java -jar maintenance.jar oss reset --env-file PATH [--confirm TOKEN]
+                   java -jar maintenance.jar oss reset --env-file PATH [--confirm TOKEN] [--prefix PREFIX]
                    java -jar maintenance.jar account create-manager --env-file PATH --email EMAIL --display-name NAME
+                   java -jar maintenance.jar seed load --env-file PATH [--manifest PATH] [--tag TAG]
+                       [--users N] [--products N] [--seed N] --prepare-reset
+                   java -jar maintenance.jar seed demo --env-file PATH [--manifest PATH] [--tag TAG]
+                       [--seed N] --prepare-reset
             --env-file is required. Reset without --confirm previews the configured targets.
             Reads the owner and application logins from the same .env file.
             PostgreSQL administrator passwords are prompted for db init and legacy db reset.
             The manager's login password is prompted twice for account create-manager.
             Database reset uses the configured owner; --admin-user is only for legacy databases not owned by it.
             Stop all writers before executing reset.
+            seed requires an explicit clean reset acknowledgement (--prepare-reset), an empty
+            configured database and no objects below OSS_PREFIX; it never deletes data itself.
+            oss reset without --prefix keeps the whole-bucket behavior. Use --prefix OSS_PREFIX
+            for a shared bucket; the prefix is nonempty and segment-bounded.
             """;
 
     private MaintenanceCli() {
@@ -48,7 +56,7 @@ public final class MaintenanceCli {
     }
 
     private static int run(String[] args) {
-        if (args.length == 1 && args[0].equals("--help")) {
+        if (Arrays.asList(args).contains("--help")) {
             System.out.print(USAGE);
             return 0;
         }
@@ -91,12 +99,16 @@ public final class MaintenanceCli {
                 }
                 case "oss reset" -> {
                     var oss = new OssMaintenance(config);
-                    if (confirmed(options, environment, oss.scope())) {
-                        long removed = oss.reset();
-                        System.out.println("OSS reset: complete (" + removed + " objects removed)");
+                    String prefix = options.prefix();
+                    if (confirmed(options, environment,
+                            prefix == null ? oss.scope() : oss.prefixScope(prefix))) {
+                        long removed = prefix == null ? oss.reset() : oss.resetPrefix(prefix);
+                        System.out.println("OSS reset: complete (" + removed + " objects removed"
+                                + (prefix == null ? ")" : " under " + OssMaintenance.normalizePrefix(prefix) + "/)"));
                     }
                 }
                 case "account create-manager" -> createManager(config, options);
+                case "seed load", "seed demo" -> SeedRunner.run(config, options);
                 default -> throw new AssertionError(options.command());
             }
             return 0;
@@ -207,20 +219,24 @@ public final class MaintenanceCli {
     }
 
     record Options(Path envFile, String command, String confirmation, String adminUser, Path backupFile,
-                   String email, String displayName) {
+                   String email, String displayName, Path manifest, String tag, int users, int products,
+                   long seed, boolean prepareReset, String prefix) {
         static Options parse(String[] args) {
-            if (args.length < 3 || args.length > 8) {
+            if (args.length < 3) {
                 return null;
             }
             String command = args[0] + " " + args[1];
-            Path envFile = null;
-            String confirmation = null;
-            String admin = null;
-            Path backupFile = null;
-            String email = null;
-            String displayName = null;
+            ParseState state = new ParseState();
             for (int index = 2; index < args.length;) {
                 String argument = args[index];
+                if ("--prepare-reset".equals(argument) || "--reset".equals(argument)) {
+                    if (state.prepareReset) {
+                        return null;
+                    }
+                    state.prepareReset = true;
+                    index++;
+                    continue;
+                }
                 String option;
                 String value;
                 int equals = argument.indexOf('=');
@@ -241,70 +257,135 @@ public final class MaintenanceCli {
                 }
                 switch (option) {
                     case "--env-file" -> {
-                        if (envFile != null) {
-                            return null;
-                        }
-                        try {
-                            envFile = Path.of(value);
-                        } catch (InvalidPathException ignored) {
-                            return null;
-                        }
+                        if (state.envFile != null) return null;
+                        try { state.envFile = Path.of(value); } catch (InvalidPathException ignored) { return null; }
                     }
                     case "--confirm" -> {
-                        if (confirmation != null) {
-                            return null;
-                        }
-                        confirmation = value;
+                        if (state.confirmation != null) return null;
+                        state.confirmation = value;
                     }
                     case "--admin-user" -> {
-                        if (admin != null) {
-                            return null;
-                        }
-                        admin = value;
+                        if (state.adminUser != null) return null;
+                        state.adminUser = value;
                     }
                     case "--backup-file" -> {
-                        if (backupFile != null) {
-                            return null;
-                        }
-                        try {
-                            backupFile = Path.of(value);
-                        } catch (InvalidPathException invalidPath) {
-                            return null;
-                        }
+                        if (state.backupFile != null) return null;
+                        try { state.backupFile = Path.of(value); } catch (InvalidPathException ignored) { return null; }
                     }
                     case "--email" -> {
-                        if (email != null) {
-                            return null;
-                        }
-                        email = value;
+                        if (state.email != null) return null;
+                        state.email = value;
                     }
                     case "--display-name" -> {
-                        if (displayName != null) {
+                        if (state.displayName != null) return null;
+                        state.displayName = value;
+                    }
+                    case "--manifest" -> {
+                        if (state.manifest != null) return null;
+                        try { state.manifest = Path.of(value); } catch (InvalidPathException ignored) { return null; }
+                    }
+                    case "--tag" -> {
+                        if (state.tag != null) return null;
+                        state.tag = value;
+                    }
+                    case "--users" -> {
+                        if (state.users != null) return null;
+                        state.users = integer(value);
+                        if (state.users == null) return null;
+                    }
+                    case "--products" -> {
+                        if (state.products != null) return null;
+                        state.products = integer(value);
+                        if (state.products == null) return null;
+                    }
+                    case "--seed" -> {
+                        if (state.seed != null) return null;
+                        try { state.seed = Long.parseLong(value); } catch (NumberFormatException invalid) { return null; }
+                        if (state.seed < 0) return null;
+                    }
+                    case "--prefix" -> {
+                        if (state.prefix != null) return null;
+                        try {
+                            if (!OssMaintenance.normalizePrefix(value).equals(value)) return null;
+                        } catch (IllegalArgumentException invalid) {
                             return null;
                         }
-                        displayName = value;
+                        state.prefix = value;
                     }
                     default -> {
                         return null;
                     }
                 }
             }
-            boolean createManager = command.equals("account create-manager");
-            if (envFile == null || (backupFile != null && !command.equals("db backup"))
-                    || (!createManager && (email != null || displayName != null))) {
+            if (state.envFile == null) {
                 return null;
             }
+            boolean seedOptions = state.manifest != null || state.tag != null || state.users != null
+                    || state.products != null || state.seed != null || state.prepareReset;
+            boolean common = state.confirmation == null && state.adminUser == null && state.backupFile == null
+                    && state.email == null && state.displayName == null && !seedOptions && state.prefix == null;
             boolean valid = switch (command) {
-                case "db init" -> admin != null && confirmation == null;
-                case "db migrate", "db validate" -> admin == null && confirmation == null;
-                case "db backup" -> admin == null && confirmation == null && backupFile != null;
-                case "db reset" -> admin == null || confirmation != null;
-                case "oss reset" -> admin == null;
-                case "account create-manager" -> admin == null && confirmation == null
-                        && email != null && displayName != null;
+                case "db init" -> state.adminUser != null && state.confirmation == null
+                        && state.backupFile == null && state.email == null && state.displayName == null
+                        && !seedOptions && state.prefix == null;
+                case "db migrate", "db validate" -> common;
+                case "db backup" -> state.backupFile != null && state.adminUser == null && state.confirmation == null
+                        && state.email == null && state.displayName == null && !seedOptions && state.prefix == null;
+                case "db reset" -> (state.adminUser == null || state.confirmation != null)
+                        && state.backupFile == null && state.email == null && state.displayName == null
+                        && !seedOptions && state.prefix == null;
+                case "oss reset" -> state.adminUser == null && state.backupFile == null && state.email == null
+                        && state.displayName == null && !seedOptions;
+                case "account create-manager" -> state.adminUser == null && state.confirmation == null
+                        && state.backupFile == null && state.email != null && state.displayName != null
+                        && !seedOptions && state.prefix == null;
+                case "seed load", "seed demo" -> state.adminUser == null && state.confirmation == null
+                        && state.backupFile == null && state.email == null && state.displayName == null
+                        && state.prefix == null;
                 default -> false;
             };
-            return valid ? new Options(envFile, command, confirmation, admin, backupFile, email, displayName) : null;
+            if (!valid) {
+                return null;
+            }
+            String tag = state.tag == null ? (command.equals("seed load") ? "load" : "demo") : state.tag;
+            if (!tag.matches("[A-Za-z0-9._-]{1,64}")) {
+                return null;
+            }
+            int users = state.users == null ? 100 : state.users;
+            int products = state.products == null ? 10000 : state.products;
+            long seed = state.seed == null ? 1L : state.seed;
+            if (command.equals("seed demo") && (state.users != null || state.products != null)) {
+                // Demo scale is fixed by the catalog; accepting knobs would imply a different catalog.
+                return null;
+            }
+            return new Options(state.envFile, command, state.confirmation, state.adminUser, state.backupFile,
+                    state.email, state.displayName, state.manifest, tag, users, products, seed,
+                    state.prepareReset, state.prefix);
+        }
+
+        private static Integer integer(String value) {
+            try {
+                int parsed = Integer.parseInt(value);
+                return parsed > 0 ? parsed : null;
+            } catch (NumberFormatException invalid) {
+                return null;
+            }
+        }
+
+        private static final class ParseState {
+            Path envFile;
+            String confirmation;
+            String adminUser;
+            Path backupFile;
+            String email;
+            String displayName;
+            Path manifest;
+            String tag;
+            Integer users;
+            Integer products;
+            Long seed;
+            boolean prepareReset;
+            String prefix;
         }
     }
 

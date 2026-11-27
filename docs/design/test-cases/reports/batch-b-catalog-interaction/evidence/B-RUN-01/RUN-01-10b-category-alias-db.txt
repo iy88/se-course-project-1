@@ -1,0 +1,6 @@
+?column?
+checked_at=2026-11-27T17:53:19+08
+(1 row)
+category_id|main_name|active_aliases|public_product_ids
+1|test-cat|验收教科书|1
+(1 row)

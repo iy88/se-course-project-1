@@ -1,0 +1,43 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.2)
+
+2026-11-26T23:07:16.060+08:00  INFO 20504 --- [backend-app] [           main] i.g.iy88.project1.BackendAppApplication  : Starting BackendAppApplication v0.0.1-SNAPSHOT using Java 27.0.1.0.2 with PID 20504 (<repo>\backend\backend-app\target\backend-app-0.0.1-SNAPSHOT.jar started by <user> in <repo>)
+2026-11-26T23:07:16.065+08:00  INFO 20504 --- [backend-app] [           main] i.g.iy88.project1.BackendAppApplication  : The following 2 profiles are active: "infrastructure", "dependency-probe"
+2026-11-26T23:07:17.765+08:00  INFO 20504 --- [backend-app] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-11-26T23:07:17.768+08:00  INFO 20504 --- [backend-app] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-26T23:07:18.064+08:00  INFO 20504 --- [backend-app] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 281 ms. Found 31 JPA repository interfaces.
+2026-11-26T23:07:19.058+08:00  INFO 20504 --- [backend-app] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-11-26T23:07:19.166+08:00  INFO 20504 --- [backend-app] [           main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.13.Final
+2026-11-26T23:07:20.072+08:00  INFO 20504 --- [backend-app] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-11-26T23:07:20.105+08:00  INFO 20504 --- [backend-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-11-26T23:07:20.320+08:00  INFO 20504 --- [backend-app] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@5a8656a2
+2026-11-26T23:07:20.322+08:00  INFO 20504 --- [backend-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-11-26T23:07:20.412+08:00  INFO 20504 --- [backend-app] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://127.0.0.1:5432/project1_acceptance]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 18.7
+	Default catalog/schema: project1_acceptance/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-11-26T23:07:21.860+08:00  INFO 20504 --- [backend-app] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-11-26T23:07:21.929+08:00  INFO 20504 --- [backend-app] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-11-26T23:07:22.073+08:00  INFO 20504 --- [backend-app] [           main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-11-26T23:07:27.275+08:00  INFO 20504 --- [backend-app] [           main] i.g.iy88.project1.BackendAppApplication  : Started BackendAppApplication in 12.189 seconds (process running for 13.447)
+2026-11-26T23:07:28.201+08:00  INFO 20504 --- [backend-app] [           main] i.g.i.p.i.InfrastructureStartupProbe     : PostgreSQL schema validation and JPA query passed (probe row ID 1). Redis probe read, write and cleanup passed.
+2026-11-26T23:07:29.309+08:00  INFO 20504 --- [backend-app] [           main] i.g.i.p.i.ExternalDependencyProbe        : OSS private bucket, versioning, object write, read and cleanup passed.
+2026-11-26T23:07:30.813+08:00  INFO 20504 --- [backend-app] [           main] i.g.i.p.i.ExternalDependencyProbe        : SMTP server accepted test message d8b5c7c6-df3f-4fef-83ab-a0748a7b8259.
+2026-11-26T23:07:30.846+08:00  INFO 20504 --- [backend-app] [           main] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-11-26T23:07:30.850+08:00  INFO 20504 --- [backend-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-11-26T23:07:30.856+08:00  INFO 20504 --- [backend-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
