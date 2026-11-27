@@ -7,6 +7,7 @@ import io.github.iy88.project1.account.application.AccountService;
 import io.github.iy88.project1.account.application.PasswordHasher;
 import io.github.iy88.project1.account.application.SessionService;
 import io.github.iy88.project1.api.account.AccountCookies;
+import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.OssFileObjects;
 import io.github.iy88.project1.storage.content.FileContentVerifier.VerifiedContent;
@@ -78,7 +79,15 @@ class S4ProductionEnforcementIT {
         }
         try (var context = app; var client = http) {
             var sessions = context.getBean(SessionService.class);
-            SESSIONS.forEach(session -> sessions.revoke(sessions.authenticate(session.token())));
+            for (var session : SESSIONS) {
+                try {
+                    sessions.revoke(sessions.authenticate(session.token()));
+                } catch (BusinessError failure) {
+                    if (failure.status() != 401) {
+                        throw failure;
+                    }
+                }
+            }
             // The integration database is provisioned and discarded by the runner.
         }
     }
@@ -384,6 +393,105 @@ class S4ProductionEnforcementIT {
     }
 
     @Test
+    void registrationCreatesOneAccountAndConsumesItsCode() throws Exception {
+        String email = "registration-" + RUN + "@example.invalid";
+        var entry = entryContext();
+        String verification = verificationRequests(entry, "registration", email).get(0).path("verification_id").asString();
+        String registration = json.createObjectNode().put("email", email).put("display_name", "Registration fixture")
+                .put("password", PASSWORD).put("verification_id", verification)
+                .put("code", verificationCode(verification)).toString();
+
+        var created = send(accountWrite(entry, "POST", "/accounts", registration), 201);
+        assertThat(db.sql("select account_id from account where email = ?").param(email).query(Long.class).list())
+                .containsExactly(created.path("account_id").asLong());
+        assertThat(db.sql("""
+                select consumed_at is not null and code is null from email_verification where id = ?
+                """).param(Long.parseLong(verification)).query(Boolean.class).single()).isTrue();
+
+        assertThat(send(accountWrite(entry, "POST", "/accounts", registration), 422).at("/error/code").asString())
+                .isEqualTo("VERIFICATION_NOT_USABLE");
+        assertThat(db.sql("select count(*) from account where email = ?").param(email).query(Long.class).single())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void duplicateRegistrationCreatesNeitherAccountNorVerificationRound() throws Exception {
+        var existing = login("duplicate-registration", "user").account();
+        String email = existing.email();
+        String request = json.createObjectNode().put("purpose", "registration").put("email", email).toString();
+        var rejected = send(accountWrite(entryContext(), "POST", "/account/email-verifications", request), 409);
+        assertThat(rejected.at("/error/code").asString()).isEqualTo("EMAIL_IN_USE");
+        assertThat(db.sql("select account_id from account where email = ?").param(email).query(Long.class).list())
+                .containsExactly(existing.id());
+        assertThat(db.sql("select count(*) from email_verification where email = ? and purpose = 'registration'")
+                .param(email).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void logoutRevokesAccessToProtectedBusinessResources() throws Exception {
+        var account = login("logout", "user");
+        String resource = "/account/resources?kind=product";
+        get(account, resource, 200);
+        var logout = request(account, "/account/session").header("Origin", ORIGIN)
+                .header("X-CSRF-Token", account.csrfToken()).DELETE().build();
+        assertThat(http.send(logout, HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(204);
+        assertThat(get(account, resource, 401).at("/error/code").asString()).isEqualTo("AUTHENTICATION_REQUIRED");
+    }
+
+    @Test
+    void passwordResetPreservesAccountProductAndTradeHistory() throws Exception {
+        var seller = login("reset-history-seller", "user");
+        var before = ownedHistory(seller, login("reset-history-buyer", "user"));
+        String email = seller.account().email();
+        var entry = entryContext();
+        String verification = verificationRequests(entry, "password_reset", email).get(0).path("verification_id").asString();
+        String newPassword = "ReplacementFixture821!";
+        String reset = json.createObjectNode().put("verification_id", verification)
+                .put("code", verificationCode(verification)).put("new_password", newPassword).toString();
+        assertThat(http.send(accountWrite(entry, "POST", "/account/password-resets", reset),
+                HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(204);
+
+        assertOwnedHistory(loginWithPassword(email, newPassword), seller.account().id(), before);
+    }
+
+    @Test
+    void emailChangePreservesAccountProductAndTradeHistory() throws Exception {
+        var seller = login("email-history-seller", "user");
+        var before = ownedHistory(seller, login("email-history-buyer", "user"));
+        String email = "email-history-new-" + RUN + "@example.invalid";
+        var session = new AccountContext(AccountCookies.SESSION + "=" + seller.token(), seller.csrfToken());
+        var verifications = verificationRequests(session, "email_change", email);
+        assertThat(verifications.get(0).path("purpose").asString()).isEqualTo("email_change_old");
+        assertThat(verifications.get(1).path("purpose").asString()).isEqualTo("email_change_new");
+        String oldId = verifications.get(0).path("verification_id").asString();
+        String newId = verifications.get(1).path("verification_id").asString();
+        String change = json.createObjectNode().put("new_email", email).put("old_verification_id", oldId)
+                .put("old_code", verificationCode(oldId)).put("new_verification_id", newId)
+                .put("new_code", verificationCode(newId)).toString();
+        var changed = send(accountWrite(session, "PUT", "/account/email", change), 200);
+        assertThat(changed.path("account_id").asLong()).isEqualTo(seller.account().id());
+
+        assertOwnedHistory(loginWithPassword(email, PASSWORD), seller.account().id(), before);
+    }
+
+    private record OwnedHistory(long product, long trade, JsonNode productBefore, JsonNode tradeBefore) {}
+
+    private static OwnedHistory ownedHistory(SessionService.Issued seller, SessionService.Issued buyer)
+            throws Exception {
+        long trade = activeTrade(buyer, seller);
+        long product = db.sql("select product_id from trade where id = ?").param(trade).query(Long.class).single();
+        return new OwnedHistory(product, trade, get(seller, "/products/" + product, 200),
+                get(seller, "/trades/" + trade, 200));
+    }
+
+    private static void assertOwnedHistory(SessionService.Issued seller, long accountId, OwnedHistory before)
+            throws Exception {
+        assertThat(seller.account().id()).isEqualTo(accountId);
+        assertThat(get(seller, "/products/" + before.product(), 200)).isEqualTo(before.productBefore());
+        assertThat(get(seller, "/trades/" + before.trade(), 200)).isEqualTo(before.tradeBefore());
+    }
+
+    @Test
     void passwordResetUsesTheSamePublicBudgetForKnownAndUnknownAddresses() throws Exception {
         var account = login("reset-known", "user");
         String knownEmail = account.account().email();
@@ -607,7 +715,11 @@ class S4ProductionEnforcementIT {
         String hash = app.getBean(PasswordHasher.class).hash(PASSWORD);
         db.sql("insert into account (email, display_name, password_hash, role) values (?, ?, ?, ?)")
                 .param(email).param(name).param(hash).param(role).update();
-        var session = app.getBean(AccountService.class).login(email, PASSWORD);
+        return loginWithPassword(email, PASSWORD);
+    }
+
+    private static SessionService.Issued loginWithPassword(String email, String password) {
+        var session = app.getBean(AccountService.class).login(email, password);
         SESSIONS.add(session);
         return session;
     }
@@ -667,17 +779,37 @@ class S4ProductionEnforcementIT {
                 .param(trade).query(Long.class).list();
     }
 
-    private static HttpResponse<String> requestPasswordReset(String email) throws Exception {
+    private record AccountContext(String cookie, String csrf) {}
+
+    private static AccountContext entryContext() throws Exception {
         var entry = http.send(HttpRequest.newBuilder(URI.create(baseUrl + "/account/entry-context")).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
         assertThat(entry.statusCode()).isEqualTo(200);
         var cookie = entry.headers().firstValue("Set-Cookie").orElseThrow().split(";", 2)[0];
-        var csrf = json.readTree(entry.body()).path("csrf_token").asString();
+        return new AccountContext(cookie, json.readTree(entry.body()).path("csrf_token").asString());
+    }
+
+    private static HttpResponse<String> requestPasswordReset(String email) throws Exception {
         var body = json.createObjectNode().put("purpose", "password_reset").put("email", email);
-        return http.send(HttpRequest.newBuilder(URI.create(baseUrl + "/account/email-verifications"))
-                .header("Origin", ORIGIN).header("Cookie", cookie).header("X-CSRF-Token", csrf)
+        return http.send(accountWrite(entryContext(), "POST", "/account/email-verifications", body.toString()),
+                HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static JsonNode verificationRequests(AccountContext context, String purpose, String email) throws Exception {
+        var body = json.createObjectNode().put("purpose", purpose).put("email", email);
+        return send(accountWrite(context, "POST", "/account/email-verifications", body.toString()), 202).path("requests");
+    }
+
+    private static String verificationCode(String id) {
+        return db.sql("select code from email_verification where id = ?")
+                .param(Long.parseLong(id)).query(String.class).single();
+    }
+
+    private static HttpRequest accountWrite(AccountContext context, String method, String path, String body) {
+        return HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofSeconds(10))
+                .header("Origin", ORIGIN).header("Cookie", context.cookie()).header("X-CSRF-Token", context.csrf())
                 .header("Idempotency-Key", key()).header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
+                .method(method, HttpRequest.BodyPublishers.ofString(body)).build();
     }
 
     private static JsonNode post(SessionService.Issued session, String path, String body, String key, int status)
