@@ -5,6 +5,7 @@ import UiIcon from "../../../../shared/UiIcon.vue";
 import { listCategories, searchProducts } from "../../api/products";
 import type { ProductSummary } from "../../api/contracts";
 import { useAsyncData, usePagedList } from "../../app/async";
+import { categoryFilterOptions } from "../../app/category-filters";
 import { formatCents, formatRelative, parseYuanToCents } from "../../app/format";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import EmptyState from "../../components/EmptyState.vue";
@@ -43,6 +44,7 @@ const filterableCategories = computed(() =>
     (category) => category.has_public_products || category.selectable,
   ),
 );
+const categoryFilters = computed(() => categoryFilterOptions(filterableCategories.value));
 const hasAdvancedFilters = computed(
   () => selectedCategories.value.length > 0 || minPrice.value !== "" || maxPrice.value !== "",
 );
@@ -181,7 +183,7 @@ function toggleCategory(id: string): void {
           <legend class="field__label">分类</legend>
           <div class="inline">
             <button
-              v-for="category in filterableCategories"
+              v-for="category in categoryFilters"
               :key="category.id"
               type="button"
               class="chip chip--action"
@@ -189,7 +191,7 @@ function toggleCategory(id: string): void {
               :aria-pressed="selectedCategories.includes(category.id)"
               @click="toggleCategory(category.id)"
             >
-              {{ category.main_name }}
+              {{ category.label }}
             </button>
           </div>
         </fieldset>
