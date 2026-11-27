@@ -243,6 +243,14 @@ export function notificationTypeLabel(eventType: string): string {
   return groups[group] ?? "通知";
 }
 
+/**
+ * Reason copy for one review outcome: only a rejection is a rejection reason.
+ * An approved review may carry an explanation for the seller.
+ */
+export function reviewReasonLabel(status: ReviewStatus): string {
+  return status === "rejected" ? "拒绝原因" : "审核说明";
+}
+
 /** Tail of the trade lifecycle shown as progress on the detail page. */
 export function tradeStageLabel(status: TradeStatus, phase: string | null | undefined): string {
   if (status === "in_progress") {
