@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.github.iy88.project1.account.application.AccountAvatarService;
@@ -16,6 +17,7 @@ import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.persistence.CategoryApplicationRepository;
 import io.github.iy88.project1.product.persistence.Product;
+import io.github.iy88.project1.product.persistence.ProductAudit;
 import io.github.iy88.project1.product.persistence.ProductAuditRepository;
 import io.github.iy88.project1.product.persistence.ProductCategoryRepository;
 import io.github.iy88.project1.product.persistence.ProductEditHistory;
@@ -30,6 +32,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -45,6 +48,8 @@ class ProductServiceEditNoticeTests {
     private final ProductCategoryRepository links = mock(ProductCategoryRepository.class);
     private final ProductEditHistoryRepository edits = mock(ProductEditHistoryRepository.class);
     private final ProductEditNotices notices = mock(ProductEditNotices.class);
+    private final ProductAuditRepository audits = mock(ProductAuditRepository.class);
+    private final ObjectProvider<ProductReviewCaseLifecycle> reviewCases = mock(ObjectProvider.class);
     private ProductService service;
     private Product product;
 
@@ -74,8 +79,8 @@ class ProductServiceEditNoticeTests {
         when(environment.getRequiredProperty("OSS_PREFIX")).thenReturn("prefix");
         when(environment.getRequiredProperty("OSS_ACCESS_KEY_ID")).thenReturn("id");
         when(environment.getRequiredProperty("OSS_ACCESS_KEY_SECRET")).thenReturn("secret");
-        service = new ProductService(products, links, edits, mock(ProductAuditRepository.class),
-                mock(CategoryApplicationRepository.class), mock(org.springframework.beans.factory.ObjectProvider.class),
+        service = new ProductService(products, links, edits, audits,
+                mock(CategoryApplicationRepository.class), reviewCases,
                 mock(AccountRepository.class), mock(AccountAvatarService.class), mock(AccountWriteGuard.class), mock(CategoryDirectory.class),
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class),
@@ -95,5 +100,25 @@ class ProductServiceEditNoticeTests {
         verify(products).save(product);
         verify(notices).productEdited(eq(context), eq(SELLER), eq(PRODUCT), eq(99L), any(), eq(true), any());
         assertThat(product.lifecycleState()).isEqualTo(Product.PUBLIC);
+    }
+
+    @Test
+    void editingAPendingReviewDoesNotPublishAManagementUpdate() {
+        ProductAudit audit = mock(ProductAudit.class);
+        when(audit.status()).thenReturn("pending");
+        when(audit.id()).thenReturn(2L);
+        when(audit.caseId()).thenReturn(4L);
+        when(audit.submittedAt()).thenReturn(NOW);
+        when(audits.findTopByProductIdOrderBySequenceNoDesc(PRODUCT)).thenReturn(Optional.of(audit));
+        when(product.lifecycleState()).thenReturn(Product.PENDING_REVIEW);
+        var lifecycle = mock(ProductReviewCaseLifecycle.class);
+        when(reviewCases.getIfAvailable()).thenReturn(lifecycle);
+        var context = new ExecutionContext(UUID.randomUUID(), ExecutionContext.ActorKind.ACCOUNT,
+                Long.toString(SELLER), UUID.randomUUID(), null, 1L, "cfg");
+
+        service.edit(SELLER, PRODUCT,
+                new ProductService.EditCommand(null, "新描述", null, null, null, null, 1), context);
+
+        verifyNoInteractions(lifecycle);
     }
 }

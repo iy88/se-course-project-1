@@ -144,7 +144,6 @@ class ManagementCaseNotifications implements NotificationSourcePort {
             case "lift" -> "事项处置已解除";
             case "close" -> "事项已结案";
             case "publish_result" -> "事项结果已公开";
-            case "review_updated" -> "待审核商品内容已更新";
             case "classification_withdrawn" -> "待审核商品的分类申请已撤回";
             case "withdrawn" -> "商品审核已撤回";
             default -> "事项有新进展";
