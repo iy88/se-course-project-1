@@ -62,6 +62,9 @@ public final class TradePorts {
 
         /** Releases the specified holder and puts the product off shelf in the same transaction. */
         void release(WriteTransaction transaction, ProductState state, long tradeId, String reason);
+
+        /** Releases the specified holder and returns the product to the public lifecycle state. */
+        void releaseToPublic(WriteTransaction transaction, ProductState state, long tradeId, String reason);
     }
 
     public interface Accounts {

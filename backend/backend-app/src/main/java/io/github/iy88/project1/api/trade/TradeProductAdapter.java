@@ -62,6 +62,11 @@ final class TradeProductAdapter implements TradePorts.Product {
         products.release(state.productId(), tradeId, Instant.now());
     }
 
+    @Override
+    public void releaseToPublic(WriteTransaction transaction, ProductState state, long tradeId, String reason) {
+        products.releaseToPublic(state.productId(), tradeId, Instant.now());
+    }
+
     private static ProductState state(ProductTradeStore.TradeProduct product) {
         return new ProductState(product.productId(), product.sellerId(), product.contentVersion(),
                 product.lifecycleState(), product.occupiedByTradeId(), product.title(),
