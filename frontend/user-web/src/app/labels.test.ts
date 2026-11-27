@@ -8,7 +8,7 @@ describe("review reason label", () => {
   });
 
   it("labels every other outcome as a review note", () => {
-    for (const status of ["passed", "withdrawn", "pending"]) {
+    for (const status of ["passed", "withdrawn", "pending"] as const) {
       assert.equal(reviewReasonLabel(status), "审核说明");
     }
   });

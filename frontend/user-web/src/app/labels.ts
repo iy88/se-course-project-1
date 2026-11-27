@@ -247,7 +247,7 @@ export function notificationTypeLabel(eventType: string): string {
  * Reason copy for one review outcome: only a rejection is a rejection reason.
  * An approved review may carry an explanation for the seller.
  */
-export function reviewReasonLabel(status: string): string {
+export function reviewReasonLabel(status: ReviewStatus): string {
   return status === "rejected" ? "拒绝原因" : "审核说明";
 }
 
