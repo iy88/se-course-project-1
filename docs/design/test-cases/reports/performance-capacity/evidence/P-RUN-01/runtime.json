@@ -1,0 +1,56 @@
+{
+  "passed": true,
+  "case": null,
+  "single_operation": null,
+  "highest_validated_rate": null,
+  "first_observed_failing_rate": null,
+  "conclusion": null,
+  "configured_ceiling_reached": null,
+  "stop_reason": null,
+  "websocket_disconnects": 0,
+  "websocket_reconnect_failures": 0,
+  "stages": [],
+  "operations": {},
+  "max_runtime_metrics": {
+    "redis_dbsize": 302,
+    "event_stream": 10000,
+    "work_stream": 0,
+    "work_pending": 0,
+    "unpublished_events": 6,
+    "all_events": 21877,
+    "db_sessions": 41,
+    "db_active": 11,
+    "db_locks": 87
+  },
+  "process_peaks": {
+    "scheduler": {
+      "cpu_pct": 1.8,
+      "rss_kib": 1186768
+    },
+    "worker-1": {
+      "cpu_pct": 0.7,
+      "rss_kib": 1212176
+    },
+    "api-1": {
+      "cpu_pct": 968.9,
+      "rss_kib": 1363744
+    },
+    "ws-1": {
+      "cpu_pct": 227.9,
+      "rss_kib": 1314672
+    }
+  },
+  "aggregate_process_peaks": {
+    "cpu_pct": 1196.8,
+    "rss_kib": 5065728
+  },
+  "upstream_counts": {
+    "upstream-1": {
+      "200": 20097,
+      "201": 5468
+    },
+    "upstream-2": {
+      "101": 100
+    }
+  }
+}

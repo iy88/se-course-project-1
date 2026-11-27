@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.61
-Version-Datetime: 2026-11-26T13:44:33+08:00
+Version: 0.1.63
+Version-Datetime: 2026-11-27T15:15:00+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -151,6 +151,13 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 
 核对输出的目标数据库，按提示输入两次登录密码。密码输入无回显。命令使用配置的数据库 owner 创建 `manager` 账户并记录审计，密码采用和普通账户相同的长度规则与哈希算法。创建完成后，使用该邮箱和密码登录管理端。邮箱已注册时，命令报错并保留该账户原有角色和密码。
 
+## 种子数据与真实接口压测
+
+隔离环境下的 `maintenance.jar seed load`、`seed demo`、OSS 前缀清理、私有 manifest 和 Rust HTTP/WebSocket 压测流程见
+[种子数据与真实接口压测使用说明](docs/guides/seed-and-loadtest.md)。共享测试桶只能使用 `oss reset --prefix` 清理当前前缀；
+不带 `--prefix` 的整桶 reset 仅适用于专用桶。性能测试案例、执行过程与原始报告证据见
+[TC-PERF-001 性能与容量测试报告](docs/design/test-cases/reports/performance-capacity/测试报告.md)。
+
 ## 后端开发
 
 后端使用 OpenJDK 27、Spring Boot 4.1.2 和 Maven 3.10.1。以下命令均从仓库根目录执行：
@@ -230,6 +237,8 @@ java -jar backend/backend-app/target/backend-app-0.0.1-SNAPSHOT.jar --spring.pro
 ```
 
 将示例收件地址替换为测试地址。探针完成后退出，失败时返回非零状态；SMTP 日志中的邮件 ID 可用于在收件箱中定位 `[Project1 S1] SMTP probe`。
+
+依赖探针是部署环境的一次性配置校验入口。首次部署、切换 Bucket 或变更相关配置时，维护方须确认私有桶和版本控制状态预检通过后才开放文件业务；现有 Jenkins 自动发布不强制执行该探针。正常上传授权、完成核验和清理请求不会重复查询 Bucket ACL／versioning；配置变更由运维控制，不允许业务运行期间擅自修改。
 
 ### OSS 配置
 

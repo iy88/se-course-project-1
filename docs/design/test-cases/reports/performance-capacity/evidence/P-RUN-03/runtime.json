@@ -1,0 +1,1124 @@
+[
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Search",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 600.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "validation_failed_trying_lower_observed_rate",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 600.0,
+        "outcome": "passed",
+        "passed": true,
+        "started_rate": 600.0,
+        "http_rps": 600.0,
+        "application_http_rps": 600.0,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 599.5,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 418,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": -0.6572043530300342,
+        "drain_seconds": 0.011720917,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      },
+      {
+        "index": 1,
+        "kind": "validation",
+        "target_rate": 600.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 600.0,
+        "http_rps": 600.0,
+        "application_http_rps": 600.0,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 587.15,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 274,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": 14.443730410696872,
+        "drain_seconds": 0.202683916,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {
+      "search": {
+        "samples": 12000,
+        "errors": 0,
+        "p50_ms": 16.470542000000002,
+        "p95_ms": 484.93904100000003,
+        "p99_ms": 577.529666
+      }
+    },
+    "max_runtime_metrics": {
+      "redis_dbsize": 101,
+      "event_stream": 0,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 0,
+      "all_events": 0,
+      "db_sessions": 41,
+      "db_active": 9,
+      "db_locks": 55
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 0.2,
+        "rss_kib": 1215216
+      },
+      "worker-1": {
+        "cpu_pct": 0.4,
+        "rss_kib": 1197360
+      },
+      "api-1": {
+        "cpu_pct": 935.9,
+        "rss_kib": 2685120
+      },
+      "ws-1": {
+        "cpu_pct": 225.7,
+        "rss_kib": 1240064
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 935.9,
+      "rss_kib": 6337296
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 30200
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Search",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 800.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 800.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 799.8939807977945,
+        "http_rps": 799.8939807977945,
+        "application_http_rps": 799.8939807977945,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 485.2963481449802,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 3149,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": 191.54036073571643,
+        "drain_seconds": 4.842568375,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 101,
+      "event_stream": 0,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 0,
+      "all_events": 0,
+      "db_sessions": 41,
+      "db_active": 10,
+      "db_locks": 55
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 0.3,
+        "rss_kib": 1212464
+      },
+      "worker-1": {
+        "cpu_pct": 0.8,
+        "rss_kib": 1182400
+      },
+      "api-1": {
+        "cpu_pct": 991.0,
+        "rss_kib": 2677504
+      },
+      "ws-1": {
+        "cpu_pct": 139.3,
+        "rss_kib": 1245664
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 991.0,
+      "rss_kib": 6317568
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 12199
+      }
+    }
+  },
+  {
+    "passed": true,
+    "case": "Single",
+    "single_operation": "Search",
+    "highest_validated_rate": 600.0,
+    "first_observed_failing_rate": null,
+    "conclusion": "validated_lower_bound_only_upper_limit_unknown",
+    "configured_ceiling_reached": true,
+    "stop_reason": "configured_ceiling_reached",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 600.0,
+        "outcome": "passed",
+        "passed": true,
+        "started_rate": 600.0,
+        "http_rps": 600.0,
+        "application_http_rps": 600.0,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 599.4,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 726,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": -0.024175331353278685,
+        "drain_seconds": 0.013555834,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      },
+      {
+        "index": 1,
+        "kind": "validation",
+        "target_rate": 600.0,
+        "outcome": "passed",
+        "passed": true,
+        "started_rate": 600.0,
+        "http_rps": 600.0,
+        "application_http_rps": 600.0,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 599.4,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 72,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": 0.05933903623249401,
+        "drain_seconds": 0.015572167,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {
+      "search": {
+        "samples": 12000,
+        "errors": 0,
+        "p50_ms": 17.539458,
+        "p95_ms": 842.690792,
+        "p99_ms": 1029.559541
+      }
+    },
+    "max_runtime_metrics": {
+      "redis_dbsize": 101,
+      "event_stream": 0,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 0,
+      "all_events": 0,
+      "db_sessions": 51,
+      "db_active": 11,
+      "db_locks": 80
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 0.7,
+        "rss_kib": 1178784
+      },
+      "worker-1": {
+        "cpu_pct": 0.5,
+        "rss_kib": 1200848
+      },
+      "api-1": {
+        "cpu_pct": 591.3,
+        "rss_kib": 1396544
+      },
+      "api-2": {
+        "cpu_pct": 481.9,
+        "rss_kib": 1352192
+      },
+      "ws-1": {
+        "cpu_pct": 141.1,
+        "rss_kib": 1233760
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1073.2,
+      "rss_kib": 6327504
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 15110
+      },
+      "upstream-2": {
+        "200": 15090
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Search",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 800.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 800.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 799.8865028242958,
+        "http_rps": 799.8865028242958,
+        "application_http_rps": 799.8865028242958,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 390.6445708168155,
+        "scenario_error_rate": 0.19375,
+        "max_in_flight": 4103,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": 43.23323570116781,
+        "drain_seconds": 6.04593525,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 101,
+      "event_stream": 0,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 0,
+      "all_events": 0,
+      "db_sessions": 51,
+      "db_active": 15,
+      "db_locks": 82
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 0.3,
+        "rss_kib": 1184560
+      },
+      "worker-1": {
+        "cpu_pct": 0.6,
+        "rss_kib": 1215232
+      },
+      "api-1": {
+        "cpu_pct": 470.1,
+        "rss_kib": 1386704
+      },
+      "api-2": {
+        "cpu_pct": 466.8,
+        "rss_kib": 1362512
+      },
+      "ws-1": {
+        "cpu_pct": 35.9,
+        "rss_kib": 1266112
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 937.5,
+      "rss_kib": 6414928
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 5324
+      },
+      "upstream-2": {
+        "200": 5326
+      },
+      "0.000": {
+        "500": 1204
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Search",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 600.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 600.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 599.966001966553,
+        "http_rps": 600.5659679685195,
+        "application_http_rps": 600.5659679685195,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 445.67474512748777,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 2094,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": -62.4855468140183,
+        "drain_seconds": 1.374259417,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 101,
+      "event_stream": 0,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 0,
+      "all_events": 0,
+      "db_sessions": 71,
+      "db_active": 29,
+      "db_locks": 165
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 0.2,
+        "rss_kib": 1198176
+      },
+      "worker-1": {
+        "cpu_pct": 0.0,
+        "rss_kib": 1176704
+      },
+      "api-1": {
+        "cpu_pct": 270.3,
+        "rss_kib": 1366912
+      },
+      "api-2": {
+        "cpu_pct": 273.2,
+        "rss_kib": 1379664
+      },
+      "api-3": {
+        "cpu_pct": 275.2,
+        "rss_kib": 1382912
+      },
+      "api-4": {
+        "cpu_pct": 264.7,
+        "rss_kib": 1366464
+      },
+      "ws-1": {
+        "cpu_pct": 37.5,
+        "rss_kib": 1257152
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1022.2,
+      "rss_kib": 9120384
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 2304
+      },
+      "upstream-2": {
+        "200": 2299
+      },
+      "upstream-3": {
+        "200": 2303
+      },
+      "upstream-4": {
+        "200": 2294
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Search",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 800.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 800.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 799.8951371070849,
+        "http_rps": 799.9951239992232,
+        "application_http_rps": 799.9951239992232,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 390.64878758467256,
+        "scenario_error_rate": 0.2865,
+        "max_in_flight": 4128,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": 7.520470004300803,
+        "drain_seconds": 5.673710125,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 101,
+      "event_stream": 0,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 0,
+      "all_events": 0,
+      "db_sessions": 71,
+      "db_active": 21,
+      "db_locks": 114
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 0.5,
+        "rss_kib": 1201360
+      },
+      "worker-1": {
+        "cpu_pct": 0.4,
+        "rss_kib": 1223504
+      },
+      "api-1": {
+        "cpu_pct": 305.3,
+        "rss_kib": 1372256
+      },
+      "api-2": {
+        "cpu_pct": 262.9,
+        "rss_kib": 1350752
+      },
+      "api-3": {
+        "cpu_pct": 292.5,
+        "rss_kib": 1368480
+      },
+      "api-4": {
+        "cpu_pct": 298.8,
+        "rss_kib": 1375616
+      },
+      "ws-1": {
+        "cpu_pct": 167.5,
+        "rss_kib": 1214320
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1078.1,
+      "rss_kib": 9092032
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 2474
+      },
+      "upstream-2": {
+        "200": 2492
+      },
+      "upstream-3": {
+        "200": 2468
+      },
+      "upstream-4": {
+        "200": 2474
+      },
+      "0.000": {
+        "500": 7
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Im",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 400.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 400.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 399.9239361470254,
+        "http_rps": 1301.152526254347,
+        "application_http_rps": 1301.152526254347,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 317.33964333266465,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 1268,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": -63.85434463039339,
+        "drain_seconds": 1.483738083,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 302,
+      "event_stream": 9879,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 13604,
+      "all_events": 23514,
+      "db_sessions": 51,
+      "db_active": 7,
+      "db_locks": 106
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 13.9,
+        "rss_kib": 1196176
+      },
+      "worker-1": {
+        "cpu_pct": 0.2,
+        "rss_kib": 1194848
+      },
+      "api-1": {
+        "cpu_pct": 486.7,
+        "rss_kib": 1377456
+      },
+      "api-2": {
+        "cpu_pct": 498.2,
+        "rss_kib": 1388640
+      },
+      "ws-1": {
+        "cpu_pct": 366.8,
+        "rss_kib": 1354320
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1327.8,
+      "rss_kib": 6509952
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 6126,
+        "201": 2986
+      },
+      "upstream-2": {
+        "200": 6168,
+        "201": 3014
+      },
+      "upstream-3": {
+        "101": 100
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Im",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 600.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 600.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 599.9904651915233,
+        "http_rps": 1878.9701401581206,
+        "application_http_rps": 1878.9701401581206,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 345.99450159377847,
+        "scenario_error_rate": 0.019833333333333335,
+        "max_in_flight": 2612,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": 3.131091087711606,
+        "drain_seconds": 3.456972292,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 302,
+      "event_stream": 6203,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 28836,
+      "all_events": 35051,
+      "db_sessions": 51,
+      "db_active": 10,
+      "db_locks": 115
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 2.5,
+        "rss_kib": 1201712
+      },
+      "worker-1": {
+        "cpu_pct": 0.0,
+        "rss_kib": 1190592
+      },
+      "api-1": {
+        "cpu_pct": 524.6,
+        "rss_kib": 1379360
+      },
+      "api-2": {
+        "cpu_pct": 515.7,
+        "rss_kib": 1430736
+      },
+      "ws-1": {
+        "cpu_pct": 319.5,
+        "rss_kib": 1330944
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1324.6,
+      "rss_kib": 6528912
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 8957,
+        "201": 4475
+      },
+      "upstream-2": {
+        "200": 8906,
+        "201": 4525
+      },
+      "upstream-3": {
+        "101": 100
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Im",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 400.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 400.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 399.9937250984375,
+        "http_rps": 1347.1788661315375,
+        "application_http_rps": 1347.1788661315375,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 381.7940106064586,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 871,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": -89.91989791537694,
+        "drain_seconds": 0.745713459,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 302,
+      "event_stream": 6149,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 16335,
+      "all_events": 22530,
+      "db_sessions": 61,
+      "db_active": 6,
+      "db_locks": 90
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 9.6,
+        "rss_kib": 1200608
+      },
+      "worker-1": {
+        "cpu_pct": 0.0,
+        "rss_kib": 1175872
+      },
+      "api-1": {
+        "cpu_pct": 442.1,
+        "rss_kib": 1444448
+      },
+      "api-2": {
+        "cpu_pct": 472.9,
+        "rss_kib": 1419584
+      },
+      "ws-1": {
+        "cpu_pct": 247.0,
+        "rss_kib": 1297312
+      },
+      "ws-2": {
+        "cpu_pct": 221.2,
+        "rss_kib": 1317472
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1310.4,
+      "rss_kib": 7831712
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 6117,
+        "201": 2967
+      },
+      "upstream-2": {
+        "200": 6183,
+        "201": 3033
+      },
+      "upstream-3": {
+        "101": 50
+      },
+      "upstream-4": {
+        "101": 50
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Im",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 600.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 600.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 599.9965875194084,
+        "http_rps": 1854.6894514537448,
+        "application_http_rps": 1854.6894514537448,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 343.2980474923549,
+        "scenario_error_rate": 0.025833333333333333,
+        "max_in_flight": 2796,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": 42.716004998617564,
+        "drain_seconds": 3.544509291,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 302,
+      "event_stream": 3344,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 31644,
+      "all_events": 35012,
+      "db_sessions": 61,
+      "db_active": 8,
+      "db_locks": 384
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 4.1,
+        "rss_kib": 1206096
+      },
+      "worker-1": {
+        "cpu_pct": 1.0,
+        "rss_kib": 1183568
+      },
+      "api-1": {
+        "cpu_pct": 457.9,
+        "rss_kib": 1432992
+      },
+      "api-2": {
+        "cpu_pct": 424.1,
+        "rss_kib": 1400032
+      },
+      "ws-1": {
+        "cpu_pct": 249.4,
+        "rss_kib": 1343552
+      },
+      "ws-2": {
+        "cpu_pct": 222.5,
+        "rss_kib": 1331440
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1337.7,
+      "rss_kib": 7857200
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 8785,
+        "201": 4495
+      },
+      "upstream-2": {
+        "200": 9037,
+        "201": 4505
+      },
+      "upstream-3": {
+        "101": 50
+      },
+      "upstream-4": {
+        "101": 50
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Im",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 400.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 400.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 399.9726002369961,
+        "http_rps": 1310.21024522634,
+        "application_http_rps": 1310.21024522634,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 375.6742647725986,
+        "scenario_error_rate": 0.0,
+        "max_in_flight": 876,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": -79.0293476653691,
+        "drain_seconds": 0.886718,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 302,
+      "event_stream": 2861,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 20995,
+      "all_events": 23878,
+      "db_sessions": 81,
+      "db_active": 6,
+      "db_locks": 709
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 31.5,
+        "rss_kib": 1194848
+      },
+      "worker-1": {
+        "cpu_pct": 0.2,
+        "rss_kib": 1207152
+      },
+      "api-1": {
+        "cpu_pct": 439.5,
+        "rss_kib": 1440192
+      },
+      "api-2": {
+        "cpu_pct": 386.3,
+        "rss_kib": 1434064
+      },
+      "ws-1": {
+        "cpu_pct": 172.9,
+        "rss_kib": 1320320
+      },
+      "ws-2": {
+        "cpu_pct": 155.9,
+        "rss_kib": 1308048
+      },
+      "ws-3": {
+        "cpu_pct": 183.9,
+        "rss_kib": 1305600
+      },
+      "ws-4": {
+        "cpu_pct": 158.5,
+        "rss_kib": 1291744
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1361.5,
+      "rss_kib": 10482464
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 6146,
+        "201": 2960
+      },
+      "upstream-2": {
+        "200": 6154,
+        "201": 3040
+      },
+      "upstream-3": {
+        "101": 25
+      },
+      "upstream-4": {
+        "101": 25
+      },
+      "upstream-5": {
+        "101": 25
+      },
+      "upstream-6": {
+        "101": 25
+      }
+    }
+  },
+  {
+    "passed": false,
+    "case": "Single",
+    "single_operation": "Im",
+    "highest_validated_rate": null,
+    "first_observed_failing_rate": 600.0,
+    "conclusion": "no_rate_validated",
+    "configured_ceiling_reached": false,
+    "stop_reason": "service_failure_bracketed",
+    "websocket_disconnects": 0,
+    "websocket_reconnect_failures": 0,
+    "stages": [
+      {
+        "index": 0,
+        "kind": "coarse",
+        "target_rate": 600.0,
+        "outcome": "service_failed",
+        "passed": false,
+        "started_rate": 599.9219626310385,
+        "http_rps": 1888.2543773811938,
+        "application_http_rps": 1888.2543773811938,
+        "storage_http_put_rps": 0.0,
+        "scenario_completions_per_second": 366.7522931551082,
+        "scenario_error_rate": 0.014166666666666666,
+        "max_in_flight": 2537,
+        "late_arrivals_skipped": 0,
+        "in_flight_limit_drops": 0,
+        "backlog_growth_per_second": 10.19999076252048,
+        "drain_seconds": 3.5865533750000003,
+        "websocket_disconnects": 0,
+        "websocket_reconnect_failures": 0
+      }
+    ],
+    "operations": {},
+    "max_runtime_metrics": {
+      "redis_dbsize": 302,
+      "event_stream": 1074,
+      "work_stream": 0,
+      "work_pending": 0,
+      "unpublished_events": 33967,
+      "all_events": 35081,
+      "db_sessions": 81,
+      "db_active": 10,
+      "db_locks": 319
+    },
+    "process_peaks": {
+      "scheduler": {
+        "cpu_pct": 12.5,
+        "rss_kib": 1190320
+      },
+      "worker-1": {
+        "cpu_pct": 0.4,
+        "rss_kib": 1189056
+      },
+      "api-1": {
+        "cpu_pct": 424.3,
+        "rss_kib": 1440384
+      },
+      "api-2": {
+        "cpu_pct": 402.1,
+        "rss_kib": 1384768
+      },
+      "ws-1": {
+        "cpu_pct": 133.2,
+        "rss_kib": 1296352
+      },
+      "ws-2": {
+        "cpu_pct": 160.3,
+        "rss_kib": 1319584
+      },
+      "ws-3": {
+        "cpu_pct": 153.8,
+        "rss_kib": 1303456
+      },
+      "ws-4": {
+        "cpu_pct": 154.4,
+        "rss_kib": 1321888
+      }
+    },
+    "aggregate_process_peaks": {
+      "cpu_pct": 1329.4,
+      "rss_kib": 10347440
+    },
+    "upstream_counts": {
+      "upstream-1": {
+        "200": 9018,
+        "201": 4483
+      },
+      "upstream-2": {
+        "200": 8999,
+        "201": 4517
+      },
+      "upstream-3": {
+        "101": 25
+      },
+      "upstream-4": {
+        "101": 25
+      },
+      "upstream-5": {
+        "101": 25
+      },
+      "upstream-6": {
+        "101": 25
+      }
+    }
+  }
+]
