@@ -4,10 +4,13 @@ import io.github.iy88.project1.account.application.AccountManagementReadModel;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.product.persistence.Product;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -19,6 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Profile("infrastructure & !dependency-probe & !file-probe")
 public class ManagementStatisticsQueries {
+    private static final int MAX_DAILY_TREND_DAYS = 31;
+
     private final JdbcClient jdbc;
     private final AccountManagementReadModel accounts;
 
@@ -69,9 +74,42 @@ public class ManagementStatisticsQueries {
                 .param("end_at", selection.endAt(), java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
                 .query((row, index) -> new TradeCounts(new Trades(row.getLong("completed"),
                         row.getLong("terminated"), row.getLong("disputed")), row.getLong("selected"))).single();
+        var completedByDay = completedByDay(selection);
 
         return new Statistics(asOf.toInstant(), selection, accountCounts, products, pending,
-                tradeCounts.current(), tradeCounts.selected());
+                tradeCounts.current(), tradeCounts.selected(), completedByDay);
+    }
+
+    private List<DailyCompleted> completedByDay(Selection selection) {
+        if (!"range".equals(selection.timeScope()) || utcDayCount(selection) > MAX_DAILY_TREND_DAYS) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                select day_start, count(t.ended_at) as completed
+                from generate_series(
+                    date_trunc('day', cast(:start_at as timestamptz) at time zone 'UTC') at time zone 'UTC',
+                    date_trunc('day', (cast(:end_at as timestamptz) - interval '1 microsecond')
+                        at time zone 'UTC') at time zone 'UTC',
+                    interval '1 day'
+                ) as days(day_start)
+                left join trade t on t.status = 'completed'
+                    and t.ended_at >= greatest(day_start, cast(:start_at as timestamptz))
+                    and t.ended_at < least(day_start + interval '1 day', cast(:end_at as timestamptz))
+                group by day_start
+                order by day_start
+                """)
+                .param("start_at", selection.startAt(), java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
+                .param("end_at", selection.endAt(), java.sql.Types.TIMESTAMP_WITH_TIMEZONE)
+                .query((row, index) -> new DailyCompleted(
+                        row.getObject("day_start", OffsetDateTime.class).toLocalDate(),
+                        row.getLong("completed")))
+                .list();
+    }
+
+    private static long utcDayCount(Selection selection) {
+        var firstDay = selection.startAt().toLocalDate();
+        var lastDay = selection.endAt().toInstant().minusNanos(1).atOffset(ZoneOffset.UTC).toLocalDate();
+        return ChronoUnit.DAYS.between(firstDay, lastDay) + 1;
     }
 
     private static Selection selection(String scope, String startAt, String endAt) {
@@ -95,13 +133,15 @@ public class ManagementStatisticsQueries {
 
     public record Statistics(Instant asOf, Selection selection, AccountManagementReadModel.Counts accounts,
                              Map<String, Long> productsByState, Pending pending, Trades trades,
-                             long completedInSelection) {}
+                             long completedInSelection, List<DailyCompleted> completedByDay) {}
 
     public record Selection(String timeScope, OffsetDateTime startAt, OffsetDateTime endAt) {}
 
     public record Pending(long reviews, long reports) {}
 
     public record Trades(long completed, long terminated, long disputed) {}
+
+    public record DailyCompleted(LocalDate day, long completed) {}
 
     private record TradeCounts(Trades current, long selected) {}
 }

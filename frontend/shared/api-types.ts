@@ -137,7 +137,7 @@ export interface paths {
     };
     /**
      * Get management statistics
-     * @description Requires a current manager session. Only completed_in_selection uses the selected time range.
+     * @description Requires a current manager session. completed_in_selection and completed_by_day use the selected time range.
      */
     get: operations["getManagementStatistics"];
     put?: never;
@@ -1173,6 +1173,13 @@ export interface components {
       };
       /** Format: int64 */
       completed_in_selection: number;
+      /** @description One UTC day bucket for a selected range of at most 31 days; empty for all time or a larger range. */
+      completed_by_day: {
+        /** Format: date */
+        day: string;
+        /** Format: int64 */
+        completed: number;
+      }[];
     };
     CommentAuthor: {
       id: string;
