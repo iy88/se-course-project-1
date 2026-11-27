@@ -37,11 +37,6 @@ class ReviewStageConfiguration {
             }
 
             @Override
-            public void contentUpdated(long caseId, long editId, Instant at) {
-                events.publishEvent(new ManagementCaseChange(caseId, "review_updated", "review:edit:" + editId, at));
-            }
-
-            @Override
             public void classificationWithdrawn(long caseId, long applicationId, Instant at) {
                 events.publishEvent(new ManagementCaseChange(caseId, "classification_withdrawn",
                         "review:category:" + applicationId, at));
