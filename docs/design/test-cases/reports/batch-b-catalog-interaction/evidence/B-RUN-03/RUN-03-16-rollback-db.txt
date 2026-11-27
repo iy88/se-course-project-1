@@ -1,0 +1,15 @@
+# B16 rollback after review approve with rejected application
+# Time: 2026-11-27 16:49 (+08:00)
+# Result: server returned REVIEW_CATEGORY_INSUFFICIENT; all writes rolled back
+
+select application_id, status, decided_at from category_application where application_id = 4;
+4|pending|
+
+select audit_id, status, decided_at from product_audit where audit_id = 7;
+7|pending|
+
+select product_id, lifecycle_state from product where product_id = 6;
+6|pending_review
+
+select count(*) from product_category where product_id = 6;
+0
