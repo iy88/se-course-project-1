@@ -252,25 +252,22 @@ public class CaseApplication {
                 long caseId = existing.get().caseId();
                 var facts = store.lock(transaction, caseId);
                 requireLifecycle(facts);
-                if (facts.archived()) {
-                    throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
+                if (!facts.archived() && !facts.decided()) {
+                    Long firstEvidence = attachEvidence(transaction, caseId, reporter, request.attachments());
+                    store.addAction(new CaseRecords.Action(0, caseId, CaseVocabulary.ACTION_SUPPLEMENT,
+                            CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
+                    store.touch(caseId, now);
+                    audit(transaction, "case.report.supplement", caseId, reporter);
+                    return new WriteResult.Response<>(200,
+                            submitted(caseId, facts.caseStatus(), true), new ResourceRef("case", caseId));
                 }
-                Long firstEvidence = attachEvidence(transaction, caseId, reporter, request.attachments());
-                store.addAction(new CaseRecords.Action(0, caseId, CaseVocabulary.ACTION_SUPPLEMENT,
-                        CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
-                store.touch(caseId, now);
-                audit(transaction, "case.report.supplement", caseId, reporter);
-                return new WriteResult.Response<>(200,
-                        submitted(caseId, facts.caseStatus(), true), new ResourceRef("case", caseId));
-            }
-            if (store.findClosedReport(reporter, request.target()).isPresent()) {
-                throw new BusinessError("CASE_CLOSED", 409, "同对象举报已结案");
             }
             lockFiles(transaction, request.attachments());
             Long opened = store.openReportIfAbsent(request.target(), reporter, reason, now).orElse(null);
             if (opened == null) {
                 var current = store.findOpenReport(reporter, request.target()).orElseThrow(CaseApplication::conflict);
                 var facts = store.lock(transaction, current.caseId());
+                if (facts.archived() || facts.decided()) throw conflict();
                 Long firstEvidence = attachEvidence(transaction, facts.caseId(), reporter, request.attachments());
                 store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_SUPPLEMENT,
                         CaseVocabulary.ACTOR_ACCOUNT, reporter, now, null, null, null, null, null, note, null), note == null ? firstEvidence : null);
@@ -330,6 +327,9 @@ public class CaseApplication {
             }
             if (facts.archived()) {
                 throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
+            }
+            if (facts.decided()) {
+                throw new BusinessError("STATE_CONFLICT", 409, "事项已作出决定，请重新提交举报");
             }
             String note = optionalText(request.supplement().note(), settings.getMaxNoteLength(), "补充说明");
             if (note == null && request.supplement().attachments().isEmpty()) {

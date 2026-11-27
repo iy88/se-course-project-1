@@ -69,18 +69,6 @@ class CaseApplicationTests {
     }
 
     @Test
-    void rejectsANewReportAfterTheSameObjectWasClosed() {
-        var harness = harness(pending());
-        var target = new CaseCommands.Target("account", RELATED, null, null);
-        when(harness.store.findClosedReport(REPORTER, target)).thenReturn(Optional.of(archived()));
-
-        assertThatThrownBy(() -> harness.application.submit(context(REPORTER), "key-1",
-                new CaseCommands.Report(target, "虚假信息", null, List.of())))
-                .isInstanceOfSatisfying(BusinessError.class,
-                        error -> assertThat(error.code()).isEqualTo("CASE_CLOSED"));
-    }
-
-    @Test
     void claimIsUniqueAndAlreadyClaimedForTheSameManager() {
         var harness = harness(pending());
         when(harness.store.claim(CASE_ID, MANAGER, NOW)).thenReturn(claimed());
@@ -731,7 +719,6 @@ class CaseApplicationTests {
         when(store.lock(any(), anyLong())).thenAnswer(invocation -> facts.get());
         when(store.requireLocked(any(), anyLong())).thenAnswer(invocation -> facts.get());
         when(store.findOpenReport(anyLong(), any())).thenReturn(Optional.empty());
-        when(store.findClosedReport(anyLong(), any())).thenReturn(Optional.empty());
         when(store.openReportIfAbsent(any(), anyLong(), anyString(), any())).thenReturn(Optional.of(CASE_ID));
         when(store.addAction(any())).thenReturn(101L);
         when(store.claim(anyLong(), anyLong(), any())).thenReturn(claimed());

@@ -494,7 +494,7 @@ public class CaseQueries {
                                          boolean managerView, long actor, List<CaseRecords.Action> inquiries,
                                          Instant now) {
         var actions = new LinkedHashSet<String>();
-        if (reporterView && !facts.archived()) {
+        if (reporterView && !facts.archived() && !facts.decided()) {
             actions.add(CaseVocabulary.SUPPLEMENT_EVIDENCE);
         }
         if (relatedView && !facts.archived()) {

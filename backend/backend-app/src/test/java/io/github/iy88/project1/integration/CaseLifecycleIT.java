@@ -415,7 +415,7 @@ class CaseLifecycleIT {
     }
 
     @Test
-    void closedReportRejectsANewSubmissionForTheSameObject() {
+    void decidedAndArchivedReportsAllowANewSubmissionForTheSameObject() {
         long reporter = REPORTER.get();
         long related = account("closed-report-" + RUN_ID, "已结案目标", "user");
         var target = new CaseCommands.Target("account", related, null, null);
@@ -428,10 +428,23 @@ class CaseLifecycleIT {
                         returning id
                         """)
                 .param(related).param(reporter).param(MANAGER_1.get()).query(Long.class).single();
-        assertThatThrownBy(() -> cases.submit(context(reporter), "resubmit-" + RUN_ID,
-                new CaseCommands.Report(target, "再次举报", null, List.of())))
-                .isInstanceOfSatisfying(BusinessError.class,
-                        error -> assertThat(error.code()).isEqualTo("CASE_CLOSED"));
+        db.sql("update moderation_case set archived_at = null where id = ?").param(closedCase).update();
+        var afterDecision = cases.submit(context(reporter), "resubmit-after-decision-" + RUN_ID,
+                new CaseCommands.Report(target, "决定后再次举报", null, List.of()));
+        assertThat(afterDecision.status()).isEqualTo(201);
+        long nextCase = afterDecision.data().path("case_id").asLong();
+        assertThat(nextCase).isNotEqualTo(closedCase);
+        db.sql("update moderation_case set archived_at = statement_timestamp() where id = ?")
+                .param(closedCase).update();
+        db.sql("update moderation_case set case_status = 'decided', decision_kind = 'no_action', "
+                + "reason_text = '不予处理', decided_by = ?, decided_at = statement_timestamp(), "
+                + "archived_at = statement_timestamp() where id = ?")
+                .param(MANAGER_1.get()).param(nextCase).update();
+        var fresh = cases.submit(context(reporter), "resubmit-" + RUN_ID,
+                new CaseCommands.Report(target, "再次举报", null, List.of()));
+        assertThat(fresh.status()).isEqualTo(201);
+        assertThat(fresh.data().path("reused").asBoolean()).isFalse();
+        assertThat(fresh.data().path("case_id").asLong()).isNotEqualTo(closedCase);
         // The archived row is still readable through the reporter viewpoint.
         assertThat(queries.detail(context(reporter), closedCase).get("case_id").asString())
                 .isEqualTo(Long.toString(closedCase));

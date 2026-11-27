@@ -114,7 +114,7 @@ public class CaseLifecycleStore {
                                 reporter_account_id, reported_reason, case_status)
                             values ('report', ?, ?, 'message', ?, ?, ?, ?, ?, 'pending')
                             on conflict (reporter_account_id, target_conversation_kind, target_id)
-                                where archived_at is null and case_type = 'report' and target_type = 'message'
+                                where archived_at is null and case_status in ('pending', 'claimed') and case_type = 'report' and target_type = 'message'
                             do nothing
                             returning id
                             """)
@@ -128,7 +128,7 @@ public class CaseLifecycleStore {
                             target_id, reporter_account_id, reported_reason, case_status)
                         values ('report', ?, ?, ?, ?, ?, ?, 'pending')
                         on conflict (reporter_account_id, target_type, target_id)
-                            where archived_at is null and case_type = 'report' and target_type <> 'message'
+                            where archived_at is null and case_status in ('pending', 'claimed') and case_type = 'report' and target_type <> 'message'
                         do nothing
                         returning id
                         """)
@@ -177,20 +177,6 @@ public class CaseLifecycleStore {
                 + " and reporter_account_id = ? and target_type = ? and target_id = ?"
                 + ("message".equals(target.targetType())
                 ? " and target_conversation_kind = ?" : "");
-        var spec = jdbc.sql(sql).param(reporterAccountId).param(target.targetType()).param(target.targetId());
-        if ("message".equals(target.targetType())) {
-            spec = spec.param(target.conversationKind());
-        }
-        return spec.query(this::facts).optional();
-    }
-
-    /** A closed report by the same reporter blocks a new submission for the same object. */
-    public Optional<CaseRecords.Facts> findClosedReport(long reporterAccountId, CaseCommands.Target target) {
-        String sql = FACTS + " where case_type = 'report' and archived_at is not null"
-                + " and reporter_account_id = ? and target_type = ? and target_id = ?"
-                + ("message".equals(target.targetType())
-                ? " and target_conversation_kind = ?" : "")
-                + " order by id desc limit 1";
         var spec = jdbc.sql(sql).param(reporterAccountId).param(target.targetType()).param(target.targetId());
         if ("message".equals(target.targetType())) {
             spec = spec.param(target.conversationKind());
