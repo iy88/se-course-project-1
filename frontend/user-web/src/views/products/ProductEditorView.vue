@@ -176,7 +176,9 @@ async function submit(): Promise<void> {
               title: title.value.trim(),
               description: description.value.trim(),
               price_cents: priceCents,
-              category_ids: selectedCategoryIds.value.length ? selectedCategoryIds.value : undefined,
+              category_ids: selectedCategoryIds.value.length
+                ? selectedCategoryIds.value
+                : undefined,
               image_file_ids: imageFileIds.value,
               category_application: canApplyNewCategory.value ? application : undefined,
               expected_version: editing.value!.content_version,
@@ -184,11 +186,7 @@ async function submit(): Promise<void> {
             keys.current("update-product"),
           ),
         (updated) =>
-          resubmitForReview(
-            updated.id,
-            updated.content_version,
-            keys.current("resubmit-product"),
-          ),
+          resubmitForReview(updated.id, updated.content_version, keys.current("resubmit-product")),
       );
       keys.rotate("update-product");
       if (result.resubmitted) keys.rotate("resubmit-product");
