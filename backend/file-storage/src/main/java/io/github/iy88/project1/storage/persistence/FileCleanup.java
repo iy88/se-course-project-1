@@ -33,7 +33,6 @@ public class FileCleanup {
 
     @Transactional(propagation = Propagation.NEVER)
     public Result runBatch(OssFileObjects objects, int batchSize) {
-        objects.requireWritableBucket();
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var retryBefore = now.minusSeconds(rules.cleanupScanSeconds());
         var ids = files.cleanupCandidates(objects.bucket(), objects.purposePrefix(FilePurpose.PRODUCT_IMAGE),
