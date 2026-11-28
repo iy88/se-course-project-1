@@ -12,7 +12,6 @@ import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.core.WriteTransaction;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -155,7 +154,8 @@ public class CaseApplication {
     public WriteResult<JsonNode> referenceEvidence(ExecutionContext context, String idempotencyKey, long caseId,
                                                    CaseCommands.EvidenceReference reference) {
         return writes.run(context, REFERENCE_EVIDENCE, idempotencyKey,
-                new EvidenceReferenceRequest(caseId, reference), new EvidenceReferenceUseCase());
+                new ReferenceCaseEvidence.Request(caseId, reference),
+                new ReferenceCaseEvidence(store, targets, managers, json, clock));
     }
 
     private record SupplementRequest(long caseId, CaseCommands.Supplement supplement) {
@@ -180,9 +180,6 @@ public class CaseApplication {
     }
 
     private record LiftRequest(long caseId, String enforcementId, String reason) {
-    }
-
-    private record EvidenceReferenceRequest(long caseId, CaseCommands.EvidenceReference reference) {
     }
 
     // ------------------------------------------------------------------ submit and supplement
@@ -1274,94 +1271,7 @@ public class CaseApplication {
         }
     }
 
-    // ------------------------------------------------------------------ platform record evidence
-
-    private final class EvidenceReferenceUseCase
-            implements WriteExecutor.UseCase<EvidenceReferenceRequest, EvidenceReferenceRequest> {
-        @Override
-        public JsonNode digestInput(EvidenceReferenceRequest request) {
-            return digest(request.caseId(), request.reference());
-        }
-
-        @Override
-        public LockPlan prepare(ExecutionContext context, EvidenceReferenceRequest request) {
-            return new LockPlan(Map.of(), Set.of(CaseLifecycleStore.lockKey(request.caseId())));
-        }
-
-        @Override
-        public EvidenceReferenceRequest qualify(ExecutionContext context, EvidenceReferenceRequest request,
-                                                LockPlan plan) {
-            requireEvidenceManager(context);
-            return request;
-        }
-
-        @Override
-        public void requireReplayAccess(ExecutionContext context, EvidenceReferenceRequest qualification,
-                                        ResourceRef resource) {
-            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
-                throw notVisible();
-            }
-            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
-            if (!facts.claimedBy(actor(context))) {
-                throw notVisible();
-            }
-        }
-
-        @Override
-        public WriteResult.Response<?> write(WriteTransaction transaction, EvidenceReferenceRequest request,
-                                             EvidenceReferenceRequest qualification, LockPlan plan) {
-            long manager = actor(transaction.context());
-            var facts = store.lock(transaction, request.caseId());
-            requireLifecycle(facts);
-            if (!facts.claimedBy(manager)) {
-                throw notVisible();
-            }
-            if (facts.archived()) {
-                throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
-            }
-            var reference = request.reference();
-            targets.requireReportedMessage(facts, reference.conversationKind(), reference.conversationId(),
-                    reference.messageId());
-            String scope = CaseRecords.MessageScope.format(reference.conversationKind(),
-                    reference.conversationId());
-            var existing = store.platformEvidence(facts.caseId(), CaseVocabulary.SOURCE_MESSAGE,
-                    reference.messageId(), scope);
-            if (existing.isPresent()) {
-                return new WriteResult.Response<>(200, evidenceReference(facts.caseId(),
-                        existing.get().evidenceId(), reference.messageId(), true),
-                        new ResourceRef("case", facts.caseId()));
-            }
-            long evidenceId = store.addPlatformEvidence(facts.caseId(), CaseVocabulary.SOURCE_MESSAGE,
-                    reference.messageId(), scope, manager, now());
-            audit(transaction, "case.evidence.reference", facts.caseId(), manager);
-            return new WriteResult.Response<>(201, evidenceReference(facts.caseId(), evidenceId,
-                    reference.messageId(), false), new ResourceRef("case", facts.caseId()));
-        }
-    }
-
     // ------------------------------------------------------------------ helpers
-
-    private JsonNode evidenceReference(long caseId, long evidenceId, long messageId, boolean reused) {
-        var body = json.createObjectNode();
-        body.put("evidence_id", Long.toString(evidenceId));
-        body.put("case_id", Long.toString(caseId));
-        body.put("evidence_kind", CaseVocabulary.EVIDENCE_PLATFORM_RECORD);
-        var source = body.putObject("source_ref");
-        source.put("resource_type", CaseVocabulary.SOURCE_MESSAGE);
-        source.put("resource_id", Long.toString(messageId));
-        body.put("reused", reused);
-        return body;
-    }
-
-    /** Role failures stay hidden as 404 because this route only exists for the fixed claimant. */
-    private void requireEvidenceManager(ExecutionContext context) {
-        actor(context);
-        try {
-            managers.requireManagerForWrite(context);
-        } catch (BusinessError denied) {
-            throw notVisible();
-        }
-    }
 
     /**
      * Acquires the actual subject rows and the already planned case row once, in the public key
@@ -1384,10 +1294,7 @@ public class CaseApplication {
     }
 
     private JsonNode digest(long caseId, Object input) {
-        var node = json.createObjectNode();
-        node.put("case_id", caseId);
-        node.set("input", json.valueToTree(input));
-        return node;
+        return CaseWriteSupport.digest(json, caseId, input);
     }
 
     private static String enforcementEvent(String action) {
@@ -1556,10 +1463,7 @@ public class CaseApplication {
     }
 
     private static long actor(ExecutionContext context) {
-        if (context.actorKind() != ExecutionContext.ActorKind.ACCOUNT) {
-            throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "需要登录账户");
-        }
-        return Long.parseLong(context.actorId());
+        return CaseWriteSupport.actor(context);
     }
 
     private Long attachEvidence(WriteTransaction transaction, long caseId, long reporter, List<Long> fileIds) {
@@ -1644,20 +1548,15 @@ public class CaseApplication {
     }
 
     private void audit(WriteTransaction transaction, String action, long caseId, long actor) {
-        var facts = json.createObjectNode();
-        facts.put("case_id", caseId);
-        facts.put("actor", actor);
-        transaction.audit(action, new ResourceRef("case", caseId), new ResourceRef("case", caseId), facts);
+        CaseWriteSupport.audit(json, transaction, action, caseId, actor);
     }
 
     private static void requireLifecycle(CaseRecords.Facts facts) {
-        if (!facts.lifecycle()) {
-            throw notVisible();
-        }
+        CaseWriteSupport.requireLifecycle(facts);
     }
 
     private Instant now() {
-        return clock.instant().truncatedTo(ChronoUnit.MICROS);
+        return CaseWriteSupport.now(clock);
     }
 
     private String requiredText(String value, int maxLength, String field) {
@@ -1683,7 +1582,7 @@ public class CaseApplication {
     }
 
     private static BusinessError notVisible() {
-        return new BusinessError("RESOURCE_NOT_VISIBLE", 404, "事项不可见");
+        return CaseWriteSupport.notVisible();
     }
 
     private static BusinessError conflict() {
