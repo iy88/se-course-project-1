@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.66
-Version-Datetime: 2026-11-28T16:20:25+08:00
+Version: 0.1.67
+Version-Datetime: 2026-11-28T17:18:35+08:00
 -->
 
 # 校园二手交易与物品流转平台
@@ -250,7 +250,7 @@ curl -fsS http://127.0.0.1:8080/actuator/health
 
 ## 前端开发
 
-前端使用 Node.js 26.13.1、pnpm 12.21.0、Vue 3、TypeScript 和 Rsbuild。使用 fnm 时，在仓库根目录执行 `fnm install` 和 `fnm use`。管理端使用 Pinia 管理跨页面共享的操作提示。两个应用共用 `frontend/pnpm-lock.yaml`：
+前端使用 Node.js 26.13.1、pnpm 12.21.0、Vue 3、TypeScript 和 Rsbuild。使用 fnm 时，在仓库根目录执行 `fnm install` 和 `fnm use`。两端使用 Pinia 管理跨页面操作提示，管理端也通过 Pinia 共享当前会话。两个应用共用 `frontend/pnpm-lock.yaml`：
 
 ```bash
 pnpm --dir frontend install --frozen-lockfile

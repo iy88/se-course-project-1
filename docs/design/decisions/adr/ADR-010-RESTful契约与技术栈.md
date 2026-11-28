@@ -1,6 +1,6 @@
 <!--
-Version: 0.1.7
-Version-Datetime: 2026-11-28T16:20:25+08:00
+Version: 0.1.8
+Version-Datetime: 2026-11-28T17:18:35+08:00
 -->
 
 # ADR-010 RESTful 契约与技术栈
@@ -47,7 +47,7 @@ Version-Datetime: 2026-11-28T16:20:25+08:00
 
 ## Vue 3、Rsbuild 与 Oxc
 
-袁尚峰于 2026-11-18 确认采用 Rsbuild + Oxc，并以 Axios 作为前端 XHR 客户端。用户端与管理端分别采用 Vue 3、TypeScript 和 Rsbuild 的官方 Vue 插件，独立维护开发服务和构建入口。共享 API 类型根据同一份 OpenAPI 契约生成。用户端以移动布局为主，复用同一路由与功能适配桌面。管理端面向桌面。管理端使用 Pinia 管理跨页面共享的操作提示，提示随应用实例存放在内存中。
+袁尚峰于 2026-11-18 确认采用 Rsbuild + Oxc，并以 Axios 作为前端 XHR 客户端。用户端与管理端分别采用 Vue 3、TypeScript 和 Rsbuild 的官方 Vue 插件，独立维护开发服务和构建入口。共享 API 类型根据同一份 OpenAPI 契约生成。用户端以移动布局为主，复用同一路由与功能适配桌面。管理端面向桌面。用户端和管理端使用 Pinia 管理跨页面操作提示，管理端也通过 Pinia 共享当前会话。共享状态随各应用实例存放在内存中，会话以服务端为准。
 
 从 [Rsbuild 官方脚手架](https://rsbuild.rs/guide/start/quick-start)的 `vue-ts` 模板分别生成两个应用。在仓库的前端目录执行以下命令。
 
