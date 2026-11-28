@@ -12,6 +12,10 @@ public interface AccountRepository extends Repository<Account, Long> {
 
     Optional<Account> findById(long id);
 
+    boolean existsByIdAndRole(long id, String role);
+
+    long count();
+
     java.util.List<Account> findByIdIn(java.util.Collection<Long> ids);
 
     @Query(value = "select * from account where normalize_email(email) = normalize_email(:email)", nativeQuery = true)
