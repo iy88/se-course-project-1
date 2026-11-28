@@ -7,6 +7,7 @@ import io.github.iy88.project1.account.application.AccountService;
 import io.github.iy88.project1.account.application.PasswordHasher;
 import io.github.iy88.project1.account.application.SessionService;
 import io.github.iy88.project1.api.account.AccountCookies;
+import io.github.iy88.project1.casemanagement.persistence.TradeTimeoutCases;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.OssFileObjects;
@@ -33,6 +34,8 @@ import org.springframework.boot.web.server.servlet.context.ServletWebServerAppli
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -129,6 +132,13 @@ class S4ProductionEnforcementIT {
         get(other, detailPath, 404);
         get(other, historyPath, 404);
         get(buyer, historyPath, 404);
+
+        long exception = new TransactionTemplate(app.getBean(PlatformTransactionManager.class))
+                .execute(status -> app.getBean(TradeTimeoutCases.class).open(trade, "单方确认超时", Instant.now()));
+        String exceptionPath = "/admin/cases/" + exception;
+        post(manager, exceptionPath + "/claim", null, key(), 200);
+        assertThat(get(manager, exceptionPath + "/trade-history", 200)).isEqualTo(history);
+        get(other, exceptionPath + "/trade-history", 404);
 
         long unrelated = activeTrade(buyer, seller);
         long otherCase = claimedTradeCase(buyer, other, unrelated);
