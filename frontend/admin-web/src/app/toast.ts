@@ -1,5 +1,6 @@
 /* Transient operation feedback shared by every administrative screen. */
-import { readonly, ref } from "vue";
+import { defineStore } from "pinia";
+import { computed, readonly, ref } from "vue";
 
 export type ToastTone = "info" | "ok" | "danger";
 
@@ -9,23 +10,27 @@ export interface ToastMessage {
   message: string;
 }
 
-const items = ref<ToastMessage[]>([]);
-let sequence = 0;
+export const useToastStore = defineStore("toast", () => {
+  const items = ref<ToastMessage[]>([]);
+  let sequence = 0;
 
-function push(tone: ToastTone, message: string): void {
-  const id = (sequence += 1);
-  items.value = [...items.value, { id, tone, message }];
-  globalThis.setTimeout(() => dismiss(id), 4500);
-}
+  function push(tone: ToastTone, message: string): void {
+    const id = (sequence += 1);
+    items.value = [...items.value, { id, tone, message }];
+    globalThis.setTimeout(() => dismiss(id), 4500);
+  }
 
-export function dismiss(id: number): void {
-  items.value = items.value.filter((item) => item.id !== id);
-}
+  function dismiss(id: number): void {
+    items.value = items.value.filter((item) => item.id !== id);
+  }
 
-export const toasts = readonly(items);
+  const toasts = computed(() => readonly(items.value));
 
-export const notify = {
-  info: (message: string) => push("info", message),
-  success: (message: string) => push("ok", message),
-  error: (message: string) => push("danger", message),
-};
+  const notify = {
+    info: (message: string) => push("info", message),
+    success: (message: string) => push("ok", message),
+    error: (message: string) => push("danger", message),
+  };
+
+  return { items, toasts, notify, dismiss };
+});

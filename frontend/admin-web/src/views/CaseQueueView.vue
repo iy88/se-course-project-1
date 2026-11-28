@@ -21,7 +21,7 @@ import {
 import { problemMessage } from "../app/problems";
 import { navigate } from "../app/router";
 import { session } from "../app/session";
-import { notify } from "../app/toast";
+import { useToastStore } from "../app/toast";
 import EmptyState from "../components/EmptyState.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
@@ -33,6 +33,8 @@ const props = defineProps<{
   kind: TodoKind;
   keyword: string;
 }>();
+
+const { notify } = useToastStore();
 
 const items = ref<ManagementTodoItem[]>([]);
 const loading = ref(false);

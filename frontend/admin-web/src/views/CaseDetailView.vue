@@ -30,12 +30,13 @@ import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { decisionKindLabels, todoKindLabels } from "../app/labels";
 import { problemMessage } from "../app/problems";
-import { notify } from "../app/toast";
+import { useToastStore } from "../app/toast";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
 
 const props = defineProps<{ caseId: string; backHref: string; anchor?: string }>();
+const { notify } = useToastStore();
 const ids = useId();
 const detail = ref<ManagementCaseDetail>();
 const error = ref<unknown>();

@@ -15,7 +15,7 @@ import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { categoryStateLabels } from "../app/labels";
 import { problemMessage } from "../app/problems";
-import { notify } from "../app/toast";
+import { useToastStore } from "../app/toast";
 import EmptyState from "../components/EmptyState.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
@@ -29,6 +29,8 @@ interface PendingAction {
   confirmLabel: string;
   nameId?: string;
 }
+
+const { notify } = useToastStore();
 
 const items = ref<CategoryDetail[]>([]);
 const loading = ref(false);

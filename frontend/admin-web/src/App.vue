@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /* Administration shell: identity gate, navigation and the active page. */
+import { storeToRefs } from "pinia";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import BrandMark from "../../shared/BrandMark.vue";
 import MobileBackButton from "../../shared/MobileBackButton.vue";
@@ -15,7 +16,7 @@ import ManagementNotificationsView from "./views/ManagementNotificationsView.vue
 import ManagementStatisticsView from "./views/ManagementStatisticsView.vue";
 import ErrorNotice from "./components/ErrorNotice.vue";
 import LoadingBlock from "./components/LoadingBlock.vue";
-import { dismiss, toasts } from "./app/toast";
+import { useToastStore } from "./app/toast";
 import { navigate, route } from "./app/router";
 import { parseLocation, reviewWorkbench, routeHref } from "./app/routes";
 import { session } from "./app/session";
@@ -54,6 +55,10 @@ const navItems = [
     href: routeHref({ name: "statistics" }),
   },
 ] as const;
+
+const toastStore = useToastStore();
+const { toasts } = storeToRefs(toastStore);
+const { dismiss } = toastStore;
 
 const page = computed(() => route.value.name);
 const mobileNavOpen = ref(false);
