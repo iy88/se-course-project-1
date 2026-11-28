@@ -136,6 +136,59 @@
         "description": "Product-review cases use the review workflow. Other cases use the case lifecycle."
       }
     },
+    "/api/v1/admin/cases/{case_id}/trade-history": {
+      "get": {
+        "operationId": "getClaimedCaseTradeHistory",
+        "summary": "读取本人认领事项的目标交易约定与完成确认历史",
+        "tags": ["case"],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "目标交易的约定与确认历史",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["trade_id", "agreement_history", "confirmation_history"],
+                  "properties": {
+                    "trade_id": {
+                      "type": "string"
+                    },
+                    "agreement_history": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Agreement"
+                      }
+                    },
+                    "confirmation_history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "需要登录" },
+          "404": { "description": "事项或目标交易不可见" },
+          "422": { "description": "事项编号无效" },
+          "503": { "description": "依赖不可用" }
+        }
+      }
+    },
     "/api/v1/admin/cases/{case_id}/evidence/{evidence_id}/file": {
       "get": {
         "operationId": "openCaseEvidenceFile",

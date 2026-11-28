@@ -1517,6 +1517,16 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
 
     // ---------------------------------------------------------------- queries and read ports
 
+    /** Projects the agreement and confirmation records for an already authorized case target. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public ObjectNode caseHistory(long tradeId) {
+        repository.find(tradeId).orElseThrow(Trade::notVisible);
+        var node = json.createObjectNode().put("trade_id", Long.toString(tradeId));
+        views.agreements(node, limit(repository.agreements(tradeId)));
+        views.confirmations(node, limit(repository.confirmations(tradeId)));
+        return node;
+    }
+
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode getTrade(ExecutionContext context, long tradeId, List<String> include) {
         long viewer = actor(context);

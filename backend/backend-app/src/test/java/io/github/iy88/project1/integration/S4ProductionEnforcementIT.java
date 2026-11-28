@@ -93,6 +93,52 @@ class S4ProductionEnforcementIT {
     }
 
     @Test
+    void claimedTradeHistoryIsLimitedToTheCurrentManagerAndCaseTarget() throws Exception {
+        var buyer = login("history-buyer", "user");
+        var seller = login("history-seller", "user");
+        var manager = login("history-manager", "manager");
+        var other = login("history-other", "manager");
+        long trade = activeTrade(buyer, seller);
+        long agreement = effectiveAgreement(trade, buyer.account().id());
+        int version = db.sql("select version from trade where id = ?").param(trade).query(Integer.class).single();
+        post(buyer, "/trades/" + trade + "/completion-confirmations", """
+                {"note":"确认交付","expected_version":%d}
+                """.formatted(version), key(), 201);
+
+        long caseId = Long.parseLong(post(buyer, "/cases", """
+                {"target":{"target_type":"trade","target_id":"%d"},"reason":"请核实确认记录"}
+                """.formatted(trade), key(), 201).path("case_id").asString());
+        String casePath = "/admin/cases/" + caseId;
+        String historyPath = casePath + "/trade-history";
+        get(manager, historyPath, 404);
+        post(manager, casePath + "/claim", null, key(), 200);
+
+        String detailPath = "/trades/" + trade + "?include=agreement_history,confirmation_history";
+        var participant = get(buyer, detailPath, 200);
+        var history = get(manager, historyPath, 200);
+        assertThat(history.size()).isEqualTo(3);
+        assertThat(history.path("trade_id").asString()).isEqualTo(Long.toString(trade));
+        assertThat(history.path("agreement_history")).isEqualTo(participant.path("agreement_history"));
+        assertThat(history.at("/agreement_history/0/id").asString()).isEqualTo(Long.toString(agreement));
+        assertThat(history.path("confirmation_history")).isEqualTo(participant.path("confirmation_history"));
+        assertThat(history.at("/confirmation_history/0/agreement_id").asString())
+                .isEqualTo(Long.toString(agreement));
+        assertThat(history.at("/confirmation_history/0/note").asString()).isEqualTo("确认交付");
+        get(seller, detailPath, 200);
+        get(manager, detailPath, 404);
+        get(other, detailPath, 404);
+        get(other, historyPath, 404);
+        get(buyer, historyPath, 404);
+
+        long unrelated = activeTrade(buyer, seller);
+        long otherCase = claimedTradeCase(buyer, other, unrelated);
+        get(manager, "/trades/" + unrelated, 404);
+        get(manager, "/admin/cases/" + otherCase + "/trade-history", 404);
+        long productCase = claimedCase(buyer, manager, "product", publicProduct(seller));
+        get(manager, "/admin/cases/" + productCase + "/trade-history", 404);
+    }
+
+    @Test
     void explicitLiftUnfreezesOnlyItsRecordedSource() throws Exception {
         var buyer = login("lift-buyer", "user");
         var seller = login("lift-seller", "user");

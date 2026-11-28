@@ -6,6 +6,7 @@ import io.github.iy88.project1.casemanagement.application.ReviewApplication;
 import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.WriteResult;
+import io.github.iy88.project1.trade.application.TradeApplication;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -34,16 +35,29 @@ public class CaseAdminController {
 
     private final CaseHttpSupport support;
     private final ObjectProvider<CaseLifecycleStore> store;
+    private final ObjectProvider<TradeApplication> trades;
     private final ObjectProvider<ReviewApplication> reviews;
     private final ObjectProvider<ReviewHttpSupport> reviewSupport;
 
     CaseAdminController(CaseHttpSupport support, ObjectProvider<CaseLifecycleStore> store,
                         ObjectProvider<ReviewApplication> reviews,
-                        ObjectProvider<ReviewHttpSupport> reviewSupport) {
+                        ObjectProvider<ReviewHttpSupport> reviewSupport, ObjectProvider<TradeApplication> trades) {
         this.support = support;
         this.store = store;
         this.reviews = reviews;
         this.reviewSupport = reviewSupport;
+        this.trades = trades;
+    }
+
+    @GetMapping("/{case_id}/trade-history")
+    ResponseEntity<JsonNode> tradeHistory(HttpServletRequest request,
+                                          @PathVariable("case_id") String caseId) {
+        long tradeId = support.queries().requireClaimedTrade(support.context(request), CaseIds.path(caseId));
+        var application = trades.getIfAvailable();
+        if (application == null) {
+            throw CaseHttpSupport.unavailable();
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(application.caseHistory(tradeId));
     }
 
     @PostMapping("/{case_id}/claim")
