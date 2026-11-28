@@ -701,20 +701,44 @@ public class CaseApplication {
             }
             var decision = request.decision();
             var instructions = CaseEnforcementInstructions.instructions(decision);
-            // A decision with subjects locks the actual product/trade rows before the case row.
-            // The prepared plan is re-checked here so a target set that grew after prepare is
-            // retried by the shared executor instead of widening locks inside the case lock.
-            CaseRecords.Facts facts;
-            if (instructions.isEmpty()) {
-                facts = store.lock(transaction, request.caseId());
-            } else {
-                if (enforcement == null) {
-                    throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "处置执行暂不可用");
-                }
-                facts = acquireSubjectLocks(transaction, plan,
-                        enforcement.lockCallbacks(transaction.context(), request.caseId(), instructions),
-                        request.caseId());
+            // The locked facts are authoritative; the snapshot above only keeps the pre-lock
+            // authorization error ahead of subject planning and the prepared lock plan.
+            CaseRecords.Facts facts = lockDecision(transaction, request.caseId(), plan, instructions);
+            requireDecidable(facts, manager, instructions);
+            String reason = requireDecisionInput(facts, decision);
+            Instant now = now();
+            facts = recordDecision(facts, decision, instructions, manager, reason, now);
+            var outcomes = enforce(transaction, facts, instructions, manager, reason, now);
+            if (!instructions.isEmpty()) {
+                facts = store.require(facts.caseId());
             }
+            var notified = notifiedAccounts(outcomes);
+            store.touch(facts.caseId(), now);
+            audit(transaction, "case.decide", facts.caseId(), manager);
+            return new WriteResult.Response<>(201, decisionResponse(facts, notified),
+                    new ResourceRef("case", facts.caseId()));
+        }
+
+        /**
+         * Locks the case row when the decision has no subjects; otherwise locks the subject rows
+         * before the case row. The prepared plan is re-checked so a target set that grew after
+         * prepare is retried by the shared executor instead of widening locks after the case lock.
+         */
+        private CaseRecords.Facts lockDecision(WriteTransaction transaction, long caseId, LockPlan plan,
+                                               List<CaseRecords.EnforcementInstruction> instructions) {
+            if (instructions.isEmpty()) {
+                return store.lock(transaction, caseId);
+            }
+            if (enforcement == null) {
+                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "处置执行暂不可用");
+            }
+            return acquireSubjectLocks(transaction, plan,
+                    enforcement.lockCallbacks(transaction.context(), caseId, instructions), caseId);
+        }
+
+        /** Re-checks lifecycle, ownership and targets in their original error order. */
+        private void requireDecidable(CaseRecords.Facts facts, long manager,
+                                      List<CaseRecords.EnforcementInstruction> instructions) {
             requireLifecycle(facts);
             if (!facts.claimedBy(manager)) {
                 throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
@@ -726,6 +750,10 @@ public class CaseApplication {
                 throw new BusinessError("STATE_CONFLICT", 409, "事项已决定");
             }
             CaseEnforcementInstructions.requireTradeTargets(facts, instructions);
+        }
+
+        /** Validates the decision input after the lifecycle checks and returns its reason. */
+        private String requireDecisionInput(CaseRecords.Facts facts, CaseCommands.Decision decision) {
             if (decision.decisionKind() == null || !CaseVocabulary.DECISION_KINDS.contains(decision.decisionKind())) {
                 throw new BusinessError("INPUT_INVALID", 422, "decision_kind 取值无效");
             }
@@ -733,25 +761,104 @@ public class CaseApplication {
             if (!decision.basisRefs().isEmpty() && !decisionBasisRefs(facts.caseId()).containsAll(decision.basisRefs())) {
                 throw new BusinessError("BASIS_REQUIRED", 422, "请选择本事项的问询、回复或用户补充材料");
             }
-            Instant now = now();
+            return reason;
+        }
+
+        /** Persists the decision and its action before any subject execution is attempted. */
+        private CaseRecords.Facts recordDecision(CaseRecords.Facts facts, CaseCommands.Decision decision,
+                                                 List<CaseRecords.EnforcementInstruction> instructions,
+                                                 long manager, String reason, Instant now) {
+            CaseRecords.Facts decided = facts;
             if (instructions.isEmpty()) {
-                facts = store.decide(facts.caseId(), decision.decisionKind(), reason, manager, now);
+                decided = store.decide(facts.caseId(), decision.decisionKind(), reason, manager, now);
             } else if (!store.decideIfClaimed(facts.caseId(), decision.decisionKind(), reason, manager, now)) {
                 throw new BusinessError("STATE_CONFLICT", 409, "事项已由其他管理员处理");
             }
-            store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_DECIDE,
+            store.addAction(new CaseRecords.Action(0, decided.caseId(), CaseVocabulary.ACTION_DECIDE,
                     CaseVocabulary.ACTOR_MANAGER, manager, now, null, null, null, null, null, null,
                     basisJson(decision.basisRefs())));
-            var outcomes = enforce(transaction, facts, instructions, manager, reason, now);
-            if (!instructions.isEmpty()) {
-                facts = store.require(facts.caseId());
+            return decided;
+        }
+
+        private List<CaseRecords.EnforcementOutcome> enforce(WriteTransaction transaction, CaseRecords.Facts facts,
+                                                            List<CaseRecords.EnforcementInstruction> instructions,
+                                                            long manager, String reason, Instant now) {
+            if (instructions.isEmpty()) {
+                return List.of();
             }
+            if (enforcement == null) {
+                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "处置执行暂不可用");
+            }
+            String basisRef = "case:" + facts.caseId();
+            var outcomes = enforcement.execute(transaction, transaction.context(), facts.caseId(), reason,
+                    basisRef, instructions, now);
+            var seen = new TreeSet<Long>();
+            for (var outcome : outcomes) {
+                recordOutcome(transaction, facts, outcome, manager, reason, basisRef, now);
+                for (long accountId : outcome.affectedAccountIds()) {
+                    ensureParticipantFollowUp(transaction, facts.caseId(), accountId, seen, basisRef, now);
+                }
+            }
+            return outcomes;
+        }
+
+        /** Persists one subject outcome and its notification before participant follow-up. */
+        private void recordOutcome(WriteTransaction transaction, CaseRecords.Facts facts,
+                                   CaseRecords.EnforcementOutcome outcome, long manager, String reason,
+                                   String basisRef, Instant now) {
+            store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
+                    outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
+                    outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
+                    outcome.currentState(), outcome.affectedAccountIds(), null, null, now, null));
+            notificationFor(transaction, facts, outcome, reason, now);
+        }
+
+        /** Grants one appeal window and thread notice per affected account across all outcomes. */
+        private void ensureParticipantFollowUp(WriteTransaction transaction, long caseId, long accountId,
+                                               Set<Long> seen, String basisRef, Instant now) {
+            if (!seen.add(accountId)) {
+                return;
+            }
+            if (store.appealEligibility(caseId, accountId).isEmpty()) {
+                store.addAppealEligibility(caseId, accountId,
+                        now.plusSeconds(settings.getAppealWindowSeconds()), basisRef, now);
+            }
+            threadWithNotice(transaction, caseId, accountId);
+        }
+
+        private void notificationFor(WriteTransaction transaction, CaseRecords.Facts facts,
+                                     CaseRecords.EnforcementOutcome outcome, String reason, Instant now) {
+            if (outcome.affectedAccountIds().isEmpty()) {
+                return;
+            }
+            // The trade-owned restore publishes exactly one trade.restored notice per participant.
+            // The case entry must not add a second notice for the same restoration.
+            if (tradeRestored(outcome)) {
+                return;
+            }
+            String event = enforcementEvent(outcome.action());
+            notifications.create(transaction, event,
+                    "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":"
+                            + notificationSuffix(outcome.action()),
+                    new ResourceRef("case", facts.caseId()), Set.copyOf(outcome.affectedAccountIds()),
+                    Map.of("case_id", Long.toString(facts.caseId()), "reason", reason), now);
+        }
+
+        private void threadWithNotice(WriteTransaction transaction, long caseId, long accountId) {
+            threads.ensure(transaction, caseId, accountId);
+            threads.append(transaction, caseId, accountId, CaseVocabulary.KIND_SYSTEM_NOTICE,
+                    CaseVocabulary.ACTOR_SYSTEM, 0, "事项已处置，可在本线程查看处理结果并提交申辩。");
+        }
+
+        private Set<Long> notifiedAccounts(List<CaseRecords.EnforcementOutcome> outcomes) {
             var notified = new TreeSet<Long>();
             for (var outcome : outcomes) {
                 notified.addAll(outcome.affectedAccountIds());
             }
-            store.touch(facts.caseId(), now);
-            audit(transaction, "case.decide", facts.caseId(), manager);
+            return notified;
+        }
+
+        private JsonNode decisionResponse(CaseRecords.Facts facts, Set<Long> notified) {
             var body = json.createObjectNode();
             body.put("case_id", Long.toString(facts.caseId()));
             body.put("decision_kind", facts.decisionKind());
@@ -780,64 +887,7 @@ public class CaseApplication {
             }
             var notifiedArray = body.putArray("notified_account_ids");
             notified.forEach(id -> notifiedArray.add(Long.toString(id)));
-            return new WriteResult.Response<>(201, body, new ResourceRef("case", facts.caseId()));
-        }
-
-        private List<CaseRecords.EnforcementOutcome> enforce(WriteTransaction transaction, CaseRecords.Facts facts,
-                                                            List<CaseRecords.EnforcementInstruction> instructions,
-                                                            long manager, String reason, Instant now) {
-            if (instructions.isEmpty()) {
-                return List.of();
-            }
-            if (enforcement == null) {
-                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "处置执行暂不可用");
-            }
-            String basisRef = "case:" + facts.caseId();
-            var outcomes = enforcement.execute(transaction, transaction.context(), facts.caseId(), reason,
-                    basisRef, instructions, now);
-            var seen = new TreeSet<Long>();
-            for (var outcome : outcomes) {
-                store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
-                        outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
-                        outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
-                        outcome.currentState(), outcome.affectedAccountIds(), null, null, now, null));
-                notificationFor(transaction, facts, outcome, reason, now);
-                for (long accountId : outcome.affectedAccountIds()) {
-                    if (!seen.add(accountId)) {
-                        continue;
-                    }
-                    if (store.appealEligibility(facts.caseId(), accountId).isEmpty()) {
-                        store.addAppealEligibility(facts.caseId(), accountId,
-                                now.plusSeconds(settings.getAppealWindowSeconds()), basisRef, now);
-                    }
-                    threadWithNotice(transaction, facts.caseId(), accountId);
-                }
-            }
-            return outcomes;
-        }
-
-        private void notificationFor(WriteTransaction transaction, CaseRecords.Facts facts,
-                                     CaseRecords.EnforcementOutcome outcome, String reason, Instant now) {
-            if (outcome.affectedAccountIds().isEmpty()) {
-                return;
-            }
-            // The trade-owned restore publishes exactly one trade.restored notice per participant.
-            // The case entry must not add a second notice for the same restoration.
-            if (tradeRestored(outcome)) {
-                return;
-            }
-            String event = enforcementEvent(outcome.action());
-            notifications.create(transaction, event,
-                    "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":"
-                            + notificationSuffix(outcome.action()),
-                    new ResourceRef("case", facts.caseId()), Set.copyOf(outcome.affectedAccountIds()),
-                    Map.of("case_id", Long.toString(facts.caseId()), "reason", reason), now);
-        }
-
-        private void threadWithNotice(WriteTransaction transaction, long caseId, long accountId) {
-            threads.ensure(transaction, caseId, accountId);
-            threads.append(transaction, caseId, accountId, CaseVocabulary.KIND_SYSTEM_NOTICE,
-                    CaseVocabulary.ACTOR_SYSTEM, 0, "事项已处置，可在本线程查看处理结果并提交申辩。");
+            return body;
         }
     }
 
