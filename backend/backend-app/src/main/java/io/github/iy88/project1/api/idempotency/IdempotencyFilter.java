@@ -53,6 +53,39 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     private static final Pattern TRADE_REVIEW_WRITE = Pattern.compile("/api/v1/trades/[^/]+/reviews");
     private static final Pattern PRODUCT_OFF_SHELF_WRITE = Pattern.compile("/api/v1/products/\\d+/off-shelf");
     private static final Pattern NOTIFICATION_READ = Pattern.compile("/api/v1/account/notifications/[^/]+/read");
+    // Built once and evaluated in declaration order; the first match wins. Exact paths are quoted
+    // so they keep the former equals semantics while regex routes keep their original expressions.
+    private static final List<AuditActionRule> AUDIT_ACTION_RULES = List.of(
+            exact("POST", "/api/v1/accounts", "account.registered"),
+            exact("POST", "/api/v1/account/email-verifications", "account.verification_requested"),
+            exact("POST", "/api/v1/account/session", "session.issued"),
+            exact("DELETE", "/api/v1/account/session", "session.revoked"),
+            exact("PUT", "/api/v1/account/password", "account.password_changed"),
+            exact("POST", "/api/v1/account/password-resets", "account.password_reset"),
+            exact("PUT", "/api/v1/account/email", "account.email_changed"),
+            exact("PATCH", "/api/v1/account/profile", "account.profile_changed"),
+            exact("POST", "/api/v1/admin/categories", AuditActions.CATEGORY_CREATED),
+            regex("PATCH", "/api/v1/admin/categories/\\d+", AuditActions.CATEGORY_RENAMED),
+            regex("POST", "/api/v1/admin/categories/\\d+/aliases", AuditActions.CATEGORY_ALIAS_ADDED),
+            regex("DELETE", "/api/v1/admin/categories/\\d+/aliases/\\d+",
+                    AuditActions.CATEGORY_ALIAS_REMOVED),
+            regex("POST", "/api/v1/admin/categories/\\d+/disable", AuditActions.CATEGORY_DISABLED),
+            regex("DELETE", "/api/v1/admin/categories/\\d+", AuditActions.CATEGORY_DELETED),
+            exact("PUT", "/api/v1/admin/banned-items", "banned_scope.replaced"),
+            exact("POST", "/api/v1/admin/banned-items", "banned_item.created"),
+            regex("PATCH", "/api/v1/admin/banned-items/\\d+", "banned_item.updated"),
+            regex("DELETE", "/api/v1/admin/banned-items/\\d+", "banned_item.deleted"),
+            exact("POST", "/api/v1/products", AuditActions.PRODUCT_SUBMITTED),
+            regex("PATCH", "/api/v1/products/\\d+", AuditActions.PRODUCT_EDITED),
+            regex("POST", "/api/v1/products/\\d+/review-submissions",
+                    AuditActions.PRODUCT_REVIEW_RESUBMITTED),
+            regex("POST", "/api/v1/products/\\d+/withdrawal", AuditActions.PRODUCT_REVIEW_WITHDRAWN),
+            regex("POST", "/api/v1/products/\\d+/off-shelf", AuditActions.PRODUCT_OFF_SHELF),
+            regex("POST", "/api/v1/products/\\d+/on-shelf", AuditActions.PRODUCT_ON_SHELF),
+            regex("POST", "/api/v1/products/\\d+/category-applications",
+                    AuditActions.CATEGORY_APPLICATION_CREATED),
+            regex("DELETE", "/api/v1/products/\\d+/category-application",
+                    AuditActions.CATEGORY_APPLICATION_WITHDRAWN));
     private static final String DIGEST_VERSION = "s2-v1";
 
     private final JdbcClient jdbc;
@@ -347,45 +380,20 @@ public class IdempotencyFilter extends OncePerRequestFilter {
 
     private static String action(String method, String path) {
         String upper = method.toUpperCase(Locale.ROOT);
-        if (upper.equals("POST") && path.equals("/api/v1/accounts")) return "account.registered";
-        if (upper.equals("POST") && path.equals("/api/v1/account/email-verifications"))
-            return "account.verification_requested";
-        if (upper.equals("POST") && path.equals("/api/v1/account/session")) return "session.issued";
-        if (upper.equals("DELETE") && path.equals("/api/v1/account/session")) return "session.revoked";
-        if (upper.equals("PUT") && path.equals("/api/v1/account/password")) return "account.password_changed";
-        if (upper.equals("POST") && path.equals("/api/v1/account/password-resets")) return "account.password_reset";
-        if (upper.equals("PUT") && path.equals("/api/v1/account/email")) return "account.email_changed";
-        if (upper.equals("PATCH") && path.equals("/api/v1/account/profile")) return "account.profile_changed";
-        if (upper.equals("POST") && path.equals("/api/v1/admin/categories")) return AuditActions.CATEGORY_CREATED;
-        if (upper.equals("PATCH") && path.matches("/api/v1/admin/categories/\\d+"))
-            return AuditActions.CATEGORY_RENAMED;
-        if (upper.equals("POST") && path.matches("/api/v1/admin/categories/\\d+/aliases"))
-            return AuditActions.CATEGORY_ALIAS_ADDED;
-        if (upper.equals("DELETE") && path.matches("/api/v1/admin/categories/\\d+/aliases/\\d+"))
-            return AuditActions.CATEGORY_ALIAS_REMOVED;
-        if (upper.equals("POST") && path.matches("/api/v1/admin/categories/\\d+/disable"))
-            return AuditActions.CATEGORY_DISABLED;
-        if (upper.equals("DELETE") && path.matches("/api/v1/admin/categories/\\d+"))
-            return AuditActions.CATEGORY_DELETED;
-        if (upper.equals("PUT") && path.equals("/api/v1/admin/banned-items")) return "banned_scope.replaced";
-        if (upper.equals("POST") && path.equals("/api/v1/admin/banned-items")) return "banned_item.created";
-        if (upper.equals("PATCH") && path.matches("/api/v1/admin/banned-items/\\d+")) return "banned_item.updated";
-        if (upper.equals("DELETE") && path.matches("/api/v1/admin/banned-items/\\d+")) return "banned_item.deleted";
-        if (upper.equals("POST") && path.equals("/api/v1/products")) return AuditActions.PRODUCT_SUBMITTED;
-        if (upper.equals("PATCH") && path.matches("/api/v1/products/\\d+")) return AuditActions.PRODUCT_EDITED;
-        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/review-submissions"))
-            return AuditActions.PRODUCT_REVIEW_RESUBMITTED;
-        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/withdrawal"))
-            return AuditActions.PRODUCT_REVIEW_WITHDRAWN;
-        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/off-shelf"))
-            return AuditActions.PRODUCT_OFF_SHELF;
-        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/on-shelf"))
-            return AuditActions.PRODUCT_ON_SHELF;
-        if (upper.equals("POST") && path.matches("/api/v1/products/\\d+/category-applications"))
-            return AuditActions.CATEGORY_APPLICATION_CREATED;
-        if (upper.equals("DELETE") && path.matches("/api/v1/products/\\d+/category-application"))
-            return AuditActions.CATEGORY_APPLICATION_WITHDRAWN;
+        for (AuditActionRule rule : AUDIT_ACTION_RULES) {
+            if (rule.matches(upper, path)) {
+                return rule.action();
+            }
+        }
         return null;
+    }
+
+    private static AuditActionRule exact(String method, String path, String action) {
+        return new AuditActionRule(method, Pattern.compile(Pattern.quote(path)), action);
+    }
+
+    private static AuditActionRule regex(String method, String expression, String action) {
+        return new AuditActionRule(method, Pattern.compile(expression), action);
     }
 
     private static String hex(byte[] value) {
@@ -450,6 +458,12 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         @Override
         public long getContentLengthLong() {
             return body.length;
+        }
+    }
+
+    private record AuditActionRule(String method, Pattern pattern, String action) {
+        boolean matches(String requestMethod, String requestPath) {
+            return method.equals(requestMethod) && pattern.matcher(requestPath).matches();
         }
     }
 
