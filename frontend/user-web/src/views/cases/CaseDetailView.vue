@@ -9,7 +9,7 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { getCase, postCaseMessage } from "../../api/cases";
+import { getCase } from "../../api/cases";
 import { listMyTodos } from "../../api/aggregation";
 import type { CaseDetail, TodoItem } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
@@ -22,7 +22,6 @@ import {
   shouldLoadNextPage,
 } from "../../app/case-inquiries";
 import { formatDateTime, formatRemaining } from "../../app/format";
-import { newIdempotencyKey } from "../../app/keys";
 import {
   caseActionKindText,
   caseActorKindText,
@@ -33,16 +32,14 @@ import {
   enforcementActionText,
   enforcementStateText,
 } from "../../app/labels";
-import { problemMessage } from "../../app/problems";
 import { session } from "../../app/session";
-import { notify } from "../../app/toast";
-import { refreshBadges } from "../../app/badges";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
 import StateBadge from "../../components/StateBadge.vue";
 import CaseSupplementDialog from "./CaseSupplementDialog.vue";
 import { useCaseThread } from "./useCaseThread";
+import { useCaseThreadReplies } from "./useCaseThreadReplies";
 
 const route = useRoute();
 const caseId = computed(() => String(route.params.caseId ?? ""));
@@ -50,17 +47,6 @@ const detail = useAsyncData<CaseDetail>((signal) => getCase(caseId.value, signal
 
 const { threadMessages, threadStatus, threadError, anchorMessageId, loadThread, cancelThread } =
   useCaseThread(() => detail.data.value?.thread);
-
-/* One open reply form at a time, keyed by the inquiry action it answers. */
-const replyingTo = ref<string | null>(null);
-const replyBody = ref("");
-const replyPending = ref(false);
-const replyError = ref<string | null>(null);
-
-/* Appeals are a separate entry point and carry no inquiry reference. */
-const appealBody = ref("");
-const appealPending = ref(false);
-const appealError = ref<string | null>(null);
 
 /* Pending inquiries come from the todo aggregation, not from the message list. */
 const pendingInquiryIds = ref<string[]>([]);
@@ -208,6 +194,24 @@ async function load(): Promise<void> {
   }
 }
 
+const {
+  replyingTo,
+  replyBody,
+  replyPending,
+  replyError,
+  appealBody,
+  appealPending,
+  appealError,
+  openInquiryReply,
+  submitInquiryReply,
+  submitAppeal,
+} = useCaseThreadReplies({
+  detail: detail.data,
+  canRespond,
+  canAppeal,
+  reload: load,
+});
+
 onMounted(() => {
   // A one second tick is enough to hide the appeal entry at its deadline.
   clockTimer = setInterval(() => {
@@ -250,73 +254,6 @@ watch([anchorMessageId, threadStatus], async ([anchor, status]) => {
     document.getElementById(`case-message-${anchor}`)?.scrollIntoView({ block: "start" });
   }
 });
-
-function openInquiryReply(actionId: string): void {
-  replyingTo.value = replyingTo.value === actionId ? null : actionId;
-  replyBody.value = "";
-  replyError.value = null;
-}
-
-async function submitInquiryReply(): Promise<void> {
-  const current = detail.data.value;
-  const thread = current?.thread;
-  const actionId = replyingTo.value;
-  if (!current || !thread || !actionId || !canRespond.value || replyPending.value) return;
-  if (!replyBody.value.trim()) {
-    replyError.value = "请填写说明内容。";
-    return;
-  }
-  replyError.value = null;
-  replyPending.value = true;
-  try {
-    await postCaseMessage(
-      current.case_id,
-      {
-        thread,
-        message_kind: "statement",
-        body: replyBody.value.trim(),
-        inquiry_action_id: actionId,
-      },
-      newIdempotencyKey(),
-    );
-    replyBody.value = "";
-    replyingTo.value = null;
-    notify.success("说明已提交。");
-    await load();
-    void refreshBadges();
-  } catch (caught) {
-    replyError.value = problemMessage(caught);
-  } finally {
-    replyPending.value = false;
-  }
-}
-
-async function submitAppeal(): Promise<void> {
-  const current = detail.data.value;
-  const thread = current?.thread;
-  if (!current || !thread || !canAppeal.value || appealPending.value) return;
-  if (!appealBody.value.trim()) {
-    appealError.value = "请填写申辩内容。";
-    return;
-  }
-  appealError.value = null;
-  appealPending.value = true;
-  try {
-    await postCaseMessage(
-      current.case_id,
-      { thread, message_kind: "appeal", body: appealBody.value.trim() },
-      newIdempotencyKey(),
-    );
-    appealBody.value = "";
-    notify.success("申辩已提交。");
-    await load();
-    void refreshBadges();
-  } catch (caught) {
-    appealError.value = problemMessage(caught);
-  } finally {
-    appealPending.value = false;
-  }
-}
 </script>
 
 <template>
