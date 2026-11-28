@@ -265,8 +265,11 @@ pnpm --dir frontend install --frozen-lockfile
 | 检查 | `pnpm --dir frontend lint` |
 | 检查格式 | `pnpm --dir frontend format:check` |
 | 类型检查 | `pnpm --dir frontend typecheck` |
+| 浏览器回归测试 | `pnpm --dir frontend test:e2e`；[测试报告](docs/design/test-cases/reports/frontend-playwright/测试报告.md) |
 | 构建两端 | `pnpm --dir frontend build` |
 | 重新生成 API 类型 | `pnpm --dir frontend generate:api` |
+
+首次运行浏览器回归测试前，执行 `pnpm --dir frontend exec playwright install chromium`。测试启动本地用户端和管理端，并构建用户端生产预览以验证真实 Service Worker；模拟 API 不访问真实环境，无需启动后端或准备账号。用例覆盖登录与退出、路由守卫、商品发布、交易协同、WebSocket 恢复、重复提交、网络异常、响应竞态和 PWA 离线恢复。GitHub Actions 的前端任务也会运行这组测试。
 
 两端共用 `frontend/shared/rsbuild.ts` 的开发代理，默认将 `/api/v1` 转发到 `http://127.0.0.1:8080`。后端地址不同时，设置 `API_PROXY_TARGET`。页面请求同源的 `/api/v1/hello`，看到 `Hello, Project1!` 即表示接口连通。构建产物输出到两个应用的 `dist/`。
 

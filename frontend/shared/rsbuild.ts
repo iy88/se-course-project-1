@@ -20,6 +20,7 @@ export function createWebConfig(port: number) {
       source: {
         define: createBrowserDefines(command),
       },
+      dev: process.env.E2E === "1" ? { lazyCompilation: false } : undefined,
       server: {
         host: "127.0.0.1",
         port,
