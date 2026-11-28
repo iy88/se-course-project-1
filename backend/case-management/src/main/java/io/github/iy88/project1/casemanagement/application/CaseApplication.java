@@ -135,8 +135,9 @@ public class CaseApplication {
     public WriteResult<JsonNode> publish(ExecutionContext context, String idempotencyKey, long caseId,
                                          CaseCommands.Publish publish) {
         managers.requireManager(context);
-        return writes.run(context, PUBLISH, idempotencyKey, new PublishRequest(caseId, publish),
-                new PublishUseCase());
+        return writes.run(context, PUBLISH, idempotencyKey,
+                new PublishCaseResult.Request(caseId, publish),
+                new PublishCaseResult(store, managers, notifications, settings, json, clock));
     }
 
     /** API-CASE-008: lifts one recorded enforcement by its case-stable execution identifier. */
@@ -174,9 +175,6 @@ public class CaseApplication {
     }
 
     private record CloseRequest(long caseId) {
-    }
-
-    private record PublishRequest(long caseId, CaseCommands.Publish publish) {
     }
 
     private record LiftRequest(long caseId, String enforcementId, String reason) {
@@ -1092,75 +1090,6 @@ public class CaseApplication {
         }
     }
 
-    // ------------------------------------------------------------------ publication
-
-    private final class PublishUseCase implements WriteExecutor.UseCase<PublishRequest, PublishRequest> {
-        @Override
-        public JsonNode digestInput(PublishRequest request) {
-            return digest(request.caseId(), request.publish());
-        }
-
-        @Override
-        public LockPlan prepare(ExecutionContext context, PublishRequest request) {
-            return new LockPlan(Map.of(), Set.of(CaseLifecycleStore.lockKey(request.caseId())));
-        }
-
-        @Override
-        public PublishRequest qualify(ExecutionContext context, PublishRequest request, LockPlan plan) {
-            managers.requireManagerForWrite(context);
-            return request;
-        }
-
-        @Override
-        public void requireReplayAccess(ExecutionContext context, PublishRequest qualification,
-                                       ResourceRef resource) {
-            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
-                throw notVisible();
-            }
-            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
-            if (!facts.claimedBy(actor(context))) {
-                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
-            }
-        }
-
-        @Override
-        public WriteResult.Response<?> write(WriteTransaction transaction, PublishRequest request,
-                                             PublishRequest qualification, LockPlan plan) {
-            long manager = actor(transaction.context());
-            var facts = store.lock(transaction, request.caseId());
-            requireLifecycle(facts);
-            if (!facts.claimedBy(manager)) {
-                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
-            }
-            if (!facts.archived()) {
-                throw new BusinessError("STATE_CONFLICT", 409, "事项尚未结案");
-            }
-            if (facts.publicResultAt() != null) {
-                throw new BusinessError("STATE_CONFLICT", 409, "结果已公开");
-            }
-            if (!CaseVocabulary.REPORT.equals(facts.caseType())) {
-                throw new BusinessError("STATE_CONFLICT", 409, "仅举报事项可公开结果");
-            }
-            String summary = requiredText(request.publish().summary(), settings.getMaxReasonLength(), "公开结论");
-            String reason = requiredText(request.publish().reason(), settings.getMaxNoteLength(), "公开原因");
-            Instant now = now();
-            facts = store.publish(facts.caseId(), summary, reason, manager, now);
-            store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_PUBLISH_RESULT,
-                    CaseVocabulary.ACTOR_MANAGER, manager, now, null, null, null, null, null, null, null));
-            if (facts.reporterAccountId() != null) {
-                notifications.create(transaction, CaseVocabulary.EVENT_RESULT_PUBLISHED,
-                        "case:" + facts.caseId() + ":result_published",
-                        new ResourceRef("case", facts.caseId()), Set.of(facts.reporterAccountId()),
-                        Map.of("case_id", Long.toString(facts.caseId())), now);
-            }
-            audit(transaction, "case.publish_result", facts.caseId(), manager);
-            var body = json.createObjectNode();
-            body.put("case_id", Long.toString(facts.caseId()));
-            body.put("public_result_at", facts.publicResultAt().toString());
-            return new WriteResult.Response<>(200, body, new ResourceRef("case", facts.caseId()));
-        }
-    }
-
     // ------------------------------------------------------------------ lift
 
     private final class LiftUseCase implements WriteExecutor.UseCase<LiftRequest, LiftRequest> {
@@ -1560,14 +1489,7 @@ public class CaseApplication {
     }
 
     private String requiredText(String value, int maxLength, String field) {
-        if (value == null || value.isBlank()) {
-            throw new BusinessError("INPUT_INVALID", 422, field + "不能为空");
-        }
-        String trimmed = value.trim();
-        if (trimmed.length() > maxLength) {
-            throw new BusinessError("INPUT_INVALID", 422, field + "超出长度限制");
-        }
-        return trimmed;
+        return CaseWriteSupport.requiredText(value, maxLength, field);
     }
 
     private String optionalText(String value, int maxLength, String field) {

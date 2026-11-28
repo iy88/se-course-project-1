@@ -32,6 +32,17 @@ final class CaseWriteSupport {
         }
     }
 
+    static String requiredText(String value, int maxLength, String field) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessError("INPUT_INVALID", 422, field + "不能为空");
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() > maxLength) {
+            throw new BusinessError("INPUT_INVALID", 422, field + "超出长度限制");
+        }
+        return trimmed;
+    }
+
     static JsonNode digest(JsonMapper json, long caseId, Object input) {
         var node = json.createObjectNode();
         node.put("case_id", caseId);
