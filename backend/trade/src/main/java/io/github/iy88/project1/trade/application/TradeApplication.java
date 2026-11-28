@@ -10,7 +10,6 @@ import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.trade.domain.Trade;
 import io.github.iy88.project1.trade.domain.TradeModels;
-import io.github.iy88.project1.trade.domain.TradePhase;
 import io.github.iy88.project1.trade.domain.TradeStatus;
 import io.github.iy88.project1.trade.domain.TradeVocabulary;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.ActorKind;
@@ -52,6 +51,7 @@ import tools.jackson.databind.node.ObjectNode;
 public class TradeApplication implements TradePorts.Governance, TradePorts.GovernanceTransaction,
         TradePorts.CaseEnforcement, TradePorts.Participation, TradePorts.ReviewEligibility, TradePorts.Closure {
     private final TradeRepository repository;
+    private final TradeHistoryWriter historyWriter;
     private final TradeViews views;
     private final WriteExecutor writes;
     private final TaskSchedules schedules;
@@ -69,6 +69,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                             TradePorts.Conversation conversations, TradePorts.Cases cases,
                             TradePorts.Notifications notifications, JsonMapper json) {
         this.repository = repository;
+        this.historyWriter = new TradeHistoryWriter(repository);
         this.views = new TradeViews(json);
         this.writes = writes;
         this.schedules = schedules;
@@ -120,7 +121,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                             buyer, state.sellerId());
                     var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
                     UUID eventId = UUID.randomUUID();
-                    long transitionId = history(transaction, trade, trade, "request.create", ActorKind.BUYER, buyer, note, null, null, eventId, now);
+                    long transitionId = historyWriter.history(transaction,
+                            trade, trade, "request.create", ActorKind.BUYER, buyer, note, null, null, eventId, now);
                     conversations.append(transaction, conversationId, eventId, "request_created",
                             "买方提交了购买请求", new ResourceRef("trade_transition", transitionId));
                     notify(transaction, trade, Set.of(trade.sellerId()), "trade.request_created", eventId);
@@ -165,7 +167,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                     repository.save(accepted);
                     repository.insertSnapshot(state.snapshot(trade.id(), now));
                     UUID acceptedEvent = UUID.randomUUID();
-                    long transitionId = history(transaction, trade, accepted, "request.accept", ActorKind.SELLER, seller, null, null, null, acceptedEvent, now);
+                    long transitionId = historyWriter.history(transaction,
+                            trade, accepted, "request.accept", ActorKind.SELLER, seller, null, null, null, acceptedEvent, now);
                     conversations.append(transaction, conversationId, acceptedEvent, "request_accepted",
                             "卖方已接受购买请求", new ResourceRef("trade_transition", transitionId));
                     notify(transaction, trade, Set.of(trade.buyerId()), "trade.request_accepted", acceptedEvent);
@@ -201,7 +204,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                             now, null, now);
                     repository.save(rejected);
                     UUID eventId = UUID.randomUUID();
-                    long transitionId = history(transaction, trade, rejected, "request.reject", ActorKind.SELLER, seller, reason, null, null, eventId, now);
+                    long transitionId = historyWriter.history(transaction,
+                            trade, rejected, "request.reject", ActorKind.SELLER, seller, reason, null, null, eventId, now);
                     conversations.append(transaction, conversationId, eventId, "request_rejected",
                             "卖方拒绝了购买请求", new ResourceRef("trade_transition", transitionId));
                     notify(transaction, trade, Set.of(trade.buyerId()), "trade.request_rejected", eventId);
@@ -231,7 +235,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                             now, null, now);
                     repository.save(withdrawn);
                     UUID eventId = UUID.randomUUID();
-                    long transitionId = history(transaction, trade, withdrawn, "request.withdraw", ActorKind.BUYER, buyer, null, null, null, eventId, now);
+                    long transitionId = historyWriter.history(transaction,
+                            trade, withdrawn, "request.withdraw", ActorKind.BUYER, buyer, null, null, null, eventId, now);
                     conversations.append(transaction, conversationId, eventId, "request_withdrawn",
                             "买方撤回了购买请求", new ResourceRef("trade_transition", transitionId));
                     notify(transaction, trade, Set.of(trade.sellerId()), "trade.request_withdrawn", eventId);
@@ -287,7 +292,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                     var updated = changed(trade, trade.status(), trade.activeAgreementId(), trade.closeReason(),
                             trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
                     repository.save(updated);
-                    historyAgreement(transaction, trade, updated,
+                    historyWriter.historyAgreement(transaction, trade, updated,
                         active == null ? "agreement.propose" : "agreement.change.propose", trade.actorKind(actor), actor,
                         null, null, null, agreementId, null, eventId, now);
                     conversations.append(transaction, conversationId, eventId,
@@ -354,7 +359,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                     var updated = changed(trade, trade.status(), active, trade.closeReason(), trade.terminalReason(),
                             trade.respondedAt(), trade.endedAt(), now);
                     repository.save(updated);
-                    historyAgreement(transaction, trade, updated, "agreement." + decision.value(),
+                    historyWriter.historyAgreement(transaction, trade, updated, "agreement." + decision.value(),
                         trade.actorKind(actor), actor, null, null, null, agreement.id(), decisionId, eventId, now);
                     String type = switch (decision) {
                         case ACCEPT -> "agreement_confirmed";
@@ -423,13 +428,13 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         repository.terminateOpenDisputes(trade.id(), now);
                         product.release(transaction, state, trade.id(), "completed");
                         UUID confirmationEvent = confirmation.businessEventId();
-                        historyConfirmation(transaction, trade, completed, "completion.confirm",
+                        historyWriter.historyConfirmation(transaction, trade, completed, "completion.confirm",
                                 trade.actorKind(actor), actor, note, null, null, effective.id(), confirmationId,
                                 confirmationEvent, now);
                         conversations.append(transaction, conversationId, confirmationEvent, "completion_confirmed",
                                 "完成确认已提交", new ResourceRef("completion_confirmation", confirmationId));
                         UUID completedEvent = UUID.randomUUID();
-                        long completedHistory = historyConfirmation(transaction, trade, completed,
+                        long completedHistory = historyWriter.historyConfirmation(transaction, trade, completed,
                                 "trade.completed", ActorKind.SYSTEM, null, null, null, null, effective.id(),
                                 confirmationId, completedEvent, now);
                         conversations.append(transaction, conversationId, completedEvent, "trade_completed",
@@ -447,7 +452,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         repository.saveWait(trade.id(), wait);
                         scheduleTimeout(trade.id(), wait, now);
                         UUID eventId = confirmation.businessEventId();
-                        historyConfirmation(transaction, trade, updated, "completion.confirm",
+                        historyWriter.historyConfirmation(transaction, trade, updated, "completion.confirm",
                                 trade.actorKind(actor), actor, note, null, null, effective.id(), confirmationId,
                                 eventId, now);
                         conversations.append(transaction, conversationId, eventId, "completion_confirmed",
@@ -505,16 +510,19 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         endFreezes(transaction, trade.id(), now);
                         repository.terminateOpenDisputes(trade.id(), now);
                         product.releaseToPublic(transaction, state, trade.id(), "cancelled");
-                    historyCancellation(transaction, trade, terminated, "cancellation.request", trade.actorKind(actor),
+                    historyWriter.historyCancellation(transaction,
+                            trade, terminated, "cancellation.request", trade.actorKind(actor),
                         actor, reason, null, null, proposalId, null, requestEvent, now);
                         conversations.append(transaction, conversationId, requestEvent, "cancellation_requested",
                                 "买方直接取消了交易", new ResourceRef("cancellation_request", proposalId));
-                    historyCancellation(transaction, trade, terminated, "cancellation.accept", ActorKind.BUYER, actor,
+                    historyWriter.historyCancellation(transaction,
+                            trade, terminated, "cancellation.accept", ActorKind.BUYER, actor,
                         reason, null, null, proposalId, decisionId, decisionEvent, now);
                         conversations.append(transaction, conversationId, decisionEvent, "cancellation_accepted",
                                 "交易已终止", new ResourceRef("cancellation_decision", decisionId));
                         UUID terminatedEvent = UUID.randomUUID();
-                        long terminatedHistory = historyCancellation(transaction, trade, terminated, "trade.terminated",
+                        long terminatedHistory = historyWriter.historyCancellation(transaction,
+                                trade, terminated, "trade.terminated",
                             ActorKind.SYSTEM, null, reason, null, null, proposalId, decisionId, terminatedEvent, now);
                         conversations.append(transaction, conversationId, terminatedEvent, "trade_terminated",
                                 "交易已终止，商品仍保持上架。", new ResourceRef("trade_transition", terminatedHistory));
@@ -525,7 +533,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         var updated = changed(trade, trade.status(), trade.activeAgreementId(), trade.closeReason(),
                                 trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
                         repository.save(updated);
-                    historyCancellation(transaction, trade, updated, "cancellation.request", trade.actorKind(actor),
+                    historyWriter.historyCancellation(transaction,
+                            trade, updated, "cancellation.request", trade.actorKind(actor),
                         actor, reason, null, null, proposalId, null, requestEvent, now);
                         conversations.append(transaction, conversationId, requestEvent, "cancellation_requested",
                                 "取消申请已提交", new ResourceRef("cancellation_request", proposalId));
@@ -586,12 +595,14 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         endFreezes(transaction, trade.id(), now);
                         repository.terminateOpenDisputes(trade.id(), now);
                         product.releaseToPublic(transaction, state, trade.id(), "cancelled");
-                    historyCancellation(transaction, trade, terminated, "cancellation.accept", trade.actorKind(actor),
+                    historyWriter.historyCancellation(transaction,
+                            trade, terminated, "cancellation.accept", trade.actorKind(actor),
                         actor, null, null, null, proposal.id(), decisionId, decisionEvent, now);
                         conversations.append(transaction, conversationId, decisionEvent, "cancellation_accepted",
                                 "取消申请已同意，交易终止", new ResourceRef("cancellation_decision", decisionId));
                         UUID terminatedEvent = UUID.randomUUID();
-                        long terminatedHistory = historyCancellation(transaction, trade, terminated, "trade.terminated",
+                        long terminatedHistory = historyWriter.historyCancellation(transaction,
+                                trade, terminated, "trade.terminated",
                             ActorKind.SYSTEM, null, null, null, null, proposal.id(), decisionId, terminatedEvent, now);
                         conversations.append(transaction, conversationId, terminatedEvent, "trade_terminated",
                                 "交易已终止，商品仍保持上架。", new ResourceRef("trade_transition", terminatedHistory));
@@ -606,7 +617,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                                 trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
                         repository.save(updated);
                         String action = decision == Decision.REJECT ? "cancellation.reject" : "cancellation.withdraw";
-                        historyCancellation(transaction, trade, updated, action, trade.actorKind(actor), actor, null, null,
+                        historyWriter.historyCancellation(transaction,
+                                trade, updated, action, trade.actorKind(actor), actor, null, null,
                             null, proposal.id(), decisionId, decisionEvent, now);
                         String type = decision == Decision.REJECT ? "cancellation_rejected" : "cancellation_withdrawn";
                         conversations.append(transaction, conversationId, decisionEvent, type,
@@ -734,7 +746,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                             trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
                     repository.save(disputed);
                     UUID eventId = UUID.randomUUID();
-                    long disputeHistory = historyDispute(transaction, trade, disputed, "dispute.open",
+                    long disputeHistory = historyWriter.historyDispute(transaction, trade, disputed, "dispute.open",
                         trade.actorKind(actor), actor, statement, null, caseId, disputeId, null, eventId, now);
                     conversations.append(transaction, conversationId, eventId, "dispute_opened", "交易争议已发起",
                             new ResourceRef("trade_transition", disputeHistory));
@@ -794,11 +806,12 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                                 trade.closeReason(), trade.terminalReason(), trade.respondedAt(), trade.endedAt(),
                                 now);
                         repository.save(resolved);
-                        historyDispute(transaction, trade, resolved, "dispute.resolution_confirm",
+                        historyWriter.historyDispute(transaction, trade, resolved, "dispute.resolution_confirm",
                                 trade.actorKind(actor), actor, null, null, null, dispute.id(), confirmationId,
                                 eventId, now);
                         UUID resolvedEvent = UUID.randomUUID();
-                        long resolvedHistory = historyDispute(transaction, trade, resolved, "dispute.resolve",
+                        long resolvedHistory = historyWriter.historyDispute(transaction,
+                                trade, resolved, "dispute.resolve",
                                 ActorKind.SYSTEM, null, null, null, null, dispute.id(), confirmationId,
                                 resolvedEvent, now);
                         conversations.append(transaction, conversationId, resolvedEvent, "dispute_resolved",
@@ -811,7 +824,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                         var updated = changed(trade, trade.status(), trade.activeAgreementId(), trade.closeReason(),
                                 trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
                         repository.save(updated);
-                        historyDispute(transaction, trade, updated, "dispute.resolution_confirm",
+                        historyWriter.historyDispute(transaction, trade, updated, "dispute.resolution_confirm",
                                 trade.actorKind(actor), actor, null, null, null, dispute.id(), confirmationId,
                                 eventId, now);
                         conversations.append(transaction, conversationId, eventId, "dispute_resolution_confirmed",
@@ -1195,7 +1208,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 trade.closeReason(), trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
         repository.save(restored);
         UUID eventId = UUID.randomUUID();
-        long historyId = historyDisputeAgreement(transaction, trade, restored, "dispute.resolve",
+        long historyId = historyWriter.historyDisputeAgreement(transaction, trade, restored, "dispute.resolve",
                 ActorKind.ADMIN, manager, validatedReason, basisRef, caseId, trade.activeAgreementId(),
                 dispute.id(), eventId, now);
         conversations.append(transaction, conversationId, eventId, "dispute_resolved",
@@ -1319,7 +1332,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 pauseWait(transaction, trade.id(), now);
                 repository.touch(trade.id(), now);
                 UUID event = UUID.randomUUID();
-                long historyId = history(transaction, trade, trade, "trade.freeze", ActorKind.SYSTEM, null,
+                long historyId = historyWriter.history(transaction,
+                        trade, trade, "trade.freeze", ActorKind.SYSTEM, null,
                         reason, basisRef, null, event, now);
                 conversations.append(transaction, branch, event, "trade_frozen",
                         "账户受限，交易已冻结", new ResourceRef("trade_transition", historyId));
@@ -1343,7 +1357,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
             repository.touch(trade.id(), now);
             resumeWaitIfPossible(transaction, trade, now);
             UUID event = UUID.randomUUID();
-            long historyId = history(transaction, trade, trade, "trade.unfreeze", ActorKind.SYSTEM, null,
+            long historyId = historyWriter.history(transaction, trade, trade, "trade.unfreeze", ActorKind.SYSTEM, null,
                     null, basisRef, null, event, now);
             conversations.append(transaction, branches.get(trade.id()), event, "trade_unfrozen", "交易冻结已解除",
                     new ResourceRef("trade_transition", historyId));
@@ -1438,7 +1452,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         var closed = changed(trade, TradeStatus.CLOSED, null, cause.value(), null, now, null, now);
         repository.save(closed);
         UUID event = UUID.randomUUID();
-        history(transaction, trade, closed, "request.close", ActorKind.SYSTEM, null, reason,
+        historyWriter.history(transaction, trade, closed, "request.close", ActorKind.SYSTEM, null, reason,
                 basisRef, null, event, now);
         conversations.append(transaction, branch, event, "request_closed", "购买请求已关闭", null);
         archive(transaction, branch, trade.id(), cause.value());
@@ -1502,12 +1516,14 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         repository.save(abnormal);
         long conversationId = requireConversationId(tradeId);
         UUID abnormalEvent = UUID.randomUUID();
-        long abnormalHistory = history(transaction, trade, abnormal, "trade.abnormal", ActorKind.SYSTEM, null, "单方确认超时",
+        long abnormalHistory = historyWriter.history(transaction,
+                trade, abnormal, "trade.abnormal", ActorKind.SYSTEM, null, "单方确认超时",
             "case:" + caseId, caseId, abnormalEvent, now);
         conversations.append(transaction, conversationId, abnormalEvent, "trade_abnormal",
                 "单方确认超时，交易转异常", new ResourceRef("trade_transition", abnormalHistory));
         UUID frozenEvent = UUID.randomUUID();
-        long frozenHistory = history(transaction, trade, abnormal, "trade.freeze", ActorKind.SYSTEM, null, "单方确认超时",
+        long frozenHistory = historyWriter.history(transaction,
+                trade, abnormal, "trade.freeze", ActorKind.SYSTEM, null, "单方确认超时",
             "case:" + caseId, caseId, frozenEvent, now);
         conversations.append(transaction, conversationId, frozenEvent, "trade_frozen",
                 "交易已冻结，等待管理员处理", new ResourceRef("trade_transition", frozenHistory));
@@ -1870,10 +1886,12 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         long freezeId = repository.insertFreeze(trade.id(), FreezeSource.ADMIN_CASE, caseId, reason, now);
         pauseWait(transaction, trade.id(), now);
         repository.touch(trade.id(), now);
-        long historyId = historyFreeze(transaction, trade, "trade.freeze", ActorKind.ADMIN, manager, reason,
+        long historyId = historyWriter.historyFreeze(transaction,
+                trade, "trade.freeze", ActorKind.ADMIN, manager, reason,
                 basisRef, caseId, freezeId, frozenBefore, true, eventId, now);
         return Optional.of(new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
-                trade.status().value(), phase(trade.phase()), phase(trade.phase()), frozenBefore, true, false));
+                trade.status().value(), TradeHistoryWriter.phase(trade.phase()),
+                TradeHistoryWriter.phase(trade.phase()), frozenBefore, true, false));
     }
 
     private TradePorts.CaseEnforcementOutcome liftFreezeFacts(WriteTransaction transaction, Trade trade,
@@ -1884,10 +1902,12 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         repository.touch(trade.id(), now);
         resumeWaitIfPossible(transaction, trade, now);
         boolean frozenAfter = !repository.activeFreezes(trade.id()).isEmpty();
-        long historyId = historyFreeze(transaction, trade, "trade.unfreeze", ActorKind.ADMIN, manager, reason,
+        long historyId = historyWriter.historyFreeze(transaction,
+                trade, "trade.unfreeze", ActorKind.ADMIN, manager, reason,
                 basisRef, caseId, freeze.id(), true, frozenAfter, eventId, now);
         return new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
-                trade.status().value(), phase(trade.phase()), phase(trade.phase()), true, frozenAfter, false);
+                trade.status().value(), TradeHistoryWriter.phase(trade.phase()),
+                TradeHistoryWriter.phase(trade.phase()), true, frozenAfter, false);
     }
 
     private TradePorts.CaseEnforcementOutcome adjustStatusFacts(WriteTransaction transaction, Trade trade,
@@ -1908,11 +1928,12 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         endFreezes(transaction, trade.id(), now);
         repository.terminateOpenDisputes(trade.id(), now);
         product.release(transaction, state, trade.id(), "admin_terminated");
-        long historyId = historyAgreement(transaction, trade, ended,
+        long historyId = historyWriter.historyAgreement(transaction, trade, ended,
                 target == TradeStatus.COMPLETED ? "trade.completed" : "trade.terminated", ActorKind.ADMIN,
                 manager, reason, basisRef, caseId, trade.activeAgreementId(), null, eventId, now);
         return new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
-                target.value(), phase(trade.phase()), phase(ended.phase()), frozenBefore, false, false);
+                target.value(), TradeHistoryWriter.phase(trade.phase()),
+                TradeHistoryWriter.phase(ended.phase()), frozenBefore, false, false);
     }
 
     private TradePorts.CaseEnforcementOutcome restoreFacts(WriteTransaction transaction, Trade trade, long caseId,
@@ -1924,10 +1945,11 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         var restored = changed(trade, TradeStatus.IN_PROGRESS, trade.activeAgreementId(),
                 trade.closeReason(), trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
         repository.save(restored);
-        long historyId = historyAgreement(transaction, trade, restored, "trade.restore", ActorKind.ADMIN,
+        long historyId = historyWriter.historyAgreement(transaction, trade, restored, "trade.restore", ActorKind.ADMIN,
                 manager, reason, basisRef, caseId, trade.activeAgreementId(), null, eventId, now);
         return new TradePorts.CaseEnforcementOutcome(trade.id(), historyId, eventId, trade.status().value(),
-                TradeStatus.IN_PROGRESS.value(), phase(trade.phase()), phase(restored.phase()), frozen, frozen,
+                TradeStatus.IN_PROGRESS.value(), TradeHistoryWriter.phase(trade.phase()),
+                TradeHistoryWriter.phase(restored.phase()), frozen, frozen,
                 false);
     }
 
@@ -2052,83 +2074,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return new Trade(trade.id(), trade.productId(), trade.buyerId(), trade.sellerId(), status,
                 trade.requestNote(), activeAgreementId, trade.version() + 1, closeReason, terminalReason,
                 trade.requestedAt(), respondedAt, endedAt, trade.createdAt(), now);
-    }
-
-    private long history(WriteTransaction transaction, Trade before, Trade after, String action, ActorKind actorKind,
-                         Long actorId, String reason, String basisRef, Long caseId, UUID eventId, Instant now) {
-        return history(transaction, before, after, action, actorKind, actorId, reason, basisRef, caseId,
-                null, null, null, null, null, null, null, eventId, now);
-    }
-
-    private long historyAgreement(WriteTransaction transaction, Trade before, Trade after, String action,
-                                  ActorKind actorKind, Long actorId, String reason, String basisRef, Long caseId,
-                                  Long agreementId, Long agreementDecisionId, UUID eventId, Instant now) {
-        return history(transaction, before, after, action, actorKind, actorId, reason, basisRef, caseId,
-                agreementId, agreementDecisionId, null, null, null, null, null, eventId, now);
-    }
-
-    private long historyConfirmation(WriteTransaction transaction, Trade before, Trade after, String action,
-                                     ActorKind actorKind, Long actorId, String reason, String basisRef, Long caseId,
-                                     Long agreementId, Long confirmationId, UUID eventId, Instant now) {
-        return history(transaction, before, after, action, actorKind, actorId, reason, basisRef, caseId,
-                agreementId, null, confirmationId, null, null, null, null, eventId, now);
-    }
-
-    private long historyCancellation(WriteTransaction transaction, Trade before, Trade after, String action,
-                                     ActorKind actorKind, Long actorId, String reason, String basisRef, Long caseId,
-                                     Long cancellationId, Long cancellationDecisionId, UUID eventId, Instant now) {
-        return history(transaction, before, after, action, actorKind, actorId, reason, basisRef, caseId,
-                null, null, null, cancellationId, cancellationDecisionId, null, null, eventId, now);
-    }
-
-    private long historyDispute(WriteTransaction transaction, Trade before, Trade after, String action,
-                                ActorKind actorKind, Long actorId, String reason, String basisRef, Long caseId,
-                                Long disputeId, Long resolutionConfirmationId, UUID eventId, Instant now) {
-        return history(transaction, before, after, action, actorKind, actorId, reason, basisRef, caseId,
-                null, null, null, null, null, disputeId, resolutionConfirmationId, eventId, now);
-    }
-
-    private long historyDisputeAgreement(WriteTransaction transaction, Trade before, Trade after, String action,
-                                         ActorKind actorKind, Long actorId, String reason, String basisRef,
-                                         Long caseId, Long agreementId, Long disputeId, UUID eventId, Instant now) {
-        return history(transaction, before, after, action, actorKind, actorId, reason, basisRef, caseId,
-                agreementId, null, null, null, null, disputeId, null, eventId, now);
-    }
-
-    private long history(WriteTransaction transaction, Trade before, Trade after, String action, ActorKind actorKind,
-                         Long actorId, String reason, String basisRef, Long caseId, Long agreementId,
-                         Long agreementDecisionId, Long confirmationId, Long cancellationId,
-                         Long cancellationDecisionId, Long disputeId, Long resolutionConfirmationId, UUID eventId,
-                         Instant now) {
-        String fromStatus = before.status() == after.status() ? null : before.status().value();
-        String toStatus = before.status() == after.status() ? null : after.status().value();
-        var beforePhase = before.phase();
-        var afterPhase = after.phase();
-        String fromPhase = beforePhase == afterPhase ? null : phase(beforePhase);
-        String toPhase = beforePhase == afterPhase ? null : phase(afterPhase);
-        return repository.insertHistory(new TradeModels.History(0, before.id(), action, fromStatus, toStatus,
-                fromPhase, toPhase, actorKind, actorId, reason, basisRef, caseId, null, null, null, agreementId,
-                agreementDecisionId, confirmationId, cancellationId, cancellationDecisionId, disputeId,
-                resolutionConfirmationId, eventId, now));
-    }
-
-    /**
-     * Records a freeze transition with its exact freeze association and a status snapshot. The
-     * snapshot is only exposed through the case-subject result; the public history projection keeps
-     * suppressing unchanged from/to values.
-     */
-    private long historyFreeze(WriteTransaction transaction, Trade trade, String action, ActorKind actorKind,
-                               Long actorId, String reason, String basisRef, Long caseId, long freezeId,
-                               boolean frozenBefore, boolean frozenAfter, UUID eventId, Instant now) {
-        String status = trade.status().value();
-        String tradePhase = phase(trade.phase());
-        return repository.insertHistory(new TradeModels.History(0, trade.id(), action, status, status,
-                tradePhase, tradePhase, actorKind, actorId, reason, basisRef, caseId, freezeId, frozenBefore,
-                frozenAfter, null, null, null, null, null, null, null, eventId, now));
-    }
-
-    private static String phase(TradePhase phase) {
-        return phase == null ? null : phase.value();
     }
 
     private void publishFreeze(WriteTransaction transaction, Trade trade, long conversationId, long caseId,
