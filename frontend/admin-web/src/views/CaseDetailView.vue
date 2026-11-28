@@ -4,16 +4,13 @@ import {
   caseEvidenceFileHref,
   liftCaseEnforcement,
   readCase,
-  readCaseThread,
   writeCase,
   type CaseDecision,
   type CaseEnforcementInput,
   type CaseMessageEvidence,
   type CaseRelatedAccount,
   type CaseManagementWrites,
-  type CaseThreadPage,
   type ManagementCaseDetail,
-  type ManagementCaseThread,
   type PendingCaseAppeal,
 } from "../api/cases";
 import { AbortedError } from "../api/errors";
@@ -29,6 +26,7 @@ import PageHeader from "../components/PageHeader.vue";
 import CaseAppealsSection from "./CaseAppealsSection.vue";
 import CaseEvidenceSection from "./CaseEvidenceSection.vue";
 import { useCaseAppeals } from "./useCaseAppeals";
+import { useCaseThread } from "./useCaseThread";
 import { useCaseTradeHistory } from "./useCaseTradeHistory";
 
 const props = defineProps<{ caseId: string; backHref: string; anchor?: string }>();
@@ -85,11 +83,15 @@ const agreementStatus = {
   superseded: "已被替代",
 };
 
-const selectedThread = ref<ManagementCaseThread>();
-const thread = ref<CaseThreadPage>();
-const threadError = ref<unknown>();
-const threadLoading = ref(false);
-let threadRequest: AbortController | undefined;
+const {
+  selectedThread,
+  thread,
+  threadError,
+  threadLoading,
+  selectThreadFor,
+  loadThread,
+  abortThread,
+} = useCaseThread(() => props.anchor);
 
 const peer = ref("");
 const inquiry = ref("");
@@ -216,25 +218,6 @@ function userProductHref(productId: string): string {
 
 const actions = computed(() => new Set(detail.value?.available_actions ?? []));
 
-function selectThreadFor(next: ManagementCaseDetail): void {
-  const threads = next.threads ?? [];
-  const messageId = props.anchor?.match(/^case-message-([1-9][0-9]*)$/)?.[1];
-  const messageAccount = messageId
-    ? next.actions.find((action) => action.message_id === messageId)?.related_account_id
-    : undefined;
-  const messageThread = threads.find((item) => item.related_account_id === messageAccount);
-  const chosen =
-    messageThread ??
-    threads.find((item) => item.conversation_id === selectedThread.value?.conversation_id) ??
-    threads[0];
-  if (chosen) {
-    void loadThread(chosen, false, messageThread ? messageId : undefined);
-    return;
-  }
-  selectedThread.value = undefined;
-  thread.value = undefined;
-}
-
 function selectDefaultPeer(next: ManagementCaseDetail): void {
   const candidates = (next.related_accounts ?? []).filter((account) => account.eligible);
   if (candidates.some((account) => account.account_id === peer.value)) return;
@@ -262,48 +245,6 @@ async function load(): Promise<void> {
     }
   } finally {
     if (detailRequest === controller) loading.value = false;
-  }
-}
-
-async function loadThread(
-  source: ManagementCaseThread,
-  older = false,
-  messageId?: string,
-): Promise<void> {
-  threadRequest?.abort();
-  const controller = new AbortController();
-  threadRequest = controller;
-  const previous = older ? thread.value : undefined;
-  selectedThread.value = source;
-  thread.value = previous;
-  threadError.value = undefined;
-  threadLoading.value = true;
-  try {
-    let before = previous?.next_before_seq ?? undefined;
-    let items = previous?.items ?? [];
-    while (!controller.signal.aborted) {
-      const next = await readCaseThread(source.conversation_id, before, controller.signal);
-      if (controller.signal.aborted) return;
-      items = [...next.items, ...items];
-      const cursor = next.next_before_seq ?? undefined;
-      if (
-        !messageId ||
-        items.some((item) => item.case_message_id === messageId) ||
-        !cursor ||
-        cursor <= 1 ||
-        next.items.length === 0 ||
-        (before && cursor >= before)
-      ) {
-        thread.value = { ...next, items };
-        break;
-      }
-      before = cursor;
-    }
-  } catch (caught) {
-    if (threadRequest === controller && !(caught instanceof AbortedError))
-      threadError.value = caught;
-  } finally {
-    if (threadRequest === controller) threadLoading.value = false;
   }
 }
 
@@ -429,7 +370,7 @@ watch(
 onMounted(load);
 onUnmounted(() => {
   detailRequest?.abort();
-  threadRequest?.abort();
+  abortThread();
   abortTradeHistory();
 });
 </script>
