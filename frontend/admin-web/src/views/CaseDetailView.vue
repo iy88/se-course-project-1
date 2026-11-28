@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, useId, watch } from "vue";
 import {
-  caseEvidenceFileHref,
   liftCaseEnforcement,
   readCase,
   writeCase,
-  type CaseDecision,
-  type CaseEnforcementInput,
   type CaseMessageEvidence,
   type CaseRelatedAccount,
   type CaseManagementWrites,
@@ -14,7 +11,6 @@ import {
   type PendingCaseAppeal,
 } from "../api/cases";
 import { AbortedError } from "../api/errors";
-import { dispositionTargets, resolveDispositionTarget } from "../app/disposition-targets";
 import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { decisionKindLabels, todoKindLabels } from "../app/labels";
@@ -24,8 +20,10 @@ import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
 import CaseAppealsSection from "./CaseAppealsSection.vue";
+import CaseDecisionForm from "./CaseDecisionForm.vue";
 import CaseEvidenceSection from "./CaseEvidenceSection.vue";
 import { useCaseAppeals } from "./useCaseAppeals";
+import { useCaseDecision } from "./useCaseDecision";
 import { useCaseThread } from "./useCaseThread";
 import { useCaseTradeHistory } from "./useCaseTradeHistory";
 
@@ -95,9 +93,6 @@ const {
 
 const peer = ref("");
 const inquiry = ref("");
-const decisionKind = ref<CaseDecision>("no_action");
-const decisionReason = ref("");
-const basis = ref<string[]>([]);
 const publicSummary = ref("");
 const publicReason = ref("");
 const confirmClose = ref(false);
@@ -110,8 +105,6 @@ const enforcementOptions = [
   { action: "freeze_trade", target: "trade", label: "冻结交易" },
   { action: "adjust_trade_status", target: "trade", label: "调整交易状态" },
 ] as const;
-const instructions = ref<{ id: number; option: number; targetId: string; expected: string }[]>([]);
-let instructionId = 0;
 
 const messages: Record<string, string> = {
   submit: "提交事项",
@@ -177,9 +170,14 @@ function accountLabel(account: CaseRelatedAccount): string {
   return `${role} · ${account.display_name ?? "账户"} #${account.account_id}`;
 }
 
-const dispositionChoices = computed(() =>
-  enforcementOptions.map(({ target }) => dispositionTargets(detail.value, target, accountLabel)),
-);
+// Page-local decision draft; created in the page setup so form mounts and load failures preserve it.
+const {
+  draft: decisionDraft,
+  dispositionChoices,
+  addInstruction,
+  removeInstruction,
+  buildDecisionWrite,
+} = useCaseDecision(detail, enforcementOptions, accountLabel);
 
 function accountDisplayName(accountId: string): string {
   const account = relatedAccounts.value.find((item) => item.account_id === accountId);
@@ -319,37 +317,12 @@ async function lift(enforcementId: string, reason: string): Promise<void> {
 }
 
 function submitDecision(): void {
-  const enforcements: CaseEnforcementInput[] = [];
-  if (decisionKind.value === "violation") {
-    for (const entry of instructions.value) {
-      const option = enforcementOptions[entry.option];
-      const choices = dispositionChoices.value[entry.option];
-      const target = resolveDispositionTarget(choices, entry.targetId);
-      if (!target) {
-        writeError.value = "请选择有效的处置对象。";
-        return;
-      }
-      enforcements.push({
-        action: option.action,
-        target_type: option.target,
-        target_id: target.id,
-        expected_result: option.action === "adjust_trade_status" ? entry.expected : undefined,
-      });
-    }
+  const result = buildDecisionWrite();
+  if ("error" in result) {
+    writeError.value = result.error;
+    return;
   }
-  void submit("decisions", {
-    decision_kind: decisionKind.value,
-    reason: decisionReason.value.trim(),
-    basis_refs: basis.value,
-    enforcements,
-  });
-}
-
-function addInstruction(): void {
-  const option = dispositionChoices.value.findIndex((choices) => choices.length);
-  if (option >= 0) {
-    instructions.value.push({ id: ++instructionId, option, targetId: "", expected: "terminated" });
-  }
+  void submit("decisions", result.body);
 }
 
 watch(
@@ -816,126 +789,21 @@ onUnmounted(() => {
         </div>
       </form>
 
-      <form
+      <CaseDecisionForm
         v-if="actions.has('decide')"
-        class="card stack"
-        :aria-labelledby="`${ids}-decide`"
-        @submit.prevent="submitDecision"
-      >
-        <h2 :id="`${ids}-decide`">处置决定</h2>
-        <label class="field"
-          ><span>结论</span>
-          <select v-model="decisionKind" name="decision_kind" class="select" required>
-            <option value="no_action">不予处置</option>
-            <option value="not_actionable">不予受理</option>
-            <option value="violation">认定违规</option>
-          </select>
-        </label>
-        <label class="field"
-          ><span>决定理由</span>
-          <textarea v-model="decisionReason" name="reason" class="textarea" required />
-        </label>
-        <fieldset class="stack">
-          <legend>补充依据（可选）</legend>
-          <p v-if="!detail.decision_basis_actions?.length && !basisEvidence.length" class="muted">
-            暂无可引用的问询、回复或用户材料。
-          </p>
-          <label v-for="item in detail.decision_basis_actions" :key="item.action_id">
-            <input v-model="basis" type="checkbox" :value="`action:${item.action_id}`" />
-            {{ messages[item.action_kind] }} · {{ formatDateTime(item.occurred_at) }}
-            <span v-if="item.note" class="pre-line"> · {{ item.note }}</span>
-          </label>
-          <div v-for="item in basisEvidence" :key="item.evidence_id" class="inline">
-            <label>
-              <input v-model="basis" type="checkbox" :value="`evidence:${item.evidence_id}`" />
-              用户上传附件 · 证据 #{{ item.evidence_id }}
-              <span v-if="item.submitted_at"> · {{ formatDateTime(item.submitted_at) }}</span>
-            </label>
-            <a
-              :href="caseEvidenceFileHref(caseId, item.evidence_id)"
-              target="_blank"
-              rel="noopener noreferrer"
-              >打开附件</a
-            >
-          </div>
-        </fieldset>
-        <template v-if="decisionKind === 'violation'">
-          <fieldset v-for="instruction in instructions" :key="instruction.id" class="stack">
-            <legend>处置项</legend>
-            <label class="field"
-              ><span>动作</span>
-              <select
-                v-model="instruction.option"
-                @change="instruction.targetId = ''"
-                :name="`action-${instruction.id}`"
-                class="select"
-              >
-                <option
-                  v-for="(option, index) in enforcementOptions"
-                  :key="option.action + option.target"
-                  :value="index"
-                  :disabled="!dispositionChoices[index].length"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-            <p v-if="dispositionChoices[instruction.option].length === 1" class="muted">
-              处置对象 · {{ dispositionChoices[instruction.option][0].label }}
-            </p>
-            <label v-else class="field">
-              <span>处置对象</span>
-              <select
-                v-model="instruction.targetId"
-                :name="`target-${instruction.id}`"
-                class="select"
-                required
-              >
-                <option value="" disabled>请选择处置对象</option>
-                <option
-                  v-for="target in dispositionChoices[instruction.option]"
-                  :key="target.id"
-                  :value="target.id"
-                >
-                  {{ target.label }}
-                </option>
-              </select>
-            </label>
-            <label
-              v-if="enforcementOptions[instruction.option].action === 'adjust_trade_status'"
-              class="field"
-              ><span>目标状态</span>
-              <select
-                v-model="instruction.expected"
-                :name="`state-${instruction.id}`"
-                class="select"
-              >
-                <option value="terminated">已终止</option>
-                <option value="completed">已完成</option>
-                <option value="in_progress">恢复进行中（仅异常交易）</option>
-              </select>
-              <span class="muted"
-                >恢复进行中保留锁单与冻结，清空当前完成确认但不启动计时；交易须与本案目标一致。</span
-              >
-            </label>
-            <div>
-              <button
-                type="button"
-                class="btn btn--ghost"
-                @click="instructions = instructions.filter((item) => item.id !== instruction.id)"
-              >
-                移除此项
-              </button>
-            </div>
-          </fieldset>
-          <div v-if="dispositionChoices.some((choices) => choices.length)">
-            <button type="button" class="btn" @click="addInstruction">添加处置项</button>
-          </div>
-        </template>
-        <div>
-          <button type="submit" class="btn btn--primary" :disabled="writing">提交决定</button>
-        </div>
-      </form>
+        :case-id="caseId"
+        :ids="ids"
+        :draft="decisionDraft"
+        :basis-actions="detail.decision_basis_actions"
+        :basis-evidence="basisEvidence"
+        :messages="messages"
+        :enforcement-options="enforcementOptions"
+        :disposition-choices="dispositionChoices"
+        :writing="writing"
+        @add-instruction="addInstruction"
+        @remove-instruction="removeInstruction"
+        @submit="submitDecision"
+      />
 
       <CaseAppealsSection
         v-if="actions.has('resolve_appeal') && appealDrafts.length"
@@ -1404,11 +1272,5 @@ details > .case-fields {
 .pre-line {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-fieldset {
-  border: 1px solid var(--line);
-  padding: var(--space-3);
-  min-inline-size: 0;
 }
 </style>
