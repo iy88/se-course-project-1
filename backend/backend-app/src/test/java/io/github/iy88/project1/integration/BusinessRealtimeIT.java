@@ -45,6 +45,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -68,6 +69,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 class BusinessRealtimeIT {
@@ -731,6 +733,57 @@ class BusinessRealtimeIT {
                 }
             };
         }
+    }
+
+    @Test
+    void protocolErrorsAndHandshakeDenialsCloseWithoutAdvancingTheCursor() throws Exception {
+        assertThatThrownBy(() -> HTTP.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5))
+                .header("Origin", "http://evil.example")
+                .header("Cookie", "it_session=" + SESSION_A1)
+                .buildAsync(URI.create("ws://127.0.0.1:" + port(first) + "/api/v1/realtime"),
+                        new WebSocket.Listener() { })
+                .orTimeout(5, TimeUnit.SECONDS).join())
+                .isInstanceOf(CompletionException.class);
+        assertThatThrownBy(() -> HTTP.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5))
+                .header("Origin", ORIGIN)
+                .header("Cookie", "it_session=" + UUID.randomUUID())
+                .buildAsync(URI.create("ws://127.0.0.1:" + port(first) + "/api/v1/realtime"),
+                        new WebSocket.Listener() { })
+                .orTimeout(5, TimeUnit.SECONDS).join())
+                .isInstanceOf(CompletionException.class);
+
+        try (var connection = open(first, SESSION_A1)) {
+            connection.send(Map.of("type", "ack", "through_seq", 1));
+            assertThat(connection.closeCode.get(5, TimeUnit.SECONDS)).isEqualTo(4400);
+        }
+        try (var connection = open(first, SESSION_A1)) {
+            connection.socket.sendText("not-json", true).orTimeout(5, TimeUnit.SECONDS).join();
+            assertThat(connection.closeCode.get(5, TimeUnit.SECONDS)).isEqualTo(4400);
+        }
+        try (var connection = open(first, SESSION_A1)) {
+            connection.send(Map.of("type", "hello", "protocol_version", 1, "csrf_token", "bad",
+                    "cursor", Map.of("epoch", UUID.randomUUID().toString(), "after_seq", 0)));
+            assertThat(connection.closeCode.get(5, TimeUnit.SECONDS)).isGreaterThanOrEqualTo(4400);
+        }
+        try (var connection = open(first, SESSION_A1)) {
+            helloAtHead(connection, first, ACCOUNT_A);
+            connection.send(hello(first.getBean(UserEvents.class).head(ACCOUNT_A).epoch(), 0));
+            assertThat(connection.closeCode.get(5, TimeUnit.SECONDS)).isEqualTo(4400);
+        }
+        try (var connection = open(first, SESSION_A1)) {
+            helloAtHead(connection, first, ACCOUNT_A);
+            connection.send(Map.of("type", "pong", "nonce", "bad"));
+            assertThat(connection.closeCode.get(5, TimeUnit.SECONDS)).isEqualTo(4400);
+        }
+        try (var connection = open(first, SESSION_A1)) {
+            helloAtHead(connection, first, ACCOUNT_A);
+            connection.send(Map.of("type", "unknown"));
+            assertThat(connection.closeCode.get(5, TimeUnit.SECONDS)).isEqualTo(4400);
+        }
+    }
+
+    private static int port(ConfigurableApplicationContext app) {
+        return ((org.springframework.boot.web.server.context.WebServerApplicationContext) app).getWebServer().getPort();
     }
 
     static final class Connection implements WebSocket.Listener, AutoCloseable {

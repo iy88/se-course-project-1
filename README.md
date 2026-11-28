@@ -220,7 +220,9 @@ java -jar backend/maintenance/target/maintenance-0.0.1-SNAPSHOT.jar \
 
 首次开发或内部模块依赖发生变化时，先执行 `mvn -f backend/pom.xml install`，将模块 JAR 和 POM 安装到本机 Maven 仓库。`verify` 用于检查，不能替代开发环境要求的 `install`。
 
-汇总覆盖率报告位于 `backend/coverage-report/target/site/jacoco-aggregate/index.html`。集成测试需要已启动的 PostgreSQL 和 Redis，并先执行最新的 `db migrate`；测试报告位于 `backend/backend-app/target/failsafe-reports/`，每次运行使用独立的 Redis 前缀并在结束时清理。使用其他配置文件时，加 `-Dit.envFile="$PWD/backend/.env.dev"`。
+后端汇总覆盖率排除 `maintenance`，报告位于 `backend/coverage-report/target/site/jacoco-aggregate/index.html`。集成测试需要已启动的 PostgreSQL 和 Redis，并先执行最新的 `db migrate`；测试报告位于 `backend/backend-app/target/failsafe-reports/`，每次运行使用独立的 Redis 前缀并在结束时清理。使用其他配置文件时，加 `-Dit.envFile="$PWD/backend/.env.dev"`。
+
+`-Pintegration` 还会生成排除 `maintenance`、只使用 Failsafe 执行数据的[集成覆盖率报告](docs/design/test-cases/集成测试覆盖率.md)，本地入口为 `backend/coverage-report/target/site/jacoco-integration/index.html`。GitHub Actions 在集成测试运行摘要中记录行和分支覆盖率。
 
 需要单独调试时，分别在终端启动 API、调度器和工作进程：
 

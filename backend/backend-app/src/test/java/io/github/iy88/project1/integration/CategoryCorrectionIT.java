@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.iy88.project1.BackendAppApplication;
+import io.github.iy88.project1.category.application.CategoryService;
+import io.github.iy88.project1.core.AuditContext;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.product.application.ProductService;
@@ -117,6 +119,18 @@ class CategoryCorrectionIT {
                         """)
                 .param(productId).param(oldCategory).param(seller).update();
         caseId = reviewCase(productId, manager);
+    }
+
+    @Test
+    void referencedCategoryCanBeDisabledButCannotBeDeleted() {
+        var categories = app.getBean(CategoryService.class);
+        var audit = new AuditContext(accountContext(manager), UUID.randomUUID());
+
+        assertFailure(() -> categories.delete(oldCategory, audit), "CATEGORY_NOT_DELETABLE");
+        assertThat(categories.disable(oldCategory, audit).state()).isEqualTo("disabled");
+        assertFailure(() -> categories.delete(oldCategory, audit), "CATEGORY_NOT_DELETABLE");
+        assertThat(db.sql("select category_id from product_category where product_id = ?")
+                .param(productId).query(Long.class).list()).containsExactly(oldCategory);
     }
 
     @Test

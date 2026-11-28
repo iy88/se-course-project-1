@@ -14,6 +14,7 @@ import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.messaging.TaskHandler;
 import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.messaging.TaskStream;
+import io.github.iy88.project1.messaging.TaskWorker;
 import io.github.iy88.project1.messaging.UserEvents;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -291,6 +292,58 @@ class InfrastructureIT {
     }
 
     @Test
+    void workerPersistsRetryAndCancelsAnObsoleteTaskWithoutExecutingIt() {
+        var schedules = app.getBean(TaskSchedules.class);
+        var worker = app.getBean(TaskWorker.class);
+        var transaction = app.getBean(TransactionTemplate.class);
+        var retry = transaction.execute(status -> schedules.schedule(new TaskSchedules.Spec(TASK_KIND, FIXTURE,
+                RUN_ID + "-retry", "v1", Instant.now().minusSeconds(1), "integration")));
+        var obsolete = transaction.execute(status -> schedules.schedule(new TaskSchedules.Spec(TASK_KIND, FIXTURE,
+                RUN_ID + "-obsolete", "v1", Instant.now().minusSeconds(1), "integration")));
+
+        int executions = TASK_EXECUTIONS.get();
+        assertThat(worker.run(new TaskSchedules.Ready(retry.id(), TASK_KIND))).isTrue();
+        assertThat(db.sql("""
+                SELECT attempts = 1 AND last_error = 'INTEGRATION_RETRY' AND lease_token IS NULL
+                    AND completed_at IS NULL AND next_attempt_at > due_at
+                FROM task_schedule WHERE task_id = ?
+                """).param(retry.id()).query(Boolean.class).single()).isTrue();
+        db.sql("DELETE FROM task_schedule WHERE task_id = ?").param(retry.id()).update();
+
+        var ready = new TaskSchedules.Ready(obsolete.id(), TASK_KIND);
+        assertThat(worker.run(ready)).isTrue();
+        assertThat(worker.run(ready)).isTrue();
+        assertThat(db.sql("""
+                SELECT attempts = 1 AND cancelled_at IS NOT NULL AND completed_at IS NULL
+                FROM task_schedule WHERE task_id = ?
+                """).param(obsolete.id()).query(Boolean.class).single()).isTrue();
+        assertThat(TASK_EXECUTIONS.get()).isEqualTo(executions);
+    }
+
+    @Test
+    void replayRechecksAccessAndPreservesTheOriginalOperation() {
+        var writes = app.getBean(WriteExecutor.class);
+        String key = RUN_ID + "-replay-access";
+        var committed = writes.run(accountContext(), "integration.access", key, "value", new WriteFixture());
+        var denied = new WriteFixture() {
+            @Override
+            public void requireReplayAccess(ExecutionContext context, Boolean qualified, ResourceRef resource) {
+                assertThat(resource).isEqualTo(FIXTURE);
+                throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "fixture");
+            }
+        };
+        assertThatThrownBy(() -> writes.run(accountContext(), "integration.access", key, "value", denied))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("RESOURCE_NOT_VISIBLE");
+                    assertThat(error.operationId()).isEqualTo(committed.operationId());
+                });
+        var replay = writes.run(accountContext(), "integration.access", key, "value", new WriteFixture());
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.operationId()).isEqualTo(committed.operationId());
+        assertThat(auditCount(committed.operationId())).isEqualTo(1);
+    }
+
+    @Test
     void websocketReconnectReplaysOnlyTheEventsAfterTheAcknowledgedCursor() throws Exception {
         var events = app.getBean(UserEvents.class);
         var tx = app.getBean(TransactionTemplate.class);
@@ -411,10 +464,15 @@ class InfrastructureIT {
                 public void lockAndQualify(WriteTransaction transaction, TaskSchedules.Task task) {}
 
                 @Override
-                public boolean isApplicable(TaskSchedules.Task task) { return true; }
+                public boolean isApplicable(TaskSchedules.Task task) {
+                    return !task.spec().triggerKey().equals(RUN_ID + "-obsolete");
+                }
 
                 @Override
                 public void execute(WriteTransaction transaction, TaskSchedules.Task task) {
+                    if (task.spec().triggerKey().equals(RUN_ID + "-retry")) {
+                        throw new BusinessError("INTEGRATION_RETRY", 409, "fixture");
+                    }
                     TASK_EXECUTIONS.incrementAndGet();
                 }
             };

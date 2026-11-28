@@ -1,5 +1,6 @@
 package io.github.iy88.project1.integration;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.iy88.project1.BackendAppApplication;
@@ -15,6 +16,7 @@ import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.OssFileObjects;
 import io.github.iy88.project1.storage.content.FileContentVerifier.VerifiedContent;
+import io.github.iy88.project1.storage.persistence.FileReferences;
 import io.github.iy88.project1.storage.persistence.FileRegistry;
 import io.github.iy88.project1.storage.persistence.UploadRegistration;
 import java.net.URI;
@@ -37,6 +39,7 @@ import org.springframework.boot.web.server.servlet.context.ServletWebServerAppli
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.PropertiesPropertySource;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -408,6 +411,28 @@ class S2ProductionReviewIT {
             db.sql("delete from trade where buyer_id = ? and seller_id = ?")
                     .param(buyerId).param(sellerId).update();
         }
+    }
+
+    @Test
+    void avatarReferenceCannotBeReadThroughAnotherAccountTarget() throws Exception {
+        var owner = login("file-reference-owner", false);
+        var other = login("file-reference-other", false);
+        long ownerId = owner.account().id();
+        long fileId = uploadedImage(ownerId, FilePurpose.ACCOUNT_AVATAR, true);
+        write(owner, "PATCH", "/account/profile", avatar(fileId), key(), 200);
+        var references = app.getBean(FileReferences.class);
+        var transaction = app.getBean(TransactionTemplate.class);
+        var ownerTarget = new UploadRegistration.Target("account", ownerId);
+        var otherTarget = new UploadRegistration.Target("account", other.account().id());
+
+        assertThat(transaction.execute(status -> references.readReferenced(ownerTarget, fileId)).fileId())
+                .isEqualTo(fileId);
+        assertThatThrownBy(() -> transaction.execute(status -> references.readReferenced(otherTarget, fileId)))
+                .isInstanceOf(FileRegistry.Rejected.class).hasMessage("RESOURCE_NOT_VISIBLE");
+
+        write(owner, "PATCH", "/account/profile", "{\"avatar_file_id\":null}", key(), 200);
+        assertThatThrownBy(() -> transaction.execute(status -> references.readReferenced(ownerTarget, fileId)))
+                .isInstanceOf(FileRegistry.Rejected.class).hasMessage("RESOURCE_NOT_VISIBLE");
     }
 
     private static long uploadedImage(long owner, FilePurpose purpose, boolean verified) {
