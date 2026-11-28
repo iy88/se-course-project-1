@@ -113,6 +113,16 @@ public class CaseQueries {
         return body;
     }
 
+    public long requireClaimedTrade(ExecutionContext context, long caseId) {
+        long actor = actor(context);
+        var facts = store.find(caseId).orElseThrow(CaseQueries::notVisible);
+        if (!facts.lifecycle() || !facts.claimedBy(actor) || !managerRole(context)
+                || !"trade".equals(facts.targetType()) || facts.targetId() == null) {
+            throw notVisible();
+        }
+        return facts.targetId();
+    }
+
     public ObjectNode detail(ExecutionContext context, long caseId) {
         long actor = actor(context);
         var facts = store.find(caseId).orElseThrow(CaseQueries::notVisible);

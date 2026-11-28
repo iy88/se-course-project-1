@@ -40,6 +40,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/admin/cases/{case_id}/trade-history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** 读取本人认领事项的目标交易约定与完成确认历史 */
+    get: operations["getClaimedCaseTradeHistory"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/admin/cases/{case_id}/evidence/{evidence_id}/file": {
     parameters: {
       query?: never;
@@ -2039,6 +2056,62 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["Error"];
         };
+      };
+    };
+  };
+  getClaimedCaseTradeHistory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        case_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description 目标交易的约定与确认历史 */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            trade_id: string;
+            agreement_history: components["schemas"]["Agreement"][];
+            confirmation_history: {
+              [key: string]: unknown;
+            }[];
+          };
+        };
+      };
+      /** @description 需要登录 */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description 事项或目标交易不可见 */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description 事项编号无效 */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description 依赖不可用 */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

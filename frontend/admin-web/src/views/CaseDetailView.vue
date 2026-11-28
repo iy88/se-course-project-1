@@ -7,6 +7,7 @@ import {
   liftCaseEnforcement,
   readCase,
   readCaseThread,
+  readCaseTradeHistory,
   resolveCaseAppeal,
   writeCase,
   type AppealableEnforcement,
@@ -18,6 +19,7 @@ import {
   type CaseManagementWrites,
   type CaseReplacementEnforcement,
   type CaseThreadPage,
+  type CaseTradeHistory,
   type ManagementCaseDetail,
   type ManagementCaseThread,
   type PendingCaseAppeal,
@@ -42,6 +44,36 @@ const writing = ref(false);
 const writeError = ref("");
 const keys = new IdempotencyKeys();
 let detailRequest: AbortController | undefined;
+
+const tradeHistory = ref<CaseTradeHistory>();
+const tradeHistoryLoading = ref(false);
+const tradeHistoryError = ref<unknown>();
+let tradeHistoryRequest: AbortController | undefined;
+const tradeHistoryAvailable = computed(() => {
+  const item = detail.value;
+  return item && (item.case_type !== "report" || item.reported_object?.target_type === "trade");
+});
+const agreementStatus = {
+  proposed: "待回应",
+  effective: "已生效",
+  rejected: "已拒绝",
+  withdrawn: "已撤回",
+  superseded: "已被替代",
+};
+
+async function loadTradeHistory(): Promise<void> {
+  const controller = new AbortController();
+  tradeHistoryRequest = controller;
+  tradeHistoryLoading.value = true;
+  tradeHistoryError.value = undefined;
+  try {
+    tradeHistory.value = await readCaseTradeHistory(props.caseId, controller.signal);
+  } catch (caught) {
+    if (!(caught instanceof AbortedError)) tradeHistoryError.value = caught;
+  } finally {
+    tradeHistoryLoading.value = false;
+  }
+}
 
 const messageEvidence = ref<CaseMessageEvidence>();
 const evidenceLoading = ref(false);
@@ -552,6 +584,7 @@ onMounted(load);
 onUnmounted(() => {
   detailRequest?.abort();
   threadRequest?.abort();
+  tradeHistoryRequest?.abort();
 });
 </script>
 
@@ -772,6 +805,57 @@ onUnmounted(() => {
         <p class="pre-line">{{ detail.target.body }}</p>
         <p v-if="detail.target.created_at">发表于 {{ formatDateTime(detail.target.created_at) }}</p>
       </details>
+      <section v-if="tradeHistoryAvailable" class="card record-card">
+        <div class="card__head">
+          <h2>交易约定与确认历史</h2>
+          <button
+            v-if="!tradeHistory && !tradeHistoryError"
+            type="button"
+            class="btn btn--small btn--ghost"
+            :disabled="tradeHistoryLoading"
+            @click="loadTradeHistory"
+          >
+            {{ tradeHistoryLoading ? "正在读取…" : "查看交易历史" }}
+          </button>
+        </div>
+        <ErrorNotice
+          v-if="tradeHistoryError"
+          :error="tradeHistoryError"
+          @retry="loadTradeHistory"
+        />
+        <div v-if="tradeHistory" class="stack">
+          <p>交易 #{{ tradeHistory.trade_id }}</p>
+          <section class="info-block">
+            <h3>约定历史</h3>
+            <p v-if="!tradeHistory.agreement_history.length">暂无约定记录。</p>
+            <ul v-else>
+              <li v-for="item in tradeHistory.agreement_history" :key="item.id">
+                <strong
+                  >第 {{ item.version_no }} 版（#{{ item.id }}） ·
+                  {{ agreementStatus[item.status] }}</strong
+                >
+                <p>提出人 #{{ item.proposed_by }} · {{ formatDateTime(item.proposed_at) }}</p>
+                <p class="pre-line">
+                  交付地点 {{ item.delivery_place_text }} · {{ formatDateTime(item.delivery_at) }}
+                </p>
+                <p>约定金额 ¥{{ (item.amount_cents / 100).toFixed(2) }}</p>
+              </li>
+            </ul>
+          </section>
+          <section class="info-block">
+            <h3>完成确认历史</h3>
+            <p v-if="!tradeHistory.confirmation_history.length">暂无完成确认记录。</p>
+            <ul v-else>
+              <li v-for="item in tradeHistory.confirmation_history" :key="item.id">
+                <strong>账户 #{{ item.confirmer_id }} · 约定 #{{ item.agreement_id }}</strong>
+                <p>{{ formatDateTime(item.submitted_at) }}</p>
+                <p v-if="item.note" class="pre-line">{{ item.note }}</p>
+                <p v-if="item.invalidated_at">已失效 · {{ formatDateTime(item.invalidated_at) }}</p>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </section>
       <div class="record-layout">
         <section
           v-if="
