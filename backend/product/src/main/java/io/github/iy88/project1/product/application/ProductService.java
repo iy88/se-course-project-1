@@ -71,6 +71,7 @@ public class ProductService {
     private final FileRead fileReads;
     private final ProductTradeHistory tradeHistory;
     private final ProductEditNotices editNotices;
+    private final ProductEditHistoryQueries editHistoryQueries;
     private final CaseCommentAccess cases;
     private final ProductCorrectionNotices correctionNotices;
     private final ProductDisplayRestrictions displayRestrictions;
@@ -121,6 +122,7 @@ public class ProductService {
         this.jdbc = jdbc;
         this.transaction = new TransactionTemplate(manager); // REQUIRED: joins a caller's write transaction.
         this.auditRecords = auditRecords;
+        this.editHistoryQueries = new ProductEditHistoryQueries(products, edits, tradeHistory, settings, cases);
     }
 
     public ProductDetail create(long sellerId, CreateCommand command, AuditContext auditContext) {
@@ -724,65 +726,18 @@ public class ProductService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public PageResult<EditView> editHistory(long viewerId, long productId, Long tradeId, Integer page,
                                             Integer pageSize) {
-        Product product = products.findById(productId).filter(found -> !found.deleted())
-                .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
-        boolean seller = product.sellerAccountId() == viewerId;
-        ProductTradeHistory.BuyerScope buyerScope = seller ? null
-                : tradeHistory.buyerScope(productId, viewerId, tradeId)
-                        .orElseThrow(() -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在"));
-        int currentPage = page == null ? 1 : page;
-        int size = pageSize == null ? settings.pageSize() : pageSize;
-        if (currentPage < 1 || size < 1 || size > settings.pageSizeMax()) {
-            throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
-        }
-        Pageable pageable = PageRequest.of(currentPage - 1, size);
-        var pageResult = seller
-                ? edits.findByProductIdOrderByEditedAtDescIdDesc(productId, pageable)
-                : edits.findBuyerHistory(productId, buyerScope.requestedAt(), pageable);
-        List<EditView> items = pageResult.getContent().stream()
-                .map(edit -> seller
-                        ? new EditView(Long.toString(edit.id()), edit.editedAt(), edit.operatorKind(),
-                                edit.editKind(), edit.beforeContent(), edit.afterContent(), edit.reason())
-                        : new EditView(Long.toString(edit.id()), edit.editedAt(), edit.operatorKind(),
-                                edit.editKind(), buyerContent(edit.beforeContent()),
-                                buyerContent(edit.afterContent()), null))
-                .toList();
-        return new PageResult<>(items, currentPage, size, pageResult.getTotalElements());
+        return editHistoryQueries.editHistory(viewerId, productId, tradeId, page, pageSize);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public PageResult<EditView> caseEditHistory(long managerId, long productId, long caseId, Integer page,
                                                 Integer pageSize) {
-        if (!cases.claimedForProduct(managerId, caseId, productId)) {
-            throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "商品不存在");
-        }
-        int currentPage = page == null ? 1 : page;
-        int size = pageSize == null ? settings.pageSize() : pageSize;
-        if (currentPage < 1 || size < 1 || size > settings.pageSizeMax()) {
-            throw new BusinessError("INPUT_INVALID", 422, "分页参数无效");
-        }
-        var result = edits.findByProductIdAndBasisTypeAndBasisIdOrderByEditedAtDescIdDesc(
-                productId, "case", caseId, PageRequest.of(currentPage - 1, size));
-        List<EditView> items = result.getContent().stream()
-                .map(edit -> new EditView(Long.toString(edit.id()), edit.editedAt(), edit.operatorKind(),
-                        edit.editKind(), buyerContent(edit.beforeContent()), buyerContent(edit.afterContent()), edit.reason()))
-                .toList();
-        return new PageResult<>(items, currentPage, size, result.getTotalElements());
+        return editHistoryQueries.caseEditHistory(managerId, productId, caseId, page, pageSize);
     }
 
     private static ExecutionContext internalContext() {
         return new ExecutionContext(java.util.UUID.randomUUID(), ExecutionContext.ActorKind.SYSTEM,
                 "product-edit", null, null, null, "internal");
-    }
-
-    private static Map<String, Object> buyerContent(Map<String, Object> content) {
-        Map<String, Object> allowed = new LinkedHashMap<>();
-        for (String key : List.of("title", "description", "price_cents", "image_file_ids", "category_ids")) {
-            if (content != null && content.containsKey(key)) {
-                allowed.put(key, content.get(key));
-            }
-        }
-        return allowed;
     }
 
     private static List<String> changedFields(Map<String, Object> before, Map<String, Object> after) {
