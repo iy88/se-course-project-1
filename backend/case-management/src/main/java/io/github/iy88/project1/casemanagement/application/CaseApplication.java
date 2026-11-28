@@ -13,16 +13,13 @@ import io.github.iy88.project1.core.WriteTransaction;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
@@ -52,21 +49,14 @@ public class CaseApplication {
     public static final String LIFT = "case.enforcement.lift";
     public static final String REFERENCE_EVIDENCE = "case.evidence.reference";
 
-    private static final Set<String> ENFORCEMENT_ACTIONS = Set.of(
-            "restrict_account", "lift_account_restriction", "withdraw_public_access", "restore_display",
-            "remove_content", "freeze_trade", "lift_trade_freeze", "adjust_trade_status",
-            "remove_evaluation_content");
-    private static final Set<String> TRADE_ACTIONS = Set.of("freeze_trade", "lift_trade_freeze",
-            "adjust_trade_status");
     /** Records produced by a reversal, never selectable as the original enforcement. */
-    private static final Set<String> LIFT_ACTIONS = Set.of("lift_account_restriction", "restore_display",
+    static final Set<String> LIFT_ACTIONS = Set.of("lift_account_restriction", "restore_display",
             "lift_trade_freeze");
     /** A terminal trade adjustment cannot be reversed or adjusted again. */
     private static final Set<String> TERMINAL_ACTIONS = Set.of("adjust_trade_status");
     /** Original actions whose subject handlers can compensate; other content removals cannot. */
     private static final Set<String> REVERSIBLE_ACTIONS = Set.of("freeze_trade", "restrict_account",
             "withdraw_public_access");
-    private static final Set<String> ADJUST_TRADE_TARGETS = Set.of("completed", "terminated", "in_progress");
 
     private final WriteExecutor writes;
     private final CaseLifecycleStore store;
@@ -532,7 +522,8 @@ public class CaseApplication {
                         plan = plan.merge(enforcement.reverseLockCallbacks(context, facts.caseId(), recorded,
                                 message.resolution()).lockPlan());
                         if (CaseVocabulary.RESOLUTION_ADJUST.equals(message.resolution())) {
-                            var replacements = replacementInstructions(message, recorded);
+                            var replacements =
+                                    CaseEnforcementInstructions.replacementInstructions(message, recorded);
                             if (!replacements.isEmpty()) {
                                 plan = plan.merge(enforcement.lockCallbacks(context, facts.caseId(),
                                         replacements).lockPlan());
@@ -588,7 +579,7 @@ public class CaseApplication {
                         recorded, message.resolution());
                 if (recorded != null && CaseVocabulary.RESOLUTION_ADJUST.equals(message.resolution())) {
                     subjects = subjects.merge(enforcement.lockCallbacks(transaction.context(), request.caseId(),
-                            replacementInstructions(message, recorded)));
+                            CaseEnforcementInstructions.replacementInstructions(message, recorded)));
                 }
                 facts = acquireSubjectLocks(transaction, plan, subjects, request.caseId());
             } else {
@@ -753,7 +744,7 @@ public class CaseApplication {
             var recorded = selectedEnforcement(facts.caseId(), message.originalEnforcementId(), appellant, true);
             boolean adjust = CaseVocabulary.RESOLUTION_ADJUST.equals(message.resolution());
             var replacements = adjust
-                    ? replacementInstructions(message, recorded)
+                    ? CaseEnforcementInstructions.replacementInstructions(message, recorded)
                     : List.<CaseRecords.EnforcementInstruction>of();
             if (replacements.stream().anyMatch(item -> recorded.action().equals(item.action()))) {
                 throw new BusinessError("INPUT_INVALID", 422, "调整处置须给出新的处置动作");
@@ -826,7 +817,7 @@ public class CaseApplication {
             if (!facts.claimedBy(actor(context))) {
                 return plan;
             }
-            var instructions = instructions(request.decision());
+            var instructions = CaseEnforcementInstructions.instructions(request.decision());
             if (!instructions.isEmpty() && enforcement != null) {
                 plan = plan.merge(enforcement.plan(context, facts.caseId(), instructions));
             }
@@ -864,7 +855,7 @@ public class CaseApplication {
                 throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
             }
             var decision = request.decision();
-            var instructions = instructions(decision);
+            var instructions = CaseEnforcementInstructions.instructions(decision);
             // A decision with subjects locks the actual product/trade rows before the case row.
             // The prepared plan is re-checked here so a target set that grew after prepare is
             // retried by the shared executor instead of widening locks inside the case lock.
@@ -889,7 +880,7 @@ public class CaseApplication {
             if (facts.decided()) {
                 throw new BusinessError("STATE_CONFLICT", 409, "事项已决定");
             }
-            requireTradeTargets(facts, instructions);
+            CaseEnforcementInstructions.requireTradeTargets(facts, instructions);
             if (decision.decisionKind() == null || !CaseVocabulary.DECISION_KINDS.contains(decision.decisionKind())) {
                 throw new BusinessError("INPUT_INVALID", 422, "decision_kind 取值无效");
             }
@@ -1235,7 +1226,7 @@ public class CaseApplication {
             }
             String reason = requiredText(request.reason(), settings.getMaxNoteLength(), "解除原因");
             var recorded = requireRecorded(facts.caseId(), request.enforcementId());
-            requireRecordedTarget(facts, recorded);
+            CaseEnforcementInstructions.requireRecordedTarget(facts, recorded);
             if (store.lift(facts.caseId(), request.enforcementId()).isPresent()
                     || !"applied".equals(recorded.resultStatus())) {
                 throw enforcementNotActive(recorded);
@@ -1392,31 +1383,6 @@ public class CaseApplication {
         return holder.get();
     }
 
-    /** A subject execution may only target the trade recorded as this case's target. */
-    private static void requireTradeTargets(CaseRecords.Facts facts,
-                                            List<CaseRecords.EnforcementInstruction> instructions) {
-        for (var item : instructions) {
-            if (!TRADE_ACTIONS.contains(item.action())) {
-                continue;
-            }
-            if (!"trade".equals(facts.targetType()) || facts.targetId() == null
-                    || facts.targetId() != item.targetId()) {
-                throw new BusinessError("TARGET_STATE_CONFLICT", 409, "事项目标与交易不一致");
-            }
-        }
-    }
-
-    /** A recorded trade enforcement must still point at this case's current target trade. */
-    private static void requireRecordedTarget(CaseRecords.Facts facts, CaseRecords.Enforcement recorded) {
-        if (!"trade".equals(recorded.targetType())) {
-            return;
-        }
-        if (!"trade".equals(facts.targetType()) || facts.targetId() == null
-                || facts.targetId() != recorded.targetId()) {
-            throw new BusinessError("TARGET_STATE_CONFLICT", 409, "事项与执行记录的目标不一致");
-        }
-    }
-
     private JsonNode digest(long caseId, Object input) {
         var node = json.createObjectNode();
         node.put("case_id", caseId);
@@ -1516,24 +1482,6 @@ public class CaseApplication {
                 && outcome.currentState().startsWith("status=in_progress");
     }
 
-    /**
-     * A replacement must stay on the original target and name a new concrete action. This keeps
-     * an adjustment from becoming an arbitrary account/product/trade selection or a hidden lift.
-     */
-    private List<CaseRecords.EnforcementInstruction> replacementInstructions(CaseCommands.Message message,
-                                                                              CaseRecords.Enforcement recorded) {
-        var replacements = instructions(message.replacementEnforcements());
-        for (var item : replacements) {
-            if (!recorded.targetType().equals(item.targetType()) || recorded.targetId() != item.targetId()) {
-                throw new BusinessError("INPUT_INVALID", 422, "调整处置须沿用原处置目标");
-            }
-            if (LIFT_ACTIONS.contains(item.action())) {
-                throw new BusinessError("INPUT_INVALID", 422, "调整处置须给出新的处置动作");
-            }
-        }
-        return replacements;
-    }
-
     private static String replacementBasis(long caseId, Long appealActionId) {
         return "case:" + caseId + ":appeal:" + appealActionId + ":replacement";
     }
@@ -1612,38 +1560,6 @@ public class CaseApplication {
             throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "需要登录账户");
         }
         return Long.parseLong(context.actorId());
-    }
-
-    private List<CaseRecords.EnforcementInstruction> instructions(CaseCommands.Decision decision) {
-        return instructions(decision.enforcements());
-    }
-
-    private List<CaseRecords.EnforcementInstruction> instructions(List<CaseCommands.Enforcement> enforcements) {
-        var list = new ArrayList<CaseRecords.EnforcementInstruction>();
-        for (var item : enforcements) {
-            if (item.action() == null || !ENFORCEMENT_ACTIONS.contains(item.action())) {
-                throw new BusinessError("INPUT_INVALID", 422, "执行动作无效");
-            }
-            if (item.targetType() == null || item.targetType().isBlank() || item.targetId() <= 0) {
-                throw new BusinessError("TARGET_INVALID", 422, "执行目标无效");
-            }
-            if (TRADE_ACTIONS.contains(item.action()) && !"trade".equals(item.targetType())) {
-                throw new BusinessError("TARGET_INVALID", 422, "交易动作的目标无效");
-            }
-            String expected = item.expectedResult();
-            if ("adjust_trade_status".equals(item.action())) {
-                if (expected == null || expected.isBlank()) {
-                    throw new BusinessError("INPUT_INVALID", 422, "调整交易状态须给出目标状态");
-                }
-                expected = expected.trim().toLowerCase(Locale.ROOT);
-                if (!ADJUST_TRADE_TARGETS.contains(expected)) {
-                    throw new BusinessError("INPUT_INVALID", 422, "调整交易状态的目标无效");
-                }
-            }
-            list.add(new CaseRecords.EnforcementInstruction(UUID.randomUUID().toString(), item.action(),
-                    item.targetType(), item.targetId(), expected));
-        }
-        return list;
     }
 
     private Long attachEvidence(WriteTransaction transaction, long caseId, long reporter, List<Long> fileIds) {
