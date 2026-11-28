@@ -14,8 +14,6 @@ import io.github.iy88.project1.trade.domain.TradeStatus;
 import io.github.iy88.project1.trade.domain.TradeVocabulary;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.ActorKind;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.AgreementStatus;
-import io.github.iy88.project1.trade.domain.TradeVocabulary.CancellationMode;
-import io.github.iy88.project1.trade.domain.TradeVocabulary.CancellationStatus;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.CloseReason;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.Decision;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.DisputeStatus;
@@ -53,6 +51,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     private final TradeHistoryWriter historyWriter;
     private final TradeViews views;
     private final TradeQueries queries;
+    private final TradeCancellation cancellation;
     private final WriteExecutor writes;
     private final TaskSchedules schedules;
     private final Clock clock;
@@ -86,6 +85,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         this.json = json;
         this.reviews = new TradeReviews(repository, views, accounts, settings, json, clock);
         this.queries = new TradeQueries(repository, views, accounts, product, conversations, settings, json, clock);
+        this.cancellation = new TradeCancellation(repository, historyWriter, views, queries, accounts,
+                conversations, notifications, product, clock, json);
         this.disputes = new TradeDisputes(repository, historyWriter, views, queries, accounts, conversations,
                 cases, clock, json);
         this.timeout = new TradeConfirmationTimeout(repository, historyWriter, queries, schedules, clock,
@@ -484,79 +485,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 (ctx, request) -> prepareTrade(actor, request.tradeId(), true, null),
                 (ctx, request) -> qualifyTrade(ctx, request.tradeId()),
                 this::replayTrade,
-                (transaction, request, qualification) -> {
-                    String reason = optionalText(request.reason(), 500, "取消原因");
-                    var pre = repository.find(request.tradeId()).orElseThrow(Trade::notVisible);
-                    requireWrite(actor);
-                    var state = lockProduct(transaction, pre.productId());
-                    var trade = repository.lockTrade(transaction, request.tradeId());
-                    trade.requireNotTerminal();
-                    requireCancellable(trade);
-                    requireNotFrozen(transaction, trade.id());
-                    trade.requireVersion(request.expectedVersion());
-                    long conversationId = requireConversation(transaction, trade.id());
-                    if (repository.pendingCancellation(trade.id()).isPresent()) {
-                        throw new BusinessError("CANCELLATION_ALREADY_PENDING", 409, "已有待决取消申请");
-                    }
-                    var now = now();
-                    boolean direct = trade.cancellationMode(actor,
-                            !repository.currentConfirmations(trade.id()).isEmpty()) == CancellationMode.DIRECT;
-                    UUID requestEvent = UUID.randomUUID();
-                    var proposal = new TradeModels.Cancellation(0, trade.id(), actor,
-                            direct ? CancellationMode.DIRECT : CancellationMode.APPROVAL, reason,
-                            direct ? CancellationStatus.ACCEPTED : CancellationStatus.PENDING, now, requestEvent);
-                    long proposalId = repository.insertCancellation(proposal);
-                    proposal = withId(proposal, proposalId);
-                    if (direct) {
-                        UUID decisionEvent = UUID.randomUUID();
-                        var decision = new TradeModels.CancellationDecision(0, proposalId, Decision.ACCEPT, actor, now,
-                                decisionEvent);
-                        long decisionId = repository.insertCancellationDecision(decision);
-                        var terminated = changed(trade, TradeStatus.TERMINATED, trade.activeAgreementId(), null,
-                                TerminalReason.CANCELLED.value(), trade.respondedAt(), now, now);
-                        repository.save(terminated);
-                        endWait(transaction, trade.id(), WaitEndReason.TERMINATED, now);
-                        endFreezes(transaction, trade.id(), now);
-                        repository.terminateOpenDisputes(trade.id(), now);
-                        product.releaseToPublic(transaction, state, trade.id(), "cancelled");
-                    historyWriter.historyCancellation(transaction,
-                            trade, terminated, "cancellation.request", trade.actorKind(actor),
-                        actor, reason, null, null, proposalId, null, requestEvent, now);
-                        conversations.append(transaction, conversationId, requestEvent, "cancellation_requested",
-                                "买方直接取消了交易", new ResourceRef("cancellation_request", proposalId));
-                    historyWriter.historyCancellation(transaction,
-                            trade, terminated, "cancellation.accept", ActorKind.BUYER, actor,
-                        reason, null, null, proposalId, decisionId, decisionEvent, now);
-                        conversations.append(transaction, conversationId, decisionEvent, "cancellation_accepted",
-                                "交易已终止", new ResourceRef("cancellation_decision", decisionId));
-                        UUID terminatedEvent = UUID.randomUUID();
-                        long terminatedHistory = historyWriter.historyCancellation(transaction,
-                                trade, terminated, "trade.terminated",
-                            ActorKind.SYSTEM, null, reason, null, null, proposalId, decisionId, terminatedEvent, now);
-                        conversations.append(transaction, conversationId, terminatedEvent, "trade_terminated",
-                                "交易已终止，商品仍保持上架。", new ResourceRef("trade_transition", terminatedHistory));
-                        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()),
-                                "trade.terminated", terminatedEvent);
-                        archive(transaction, conversationId, trade.id(), "cancelled");
-                    } else {
-                        var updated = changed(trade, trade.status(), trade.activeAgreementId(), trade.closeReason(),
-                                trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
-                        repository.save(updated);
-                    historyWriter.historyCancellation(transaction,
-                            trade, updated, "cancellation.request", trade.actorKind(actor),
-                        actor, reason, null, null, proposalId, null, requestEvent, now);
-                        conversations.append(transaction, conversationId, requestEvent, "cancellation_requested",
-                                "取消申请已提交", new ResourceRef("cancellation_request", proposalId));
-                        notify(transaction, trade, Set.of(other(trade, actor)),
-                                "trade.cancellation_requested", requestEvent);
-                    }
-                    audit(transaction, "trade.cancellation.propose", trade.id(), null);
-                    var body = json.createObjectNode();
-                    body.put("mode", proposal.mode().value());
-                    body.set("proposal", views.cancellationRecord(proposal));
-                    body.set("trade", view(trade.id(), actor, conversationId));
-                    return new WriteResult.Response<>(201, body, new ResourceRef("trade", trade.id()));
-                });
+                (transaction, request, qualification) -> cancellation.propose(transaction, actor, request));
     }
 
     public WriteResult<JsonNode> decideCancellation(ExecutionContext context, String key,
@@ -566,83 +495,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 (ctx, request) -> prepareTrade(actor, request.tradeId(), true, null),
                 (ctx, request) -> qualifyTrade(ctx, request.tradeId()),
                 this::replayTrade,
-                (transaction, request, qualification) -> {
-                    Decision decision = decision(request.decision());
-                    var pre = repository.find(request.tradeId()).orElseThrow(Trade::notVisible);
-                    requireWrite(actor);
-                    var state = lockProduct(transaction, pre.productId());
-                    var trade = repository.lockTrade(transaction, request.tradeId());
-                    trade.requireNotTerminal();
-                    requireCancellable(trade);
-                    requireNotFrozen(transaction, trade.id());
-                    trade.requireVersion(request.expectedVersion());
-                    long conversationId = requireConversation(transaction, trade.id());
-                    var proposal = repository.cancellation(request.cancellationId())
-                            .orElseThrow(() -> new BusinessError("CANCELLATION_NOT_PENDING", 409,
-                                    "取消申请不存在"));
-                    if (proposal.tradeId() != trade.id() || proposal.status() != CancellationStatus.PENDING) {
-                        throw new BusinessError("CANCELLATION_NOT_PENDING", 409, "取消申请已决或不属于本交易");
-                    }
-                    if (decision == Decision.WITHDRAW) {
-                        if (proposal.proposedBy() != actor) {
-                            throw Trade.actionNotAllowed();
-                        }
-                    } else if (proposal.proposedBy() == actor) {
-                        throw Trade.actionNotAllowed();
-                    }
-                    var now = now();
-                    UUID decisionEvent = UUID.randomUUID();
-                    var stored = new TradeModels.CancellationDecision(0, proposal.id(), decision, actor, now,
-                            decisionEvent);
-                    long decisionId = repository.insertCancellationDecision(stored);
-                    if (decision == Decision.ACCEPT) {
-                        repository.setCancellationStatus(proposal.id(), CancellationStatus.ACCEPTED);
-                        var terminated = changed(trade, TradeStatus.TERMINATED, trade.activeAgreementId(), null,
-                                TerminalReason.CANCELLED.value(), trade.respondedAt(), now, now);
-                        repository.save(terminated);
-                        endWait(transaction, trade.id(), WaitEndReason.TERMINATED, now);
-                        endFreezes(transaction, trade.id(), now);
-                        repository.terminateOpenDisputes(trade.id(), now);
-                        product.releaseToPublic(transaction, state, trade.id(), "cancelled");
-                    historyWriter.historyCancellation(transaction,
-                            trade, terminated, "cancellation.accept", trade.actorKind(actor),
-                        actor, null, null, null, proposal.id(), decisionId, decisionEvent, now);
-                        conversations.append(transaction, conversationId, decisionEvent, "cancellation_accepted",
-                                "取消申请已同意，交易终止", new ResourceRef("cancellation_decision", decisionId));
-                        UUID terminatedEvent = UUID.randomUUID();
-                        long terminatedHistory = historyWriter.historyCancellation(transaction,
-                                trade, terminated, "trade.terminated",
-                            ActorKind.SYSTEM, null, null, null, null, proposal.id(), decisionId, terminatedEvent, now);
-                        conversations.append(transaction, conversationId, terminatedEvent, "trade_terminated",
-                                "交易已终止，商品仍保持上架。", new ResourceRef("trade_transition", terminatedHistory));
-                        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.terminated",
-                                terminatedEvent);
-                        archive(transaction, conversationId, trade.id(), "cancelled");
-                    } else {
-                        repository.setCancellationStatus(proposal.id(),
-                                decision == Decision.REJECT ? CancellationStatus.REJECTED
-                                        : CancellationStatus.WITHDRAWN);
-                        var updated = changed(trade, trade.status(), trade.activeAgreementId(), trade.closeReason(),
-                                trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
-                        repository.save(updated);
-                        String action = decision == Decision.REJECT ? "cancellation.reject" : "cancellation.withdraw";
-                        historyWriter.historyCancellation(transaction,
-                                trade, updated, action, trade.actorKind(actor), actor, null, null,
-                            null, proposal.id(), decisionId, decisionEvent, now);
-                        String type = decision == Decision.REJECT ? "cancellation_rejected" : "cancellation_withdrawn";
-                        conversations.append(transaction, conversationId, decisionEvent, type,
-                                decision == Decision.REJECT ? "取消申请被拒绝" : "取消申请已撤回",
-                                new ResourceRef("cancellation_decision", decisionId));
-                        notify(transaction, trade, Set.of(other(trade, actor)), "trade." + type, decisionEvent);
-                    }
-                    audit(transaction, "trade.cancellation." + decision.value(), trade.id(), null);
-                    var updatedProposal = repository.cancellation(proposal.id()).orElseThrow();
-                    var body = json.createObjectNode();
-                    body.set("proposal", views.cancellationRecord(updatedProposal));
-                    body.set("trade", view(trade.id(), actor, conversationId));
-                    return new WriteResult.Response<>(200, body,
-                            new ResourceRef("trade", trade.id()));
-                });
+                (transaction, request, qualification) -> cancellation.decide(transaction, actor, request));
     }
 
     // ---------------------------------------------------------------- reviews
@@ -1653,12 +1506,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private TradePorts.ProductState lockProduct(WriteTransaction transaction, long productId) {
-        var result = new java.util.concurrent.atomic.AtomicReference<TradePorts.ProductState>();
-        transaction.lock(productKey(productId), () -> result.set(product.lock(transaction, productId)));
-        if (result.get() == null) {
-            throw productUnavailable();
-        }
-        return result.get();
+        return TradeWriteSupport.lockProduct(product, transaction, productId);
     }
 
     private void lockCase(WriteTransaction transaction, long caseId, long manager, long tradeId, String basisRef) {
@@ -1804,12 +1652,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 agreement.paymentTiming(), agreement.proposedAt(), agreement.businessEventId());
     }
 
-    private static TradeModels.Cancellation withId(TradeModels.Cancellation cancellation, long id) {
-        return new TradeModels.Cancellation(id, cancellation.tradeId(), cancellation.proposedBy(),
-                cancellation.mode(), cancellation.reason(), cancellation.status(), cancellation.proposedAt(),
-                cancellation.businessEventId());
-    }
-
     private static TradeModels.Confirmation withId(TradeModels.Confirmation confirmation, long id) {
         return new TradeModels.Confirmation(id, confirmation.tradeId(), confirmation.agreementId(),
                 confirmation.confirmerId(), confirmation.note(), confirmation.submittedAt(),
@@ -1824,15 +1666,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
             throw new BusinessError("REQUEST_ALREADY_ENDED", 409, "请求已结束");
         }
         if (trade.status() != TradeStatus.PENDING_ACCEPTANCE) {
-            throw Trade.stateConflict();
-        }
-    }
-
-    private void requireCancellable(Trade trade) {
-        if (trade.status() == TradeStatus.ABNORMAL) {
-            throw new BusinessError("STATE_CONFLICT", 409, "异常交易需管理员处理");
-        }
-        if (trade.status() != TradeStatus.IN_PROGRESS && trade.status() != TradeStatus.DISPUTED) {
             throw Trade.stateConflict();
         }
     }
@@ -1870,11 +1703,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static Decision decision(String value) {
-        try {
-            return Decision.from(value);
-        } catch (RuntimeException invalid) {
-            throw inputInvalid("decision 参数无效");
-        }
+        return TradeWriteSupport.decision(value);
     }
 
     private static TradeStatus terminalTarget(String value) {
@@ -1911,7 +1740,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static BusinessError productUnavailable() {
-        return new BusinessError("PRODUCT_NOT_AVAILABLE", 409, "商品当前不可交易");
+        return TradeWriteSupport.productUnavailable();
     }
 
     private static String requiredText(String value, int max, String field) {
@@ -1919,13 +1748,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static String optionalText(String value, int max, String field) {
-        if (value == null) {
-            return null;
-        }
-        if (value.length() > max) {
-            throw inputInvalid(field + "长度不能超过" + max);
-        }
-        return value.isBlank() ? null : value.trim();
+        return TradeWriteSupport.optionalText(value, max, field);
     }
 
     private static LockPlan.Key productKey(long productId) {

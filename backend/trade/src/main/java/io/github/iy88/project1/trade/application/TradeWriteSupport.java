@@ -9,6 +9,7 @@ import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.trade.domain.Trade;
 import io.github.iy88.project1.trade.domain.TradeModels;
 import io.github.iy88.project1.trade.domain.TradeStatus;
+import io.github.iy88.project1.trade.domain.TradeVocabulary.Decision;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.WaitEndReason;
 import io.github.iy88.project1.trade.persistence.TradeRepository;
 import java.time.Clock;
@@ -173,5 +174,36 @@ final class TradeWriteSupport {
                 + deadline.toEpochMilli();
         schedules.schedule(new TaskSchedules.Spec(TradeTimeoutHandler.KIND, new ResourceRef("trade", tradeId),
                 trigger, wait.fingerprint(), deadline, wait.policyVersion()));
+    }
+
+    static Decision decision(String value) {
+        try {
+            return Decision.from(value);
+        } catch (RuntimeException invalid) {
+            throw inputInvalid("decision 参数无效");
+        }
+    }
+
+    static String optionalText(String value, int max, String field) {
+        if (value == null) {
+            return null;
+        }
+        if (value.length() > max) {
+            throw inputInvalid(field + "长度不能超过" + max);
+        }
+        return value.isBlank() ? null : value.trim();
+    }
+
+    static BusinessError productUnavailable() {
+        return new BusinessError("PRODUCT_NOT_AVAILABLE", 409, "商品当前不可交易");
+    }
+
+    static TradePorts.ProductState lockProduct(TradePorts.Product product, WriteTransaction transaction, long productId) {
+        var result = new java.util.concurrent.atomic.AtomicReference<TradePorts.ProductState>();
+        transaction.lock(productKey(productId), () -> result.set(product.lock(transaction, productId)));
+        if (result.get() == null) {
+            throw productUnavailable();
+        }
+        return result.get();
     }
 }
