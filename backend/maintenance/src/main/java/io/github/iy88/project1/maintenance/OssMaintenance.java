@@ -58,54 +58,7 @@ final class OssMaintenance {
     static long clear(OSSClient client, String bucket) {
         OssClients.requirePrivateUnversionedBucket(client, bucket);
         var request = ListObjectsV2Request.newBuilder().bucket(bucket).maxKeys(MAX_BATCH_SIZE).build();
-        long removed = 0;
-        String previousFirstKey = null;
-        while (true) {
-            // List the first page again after deleting it, so a continuation token never points into removed objects.
-            var page = client.listObjectsV2(request);
-            var objects = page.contents();
-            if (objects == null || objects.isEmpty()) {
-                if (Boolean.TRUE.equals(page.isTruncated())) {
-                    throw new IllegalStateException("OSS returned an empty truncated page");
-                }
-                return removed;
-            }
-            if (objects.size() > MAX_BATCH_SIZE) {
-                throw new IllegalStateException("OSS returned more keys than the batch delete limit");
-            }
-            var keys = new ArrayList<String>(objects.size());
-            for (var object : objects) {
-                String key = object == null ? null : object.key();
-                if (key == null || key.isEmpty()) {
-                    throw new IllegalStateException("OSS listing returned an object without a key");
-                }
-                keys.add(key);
-            }
-            if (keys.getFirst().equals(previousFirstKey)) {
-                throw new IllegalStateException("OSS listing did not advance after deletion");
-            }
-            previousFirstKey = keys.getFirst();
-            var deletions = keys.stream().map(key -> ObjectIdentifier.newBuilder().key(key).build()).toList();
-            var result = client.deleteMultipleObjects(DeleteMultipleObjectsRequest.newBuilder()
-                    .bucket(bucket)
-                    .delete(Delete.newBuilder().objects(deletions).quiet(false).build())
-                    .build());
-            var deleted = result.deletedObjects();
-            var confirmedKeys = new HashSet<String>();
-            if (deleted != null) {
-                for (var object : deleted) {
-                    String key = object == null ? null : object.key();
-                    if (key == null || key.isEmpty()) {
-                        throw new IllegalStateException("OSS deletion response returned an object without a key");
-                    }
-                    confirmedKeys.add(key);
-                }
-            }
-            if (!new HashSet<>(keys).equals(confirmedKeys)) {
-                throw new IllegalStateException("OSS did not confirm every deletion in the batch");
-            }
-            removed += keys.size();
-        }
+        return deleteBatches(client, bucket, request, BatchScope.ALL_OBJECTS);
     }
 
     /**
@@ -123,14 +76,20 @@ final class OssMaintenance {
                 .prefix(scope)
                 .maxKeys(MAX_BATCH_SIZE)
                 .build();
+        return deleteBatches(client, bucket, request, BatchScope.forPrefix(scope));
+    }
+
+    private static long deleteBatches(
+            OSSClient client, String bucket, ListObjectsV2Request request, BatchScope scope) {
         long removed = 0;
         String previousFirstKey = null;
         while (true) {
+            // List the first page again after deleting it, so a continuation token never points into removed objects.
             var page = client.listObjectsV2(request);
             var objects = page.contents();
             if (objects == null || objects.isEmpty()) {
                 if (Boolean.TRUE.equals(page.isTruncated())) {
-                    throw new IllegalStateException("OSS returned an empty truncated prefix page");
+                    throw new IllegalStateException(scope.emptyTruncatedPageMessage());
                 }
                 return removed;
             }
@@ -140,9 +99,7 @@ final class OssMaintenance {
             var keys = new ArrayList<String>(objects.size());
             for (var object : objects) {
                 String key = object == null ? null : object.key();
-                if (key == null || !key.startsWith(scope) || key.length() == scope.length()) {
-                    throw new IllegalStateException("OSS returned a key outside the configured prefix");
-                }
+                scope.requireListedKey(key);
                 keys.add(key);
             }
             if (keys.getFirst().equals(previousFirstKey)) {
@@ -159,16 +116,53 @@ final class OssMaintenance {
             if (deleted != null) {
                 for (var object : deleted) {
                     String key = object == null ? null : object.key();
-                    if (key == null || !key.startsWith(scope)) {
-                        throw new IllegalStateException("OSS returned a deletion outside the configured prefix");
-                    }
+                    scope.requireDeletedKey(key);
                     confirmedKeys.add(key);
                 }
             }
             if (!new HashSet<>(keys).equals(confirmedKeys)) {
-                throw new IllegalStateException("OSS did not confirm every prefix deletion in the batch");
+                throw new IllegalStateException(scope.unconfirmedDeletionMessage());
             }
             removed += keys.size();
+        }
+    }
+
+    /** Key boundary and error wording for one deletion scope; a null prefix means the whole bucket. */
+    private record BatchScope(
+            String scopePrefix,
+            String emptyTruncatedPageMessage,
+            String unconfirmedDeletionMessage) {
+
+        private static final BatchScope ALL_OBJECTS = new BatchScope(
+                null,
+                "OSS returned an empty truncated page",
+                "OSS did not confirm every deletion in the batch");
+
+        static BatchScope forPrefix(String scopePrefix) {
+            return new BatchScope(
+                    scopePrefix,
+                    "OSS returned an empty truncated prefix page",
+                    "OSS did not confirm every prefix deletion in the batch");
+        }
+
+        void requireListedKey(String key) {
+            if (scopePrefix == null) {
+                if (key == null || key.isEmpty()) {
+                    throw new IllegalStateException("OSS listing returned an object without a key");
+                }
+            } else if (key == null || !key.startsWith(scopePrefix) || key.length() == scopePrefix.length()) {
+                throw new IllegalStateException("OSS returned a key outside the configured prefix");
+            }
+        }
+
+        void requireDeletedKey(String key) {
+            if (scopePrefix == null) {
+                if (key == null || key.isEmpty()) {
+                    throw new IllegalStateException("OSS deletion response returned an object without a key");
+                }
+            } else if (key == null || !key.startsWith(scopePrefix)) {
+                throw new IllegalStateException("OSS returned a deletion outside the configured prefix");
+            }
         }
     }
 
