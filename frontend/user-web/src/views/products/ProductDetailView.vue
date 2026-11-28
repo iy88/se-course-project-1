@@ -25,7 +25,7 @@ import { formatCents, formatDateTime, formatRelative } from "../../app/format";
 import { productLifecycleLabels, productLifecycleTones, reviewReasonLabel } from "../../app/labels";
 import { IdempotencyKeys } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import { refreshBadges } from "../../app/badges";
 import { session } from "../../app/session";
 import ActionButton from "../../components/ActionButton.vue";
@@ -39,6 +39,8 @@ import ProductCommentSection from "../../components/interaction/ProductCommentSe
 import ProductFavoriteControl from "../../components/interaction/ProductFavoriteControl.vue";
 import StartChatButton from "../../components/interaction/StartChatButton.vue";
 import ProductImageGallery from "./ProductImageGallery.vue";
+
+const { notify } = useToastStore();
 
 const route = useRoute();
 const router = useRouter();

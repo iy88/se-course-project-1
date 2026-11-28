@@ -6,8 +6,10 @@ import type { TradeView } from "../../api/contracts";
 import { formatCents, formatDateTime, fromLocalInputValue } from "../../app/format";
 import type { IdempotencyKeys } from "../../app/keys";
 import { session } from "../../app/session";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import type { useTradeAgreementDraft } from "./useTradeAgreementDraft";
+
+const { notify } = useToastStore();
 
 const props = defineProps<{
   trade: TradeView;

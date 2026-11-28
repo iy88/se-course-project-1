@@ -30,11 +30,13 @@ import { IdempotencyKeys } from "../../app/keys";
 import { bannedGroupLabels } from "../../app/labels";
 import { problemMessage } from "../../app/problems";
 import { saveProductEditAndResubmit } from "../../app/product-edit-submission";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import ImageUploader from "../../components/ImageUploader.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
+
+const { notify } = useToastStore();
 
 const route = useRoute();
 const router = useRouter();

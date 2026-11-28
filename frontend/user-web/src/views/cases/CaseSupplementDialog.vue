@@ -4,8 +4,10 @@ import { ref, toRefs } from "vue";
 import { supplementReport } from "../../api/cases";
 import { newIdempotencyKey } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import ImageUploader from "../../components/ImageUploader.vue";
+
+const { notify } = useToastStore();
 
 const props = defineProps<{
   /** Case projected by the detail payload, which is also the write target. */

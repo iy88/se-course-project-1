@@ -32,7 +32,7 @@ import {
   tradeTerminalReasonLabel,
 } from "../../app/labels";
 import { session } from "../../app/session";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import { refreshBadges } from "../../app/badges";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
@@ -44,6 +44,8 @@ import TradeProductHistory from "../../components/interaction/TradeProductHistor
 import TradeReviewSection from "../../components/interaction/TradeReviewSection.vue";
 import TradeAgreementSection from "./TradeAgreementSection.vue";
 import { useTradeAgreementDraft } from "./useTradeAgreementDraft";
+
+const { notify } = useToastStore();
 
 const route = useRoute();
 const router = useRouter();

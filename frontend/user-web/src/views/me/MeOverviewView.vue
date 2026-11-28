@@ -7,7 +7,7 @@ import { readOverview } from "../../api/aggregation";
 import type { MyOverview } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
 import { formatDateTime } from "../../app/format";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import { problemMessage } from "../../app/problems";
 import { clearSession, session } from "../../app/session";
 import { resetBadges } from "../../app/badges";
@@ -15,6 +15,8 @@ import { resetRealtimeCursor } from "../../app/realtime";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
+
+const { notify } = useToastStore();
 
 const router = useRouter();
 const signOutDialog = ref<HTMLDialogElement | null>(null);

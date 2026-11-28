@@ -10,7 +10,7 @@ import type { CaseDetail } from "../../api/contracts";
 import { refreshBadges } from "../../app/badges";
 import { newIdempotencyKey } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 
 export interface CaseThreadRepliesOptions {
   /** Detail payload whose thread is the write target. */
@@ -23,6 +23,7 @@ export interface CaseThreadRepliesOptions {
 }
 
 export function useCaseThreadReplies(options: CaseThreadRepliesOptions) {
+  const { notify } = useToastStore();
   const replyingTo = ref<string | null>(null);
   const replyBody = ref("");
   const replyPending = ref(false);

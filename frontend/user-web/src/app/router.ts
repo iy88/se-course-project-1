@@ -6,7 +6,7 @@
  */
 import { createRouter, createWebHistory, START_LOCATION, type RouteRecordRaw } from "vue-router";
 import { ensureSession, refreshSession, session } from "./session";
-import { notify } from "./toast";
+import { notify } from "./toast-bridge";
 
 declare module "vue-router" {
   interface RouteMeta {

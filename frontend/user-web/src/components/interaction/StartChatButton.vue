@@ -13,7 +13,9 @@ import { rememberPeer } from "../../app/conversation-directory";
 import { IdempotencyKeys } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
 import { session } from "../../app/session";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
+
+const { notify } = useToastStore();
 
 const props = withDefaults(
   defineProps<{

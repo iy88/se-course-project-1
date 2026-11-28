@@ -15,10 +15,12 @@ import { refreshesNotificationDetail } from "../../app/notification-events";
 import { problemMessage } from "../../app/problems";
 import { registerSnapshotReloader, subscribeRealtime } from "../../app/realtime";
 import { refreshBadges } from "../../app/badges";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
+
+const { notify } = useToastStore();
 
 const route = useRoute();
 const notificationId = computed(() => String(route.params.notificationId ?? ""));

@@ -6,10 +6,12 @@ import type { ReportTarget, ReportTargetType } from "../../api/contracts";
 import { newIdempotencyKey } from "../../app/keys";
 import { rememberCaseScope } from "../../app/case-directory";
 import { problemMessage } from "../../app/problems";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import { refreshBadges } from "../../app/badges";
 import ImageUploader from "../../components/ImageUploader.vue";
 import PageHeader from "../../components/PageHeader.vue";
+
+const { notify } = useToastStore();
 
 const route = useRoute();
 const router = useRouter();
