@@ -64,6 +64,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     private final JsonMapper json;
     private final TradeReviews reviews;
     private final TradeDisputes disputes;
+    private final TradeConfirmation confirmation;
     private final TradeConfirmationTimeout timeout;
 
     public TradeApplication(TradeRepository repository, WriteExecutor writes, TaskSchedules schedules, Clock clock,
@@ -85,6 +86,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         this.json = json;
         this.reviews = new TradeReviews(repository, views, accounts, settings, json, clock);
         this.queries = new TradeQueries(repository, views, accounts, product, conversations, settings, json, clock);
+        this.confirmation = new TradeConfirmation(repository, historyWriter, views, queries, accounts, product,
+                conversations, notifications, schedules, settings, clock, json);
         this.cancellation = new TradeCancellation(repository, historyWriter, views, queries, accounts,
                 conversations, notifications, product, clock, json);
         this.disputes = new TradeDisputes(repository, historyWriter, views, queries, accounts, conversations,
@@ -400,80 +403,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 (ctx, request) -> prepareTrade(actor, request.tradeId(), true, null),
                 (ctx, request) -> qualifyTrade(ctx, request.tradeId()),
                 this::replayTrade,
-                (transaction, request, qualification) -> {
-                    String note = optionalText(request.note(), 1000, "确认说明");
-                    var pre = repository.find(request.tradeId()).orElseThrow(Trade::notVisible);
-                    requireWrite(actor);
-                    var state = lockProduct(transaction, pre.productId());
-                    var trade = repository.lockTrade(transaction, request.tradeId());
-                    trade.requireNotTerminal();
-                    trade.requireInProgress();
-                    requireNotFrozen(transaction, trade.id());
-                    trade.requireVersion(request.expectedVersion());
-                    long conversationId = requireConversation(transaction, trade.id());
-                    var effective = repository.currentAgreement(trade.id())
-                            .orElseThrow(() -> new BusinessError("AGREEMENT_REQUIRED", 409, "尚无生效约定"));
-                    if (trade.activeAgreementId() == null || effective.id() != trade.activeAgreementId()) {
-                        throw Trade.stateConflict();
-                    }
-                    var current = repository.currentConfirmations(trade.id());
-                    if (current.stream().anyMatch(item -> item.confirmerId() == actor)) {
-                        throw new BusinessError("CONFIRMATION_ALREADY_SUBMITTED", 409, "本人已提交确认");
-                    }
-                    var now = now();
-                    var confirmation = new TradeModels.Confirmation(0, trade.id(), effective.id(),
-                            actor, note, now, null, null, UUID.randomUUID());
-                    long confirmationId = repository.insertConfirmation(confirmation);
-                    confirmation = withId(confirmation, confirmationId);
-                    var counterpart = current.stream()
-                            .filter(item -> item.confirmerId() == other(trade, actor))
-                            .filter(item -> item.agreementId() == effective.id())
-                            .findFirst();
-                    if (counterpart.isPresent()) {
-                        var completed = changed(trade, TradeStatus.COMPLETED, trade.activeAgreementId(), null,
-                                TerminalReason.COMPLETED.value(), trade.respondedAt(), now, now);
-                        repository.save(completed);
-                        endWait(transaction, trade.id(), WaitEndReason.COMPLETED, now);
-                        endFreezes(transaction, trade.id(), now);
-                        repository.terminateOpenDisputes(trade.id(), now);
-                        product.release(transaction, state, trade.id(), "completed");
-                        UUID confirmationEvent = confirmation.businessEventId();
-                        historyWriter.historyConfirmation(transaction, trade, completed, "completion.confirm",
-                                trade.actorKind(actor), actor, note, null, null, effective.id(), confirmationId,
-                                confirmationEvent, now);
-                        conversations.append(transaction, conversationId, confirmationEvent, "completion_confirmed",
-                                "完成确认已提交", new ResourceRef("completion_confirmation", confirmationId));
-                        UUID completedEvent = UUID.randomUUID();
-                        long completedHistory = historyWriter.historyConfirmation(transaction, trade, completed,
-                                "trade.completed", ActorKind.SYSTEM, null, null, null, null, effective.id(),
-                                confirmationId, completedEvent, now);
-                        conversations.append(transaction, conversationId, completedEvent, "trade_completed",
-                                "交易已完成，商品已下架。如需继续出售，可前往商品详情重新上架。",
-                                new ResourceRef("trade_transition", completedHistory));
-                        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()),
-                                "trade.completed", completedEvent);
-                        archive(transaction, conversationId, trade.id(), "completed");
-                    } else {
-                        var updated = changed(trade, trade.status(), trade.activeAgreementId(), trade.closeReason(),
-                                trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
-                        repository.save(updated);
-                        var wait = TradeModels.Wait.start(now, settings.confirmationWaitSeconds(),
-                                settings.policyVersion());
-                        repository.saveWait(trade.id(), wait);
-                        scheduleTimeout(trade.id(), wait, now);
-                        UUID eventId = confirmation.businessEventId();
-                        historyWriter.historyConfirmation(transaction, trade, updated, "completion.confirm",
-                                trade.actorKind(actor), actor, note, null, null, effective.id(), confirmationId,
-                                eventId, now);
-                        conversations.append(transaction, conversationId, eventId, "completion_confirmed",
-                                "完成确认已提交，等待对方确认", new ResourceRef("completion_confirmation",
-                                        confirmationId));
-                        notify(transaction, trade, Set.of(other(trade, actor)), "trade.completion_confirmed", eventId);
-                    }
-                    audit(transaction, "trade.confirmation.submit", trade.id(), null);
-                    return new WriteResult.Response<>(201, confirmationEnvelope(confirmation, trade.id(), actor),
-                            new ResourceRef("trade", trade.id()));
-                });
+                (transaction, request, qualification) -> confirmation.submit(transaction, actor, request));
     }
 
     // ---------------------------------------------------------------- cancellation
@@ -1622,13 +1552,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return node;
     }
 
-    private ObjectNode confirmationEnvelope(TradeModels.Confirmation confirmation, long tradeId, long viewer) {
-        var node = json.createObjectNode();
-        node.set("confirmation", views.confirmationRecord(confirmation));
-        node.set("trade", view(tradeId, viewer, null));
-        return node;
-    }
-
     private TradePorts.GovernanceOutcome governanceOutcome(long tradeId) {
         var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
         return new TradePorts.GovernanceOutcome(trade.id(), trade.status().value(),
@@ -1650,12 +1573,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 agreement.status(), agreement.proposedBy(), agreement.deliveryAt(), agreement.deliveryPlaceText(),
                 agreement.deliveryMethod(), agreement.amountCents(), agreement.paymentMethod(),
                 agreement.paymentTiming(), agreement.proposedAt(), agreement.businessEventId());
-    }
-
-    private static TradeModels.Confirmation withId(TradeModels.Confirmation confirmation, long id) {
-        return new TradeModels.Confirmation(id, confirmation.tradeId(), confirmation.agreementId(),
-                confirmation.confirmerId(), confirmation.note(), confirmation.submittedAt(),
-                confirmation.invalidatedAt(), confirmation.invalidationReason(), confirmation.businessEventId());
     }
 
     private void requireRequestOpen(Trade trade) {
