@@ -14,6 +14,8 @@ dist/
 .pnpm-store/
 *.tsbuildinfo
 coverage/
+/frontend/playwright-report/
+/frontend/test-results/
 
 # Python utilities and legacy backend
 __pycache__/
