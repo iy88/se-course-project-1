@@ -64,6 +64,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     private final TradePorts.Notifications notifications;
     private final JsonMapper json;
     private final TradeReviews reviews;
+    private final TradeConfirmationTimeout timeout;
 
     public TradeApplication(TradeRepository repository, WriteExecutor writes, TaskSchedules schedules, Clock clock,
                             TradeSettings settings, TradePorts.Product product, TradePorts.Accounts accounts,
@@ -84,6 +85,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         this.json = json;
         this.reviews = new TradeReviews(repository, views, accounts, settings, json, clock);
         this.queries = new TradeQueries(repository, views, accounts, product, conversations, settings, json, clock);
+        this.timeout = new TradeConfirmationTimeout(repository, historyWriter, queries, schedules, clock,
+                conversations, cases, notifications, json);
     }
 
     // ---------------------------------------------------------------- purchase requests
@@ -1403,73 +1406,20 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     // ---------------------------------------------------------------- timeout task support
 
     public LockPlan timeoutPlan(long tradeId) {
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        var resources = new TreeSet<LockPlan.Key>();
-        resources.add(tradeKey(trade.id()));
-        conversations.find(tradeId).ifPresent(id -> resources.add(conversationKey(id)));
-        // The timeout freeze is a real freeze source for both parties, so it takes the same
-        // exclusive party locks as an admin-case freeze before inserting the freeze row.
-        return new LockPlan(partyAccounts(trade, true), resources);
+        return timeout.timeoutPlan(tradeId);
     }
 
     public void lockForTimeout(WriteTransaction transaction, long tradeId) {
-        repository.lockTrade(transaction, tradeId);
-        requireConversation(transaction, tradeId);
+        timeout.lockForTimeout(transaction, tradeId);
     }
 
     public boolean timeoutApplicable(long tradeId, String sourceVersion) {
-        var trade = repository.find(tradeId).orElse(null);
-        if (trade == null || trade.status() != TradeStatus.IN_PROGRESS) {
-            return false;
-        }
-        var wait = repository.waitFor(tradeId).orElse(null);
-        if (wait == null || wait.ended() || !wait.active()) {
-            return false;
-        }
-        if (!wait.fingerprint().equals(sourceVersion)) {
-            return false;
-        }
-        if (!repository.activeFreezes(tradeId).isEmpty()) {
-            return false;
-        }
-        return repository.currentConfirmations(tradeId).size() == 1;
+        return timeout.timeoutApplicable(tradeId, sourceVersion);
     }
 
     public void applyTimeout(WriteTransaction transaction, ExecutionContext context, long tradeId,
                              String sourceVersion) {
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        if (!timeoutApplicable(tradeId, sourceVersion)) {
-            return;
-        }
-        requirePartyFreezeLocks(transaction, trade);
-        var now = now();
-        var wait = repository.waitFor(tradeId).orElseThrow();
-        if (wait.elapsedSeconds(now) < wait.waitSeconds()) {
-            // The database clock has not reached the stored deadline yet; move the trigger forward.
-            scheduleTimeout(tradeId, wait, now);
-            return;
-        }
-        long caseId = cases.openTimeoutCase(transaction, context, tradeId, "单方确认超时");
-        repository.insertFreeze(tradeId, FreezeSource.TIMEOUT, caseId, "单方确认超时", now);
-        endWait(transaction, tradeId, WaitEndReason.TIMEOUT, now);
-        var abnormal = changed(trade, TradeStatus.ABNORMAL, trade.activeAgreementId(), trade.closeReason(),
-                trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
-        repository.save(abnormal);
-        long conversationId = requireConversationId(tradeId);
-        UUID abnormalEvent = UUID.randomUUID();
-        long abnormalHistory = historyWriter.history(transaction,
-                trade, abnormal, "trade.abnormal", ActorKind.SYSTEM, null, "单方确认超时",
-            "case:" + caseId, caseId, abnormalEvent, now);
-        conversations.append(transaction, conversationId, abnormalEvent, "trade_abnormal",
-                "单方确认超时，交易转异常", new ResourceRef("trade_transition", abnormalHistory));
-        UUID frozenEvent = UUID.randomUUID();
-        long frozenHistory = historyWriter.history(transaction,
-                trade, abnormal, "trade.freeze", ActorKind.SYSTEM, null, "单方确认超时",
-            "case:" + caseId, caseId, frozenEvent, now);
-        conversations.append(transaction, conversationId, frozenEvent, "trade_frozen",
-                "交易已冻结，等待管理员处理", new ResourceRef("trade_transition", frozenHistory));
-        notify(transaction, trade, Set.of(trade.buyerId(), trade.sellerId()), "trade.timeout", abnormalEvent);
-        audit(transaction, "trade.timeout", tradeId, new ResourceRef("case", caseId));
+        timeout.applyTimeout(transaction, context, tradeId, sourceVersion);
     }
 
     // ---------------------------------------------------------------- queries and read ports
@@ -1679,11 +1629,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static Map<Long, LockPlan.AccountMode> partyAccounts(Trade trade, boolean exclusiveParties) {
-        var accounts = new TreeMap<Long, LockPlan.AccountMode>();
-        var partyMode = exclusiveParties ? LockPlan.AccountMode.EXCLUSIVE : LockPlan.AccountMode.SHARED;
-        accounts.put(trade.buyerId(), partyMode);
-        accounts.put(trade.sellerId(), partyMode);
-        return accounts;
+        return TradeWriteSupport.partyAccounts(trade, exclusiveParties);
     }
 
     private void requireWrite(long accountId) {
@@ -1845,9 +1791,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private long requireConversation(WriteTransaction transaction, long tradeId) {
-        long conversationId = requireConversationId(tradeId);
-        conversations.lockConversation(transaction, conversationId);
-        return conversationId;
+        return TradeWriteSupport.requireConversation(transaction, conversations, queries, tradeId);
     }
 
     private long requireConversationId(long tradeId) {
@@ -1882,10 +1826,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private void endWait(WriteTransaction transaction, long tradeId, WaitEndReason reason, Instant now) {
-        var wait = repository.waitFor(tradeId).orElse(null);
-        if (wait != null && !wait.ended()) {
-            repository.saveWait(tradeId, wait.end(now, reason));
-        }
+        TradeWriteSupport.endWait(repository, tradeId, reason, now);
     }
 
     private void endFreezes(WriteTransaction transaction, long tradeId, Instant now) {
@@ -1893,22 +1834,13 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private void scheduleTimeout(long tradeId, TradeModels.Wait wait, Instant now) {
-        var deadline = wait.deadline(now);
-        String trigger = tradeId + ":" + wait.startedAt().toEpochMilli() + ":"
-                + (wait.activeSince() == null ? "paused" : wait.activeSince().toEpochMilli()) + ":"
-                + deadline.toEpochMilli();
-        schedules.schedule(new TaskSchedules.Spec(TradeTimeoutHandler.KIND, new ResourceRef("trade", tradeId),
-                trigger, wait.fingerprint(), deadline, wait.policyVersion()));
+        TradeWriteSupport.scheduleTimeout(schedules, tradeId, wait, now);
     }
 
     private Trade changed(Trade trade, TradeStatus status, Long activeAgreementId, String closeReason,
                           String terminalReason, Instant respondedAt, Instant endedAt, Instant now) {
-        if (status != trade.status()) {
-            trade.status().requireTransition(status);
-        }
-        return new Trade(trade.id(), trade.productId(), trade.buyerId(), trade.sellerId(), status,
-                trade.requestNote(), activeAgreementId, trade.version() + 1, closeReason, terminalReason,
-                trade.requestedAt(), respondedAt, endedAt, trade.createdAt(), now);
+        return TradeWriteSupport.changed(trade, status, activeAgreementId, closeReason, terminalReason,
+                respondedAt, endedAt, now);
     }
 
     private void publishFreeze(WriteTransaction transaction, Trade trade, long conversationId, long caseId,
@@ -2053,8 +1985,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
      * replans with the stronger mode if a caller still prepared a shared lock.
      */
     private static void requirePartyFreezeLocks(WriteTransaction transaction, Trade trade) {
-        transaction.requireExclusiveAccount(trade.buyerId());
-        transaction.requireExclusiveAccount(trade.sellerId());
+        TradeWriteSupport.requirePartyFreezeLocks(transaction, trade);
     }
 
     private long actor(ExecutionContext context) {
@@ -2140,7 +2071,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static LockPlan.Key conversationKey(long conversationId) {
-        return new LockPlan.Key(LockPlan.Domain.TRADE_CONVERSATION, List.of(conversationId));
+        return TradeWriteSupport.conversationKey(conversationId);
     }
 
     private Void qualifySession(ExecutionContext context) {

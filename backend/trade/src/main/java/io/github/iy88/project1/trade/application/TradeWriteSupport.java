@@ -5,7 +5,11 @@ import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.LockPlan;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteTransaction;
+import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.trade.domain.Trade;
+import io.github.iy88.project1.trade.domain.TradeModels;
+import io.github.iy88.project1.trade.domain.TradeStatus;
+import io.github.iy88.project1.trade.domain.TradeVocabulary.WaitEndReason;
 import io.github.iy88.project1.trade.persistence.TradeRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -77,5 +81,55 @@ final class TradeWriteSupport {
 
     static BusinessError inputInvalid(String message) {
         return new BusinessError("INPUT_INVALID", 422, message);
+    }
+
+    static Map<Long, LockPlan.AccountMode> partyAccounts(Trade trade, boolean exclusiveParties) {
+        var accounts = new TreeMap<Long, LockPlan.AccountMode>();
+        var partyMode = exclusiveParties ? LockPlan.AccountMode.EXCLUSIVE : LockPlan.AccountMode.SHARED;
+        accounts.put(trade.buyerId(), partyMode);
+        accounts.put(trade.sellerId(), partyMode);
+        return accounts;
+    }
+
+    static Trade changed(Trade trade, TradeStatus status, Long activeAgreementId, String closeReason,
+                         String terminalReason, Instant respondedAt, Instant endedAt, Instant now) {
+        if (status != trade.status()) {
+            trade.status().requireTransition(status);
+        }
+        return new Trade(trade.id(), trade.productId(), trade.buyerId(), trade.sellerId(), status,
+                trade.requestNote(), activeAgreementId, trade.version() + 1, closeReason, terminalReason,
+                trade.requestedAt(), respondedAt, endedAt, trade.createdAt(), now);
+    }
+
+    static void requirePartyFreezeLocks(WriteTransaction transaction, Trade trade) {
+        transaction.requireExclusiveAccount(trade.buyerId());
+        transaction.requireExclusiveAccount(trade.sellerId());
+    }
+
+    static LockPlan.Key conversationKey(long conversationId) {
+        return new LockPlan.Key(LockPlan.Domain.TRADE_CONVERSATION, List.of(conversationId));
+    }
+
+    static long requireConversation(WriteTransaction transaction, TradePorts.Conversation conversations,
+                                    TradeQueries queries, long tradeId) {
+        long conversationId = queries.requireConversationId(tradeId);
+        conversations.lockConversation(transaction, conversationId);
+        return conversationId;
+    }
+
+    static void endWait(TradeRepository repository, long tradeId, WaitEndReason reason, Instant now) {
+        var wait = repository.waitFor(tradeId).orElse(null);
+        if (wait != null && !wait.ended()) {
+            repository.saveWait(tradeId, wait.end(now, reason));
+        }
+    }
+
+    static void scheduleTimeout(TaskSchedules schedules, long tradeId, TradeModels.Wait wait, Instant now) {
+        var deadline = wait.deadline(now);
+        String trigger = tradeId + ":" + wait.startedAt().toEpochMilli() + ":"
+                + (wait.activeSince() == null ? "paused" : wait.activeSince().toEpochMilli()) + ":"
+                + deadline.toEpochMilli();
+        schedules.schedule(new TaskSchedules.Spec(TradeTimeoutHandler.KIND, new ResourceRef("trade", tradeId),
+                trigger, wait.fingerprint(), deadline, wait.policyVersion()));
     }
 }
