@@ -7,7 +7,6 @@ import {
   liftCaseEnforcement,
   readCase,
   readCaseThread,
-  readCaseTradeHistory,
   resolveCaseAppeal,
   writeCase,
   type AppealableEnforcement,
@@ -19,7 +18,6 @@ import {
   type CaseManagementWrites,
   type CaseReplacementEnforcement,
   type CaseThreadPage,
-  type CaseTradeHistory,
   type ManagementCaseDetail,
   type ManagementCaseThread,
   type PendingCaseAppeal,
@@ -34,6 +32,7 @@ import { useToastStore } from "../app/toast";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
+import { useCaseTradeHistory } from "./useCaseTradeHistory";
 
 const props = defineProps<{ caseId: string; backHref: string; anchor?: string }>();
 const { notify } = useToastStore();
@@ -46,10 +45,13 @@ const writeError = ref("");
 const keys = new IdempotencyKeys();
 let detailRequest: AbortController | undefined;
 
-const tradeHistory = ref<CaseTradeHistory>();
-const tradeHistoryLoading = ref(false);
-const tradeHistoryError = ref<unknown>();
-let tradeHistoryRequest: AbortController | undefined;
+const {
+  tradeHistory,
+  tradeHistoryLoading,
+  tradeHistoryError,
+  loadTradeHistory,
+  abortTradeHistory,
+} = useCaseTradeHistory(() => props.caseId);
 const tradeHistoryAvailable = computed(() => {
   const item = detail.value;
   return item && (item.case_type !== "report" || item.reported_object?.target_type === "trade");
@@ -61,20 +63,6 @@ const agreementStatus = {
   withdrawn: "已撤回",
   superseded: "已被替代",
 };
-
-async function loadTradeHistory(): Promise<void> {
-  const controller = new AbortController();
-  tradeHistoryRequest = controller;
-  tradeHistoryLoading.value = true;
-  tradeHistoryError.value = undefined;
-  try {
-    tradeHistory.value = await readCaseTradeHistory(props.caseId, controller.signal);
-  } catch (caught) {
-    if (!(caught instanceof AbortedError)) tradeHistoryError.value = caught;
-  } finally {
-    tradeHistoryLoading.value = false;
-  }
-}
 
 const messageEvidence = ref<CaseMessageEvidence>();
 const evidenceLoading = ref(false);
@@ -585,7 +573,7 @@ onMounted(load);
 onUnmounted(() => {
   detailRequest?.abort();
   threadRequest?.abort();
-  tradeHistoryRequest?.abort();
+  abortTradeHistory();
 });
 </script>
 
