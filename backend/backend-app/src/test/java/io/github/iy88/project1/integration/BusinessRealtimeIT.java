@@ -27,6 +27,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
+import java.net.http.WebSocketHandshakeException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Timestamp;
@@ -736,21 +737,9 @@ class BusinessRealtimeIT {
     }
 
     @Test
-    void protocolErrorsAndHandshakeDenialsCloseWithoutAdvancingTheCursor() throws Exception {
-        assertThatThrownBy(() -> HTTP.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5))
-                .header("Origin", "http://evil.example")
-                .header("Cookie", "it_session=" + SESSION_A1)
-                .buildAsync(URI.create("ws://127.0.0.1:" + port(first) + "/api/v1/realtime"),
-                        new WebSocket.Listener() { })
-                .orTimeout(5, TimeUnit.SECONDS).join())
-                .isInstanceOf(CompletionException.class);
-        assertThatThrownBy(() -> HTTP.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5))
-                .header("Origin", ORIGIN)
-                .header("Cookie", "it_session=" + UUID.randomUUID())
-                .buildAsync(URI.create("ws://127.0.0.1:" + port(first) + "/api/v1/realtime"),
-                        new WebSocket.Listener() { })
-                .orTimeout(5, TimeUnit.SECONDS).join())
-                .isInstanceOf(CompletionException.class);
+    void protocolErrorsAndHandshakeDenialsCloseConnections() throws Exception {
+        assertHandshakeDenied("http://evil.example", "it_session=" + SESSION_A1, 403);
+        assertHandshakeDenied(ORIGIN, "it_session=" + UUID.randomUUID(), 401);
 
         try (var connection = open(first, SESSION_A1)) {
             connection.send(Map.of("type", "ack", "through_seq", 1));
@@ -784,6 +773,20 @@ class BusinessRealtimeIT {
 
     private static int port(ConfigurableApplicationContext app) {
         return ((org.springframework.boot.web.server.context.WebServerApplicationContext) app).getWebServer().getPort();
+    }
+
+    private static void assertHandshakeDenied(String origin, String cookie, int status) {
+        assertThatThrownBy(() -> HTTP.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5))
+                .header("Origin", origin)
+                .header("Cookie", cookie)
+                .buildAsync(URI.create("ws://127.0.0.1:" + port(first) + "/api/v1/realtime"),
+                        new WebSocket.Listener() { })
+                .orTimeout(5, TimeUnit.SECONDS).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(WebSocketHandshakeException.class)
+                .satisfies(exception -> assertThat(
+                        ((WebSocketHandshakeException) exception.getCause()).getResponse().statusCode())
+                        .isEqualTo(status));
     }
 
     static final class Connection implements WebSocket.Listener, AutoCloseable {

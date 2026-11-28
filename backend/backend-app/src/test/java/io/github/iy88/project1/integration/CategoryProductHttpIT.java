@@ -156,14 +156,14 @@ class CategoryProductHttpIT {
                     entry.displayOrder()));
         }
         for (var group : List.of("legal_prohibited", "dangerous_controlled", "live_animals",
-                "medicine_device", "account_virtual", "service_promotion")) {
+                "medicine_device", "account_virtual", "service_promotion", "other")) {
             inputs.add(new BannedScopeService.Input(null, group, group + "-" + RUN, 50));
         }
         new TransactionTemplate(http.app.getBean(PlatformTransactionManager.class))
                 .executeWithoutResult(status -> {
                     var replaced = http.app.getBean(BannedScopeService.class)
                             .replace(http.accountId(manager), inputs);
-                    assertThat(replaced.groups()).hasSizeGreaterThanOrEqualTo(7);
+                    assertThat(replaced.groups()).hasSize(7);
                     status.setRollbackOnly();
                 });
         var beforeReplace = flatten(http.get(buyer, "/banned-items", 200));

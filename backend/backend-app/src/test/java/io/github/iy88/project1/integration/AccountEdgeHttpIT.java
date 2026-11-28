@@ -20,12 +20,10 @@ import tools.jackson.databind.JsonNode;
 class AccountEdgeHttpIT {
     private static final String RUN = UUID.randomUUID().toString().substring(0, 8);
     private static HttpItSupport http;
-    private static Session account;
 
     @BeforeAll
     static void start() throws Exception {
         http = HttpItSupport.start("account-edge");
-        account = http.account("account-owner", "user");
     }
 
     @AfterAll
@@ -45,6 +43,7 @@ class AccountEdgeHttpIT {
         var verificationId = request.at("/requests/0/verification_id").asString();
         var code = http.db.sql("select code from email_verification where id = ?")
                 .param(Long.parseLong(verificationId)).query(String.class).single();
+        var wrongCode = differentCode(code);
 
         guestWrite(guest, "POST", "/accounts", """
                 {"email":"%s","display_name":"New","password":"short","verification_id":"%s","code":"%s"}
@@ -53,8 +52,8 @@ class AccountEdgeHttpIT {
                 {"email":"%s","display_name":"New","password":"%s","verification_id":"not-a-number","code":"%s"}
                 """.formatted(email, HttpItSupport.PASSWORD, code), 422);
         guestWrite(guest, "POST", "/accounts", """
-                {"email":"%s","display_name":"New","password":"%s","verification_id":"%s","code":"000000"}
-                """.formatted(email, HttpItSupport.PASSWORD, verificationId), 422);
+                {"email":"%s","display_name":"New","password":"%s","verification_id":"%s","code":"%s"}
+                """.formatted(email, HttpItSupport.PASSWORD, verificationId, wrongCode), 422);
         var registered = guestWrite(guest, "POST", "/accounts", """
                 {"email":"%s","display_name":"New","password":"%s","verification_id":"%s","code":"%s"}
                 """.formatted(email, HttpItSupport.PASSWORD, verificationId, code), 201);
@@ -85,6 +84,7 @@ class AccountEdgeHttpIT {
 
     @Test
     void profilePasswordEmailAndSessionChangesRevokeOnlyTheCurrentCredential() throws Exception {
+        var account = http.account("account-owner", "user");
         var email = account.email();
         var session = http.get(account, "/account/session", 200);
         assertThat(session.path("account").path("account_id").asString())
@@ -136,6 +136,7 @@ class AccountEdgeHttpIT {
 
     @Test
     void malformedStoredSessionsAreRejectedWithoutAffectingOtherSessions() throws Exception {
+        var account = http.account("account-session-owner", "user");
         rawGet("/account/session", null, 401);
         rawGet("/account/session", "", 401);
         rawGet("/account/session", "not-base64", 401);
@@ -202,6 +203,10 @@ class AccountEdgeHttpIT {
         }
         String namespace = http.app.getEnvironment().getProperty("project1.redis.namespace");
         return namespace + ":session:" + hex;
+    }
+
+    private static String differentCode(String code) {
+        return "000000".equals(code) ? "111111" : "000000";
     }
 
     private record Guest(String cookie, String csrf) {
