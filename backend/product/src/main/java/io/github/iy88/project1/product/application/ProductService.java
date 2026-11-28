@@ -24,12 +24,10 @@ import io.github.iy88.project1.product.persistence.ProductCategoryRepository;
 import io.github.iy88.project1.product.persistence.ProductEditHistory;
 import io.github.iy88.project1.product.persistence.ProductEditHistoryRepository;
 import io.github.iy88.project1.product.persistence.ProductRepository;
-import io.github.iy88.project1.storage.FilePurpose;
 import io.github.iy88.project1.storage.OssClients;
 import io.github.iy88.project1.storage.OssFileObjects;
 import io.github.iy88.project1.storage.application.FileRead;
 import io.github.iy88.project1.storage.persistence.FileReferences;
-import io.github.iy88.project1.storage.persistence.FileRegistry;
 import io.github.iy88.project1.storage.persistence.UploadRegistration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -69,6 +67,7 @@ public class ProductService {
     private final ProductSettings settings;
     private final CategorySettings categorySettings;
     private final FileReferences fileReferences;
+    private final ProductImageReferences imageReferences;
     private final FileRead fileReads;
     private final ProductTradeHistory tradeHistory;
     private final ProductEditNotices editNotices;
@@ -107,6 +106,7 @@ public class ProductService {
         this.settings = settings;
         this.categorySettings = categorySettings;
         this.fileReferences = fileReferences;
+        this.imageReferences = new ProductImageReferences(fileReferences, settings);
         this.fileReads = fileReads;
         this.tradeHistory = tradeHistory;
         this.editNotices = editNotices;
@@ -145,7 +145,7 @@ public class ProductService {
             if (proposed != null) {
                 application = applications.save(new CategoryApplication(product.id(), sellerId, proposed, now));
             }
-            attachImages(product.id(), sellerId, command.imageFileIds());
+            imageReferences.attachImages(product.id(), sellerId, command.imageFileIds());
             if (reviewCases.getIfAvailable() != null) {
                 captureCaseSnapshot(caseId, product);
             }
@@ -219,7 +219,7 @@ public class ProductService {
                 }
             }
             if (command.imageFileIds() != null) {
-                replaceImages(productId, sellerId, command.imageFileIds(), now);
+                imageReferences.replaceImages(productId, sellerId, command.imageFileIds());
             }
             product.editContent(title, description, price, now);
             products.save(product);
@@ -881,43 +881,6 @@ public class ProductService {
         return items;
     }
 
-    private void attachImages(long productId, long sellerId, List<String> values) {
-        List<Long> ids = parseFileIds(values);
-        if (ids.isEmpty()) {
-            return;
-        }
-        if (ids.size() > settings.imageMaxCount()) {
-            throw new BusinessError("INPUT_INVALID", 422, "图片数量超出限制");
-        }
-        try {
-            fileReferences.attach(sellerId, new UploadRegistration.Target("product", productId),
-                    FilePurpose.PRODUCT_IMAGE, ids, "image");
-        } catch (FileRegistry.Rejected rejected) {
-            throw fileError(rejected.getMessage());
-        }
-    }
-
-    private void replaceImages(long productId, long sellerId, List<String> values, Instant now) {
-        List<Long> ids = parseFileIds(values);
-        if (ids.size() > settings.imageMaxCount()) {
-            throw new BusinessError("INPUT_INVALID", 422, "图片数量超出限制");
-        }
-        var target = new UploadRegistration.Target("product", productId);
-        var current = fileReferences.current(target, "image");
-        if (!current.isEmpty()) {
-            fileReferences.release(target,
-                    current.stream().map(FileReferences.Reference::referenceId).toList(),
-                    new FileReferences.RetentionBasis("product_image_replaced", Set.of("s2-v1"), null, Set.of()));
-        }
-        if (!ids.isEmpty()) {
-            try {
-                fileReferences.attach(sellerId, target, FilePurpose.PRODUCT_IMAGE, ids, "image");
-            } catch (FileRegistry.Rejected rejected) {
-                throw fileError(rejected.getMessage());
-            }
-        }
-    }
-
     private List<ImageRef> images(long productId) {
         boolean transactional = org.springframework.transaction.support.TransactionSynchronizationManager
                 .isActualTransactionActive();
@@ -964,34 +927,6 @@ public class ProductService {
         } catch (RuntimeException unavailable) {
             return Map.of();
         }
-    }
-
-    private static BusinessError fileError(String code) {
-        return switch (code) {
-            case "RESOURCE_NOT_VISIBLE" -> new BusinessError("RESOURCE_NOT_VISIBLE", 404, "文件不存在");
-            case "FILE_PURPOSE_MISMATCH" -> new BusinessError("FILE_PURPOSE_MISMATCH", 422, "文件用途不符");
-            case "FILE_NOT_REFERENCEABLE" -> new BusinessError("FILE_NOT_REFERENCEABLE", 409, "文件尚未核验");
-            default -> new BusinessError("INPUT_INVALID", 422, "文件不可用");
-        };
-    }
-
-    private static List<Long> parseFileIds(List<String> values) {
-        if (values == null) {
-            return List.of();
-        }
-        List<Long> ids = new ArrayList<>();
-        for (String value : values) {
-            try {
-                long id = Long.parseLong(value);
-                if (id <= 0) {
-                    throw new NumberFormatException();
-                }
-                ids.add(id);
-            } catch (NumberFormatException invalid) {
-                throw new BusinessError("INPUT_INVALID", 422, "文件标识无效");
-            }
-        }
-        return ids;
     }
 
     private void saveLinks(long productId, long sellerId, Collection<Long> categoryIds, Instant now) {
