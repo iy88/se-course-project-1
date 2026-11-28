@@ -20,6 +20,7 @@ import {
 } from "../../api/products";
 import type {
   BannedScopeView,
+  CategoryApplicationInput,
   CategoryApplicationRef,
   CategoryView,
   ProductDetail,
@@ -155,6 +156,77 @@ function validate(): boolean {
   return Object.keys(errors).length === 0;
 }
 
+/* Build the product request fields shared by create and edit, preserving wire order. */
+function productPayload<TCategoryIds extends string[] | undefined>(
+  priceCents: number,
+  categoryIds: TCategoryIds,
+  application: CategoryApplicationInput | undefined,
+): {
+  title: string;
+  description: string;
+  price_cents: number;
+  category_ids: TCategoryIds;
+  image_file_ids: string[];
+  category_application: CategoryApplicationInput | undefined;
+} {
+  return {
+    title: title.value.trim(),
+    description: description.value.trim(),
+    price_cents: priceCents,
+    category_ids: categoryIds,
+    image_file_ids: imageFileIds.value,
+    category_application: application,
+  };
+}
+
+async function submitEdit(
+  productId: string,
+  product: ProductDetail,
+  priceCents: number,
+  application: CategoryApplicationInput | undefined,
+): Promise<void> {
+  const result = await saveProductEditAndResubmit(
+    () =>
+      updateProduct(
+        productId,
+        {
+          ...productPayload(
+            priceCents,
+            selectedCategoryIds.value.length ? selectedCategoryIds.value : undefined,
+            canApplyNewCategory.value ? application : undefined,
+          ),
+          expected_version: product.content_version,
+        },
+        keys.current("update-product"),
+      ),
+    (updated) =>
+      resubmitForReview(updated.id, updated.content_version, keys.current("resubmit-product")),
+  );
+  keys.rotate("update-product");
+  if (result.resubmitted) keys.rotate("resubmit-product");
+  notify.success(
+    result.resubmitted
+      ? "修改已保存，已重新提交审核。"
+      : result.product.lifecycle_state === "pending_review"
+        ? "修改已保存，审核结论以最新内容为准。"
+        : "修改已保存。",
+  );
+  await router.push({ name: "product-detail", params: { productId: result.product.id } });
+}
+
+async function submitCreate(
+  priceCents: number,
+  application: CategoryApplicationInput | undefined,
+): Promise<void> {
+  const created = await createProduct(
+    productPayload(priceCents, selectedCategoryIds.value, application),
+    keys.current("create-product"),
+  );
+  keys.rotate("create-product");
+  notify.success("商品已提交审核，通过后会公开展示。");
+  await router.push({ name: "product-detail", params: { productId: created.id } });
+}
+
 async function submit(): Promise<void> {
   if (submitting.value) return;
   submitError.value = null;
@@ -167,53 +239,13 @@ async function submit(): Promise<void> {
     const application = newCategoryName.value.trim()
       ? { proposed_name: newCategoryName.value.trim() }
       : undefined;
-    if (productId.value && editing.value) {
-      const result = await saveProductEditAndResubmit(
-        () =>
-          updateProduct(
-            productId.value!,
-            {
-              title: title.value.trim(),
-              description: description.value.trim(),
-              price_cents: priceCents,
-              category_ids: selectedCategoryIds.value.length
-                ? selectedCategoryIds.value
-                : undefined,
-              image_file_ids: imageFileIds.value,
-              category_application: canApplyNewCategory.value ? application : undefined,
-              expected_version: editing.value!.content_version,
-            },
-            keys.current("update-product"),
-          ),
-        (updated) =>
-          resubmitForReview(updated.id, updated.content_version, keys.current("resubmit-product")),
-      );
-      keys.rotate("update-product");
-      if (result.resubmitted) keys.rotate("resubmit-product");
-      notify.success(
-        result.resubmitted
-          ? "修改已保存，已重新提交审核。"
-          : result.product.lifecycle_state === "pending_review"
-            ? "修改已保存，审核结论以最新内容为准。"
-            : "修改已保存。",
-      );
-      await router.push({ name: "product-detail", params: { productId: result.product.id } });
+    const currentProductId = productId.value;
+    const product = editing.value;
+    if (currentProductId && product) {
+      await submitEdit(currentProductId, product, priceCents, application);
       return;
     }
-    const created = await createProduct(
-      {
-        title: title.value.trim(),
-        description: description.value.trim(),
-        price_cents: priceCents,
-        category_ids: selectedCategoryIds.value,
-        image_file_ids: imageFileIds.value,
-        category_application: application,
-      },
-      keys.current("create-product"),
-    );
-    keys.rotate("create-product");
-    notify.success("商品已提交审核，通过后会公开展示。");
-    await router.push({ name: "product-detail", params: { productId: created.id } });
+    await submitCreate(priceCents, application);
   } catch (caught) {
     submitError.value = problemMessage(caught);
   } finally {
