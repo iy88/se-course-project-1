@@ -12,6 +12,7 @@ import io.github.iy88.project1.casemanagement.application.CasePorts;
 import io.github.iy88.project1.casemanagement.application.CaseQueries;
 import io.github.iy88.project1.casemanagement.application.CaseRecords;
 import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
+import io.github.iy88.project1.conversation.application.ConversationQueries;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.LockPlan;
@@ -559,6 +560,34 @@ class CaseLifecycleIT {
         db.sql("delete from trade where id = ?").param(trade).update();
         db.sql("delete from product_comment where comment_id = ?").param(comment).update();
         db.sql("delete from product where product_id = ?").param(product).update();
+    }
+
+    @Test
+    void privateConversationHistoryRequiresMembershipAndValidPagination() {
+        long sender = account("history-sender-" + RUN_ID, "History sender", "user");
+        long recipient = REPORTER.get();
+        long conversation = db.sql("""
+                insert into chat_conversation (account_low_id, account_high_id, seq_head, created_at)
+                values (?, ?, 2, statement_timestamp()) returning chat_conversation_id
+                """).param(Math.min(sender, recipient)).param(Math.max(sender, recipient)).query(Long.class).single();
+        db.sql("""
+                insert into chat_message (chat_conversation_id, seq, sender_account_id, body, created_at)
+                values (?, 1, ?, 'First', statement_timestamp()), (?, 2, ?, 'Second', statement_timestamp())
+                """).param(conversation).param(sender).param(conversation).param(recipient).update();
+
+        var history = app.getBean(ConversationQueries.class);
+        assertThatThrownBy(() -> history.pageChat(context(RELATED.get()), conversation, null, null, 10))
+                .isInstanceOfSatisfying(BusinessError.class, error -> {
+                    assertThat(error.code()).isEqualTo("PARTICIPANT_REQUIRED");
+                    assertThat(error.status()).isEqualTo(404);
+                });
+        assertThatThrownBy(() -> history.pageChat(context(recipient), conversation, 2L, 1L, 10))
+                .isInstanceOfSatisfying(BusinessError.class,
+                        error -> assertThat(error.code()).isEqualTo("INPUT_INVALID"));
+        assertThat(history.pageChat(context(recipient), conversation, 2L, null, 10).items())
+                .extracting(message -> message.seq()).containsExactly(1L);
+        assertThat(history.pageChat(context(sender), conversation, null, 1L, 10).items())
+                .extracting(message -> message.seq()).containsExactly(2L);
     }
 
     @Test

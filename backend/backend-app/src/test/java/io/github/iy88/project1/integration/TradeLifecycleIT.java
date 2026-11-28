@@ -717,6 +717,37 @@ class TradeLifecycleIT {
     }
 
     @Test
+    void onlyThePeerCanRejectAndOnlyTheProposerCanWithdrawCancellation() {
+        long product = product(SELLER);
+        long tradeId = create(product, BUYER_ONE);
+        var accepted = trades.accept(account(SELLER), "decision-accept-trade-" + RUN,
+                new TradeCommands.Versioned(tradeId, 1));
+        int version = accepted.data().path("version").asInt();
+
+        for (String decision : List.of("reject", "withdraw")) {
+            var pending = trades.proposeCancellation(account(SELLER), "decision-propose-" + decision + RUN,
+                    new TradeCommands.ProposeCancellation(tradeId, null, version));
+            long proposal = Long.parseLong(pending.data().path("proposal").path("id").stringValue());
+            var command = new TradeCommands.DecideCancellation(tradeId, proposal, decision,
+                    pending.data().path("trade").path("version").asInt());
+            long allowed = decision.equals("reject") ? BUYER_ONE : SELLER;
+            long denied = decision.equals("reject") ? SELLER : BUYER_ONE;
+
+            assertThatThrownBy(() -> trades.decideCancellation(account(denied), "decision-deny-" + decision + RUN,
+                    command)).isInstanceOfSatisfying(BusinessError.class,
+                            error -> assertThat(error.code()).isEqualTo("ACTION_NOT_ALLOWED"));
+
+            var resolved = trades.decideCancellation(account(allowed), "decision-allow-" + decision + RUN, command);
+            assertThat(resolved.data().path("proposal").path("status").stringValue())
+                    .isEqualTo(decision.equals("reject") ? "rejected" : "withdrawn");
+            assertThat(resolved.data().path("trade").path("status").stringValue()).isEqualTo("in_progress");
+            assertThat(ports.occupancy(product)).isEqualTo(tradeId);
+            assertThat(ports.archived(tradeId)).isFalse();
+            version = resolved.data().path("trade").path("version").asInt();
+        }
+    }
+
+    @Test
     void directCancellationLeavesTheProductPublic() {
         long product = product(SELLER);
         long tradeId = create(product, BUYER_ONE);

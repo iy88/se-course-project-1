@@ -155,6 +155,32 @@ jobs:
           ./mvnw --batch-mode --no-transfer-progress --threads 2 verify -Pintegration \
             -Dit.envFile="$RUNNER_TEMP/project1-integration.env"
 
+      - name: Check and summarize integration coverage
+        run: |
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+
+          tests = ET.parse("backend-app/target/failsafe-reports/failsafe-summary.xml").getroot()
+          if int(tests.findtext("completed", "0")) == 0 or any(
+              int(tests.findtext(field)) for field in ("errors", "failures", "skipped")
+          ):
+              raise SystemExit("Expected a non-empty integration suite with all cases passing")
+
+          report = ET.parse("coverage-report/target/site/jacoco-integration/jacoco.xml").getroot()
+          lines = ["### Backend integration coverage (excluding maintenance)"]
+          for kind, target in (("LINE", 85), ("BRANCH", 65)):
+              counter = report.find(f"counter[@type='{kind}']")
+              if counter is None or int(counter.attrib["covered"]) == 0:
+                  raise SystemExit(f"Missing integration coverage data for {kind}")
+              covered = int(counter.attrib["covered"])
+              total = covered + int(counter.attrib["missed"])
+              result = "met" if 100 * covered >= target * total else "below target"
+              lines.append(f"- {kind.lower()}: {covered / total:.2%} ({covered}/{total}), target {target}% ({result})")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              print("\n".join(lines), file=summary)
+          PY
+
   frontend:
     name: Frontend / Vue
     runs-on: ubuntu-24.04
