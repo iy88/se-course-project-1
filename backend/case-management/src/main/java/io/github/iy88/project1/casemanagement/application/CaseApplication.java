@@ -101,7 +101,8 @@ public class CaseApplication {
 
     public WriteResult<JsonNode> claim(ExecutionContext context, String idempotencyKey, long caseId) {
         managers.requireManager(context);
-        return writes.run(context, CLAIM, idempotencyKey, new ClaimRequest(caseId), new ClaimUseCase());
+        return writes.run(context, CLAIM, idempotencyKey, new ClaimCase.Request(caseId),
+                new ClaimCase(store, managers, json, clock));
     }
 
     public WriteResult<JsonNode> inquire(ExecutionContext context, String idempotencyKey, long caseId,
@@ -160,9 +161,6 @@ public class CaseApplication {
     }
 
     private record SupplementRequest(long caseId, CaseCommands.Supplement supplement) {
-    }
-
-    private record ClaimRequest(long caseId) {
     }
 
     private record InquiryRequest(long caseId, CaseCommands.Inquiry inquiry) {
@@ -334,65 +332,6 @@ public class CaseApplication {
             body.put("case_id", Long.toString(facts.caseId()));
             body.put("supplement_count", supplements);
             body.put("updated_at", now.toString());
-            return new WriteResult.Response<>(200, body, new ResourceRef("case", facts.caseId()));
-        }
-    }
-
-    // ------------------------------------------------------------------ claim
-
-    private final class ClaimUseCase implements WriteExecutor.UseCase<ClaimRequest, Boolean> {
-        @Override
-        public JsonNode digestInput(ClaimRequest request) {
-            return json.createObjectNode().put("case_id", request.caseId());
-        }
-
-        @Override
-        public LockPlan prepare(ExecutionContext context, ClaimRequest request) {
-            return new LockPlan(Map.of(), Set.of(CaseLifecycleStore.lockKey(request.caseId())));
-        }
-
-        @Override
-        public Boolean qualify(ExecutionContext context, ClaimRequest request, LockPlan plan) {
-            managers.requireManagerForWrite(context);
-            return Boolean.TRUE;
-        }
-
-        @Override
-        public void requireReplayAccess(ExecutionContext context, Boolean qualification, ResourceRef resource) {
-            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
-                throw notVisible();
-            }
-            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
-            if (!facts.claimedBy(actor(context))) {
-                throw notVisible();
-            }
-        }
-
-        @Override
-        public WriteResult.Response<?> write(WriteTransaction transaction, ClaimRequest request,
-                                             Boolean qualification, LockPlan plan) {
-            long manager = actor(transaction.context());
-            var facts = store.lock(transaction, request.caseId());
-            requireLifecycle(facts);
-            if (facts.archived()) {
-                throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
-            }
-            boolean alreadyClaimed = facts.claimedBy(manager);
-            if (!alreadyClaimed) {
-                if (facts.claimedManagerId() != null) {
-                    throw new BusinessError("CASE_ALREADY_CLAIMED", 409, "事项已被其他管理员认领");
-                }
-                facts = store.claim(facts.caseId(), manager, now());
-                store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_CLAIM,
-                        CaseVocabulary.ACTOR_MANAGER, manager, now(), null, null, null, null, null, null, null));
-            }
-            audit(transaction, "case.claim", facts.caseId(), manager);
-            var body = json.createObjectNode();
-            body.put("case_id", Long.toString(facts.caseId()));
-            body.put("case_status", facts.caseStatus());
-            body.put("claimed_manager_id", Long.toString(facts.claimedManagerId()));
-            body.put("claimed_at", facts.claimedAt().toString());
-            body.put("already_claimed", alreadyClaimed);
             return new WriteResult.Response<>(200, body, new ResourceRef("case", facts.caseId()));
         }
     }
