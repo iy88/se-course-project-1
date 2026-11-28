@@ -60,4 +60,11 @@ final class CaseWriteSupport {
     static Instant now(Clock clock) {
         return clock.instant().truncatedTo(ChronoUnit.MICROS);
     }
+
+    static JsonNode thread(JsonMapper json, long conversationId) {
+        var body = json.createObjectNode();
+        body.put("conversation_kind", "case");
+        body.put("conversation_id", Long.toString(conversationId));
+        return body;
+    }
 }

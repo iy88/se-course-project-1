@@ -108,8 +108,8 @@ public class CaseApplication {
     public WriteResult<JsonNode> inquire(ExecutionContext context, String idempotencyKey, long caseId,
                                          CaseCommands.Inquiry inquiry) {
         managers.requireManager(context);
-        return writes.run(context, INQUIRE, idempotencyKey, new InquiryRequest(caseId, inquiry),
-                new InquiryUseCase());
+        return writes.run(context, INQUIRE, idempotencyKey, new InquireCase.Request(caseId, inquiry),
+                new InquireCase(store, targets, managers, notifications, threads, settings, json, clock));
     }
 
     public WriteResult<JsonNode> postMessage(ExecutionContext context, String idempotencyKey, long caseId,
@@ -161,9 +161,6 @@ public class CaseApplication {
     }
 
     private record SupplementRequest(long caseId, CaseCommands.Supplement supplement) {
-    }
-
-    private record InquiryRequest(long caseId, CaseCommands.Inquiry inquiry) {
     }
 
     private record MessageRequest(long caseId, CaseCommands.Message message) {
@@ -333,92 +330,6 @@ public class CaseApplication {
             body.put("supplement_count", supplements);
             body.put("updated_at", now.toString());
             return new WriteResult.Response<>(200, body, new ResourceRef("case", facts.caseId()));
-        }
-    }
-
-    // ------------------------------------------------------------------ inquiry
-
-    private final class InquiryUseCase implements WriteExecutor.UseCase<InquiryRequest, InquiryRequest> {
-        @Override
-        public JsonNode digestInput(InquiryRequest request) {
-            return digest(request.caseId(), request.inquiry());
-        }
-
-        @Override
-        public LockPlan prepare(ExecutionContext context, InquiryRequest request) {
-            var facts = store.find(request.caseId()).orElseThrow(CaseApplication::notVisible);
-            var resources = new TreeSet<LockPlan.Key>();
-            resources.add(CaseLifecycleStore.lockKey(facts.caseId()));
-            threads.findConversation(facts.caseId(), request.inquiry().peerAccountId())
-                    .ifPresent(id -> resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
-                            List.of(id))));
-            var accounts = new TreeMap<Long, LockPlan.AccountMode>();
-            if (request.inquiry().peerAccountId() > 0) {
-                accounts.put(request.inquiry().peerAccountId(), LockPlan.AccountMode.SHARED);
-            }
-            return new LockPlan(accounts, resources);
-        }
-
-        @Override
-        public InquiryRequest qualify(ExecutionContext context, InquiryRequest request, LockPlan plan) {
-            managers.requireManagerForWrite(context);
-            return request;
-        }
-
-        @Override
-        public void requireReplayAccess(ExecutionContext context, InquiryRequest qualification,
-                                       ResourceRef resource) {
-            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
-                throw notVisible();
-            }
-            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
-            if (!facts.claimedBy(actor(context))) {
-                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
-            }
-        }
-
-        @Override
-        public WriteResult.Response<?> write(WriteTransaction transaction, InquiryRequest request,
-                                             InquiryRequest qualification, LockPlan plan) {
-            long manager = actor(transaction.context());
-            var facts = store.lock(transaction, request.caseId());
-            requireLifecycle(facts);
-            if (!facts.claimedBy(manager)) {
-                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
-            }
-            if (facts.archived()) {
-                throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
-            }
-            long peer = request.inquiry().peerAccountId();
-            if (peer <= 0 || peer == manager) {
-                throw new BusinessError("INPUT_INVALID", 422, "问询对象无效");
-            }
-            if (facts.reporterAccountId() != null && facts.reporterAccountId() == peer) {
-                throw new BusinessError("INPUT_INVALID", 422, "不得向举报人发起问询");
-            }
-            if (!targets.relatedAccountIds(facts).contains(peer)) {
-                throw new BusinessError("INPUT_INVALID", 422, "对象不是事项相关账户");
-            }
-            String scope = requiredText(request.inquiry().scopeText(), settings.getMaxNoteLength(), "问询范围");
-            Instant now = now();
-            long conversationId = threads.ensure(transaction, facts.caseId(), peer);
-            var message = threads.append(transaction, facts.caseId(), peer, CaseVocabulary.KIND_INQUIRY,
-                    CaseVocabulary.ACTOR_MANAGER, manager, scope);
-            long actionId = store.addAction(new CaseRecords.Action(0, facts.caseId(),
-                    CaseVocabulary.ACTION_INQUIRE, CaseVocabulary.ACTOR_MANAGER, manager, now,
-                    message.messageId(), peer, null, null, null, scope, null));
-            notifications.create(transaction, CaseVocabulary.EVENT_INQUIRY_CREATED,
-                    "case:" + facts.caseId() + ":inquiry:" + actionId, new ResourceRef("case", facts.caseId()),
-                    Set.of(peer), Map.of("case_id", Long.toString(facts.caseId())), now);
-            store.touch(facts.caseId(), now);
-            audit(transaction, "case.inquire", facts.caseId(), manager);
-            var body = json.createObjectNode();
-            body.put("inquiry_action_id", Long.toString(actionId));
-            body.put("case_message_id", Long.toString(message.messageId()));
-            body.set("thread", thread(conversationId));
-            body.put("case_status", facts.caseStatus());
-            body.put("notified_at", now.toString());
-            return new WriteResult.Response<>(201, body, new ResourceRef("case", facts.caseId()));
         }
     }
 
@@ -1386,10 +1297,7 @@ public class CaseApplication {
     }
 
     private JsonNode thread(long conversationId) {
-        var body = json.createObjectNode();
-        body.put("conversation_kind", "case");
-        body.put("conversation_id", Long.toString(conversationId));
-        return body;
+        return CaseWriteSupport.thread(json, conversationId);
     }
 
     private JsonNode closed(CaseRecords.Facts facts) {
