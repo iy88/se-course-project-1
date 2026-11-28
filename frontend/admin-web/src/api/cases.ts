@@ -1,4 +1,5 @@
 /* Shared case workbench query (API-COM-QUERY-004). */
+import type { components } from "../../../shared/api-types";
 import { request } from "./http";
 import type { ManagementTodoPage, TodoKind, WorkbenchOwnership } from "./contracts";
 
@@ -174,6 +175,22 @@ export interface CaseThreadPage {
 
 export function readCase(caseId: string, signal?: AbortSignal): Promise<ManagementCaseDetail> {
   return request("GET", `/cases/${encodeURIComponent(caseId)}`, { signal });
+}
+
+export interface CaseTradeHistory {
+  trade_id: string;
+  agreement_history: components["schemas"]["Agreement"][];
+  confirmation_history: (components["schemas"]["Confirmation"] & {
+    invalidated_at: string | null;
+    invalidation_reason: string | null;
+  })[];
+}
+
+export function readCaseTradeHistory(
+  caseId: string,
+  signal: AbortSignal,
+): Promise<CaseTradeHistory> {
+  return request("GET", `/admin/cases/${encodeURIComponent(caseId)}/trade-history`, { signal });
 }
 
 /** Same-origin read route for one verified case evidence attachment. */
