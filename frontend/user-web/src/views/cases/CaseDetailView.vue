@@ -7,9 +7,9 @@
  * those capabilities from the case payload (`thread`, `appeal_deadline_at`,
  * archived state) instead of from the case status alone.
  */
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { getCase, postCaseMessage, supplementReport } from "../../api/cases";
+import { getCase, postCaseMessage } from "../../api/cases";
 import { listMyTodos } from "../../api/aggregation";
 import type { CaseDetail, TodoItem } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
@@ -38,10 +38,10 @@ import { session } from "../../app/session";
 import { notify } from "../../app/toast";
 import { refreshBadges } from "../../app/badges";
 import ErrorNotice from "../../components/ErrorNotice.vue";
-import ImageUploader from "../../components/ImageUploader.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
 import StateBadge from "../../components/StateBadge.vue";
+import CaseSupplementDialog from "./CaseSupplementDialog.vue";
 import { useCaseThread } from "./useCaseThread";
 
 const route = useRoute();
@@ -65,8 +65,18 @@ const appealError = ref<string | null>(null);
 /* Pending inquiries come from the todo aggregation, not from the message list. */
 const pendingInquiryIds = ref<string[]>([]);
 
-const supplementDialog = ref<HTMLDialogElement | null>(null);
+const supplementDialog = ref<{
+  toggle: () => void;
+  close: () => void;
+} | null>(null);
 const supplementOpen = ref(false);
+// Preserve the draft and an in-flight request when the detail error hides the dialog.
+const supplementState = reactive({
+  note: "",
+  files: [] as string[],
+  pending: false,
+  error: null as string | null,
+});
 const reportMaterials = computed(() => detail.data.value?.report_materials);
 const caseTypeLabel = computed(() => {
   const kind = detail.data.value?.case_type;
@@ -87,20 +97,8 @@ function attachmentKindLabel(contentType?: string): string {
 }
 
 function toggleSupplement(): void {
-  const dialog = supplementDialog.value;
-  if (!dialog) return;
-  if (dialog.open) {
-    dialog.close();
-  } else {
-    dialog.showModal();
-    supplementOpen.value = true;
-  }
+  supplementDialog.value?.toggle();
 }
-
-const supplementNote = ref("");
-const supplementFiles = ref<string[]>([]);
-const supplementPending = ref(false);
-const supplementError = ref<string | null>(null);
 
 /*
  * The reporter viewpoint comes from the server projection when present, otherwise from
@@ -228,9 +226,9 @@ onUnmounted(() => {
 
 watch(caseId, () => {
   supplementDialog.value?.close();
-  supplementNote.value = "";
-  supplementFiles.value = [];
-  supplementError.value = null;
+  supplementState.note = "";
+  supplementState.files = [];
+  supplementState.error = null;
   cancelThread();
   void load();
 });
@@ -317,37 +315,6 @@ async function submitAppeal(): Promise<void> {
     appealError.value = problemMessage(caught);
   } finally {
     appealPending.value = false;
-  }
-}
-
-async function submitSupplement(): Promise<void> {
-  const current = detail.data.value;
-  if (!current || !canSupplement.value || supplementPending.value) return;
-  if (!supplementNote.value.trim() && !supplementFiles.value.length) {
-    supplementError.value = "请填写补充说明或上传证据。";
-    return;
-  }
-  supplementError.value = null;
-  supplementPending.value = true;
-  try {
-    const result = await supplementReport(
-      current.case_id,
-      {
-        note: supplementNote.value.trim() || undefined,
-        attachments: supplementFiles.value.map((fileId) => ({ file_id: fileId })),
-      },
-      newIdempotencyKey(),
-    );
-    if (current.case_id !== caseId.value) return;
-    supplementNote.value = "";
-    supplementFiles.value = [];
-    supplementDialog.value?.close();
-    notify.success(`已补充材料（第 ${result.supplement_count} 次）。`);
-    await load();
-  } catch (caught) {
-    supplementError.value = problemMessage(caught);
-  } finally {
-    supplementPending.value = false;
   }
 }
 </script>
@@ -691,50 +658,16 @@ async function submitSupplement(): Promise<void> {
         从「我的事项 → 我提交的」打开本事项，才能补充说明与证据。
       </p>
 
-      <dialog
+      <CaseSupplementDialog
         v-if="canSupplement"
-        id="case-supplement"
         ref="supplementDialog"
-        class="card supplement-dialog"
-        aria-labelledby="case-supplement-title"
-        @close="supplementOpen = false"
-        @cancel="supplementPending && $event.preventDefault()"
-      >
-        <form class="stack" @submit.prevent="submitSupplement">
-          <h2 id="case-supplement-title">补充材料</h2>
-          <div class="field">
-            <label class="field__label" for="supplement-note">补充说明</label>
-            <textarea
-              id="supplement-note"
-              v-model="supplementNote"
-              class="textarea"
-              maxlength="1000"
-            />
-          </div>
-          <ImageUploader
-            v-model="supplementFiles"
-            purpose="case_evidence"
-            label="证据文件"
-            hint="支持 JPG、PNG、PDF"
-            :max-count="5"
-            :target="null"
-          />
-          <p v-if="supplementError" class="field__error" role="alert">{{ supplementError }}</p>
-          <div class="inline">
-            <button
-              type="button"
-              class="btn btn--ghost"
-              :disabled="supplementPending"
-              @click="toggleSupplement"
-            >
-              关闭
-            </button>
-            <button type="submit" class="btn btn--primary" :disabled="supplementPending">
-              {{ supplementPending ? "提交中…" : "提交补充" }}
-            </button>
-          </div>
-        </form>
-      </dialog>
+        :can-supplement="canSupplement"
+        :case-id="detail.data.value.case_id"
+        :get-active-case-id="() => caseId"
+        :state="supplementState"
+        :reload="load"
+        @update:open="supplementOpen = $event"
+      />
     </template>
   </div>
 </template>
@@ -928,20 +861,6 @@ async function submitSupplement(): Promise<void> {
 .supplement-toggle {
   flex: 0 0 auto;
   align-self: flex-start;
-}
-
-.supplement-dialog {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: min(36rem, calc(100% - 2rem));
-  max-height: calc(100dvh - 2rem);
-  overflow: auto;
-  color: inherit;
-}
-
-.supplement-dialog::backdrop {
-  background: rgb(0 0 0 / 38%);
 }
 
 .reason {
