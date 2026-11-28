@@ -7,7 +7,7 @@
  * those capabilities from the case payload (`thread`, `appeal_deadline_at`,
  * archived state) instead of from the case status alone.
  */
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getCase } from "../../api/cases";
 import { listMyTodos } from "../../api/aggregation";
@@ -57,12 +57,13 @@ const supplementDialog = ref<{
 } | null>(null);
 const supplementOpen = ref(false);
 // Preserve the draft and an in-flight request when the detail error hides the dialog.
-const supplementState = reactive({
+const emptySupplementState = () => ({
   note: "",
   files: [] as string[],
   pending: false,
   error: null as string | null,
 });
+const supplementState = ref(emptySupplementState());
 const reportMaterials = computed(() => detail.data.value?.report_materials);
 const caseTypeLabel = computed(() => {
   const kind = detail.data.value?.case_type;
@@ -128,7 +129,9 @@ const availability = computed(() =>
   }),
 );
 
-const canSupplement = computed(() => availability.value.supplement);
+const canSupplement = computed(
+  () => detail.data.value?.case_id === caseId.value && availability.value.supplement,
+);
 const canRespond = computed(() => availability.value.respond);
 const canAppeal = computed(() => availability.value.appeal);
 
@@ -230,9 +233,7 @@ onUnmounted(() => {
 
 watch(caseId, () => {
   supplementDialog.value?.close();
-  supplementState.note = "";
-  supplementState.files = [];
-  supplementState.error = null;
+  supplementState.value = emptySupplementState();
   cancelThread();
   void load();
 });
@@ -597,10 +598,11 @@ watch([anchorMessageId, threadStatus], async ([anchor, status]) => {
 
       <CaseSupplementDialog
         v-if="canSupplement"
+        :key="detail.data.value.case_id"
         ref="supplementDialog"
         :can-supplement="canSupplement"
         :case-id="detail.data.value.case_id"
-        :get-active-case-id="() => caseId"
+        :is-current="(id, state) => id === caseId && state === supplementState"
         :state="supplementState"
         :reload="load"
         @update:open="supplementOpen = $event"

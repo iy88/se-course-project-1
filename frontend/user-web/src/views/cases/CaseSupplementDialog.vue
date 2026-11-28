@@ -9,12 +9,14 @@ import ImageUploader from "../../components/ImageUploader.vue";
 
 const { notify } = useToastStore();
 
+type SupplementState = { note: string; files: string[]; pending: boolean; error: string | null };
+
 const props = defineProps<{
   /** Case projected by the detail payload, which is also the write target. */
   caseId: string;
-  /** Current route case, used to drop a response after the reader leaves. */
-  getActiveCaseId: () => string;
-  state: { note: string; files: string[]; pending: boolean; error: string | null };
+  /** Only the active case and draft may trigger page effects after a write. */
+  isCurrent: (caseId: string, state: SupplementState) => boolean;
+  state: SupplementState;
   /** Reloads the page detail after a successful supplement. */
   reload: () => Promise<void>;
   canSupplement: boolean;
@@ -23,7 +25,8 @@ const props = defineProps<{
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 
 const dialog = ref<HTMLDialogElement | null>(null);
-const { note, files, pending, error } = toRefs(props.state);
+const state = props.state;
+const { note, files, pending, error } = toRefs(state);
 
 function toggle(): void {
   const element = dialog.value;
@@ -66,7 +69,7 @@ async function submit(): Promise<void> {
       },
       newIdempotencyKey(),
     );
-    if (requestCaseId !== props.getActiveCaseId()) return;
+    if (!props.isCurrent(requestCaseId, state)) return;
     note.value = "";
     files.value = [];
     dialog.value?.close();
