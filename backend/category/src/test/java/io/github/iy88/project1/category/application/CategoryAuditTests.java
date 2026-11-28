@@ -39,7 +39,7 @@ class CategoryAuditTests {
     private final CategoryRepository categories = mock(CategoryRepository.class);
     private final CategoryNameRepository names = mock(CategoryNameRepository.class);
     private final ObjectProvider<CategoryProductVisibility> productVisibility =
-            mock(ObjectProvider.class);
+            mock();
     private final PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
     private final AuditStore auditRecords = mock(AuditStore.class);
     private final AuditContext context = new AuditContext(new ExecutionContext(UUID.randomUUID(),
@@ -72,14 +72,12 @@ class CategoryAuditTests {
 
         service.create(MANAGER, "二手教材", context);
 
-        @SuppressWarnings("unchecked")
-        var facts = ArgumentCaptor.forClass(Map.class);
+        var facts = ArgumentCaptor.<Map<String, ?>>captor();
         verify(auditRecords).record(eq(context), eq(AuditActions.CATEGORY_CREATED),
                 eq(new ResourceRef("category", CATEGORY)), isNull(), facts.capture());
-        assertThat(facts.getValue())
-                .containsEntry("main_name", "二手教材")
-                .containsEntry("category_name_id", "7")
-                .containsEntry("state", "active");
+        assertThat(facts.getValue().get("main_name")).isEqualTo("二手教材");
+        assertThat(facts.getValue().get("category_name_id")).isEqualTo("7");
+        assertThat(facts.getValue().get("state")).isEqualTo("active");
     }
 
     @Test
@@ -94,13 +92,11 @@ class CategoryAuditTests {
 
         service.disable(CATEGORY, context);
 
-        @SuppressWarnings("unchecked")
-        var facts = ArgumentCaptor.forClass(Map.class);
+        var facts = ArgumentCaptor.<Map<String, ?>>captor();
         verify(auditRecords).record(eq(context), eq(AuditActions.CATEGORY_DISABLED),
                 eq(new ResourceRef("category", CATEGORY)), isNull(), facts.capture());
-        assertThat(facts.getValue())
-                .containsEntry("previous_state", "active")
-                .containsEntry("current_state", "disabled");
+        assertThat(facts.getValue().get("previous_state")).isEqualTo("active");
+        assertThat(facts.getValue().get("current_state")).isEqualTo("disabled");
     }
 
     @Test

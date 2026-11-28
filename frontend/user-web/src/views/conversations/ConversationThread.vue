@@ -25,10 +25,12 @@ import { newIdempotencyKey } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
 import { realtimeState, registerSnapshotReloader, subscribeRealtime } from "../../app/realtime";
 import { session } from "../../app/session";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import StartChatButton from "../../components/interaction/StartChatButton.vue";
+
+const { notify } = useToastStore();
 
 const route = useRoute();
 const router = useRouter();

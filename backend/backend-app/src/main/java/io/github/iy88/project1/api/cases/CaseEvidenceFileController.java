@@ -123,7 +123,7 @@ public class CaseEvidenceFileController {
 
     private static CaseRecords.Facts requireClaim(CaseLifecycleStore store, CasePorts.Managers managers,
                                                   ExecutionContext context, long caseId, long actor) {
-        var facts = store.find(caseId).filter(CaseRecords.Facts::lifecycle).orElseThrow(
+        var facts = store.find(caseId).filter(entry -> entry.lifecycle()).orElseThrow(
                 CaseEvidenceFileController::notVisible);
         if (!facts.claimedBy(actor)) {
             throw notVisible();

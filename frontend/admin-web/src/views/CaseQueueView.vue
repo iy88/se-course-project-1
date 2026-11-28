@@ -20,8 +20,8 @@ import {
 } from "../app/labels";
 import { problemMessage } from "../app/problems";
 import { navigate } from "../app/router";
-import { session } from "../app/session";
-import { notify } from "../app/toast";
+import { useSessionStore } from "../app/session";
+import { useToastStore } from "../app/toast";
 import EmptyState from "../components/EmptyState.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
@@ -33,6 +33,9 @@ const props = defineProps<{
   kind: TodoKind;
   keyword: string;
 }>();
+
+const { notify } = useToastStore();
+const session = useSessionStore();
 
 const items = ref<ManagementTodoItem[]>([]);
 const loading = ref(false);
@@ -180,7 +183,7 @@ function detailAuditId(item: ManagementTodoItem): string | null {
 function canOpen(item: ManagementTodoItem): boolean {
   if (
     props.ownership === "completed_all" &&
-    item.manager_id !== session.identity.value?.account.account_id
+    item.manager_id !== session.identity?.account.account_id
   ) {
     return false;
   }

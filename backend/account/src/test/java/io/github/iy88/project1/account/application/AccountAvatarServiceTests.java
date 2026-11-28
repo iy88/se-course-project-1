@@ -50,7 +50,6 @@ class AccountAvatarServiceTests {
         try (MockedStatic<OssClients> clients = mockStatic(OssClients.class)) {
             clients.when(() -> OssClients.use(anyString(), anyString(), anyString(), anyString(), any()))
                     .thenAnswer(invocation -> {
-                        @SuppressWarnings("unchecked")
                         Function<OSSClient, Object> action = invocation.getArgument(4);
                         return action.apply(mock(OSSClient.class));
                     });

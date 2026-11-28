@@ -12,17 +12,13 @@ import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.core.WriteTransaction;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import tools.jackson.databind.JsonNode;
@@ -52,21 +48,14 @@ public class CaseApplication {
     public static final String LIFT = "case.enforcement.lift";
     public static final String REFERENCE_EVIDENCE = "case.evidence.reference";
 
-    private static final Set<String> ENFORCEMENT_ACTIONS = Set.of(
-            "restrict_account", "lift_account_restriction", "withdraw_public_access", "restore_display",
-            "remove_content", "freeze_trade", "lift_trade_freeze", "adjust_trade_status",
-            "remove_evaluation_content");
-    private static final Set<String> TRADE_ACTIONS = Set.of("freeze_trade", "lift_trade_freeze",
-            "adjust_trade_status");
     /** Records produced by a reversal, never selectable as the original enforcement. */
-    private static final Set<String> LIFT_ACTIONS = Set.of("lift_account_restriction", "restore_display",
+    static final Set<String> LIFT_ACTIONS = Set.of("lift_account_restriction", "restore_display",
             "lift_trade_freeze");
     /** A terminal trade adjustment cannot be reversed or adjusted again. */
     private static final Set<String> TERMINAL_ACTIONS = Set.of("adjust_trade_status");
     /** Original actions whose subject handlers can compensate; other content removals cannot. */
     private static final Set<String> REVERSIBLE_ACTIONS = Set.of("freeze_trade", "restrict_account",
             "withdraw_public_access");
-    private static final Set<String> ADJUST_TRADE_TARGETS = Set.of("completed", "terminated", "in_progress");
 
     private final WriteExecutor writes;
     private final CaseLifecycleStore store;
@@ -112,14 +101,15 @@ public class CaseApplication {
 
     public WriteResult<JsonNode> claim(ExecutionContext context, String idempotencyKey, long caseId) {
         managers.requireManager(context);
-        return writes.run(context, CLAIM, idempotencyKey, new ClaimRequest(caseId), new ClaimUseCase());
+        return writes.run(context, CLAIM, idempotencyKey, new ClaimCase.Request(caseId),
+                new ClaimCase(store, managers, json, clock));
     }
 
     public WriteResult<JsonNode> inquire(ExecutionContext context, String idempotencyKey, long caseId,
                                          CaseCommands.Inquiry inquiry) {
         managers.requireManager(context);
-        return writes.run(context, INQUIRE, idempotencyKey, new InquiryRequest(caseId, inquiry),
-                new InquiryUseCase());
+        return writes.run(context, INQUIRE, idempotencyKey, new InquireCase.Request(caseId, inquiry),
+                new InquireCase(store, targets, managers, notifications, threads, settings, json, clock));
     }
 
     public WriteResult<JsonNode> postMessage(ExecutionContext context, String idempotencyKey, long caseId,
@@ -146,8 +136,9 @@ public class CaseApplication {
     public WriteResult<JsonNode> publish(ExecutionContext context, String idempotencyKey, long caseId,
                                          CaseCommands.Publish publish) {
         managers.requireManager(context);
-        return writes.run(context, PUBLISH, idempotencyKey, new PublishRequest(caseId, publish),
-                new PublishUseCase());
+        return writes.run(context, PUBLISH, idempotencyKey,
+                new PublishCaseResult.Request(caseId, publish),
+                new PublishCaseResult(store, managers, notifications, settings, json, clock));
     }
 
     /** API-CASE-008: lifts one recorded enforcement by its case-stable execution identifier. */
@@ -165,16 +156,11 @@ public class CaseApplication {
     public WriteResult<JsonNode> referenceEvidence(ExecutionContext context, String idempotencyKey, long caseId,
                                                    CaseCommands.EvidenceReference reference) {
         return writes.run(context, REFERENCE_EVIDENCE, idempotencyKey,
-                new EvidenceReferenceRequest(caseId, reference), new EvidenceReferenceUseCase());
+                new ReferenceCaseEvidence.Request(caseId, reference),
+                new ReferenceCaseEvidence(store, targets, managers, json, clock));
     }
 
     private record SupplementRequest(long caseId, CaseCommands.Supplement supplement) {
-    }
-
-    private record ClaimRequest(long caseId) {
-    }
-
-    private record InquiryRequest(long caseId, CaseCommands.Inquiry inquiry) {
     }
 
     private record MessageRequest(long caseId, CaseCommands.Message message) {
@@ -186,13 +172,7 @@ public class CaseApplication {
     private record CloseRequest(long caseId) {
     }
 
-    private record PublishRequest(long caseId, CaseCommands.Publish publish) {
-    }
-
     private record LiftRequest(long caseId, String enforcementId, String reason) {
-    }
-
-    private record EvidenceReferenceRequest(long caseId, CaseCommands.EvidenceReference reference) {
     }
 
     // ------------------------------------------------------------------ submit and supplement
@@ -353,151 +333,6 @@ public class CaseApplication {
         }
     }
 
-    // ------------------------------------------------------------------ claim
-
-    private final class ClaimUseCase implements WriteExecutor.UseCase<ClaimRequest, Boolean> {
-        @Override
-        public JsonNode digestInput(ClaimRequest request) {
-            return json.createObjectNode().put("case_id", request.caseId());
-        }
-
-        @Override
-        public LockPlan prepare(ExecutionContext context, ClaimRequest request) {
-            return new LockPlan(Map.of(), Set.of(CaseLifecycleStore.lockKey(request.caseId())));
-        }
-
-        @Override
-        public Boolean qualify(ExecutionContext context, ClaimRequest request, LockPlan plan) {
-            managers.requireManagerForWrite(context);
-            return Boolean.TRUE;
-        }
-
-        @Override
-        public void requireReplayAccess(ExecutionContext context, Boolean qualification, ResourceRef resource) {
-            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
-                throw notVisible();
-            }
-            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
-            if (!facts.claimedBy(actor(context))) {
-                throw notVisible();
-            }
-        }
-
-        @Override
-        public WriteResult.Response<?> write(WriteTransaction transaction, ClaimRequest request,
-                                             Boolean qualification, LockPlan plan) {
-            long manager = actor(transaction.context());
-            var facts = store.lock(transaction, request.caseId());
-            requireLifecycle(facts);
-            if (facts.archived()) {
-                throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
-            }
-            boolean alreadyClaimed = facts.claimedBy(manager);
-            if (!alreadyClaimed) {
-                if (facts.claimedManagerId() != null) {
-                    throw new BusinessError("CASE_ALREADY_CLAIMED", 409, "事项已被其他管理员认领");
-                }
-                facts = store.claim(facts.caseId(), manager, now());
-                store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_CLAIM,
-                        CaseVocabulary.ACTOR_MANAGER, manager, now(), null, null, null, null, null, null, null));
-            }
-            audit(transaction, "case.claim", facts.caseId(), manager);
-            var body = json.createObjectNode();
-            body.put("case_id", Long.toString(facts.caseId()));
-            body.put("case_status", facts.caseStatus());
-            body.put("claimed_manager_id", Long.toString(facts.claimedManagerId()));
-            body.put("claimed_at", facts.claimedAt().toString());
-            body.put("already_claimed", alreadyClaimed);
-            return new WriteResult.Response<>(200, body, new ResourceRef("case", facts.caseId()));
-        }
-    }
-
-    // ------------------------------------------------------------------ inquiry
-
-    private final class InquiryUseCase implements WriteExecutor.UseCase<InquiryRequest, InquiryRequest> {
-        @Override
-        public JsonNode digestInput(InquiryRequest request) {
-            return digest(request.caseId(), request.inquiry());
-        }
-
-        @Override
-        public LockPlan prepare(ExecutionContext context, InquiryRequest request) {
-            var facts = store.find(request.caseId()).orElseThrow(CaseApplication::notVisible);
-            var resources = new TreeSet<LockPlan.Key>();
-            resources.add(CaseLifecycleStore.lockKey(facts.caseId()));
-            threads.findConversation(facts.caseId(), request.inquiry().peerAccountId())
-                    .ifPresent(id -> resources.add(new LockPlan.Key(LockPlan.Domain.CASE_CONVERSATION,
-                            List.of(id))));
-            var accounts = new TreeMap<Long, LockPlan.AccountMode>();
-            if (request.inquiry().peerAccountId() > 0) {
-                accounts.put(request.inquiry().peerAccountId(), LockPlan.AccountMode.SHARED);
-            }
-            return new LockPlan(accounts, resources);
-        }
-
-        @Override
-        public InquiryRequest qualify(ExecutionContext context, InquiryRequest request, LockPlan plan) {
-            managers.requireManagerForWrite(context);
-            return request;
-        }
-
-        @Override
-        public void requireReplayAccess(ExecutionContext context, InquiryRequest qualification,
-                                       ResourceRef resource) {
-            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
-                throw notVisible();
-            }
-            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
-            if (!facts.claimedBy(actor(context))) {
-                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
-            }
-        }
-
-        @Override
-        public WriteResult.Response<?> write(WriteTransaction transaction, InquiryRequest request,
-                                             InquiryRequest qualification, LockPlan plan) {
-            long manager = actor(transaction.context());
-            var facts = store.lock(transaction, request.caseId());
-            requireLifecycle(facts);
-            if (!facts.claimedBy(manager)) {
-                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
-            }
-            if (facts.archived()) {
-                throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
-            }
-            long peer = request.inquiry().peerAccountId();
-            if (peer <= 0 || peer == manager) {
-                throw new BusinessError("INPUT_INVALID", 422, "问询对象无效");
-            }
-            if (facts.reporterAccountId() != null && facts.reporterAccountId() == peer) {
-                throw new BusinessError("INPUT_INVALID", 422, "不得向举报人发起问询");
-            }
-            if (!targets.relatedAccountIds(facts).contains(peer)) {
-                throw new BusinessError("INPUT_INVALID", 422, "对象不是事项相关账户");
-            }
-            String scope = requiredText(request.inquiry().scopeText(), settings.getMaxNoteLength(), "问询范围");
-            Instant now = now();
-            long conversationId = threads.ensure(transaction, facts.caseId(), peer);
-            var message = threads.append(transaction, facts.caseId(), peer, CaseVocabulary.KIND_INQUIRY,
-                    CaseVocabulary.ACTOR_MANAGER, manager, scope);
-            long actionId = store.addAction(new CaseRecords.Action(0, facts.caseId(),
-                    CaseVocabulary.ACTION_INQUIRE, CaseVocabulary.ACTOR_MANAGER, manager, now,
-                    message.messageId(), peer, null, null, null, scope, null));
-            notifications.create(transaction, CaseVocabulary.EVENT_INQUIRY_CREATED,
-                    "case:" + facts.caseId() + ":inquiry:" + actionId, new ResourceRef("case", facts.caseId()),
-                    Set.of(peer), Map.of("case_id", Long.toString(facts.caseId())), now);
-            store.touch(facts.caseId(), now);
-            audit(transaction, "case.inquire", facts.caseId(), manager);
-            var body = json.createObjectNode();
-            body.put("inquiry_action_id", Long.toString(actionId));
-            body.put("case_message_id", Long.toString(message.messageId()));
-            body.set("thread", thread(conversationId));
-            body.put("case_status", facts.caseStatus());
-            body.put("notified_at", now.toString());
-            return new WriteResult.Response<>(201, body, new ResourceRef("case", facts.caseId()));
-        }
-    }
-
     // ------------------------------------------------------------------ statement, appeal, manager reply
 
     private final class MessageUseCase implements WriteExecutor.UseCase<MessageRequest, MessageRequest> {
@@ -532,7 +367,8 @@ public class CaseApplication {
                         plan = plan.merge(enforcement.reverseLockCallbacks(context, facts.caseId(), recorded,
                                 message.resolution()).lockPlan());
                         if (CaseVocabulary.RESOLUTION_ADJUST.equals(message.resolution())) {
-                            var replacements = replacementInstructions(message, recorded);
+                            var replacements =
+                                    CaseEnforcementInstructions.replacementInstructions(message, recorded);
                             if (!replacements.isEmpty()) {
                                 plan = plan.merge(enforcement.lockCallbacks(context, facts.caseId(),
                                         replacements).lockPlan());
@@ -588,7 +424,7 @@ public class CaseApplication {
                         recorded, message.resolution());
                 if (recorded != null && CaseVocabulary.RESOLUTION_ADJUST.equals(message.resolution())) {
                     subjects = subjects.merge(enforcement.lockCallbacks(transaction.context(), request.caseId(),
-                            replacementInstructions(message, recorded)));
+                            CaseEnforcementInstructions.replacementInstructions(message, recorded)));
                 }
                 facts = acquireSubjectLocks(transaction, plan, subjects, request.caseId());
             } else {
@@ -753,7 +589,7 @@ public class CaseApplication {
             var recorded = selectedEnforcement(facts.caseId(), message.originalEnforcementId(), appellant, true);
             boolean adjust = CaseVocabulary.RESOLUTION_ADJUST.equals(message.resolution());
             var replacements = adjust
-                    ? replacementInstructions(message, recorded)
+                    ? CaseEnforcementInstructions.replacementInstructions(message, recorded)
                     : List.<CaseRecords.EnforcementInstruction>of();
             if (replacements.stream().anyMatch(item -> recorded.action().equals(item.action()))) {
                 throw new BusinessError("INPUT_INVALID", 422, "调整处置须给出新的处置动作");
@@ -787,7 +623,7 @@ public class CaseApplication {
             String sourceNote = "original_enforcement_id=" + recorded.enforcementId();
             if (!replacements.isEmpty()) {
                 sourceNote += ";replacement_enforcement_ids=" + replacements.stream()
-                        .map(CaseRecords.EnforcementInstruction::enforcementId)
+                        .map(element -> element.enforcementId())
                         .collect(Collectors.joining(","));
             }
             store.markEnforcementLifted(facts.caseId(), recorded.enforcementId(), manager, basisRef, now);
@@ -826,7 +662,7 @@ public class CaseApplication {
             if (!facts.claimedBy(actor(context))) {
                 return plan;
             }
-            var instructions = instructions(request.decision());
+            var instructions = CaseEnforcementInstructions.instructions(request.decision());
             if (!instructions.isEmpty() && enforcement != null) {
                 plan = plan.merge(enforcement.plan(context, facts.caseId(), instructions));
             }
@@ -864,21 +700,45 @@ public class CaseApplication {
                 throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
             }
             var decision = request.decision();
-            var instructions = instructions(decision);
-            // A decision with subjects locks the actual product/trade rows before the case row.
-            // The prepared plan is re-checked here so a target set that grew after prepare is
-            // retried by the shared executor instead of widening locks inside the case lock.
-            CaseRecords.Facts facts;
-            if (instructions.isEmpty()) {
-                facts = store.lock(transaction, request.caseId());
-            } else {
-                if (enforcement == null) {
-                    throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "处置执行暂不可用");
-                }
-                facts = acquireSubjectLocks(transaction, plan,
-                        enforcement.lockCallbacks(transaction.context(), request.caseId(), instructions),
-                        request.caseId());
+            var instructions = CaseEnforcementInstructions.instructions(decision);
+            // The locked facts are authoritative; the snapshot above only keeps the pre-lock
+            // authorization error ahead of subject planning and the prepared lock plan.
+            CaseRecords.Facts facts = lockDecision(transaction, request.caseId(), plan, instructions);
+            requireDecidable(facts, manager, instructions);
+            String reason = requireDecisionInput(facts, decision);
+            Instant now = now();
+            facts = recordDecision(facts, decision, instructions, manager, reason, now);
+            var outcomes = enforce(transaction, facts, instructions, manager, reason, now);
+            if (!instructions.isEmpty()) {
+                facts = store.require(facts.caseId());
             }
+            var notified = notifiedAccounts(outcomes);
+            store.touch(facts.caseId(), now);
+            audit(transaction, "case.decide", facts.caseId(), manager);
+            return new WriteResult.Response<>(201, decisionResponse(facts, notified),
+                    new ResourceRef("case", facts.caseId()));
+        }
+
+        /**
+         * Locks the case row when the decision has no subjects; otherwise locks the subject rows
+         * before the case row. The prepared plan is re-checked so a target set that grew after
+         * prepare is retried by the shared executor instead of widening locks after the case lock.
+         */
+        private CaseRecords.Facts lockDecision(WriteTransaction transaction, long caseId, LockPlan plan,
+                                               List<CaseRecords.EnforcementInstruction> instructions) {
+            if (instructions.isEmpty()) {
+                return store.lock(transaction, caseId);
+            }
+            if (enforcement == null) {
+                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "处置执行暂不可用");
+            }
+            return acquireSubjectLocks(transaction, plan,
+                    enforcement.lockCallbacks(transaction.context(), caseId, instructions), caseId);
+        }
+
+        /** Re-checks lifecycle, ownership and targets in their original error order. */
+        private void requireDecidable(CaseRecords.Facts facts, long manager,
+                                      List<CaseRecords.EnforcementInstruction> instructions) {
             requireLifecycle(facts);
             if (!facts.claimedBy(manager)) {
                 throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
@@ -889,7 +749,11 @@ public class CaseApplication {
             if (facts.decided()) {
                 throw new BusinessError("STATE_CONFLICT", 409, "事项已决定");
             }
-            requireTradeTargets(facts, instructions);
+            CaseEnforcementInstructions.requireTradeTargets(facts, instructions);
+        }
+
+        /** Validates the decision input after the lifecycle checks and returns its reason. */
+        private String requireDecisionInput(CaseRecords.Facts facts, CaseCommands.Decision decision) {
             if (decision.decisionKind() == null || !CaseVocabulary.DECISION_KINDS.contains(decision.decisionKind())) {
                 throw new BusinessError("INPUT_INVALID", 422, "decision_kind 取值无效");
             }
@@ -897,25 +761,104 @@ public class CaseApplication {
             if (!decision.basisRefs().isEmpty() && !decisionBasisRefs(facts.caseId()).containsAll(decision.basisRefs())) {
                 throw new BusinessError("BASIS_REQUIRED", 422, "请选择本事项的问询、回复或用户补充材料");
             }
-            Instant now = now();
+            return reason;
+        }
+
+        /** Persists the decision and its action before any subject execution is attempted. */
+        private CaseRecords.Facts recordDecision(CaseRecords.Facts facts, CaseCommands.Decision decision,
+                                                 List<CaseRecords.EnforcementInstruction> instructions,
+                                                 long manager, String reason, Instant now) {
+            CaseRecords.Facts decided = facts;
             if (instructions.isEmpty()) {
-                facts = store.decide(facts.caseId(), decision.decisionKind(), reason, manager, now);
+                decided = store.decide(facts.caseId(), decision.decisionKind(), reason, manager, now);
             } else if (!store.decideIfClaimed(facts.caseId(), decision.decisionKind(), reason, manager, now)) {
                 throw new BusinessError("STATE_CONFLICT", 409, "事项已由其他管理员处理");
             }
-            store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_DECIDE,
+            store.addAction(new CaseRecords.Action(0, decided.caseId(), CaseVocabulary.ACTION_DECIDE,
                     CaseVocabulary.ACTOR_MANAGER, manager, now, null, null, null, null, null, null,
                     basisJson(decision.basisRefs())));
-            var outcomes = enforce(transaction, facts, instructions, manager, reason, now);
-            if (!instructions.isEmpty()) {
-                facts = store.require(facts.caseId());
+            return decided;
+        }
+
+        private List<CaseRecords.EnforcementOutcome> enforce(WriteTransaction transaction, CaseRecords.Facts facts,
+                                                            List<CaseRecords.EnforcementInstruction> instructions,
+                                                            long manager, String reason, Instant now) {
+            if (instructions.isEmpty()) {
+                return List.of();
             }
+            if (enforcement == null) {
+                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "处置执行暂不可用");
+            }
+            String basisRef = "case:" + facts.caseId();
+            var outcomes = enforcement.execute(transaction, transaction.context(), facts.caseId(), reason,
+                    basisRef, instructions, now);
+            var seen = new TreeSet<Long>();
+            for (var outcome : outcomes) {
+                recordOutcome(transaction, facts, outcome, manager, reason, basisRef, now);
+                for (long accountId : outcome.affectedAccountIds()) {
+                    ensureParticipantFollowUp(transaction, facts.caseId(), accountId, seen, basisRef, now);
+                }
+            }
+            return outcomes;
+        }
+
+        /** Persists one subject outcome and its notification before participant follow-up. */
+        private void recordOutcome(WriteTransaction transaction, CaseRecords.Facts facts,
+                                   CaseRecords.EnforcementOutcome outcome, long manager, String reason,
+                                   String basisRef, Instant now) {
+            store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
+                    outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
+                    outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
+                    outcome.currentState(), outcome.affectedAccountIds(), null, null, now, null));
+            notificationFor(transaction, facts, outcome, reason, now);
+        }
+
+        /** Grants one appeal window and thread notice per affected account across all outcomes. */
+        private void ensureParticipantFollowUp(WriteTransaction transaction, long caseId, long accountId,
+                                               Set<Long> seen, String basisRef, Instant now) {
+            if (!seen.add(accountId)) {
+                return;
+            }
+            if (store.appealEligibility(caseId, accountId).isEmpty()) {
+                store.addAppealEligibility(caseId, accountId,
+                        now.plusSeconds(settings.getAppealWindowSeconds()), basisRef, now);
+            }
+            threadWithNotice(transaction, caseId, accountId);
+        }
+
+        private void notificationFor(WriteTransaction transaction, CaseRecords.Facts facts,
+                                     CaseRecords.EnforcementOutcome outcome, String reason, Instant now) {
+            if (outcome.affectedAccountIds().isEmpty()) {
+                return;
+            }
+            // The trade-owned restore publishes exactly one trade.restored notice per participant.
+            // The case entry must not add a second notice for the same restoration.
+            if (tradeRestored(outcome)) {
+                return;
+            }
+            String event = enforcementEvent(outcome.action());
+            notifications.create(transaction, event,
+                    "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":"
+                            + notificationSuffix(outcome.action()),
+                    new ResourceRef("case", facts.caseId()), Set.copyOf(outcome.affectedAccountIds()),
+                    Map.of("case_id", Long.toString(facts.caseId()), "reason", reason), now);
+        }
+
+        private void threadWithNotice(WriteTransaction transaction, long caseId, long accountId) {
+            threads.ensure(transaction, caseId, accountId);
+            threads.append(transaction, caseId, accountId, CaseVocabulary.KIND_SYSTEM_NOTICE,
+                    CaseVocabulary.ACTOR_SYSTEM, 0, "事项已处置，可在本线程查看处理结果并提交申辩。");
+        }
+
+        private Set<Long> notifiedAccounts(List<CaseRecords.EnforcementOutcome> outcomes) {
             var notified = new TreeSet<Long>();
             for (var outcome : outcomes) {
                 notified.addAll(outcome.affectedAccountIds());
             }
-            store.touch(facts.caseId(), now);
-            audit(transaction, "case.decide", facts.caseId(), manager);
+            return notified;
+        }
+
+        private JsonNode decisionResponse(CaseRecords.Facts facts, Set<Long> notified) {
             var body = json.createObjectNode();
             body.put("case_id", Long.toString(facts.caseId()));
             body.put("decision_kind", facts.decisionKind());
@@ -944,64 +887,7 @@ public class CaseApplication {
             }
             var notifiedArray = body.putArray("notified_account_ids");
             notified.forEach(id -> notifiedArray.add(Long.toString(id)));
-            return new WriteResult.Response<>(201, body, new ResourceRef("case", facts.caseId()));
-        }
-
-        private List<CaseRecords.EnforcementOutcome> enforce(WriteTransaction transaction, CaseRecords.Facts facts,
-                                                            List<CaseRecords.EnforcementInstruction> instructions,
-                                                            long manager, String reason, Instant now) {
-            if (instructions.isEmpty()) {
-                return List.of();
-            }
-            if (enforcement == null) {
-                throw new BusinessError("DEPENDENCY_UNAVAILABLE", 503, "处置执行暂不可用");
-            }
-            String basisRef = "case:" + facts.caseId();
-            var outcomes = enforcement.execute(transaction, transaction.context(), facts.caseId(), reason,
-                    basisRef, instructions, now);
-            var seen = new TreeSet<Long>();
-            for (var outcome : outcomes) {
-                store.addEnforcement(new CaseRecords.Enforcement(outcome.enforcementId(), facts.caseId(),
-                        outcome.action(), outcome.targetType(), outcome.targetId(), basisRef, manager, now,
-                        outcome.resultType(), outcome.resultId(), outcome.resultStatus(), outcome.previousState(),
-                        outcome.currentState(), outcome.affectedAccountIds(), null, null, now, null));
-                notificationFor(transaction, facts, outcome, reason, now);
-                for (long accountId : outcome.affectedAccountIds()) {
-                    if (!seen.add(accountId)) {
-                        continue;
-                    }
-                    if (store.appealEligibility(facts.caseId(), accountId).isEmpty()) {
-                        store.addAppealEligibility(facts.caseId(), accountId,
-                                now.plusSeconds(settings.getAppealWindowSeconds()), basisRef, now);
-                    }
-                    threadWithNotice(transaction, facts.caseId(), accountId);
-                }
-            }
-            return outcomes;
-        }
-
-        private void notificationFor(WriteTransaction transaction, CaseRecords.Facts facts,
-                                     CaseRecords.EnforcementOutcome outcome, String reason, Instant now) {
-            if (outcome.affectedAccountIds().isEmpty()) {
-                return;
-            }
-            // The trade-owned restore publishes exactly one trade.restored notice per participant.
-            // The case entry must not add a second notice for the same restoration.
-            if (tradeRestored(outcome)) {
-                return;
-            }
-            String event = enforcementEvent(outcome.action());
-            notifications.create(transaction, event,
-                    "case:" + facts.caseId() + ":" + outcome.enforcementId() + ":"
-                            + notificationSuffix(outcome.action()),
-                    new ResourceRef("case", facts.caseId()), Set.copyOf(outcome.affectedAccountIds()),
-                    Map.of("case_id", Long.toString(facts.caseId()), "reason", reason), now);
-        }
-
-        private void threadWithNotice(WriteTransaction transaction, long caseId, long accountId) {
-            threads.ensure(transaction, caseId, accountId);
-            threads.append(transaction, caseId, accountId, CaseVocabulary.KIND_SYSTEM_NOTICE,
-                    CaseVocabulary.ACTOR_SYSTEM, 0, "事项已处置，可在本线程查看处理结果并提交申辩。");
+            return body;
         }
     }
 
@@ -1104,75 +990,6 @@ public class CaseApplication {
         }
     }
 
-    // ------------------------------------------------------------------ publication
-
-    private final class PublishUseCase implements WriteExecutor.UseCase<PublishRequest, PublishRequest> {
-        @Override
-        public JsonNode digestInput(PublishRequest request) {
-            return digest(request.caseId(), request.publish());
-        }
-
-        @Override
-        public LockPlan prepare(ExecutionContext context, PublishRequest request) {
-            return new LockPlan(Map.of(), Set.of(CaseLifecycleStore.lockKey(request.caseId())));
-        }
-
-        @Override
-        public PublishRequest qualify(ExecutionContext context, PublishRequest request, LockPlan plan) {
-            managers.requireManagerForWrite(context);
-            return request;
-        }
-
-        @Override
-        public void requireReplayAccess(ExecutionContext context, PublishRequest qualification,
-                                       ResourceRef resource) {
-            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
-                throw notVisible();
-            }
-            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
-            if (!facts.claimedBy(actor(context))) {
-                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
-            }
-        }
-
-        @Override
-        public WriteResult.Response<?> write(WriteTransaction transaction, PublishRequest request,
-                                             PublishRequest qualification, LockPlan plan) {
-            long manager = actor(transaction.context());
-            var facts = store.lock(transaction, request.caseId());
-            requireLifecycle(facts);
-            if (!facts.claimedBy(manager)) {
-                throw new BusinessError("NOT_CASE_MANAGER", 404, "事项不可见");
-            }
-            if (!facts.archived()) {
-                throw new BusinessError("STATE_CONFLICT", 409, "事项尚未结案");
-            }
-            if (facts.publicResultAt() != null) {
-                throw new BusinessError("STATE_CONFLICT", 409, "结果已公开");
-            }
-            if (!CaseVocabulary.REPORT.equals(facts.caseType())) {
-                throw new BusinessError("STATE_CONFLICT", 409, "仅举报事项可公开结果");
-            }
-            String summary = requiredText(request.publish().summary(), settings.getMaxReasonLength(), "公开结论");
-            String reason = requiredText(request.publish().reason(), settings.getMaxNoteLength(), "公开原因");
-            Instant now = now();
-            facts = store.publish(facts.caseId(), summary, reason, manager, now);
-            store.addAction(new CaseRecords.Action(0, facts.caseId(), CaseVocabulary.ACTION_PUBLISH_RESULT,
-                    CaseVocabulary.ACTOR_MANAGER, manager, now, null, null, null, null, null, null, null));
-            if (facts.reporterAccountId() != null) {
-                notifications.create(transaction, CaseVocabulary.EVENT_RESULT_PUBLISHED,
-                        "case:" + facts.caseId() + ":result_published",
-                        new ResourceRef("case", facts.caseId()), Set.of(facts.reporterAccountId()),
-                        Map.of("case_id", Long.toString(facts.caseId())), now);
-            }
-            audit(transaction, "case.publish_result", facts.caseId(), manager);
-            var body = json.createObjectNode();
-            body.put("case_id", Long.toString(facts.caseId()));
-            body.put("public_result_at", facts.publicResultAt().toString());
-            return new WriteResult.Response<>(200, body, new ResourceRef("case", facts.caseId()));
-        }
-    }
-
     // ------------------------------------------------------------------ lift
 
     private final class LiftUseCase implements WriteExecutor.UseCase<LiftRequest, LiftRequest> {
@@ -1235,7 +1052,7 @@ public class CaseApplication {
             }
             String reason = requiredText(request.reason(), settings.getMaxNoteLength(), "解除原因");
             var recorded = requireRecorded(facts.caseId(), request.enforcementId());
-            requireRecordedTarget(facts, recorded);
+            CaseEnforcementInstructions.requireRecordedTarget(facts, recorded);
             if (store.lift(facts.caseId(), request.enforcementId()).isPresent()
                     || !"applied".equals(recorded.resultStatus())) {
                 throw enforcementNotActive(recorded);
@@ -1283,94 +1100,7 @@ public class CaseApplication {
         }
     }
 
-    // ------------------------------------------------------------------ platform record evidence
-
-    private final class EvidenceReferenceUseCase
-            implements WriteExecutor.UseCase<EvidenceReferenceRequest, EvidenceReferenceRequest> {
-        @Override
-        public JsonNode digestInput(EvidenceReferenceRequest request) {
-            return digest(request.caseId(), request.reference());
-        }
-
-        @Override
-        public LockPlan prepare(ExecutionContext context, EvidenceReferenceRequest request) {
-            return new LockPlan(Map.of(), Set.of(CaseLifecycleStore.lockKey(request.caseId())));
-        }
-
-        @Override
-        public EvidenceReferenceRequest qualify(ExecutionContext context, EvidenceReferenceRequest request,
-                                                LockPlan plan) {
-            requireEvidenceManager(context);
-            return request;
-        }
-
-        @Override
-        public void requireReplayAccess(ExecutionContext context, EvidenceReferenceRequest qualification,
-                                        ResourceRef resource) {
-            if (!CaseVocabulary.SOURCE_CASE.equals(resource.type())) {
-                throw notVisible();
-            }
-            var facts = store.find(resource.id()).orElseThrow(CaseApplication::notVisible);
-            if (!facts.claimedBy(actor(context))) {
-                throw notVisible();
-            }
-        }
-
-        @Override
-        public WriteResult.Response<?> write(WriteTransaction transaction, EvidenceReferenceRequest request,
-                                             EvidenceReferenceRequest qualification, LockPlan plan) {
-            long manager = actor(transaction.context());
-            var facts = store.lock(transaction, request.caseId());
-            requireLifecycle(facts);
-            if (!facts.claimedBy(manager)) {
-                throw notVisible();
-            }
-            if (facts.archived()) {
-                throw new BusinessError("CASE_CLOSED", 409, "事项已结案");
-            }
-            var reference = request.reference();
-            targets.requireReportedMessage(facts, reference.conversationKind(), reference.conversationId(),
-                    reference.messageId());
-            String scope = CaseRecords.MessageScope.format(reference.conversationKind(),
-                    reference.conversationId());
-            var existing = store.platformEvidence(facts.caseId(), CaseVocabulary.SOURCE_MESSAGE,
-                    reference.messageId(), scope);
-            if (existing.isPresent()) {
-                return new WriteResult.Response<>(200, evidenceReference(facts.caseId(),
-                        existing.get().evidenceId(), reference.messageId(), true),
-                        new ResourceRef("case", facts.caseId()));
-            }
-            long evidenceId = store.addPlatformEvidence(facts.caseId(), CaseVocabulary.SOURCE_MESSAGE,
-                    reference.messageId(), scope, manager, now());
-            audit(transaction, "case.evidence.reference", facts.caseId(), manager);
-            return new WriteResult.Response<>(201, evidenceReference(facts.caseId(), evidenceId,
-                    reference.messageId(), false), new ResourceRef("case", facts.caseId()));
-        }
-    }
-
     // ------------------------------------------------------------------ helpers
-
-    private JsonNode evidenceReference(long caseId, long evidenceId, long messageId, boolean reused) {
-        var body = json.createObjectNode();
-        body.put("evidence_id", Long.toString(evidenceId));
-        body.put("case_id", Long.toString(caseId));
-        body.put("evidence_kind", CaseVocabulary.EVIDENCE_PLATFORM_RECORD);
-        var source = body.putObject("source_ref");
-        source.put("resource_type", CaseVocabulary.SOURCE_MESSAGE);
-        source.put("resource_id", Long.toString(messageId));
-        body.put("reused", reused);
-        return body;
-    }
-
-    /** Role failures stay hidden as 404 because this route only exists for the fixed claimant. */
-    private void requireEvidenceManager(ExecutionContext context) {
-        actor(context);
-        try {
-            managers.requireManagerForWrite(context);
-        } catch (BusinessError denied) {
-            throw notVisible();
-        }
-    }
 
     /**
      * Acquires the actual subject rows and the already planned case row once, in the public key
@@ -1392,36 +1122,8 @@ public class CaseApplication {
         return holder.get();
     }
 
-    /** A subject execution may only target the trade recorded as this case's target. */
-    private static void requireTradeTargets(CaseRecords.Facts facts,
-                                            List<CaseRecords.EnforcementInstruction> instructions) {
-        for (var item : instructions) {
-            if (!TRADE_ACTIONS.contains(item.action())) {
-                continue;
-            }
-            if (!"trade".equals(facts.targetType()) || facts.targetId() == null
-                    || facts.targetId() != item.targetId()) {
-                throw new BusinessError("TARGET_STATE_CONFLICT", 409, "事项目标与交易不一致");
-            }
-        }
-    }
-
-    /** A recorded trade enforcement must still point at this case's current target trade. */
-    private static void requireRecordedTarget(CaseRecords.Facts facts, CaseRecords.Enforcement recorded) {
-        if (!"trade".equals(recorded.targetType())) {
-            return;
-        }
-        if (!"trade".equals(facts.targetType()) || facts.targetId() == null
-                || facts.targetId() != recorded.targetId()) {
-            throw new BusinessError("TARGET_STATE_CONFLICT", 409, "事项与执行记录的目标不一致");
-        }
-    }
-
     private JsonNode digest(long caseId, Object input) {
-        var node = json.createObjectNode();
-        node.put("case_id", caseId);
-        node.set("input", json.valueToTree(input));
-        return node;
+        return CaseWriteSupport.digest(json, caseId, input);
     }
 
     private static String enforcementEvent(String action) {
@@ -1455,17 +1157,15 @@ public class CaseApplication {
         var recorded = store.enforcement(caseId, enforcementId).orElse(null);
         // The store lookup is already scoped by case, but the selected record must still prove
         // its case and appellant linkage before it can be reversed.
-        boolean sameCase = recorded != null && recorded.caseId() == caseId;
-        boolean affected = sameCase && appellant != null
-                && recorded.affectedAccountIds().contains(appellant);
-        if (!sameCase || (appellant != null && !affected)) {
+        if (recorded == null || recorded.caseId() != caseId
+                || (appellant != null && !recorded.affectedAccountIds().contains(appellant))) {
             if (requireEligible) {
                 throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "执行记录不存在");
             }
             return null;
         }
         if (requireEligible) {
-            if (!affected) {
+            if (appellant == null) {
                 throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "执行记录不存在");
             }
             if (!"applied".equals(recorded.resultStatus())
@@ -1516,24 +1216,6 @@ public class CaseApplication {
                 && outcome.currentState().startsWith("status=in_progress");
     }
 
-    /**
-     * A replacement must stay on the original target and name a new concrete action. This keeps
-     * an adjustment from becoming an arbitrary account/product/trade selection or a hidden lift.
-     */
-    private List<CaseRecords.EnforcementInstruction> replacementInstructions(CaseCommands.Message message,
-                                                                              CaseRecords.Enforcement recorded) {
-        var replacements = instructions(message.replacementEnforcements());
-        for (var item : replacements) {
-            if (!recorded.targetType().equals(item.targetType()) || recorded.targetId() != item.targetId()) {
-                throw new BusinessError("INPUT_INVALID", 422, "调整处置须沿用原处置目标");
-            }
-            if (LIFT_ACTIONS.contains(item.action())) {
-                throw new BusinessError("INPUT_INVALID", 422, "调整处置须给出新的处置动作");
-            }
-        }
-        return replacements;
-    }
-
     private static String replacementBasis(long caseId, Long appealActionId) {
         return "case:" + caseId + ":appeal:" + appealActionId + ":replacement";
     }
@@ -1548,7 +1230,7 @@ public class CaseApplication {
         }
         return store.action(caseId, appealActionId)
                 .filter(action -> CaseVocabulary.ACTION_APPEAL.equals(action.actionKind()))
-                .map(CaseRecords.Action::relatedAccountId)
+                .map(result -> result.relatedAccountId())
                 .orElse(null);
     }
 
@@ -1608,42 +1290,7 @@ public class CaseApplication {
     }
 
     private static long actor(ExecutionContext context) {
-        if (context.actorKind() != ExecutionContext.ActorKind.ACCOUNT) {
-            throw new BusinessError("AUTHENTICATION_REQUIRED", 401, "需要登录账户");
-        }
-        return Long.parseLong(context.actorId());
-    }
-
-    private List<CaseRecords.EnforcementInstruction> instructions(CaseCommands.Decision decision) {
-        return instructions(decision.enforcements());
-    }
-
-    private List<CaseRecords.EnforcementInstruction> instructions(List<CaseCommands.Enforcement> enforcements) {
-        var list = new ArrayList<CaseRecords.EnforcementInstruction>();
-        for (var item : enforcements) {
-            if (item.action() == null || !ENFORCEMENT_ACTIONS.contains(item.action())) {
-                throw new BusinessError("INPUT_INVALID", 422, "执行动作无效");
-            }
-            if (item.targetType() == null || item.targetType().isBlank() || item.targetId() <= 0) {
-                throw new BusinessError("TARGET_INVALID", 422, "执行目标无效");
-            }
-            if (TRADE_ACTIONS.contains(item.action()) && !"trade".equals(item.targetType())) {
-                throw new BusinessError("TARGET_INVALID", 422, "交易动作的目标无效");
-            }
-            String expected = item.expectedResult();
-            if ("adjust_trade_status".equals(item.action())) {
-                if (expected == null || expected.isBlank()) {
-                    throw new BusinessError("INPUT_INVALID", 422, "调整交易状态须给出目标状态");
-                }
-                expected = expected.trim().toLowerCase(Locale.ROOT);
-                if (!ADJUST_TRADE_TARGETS.contains(expected)) {
-                    throw new BusinessError("INPUT_INVALID", 422, "调整交易状态的目标无效");
-                }
-            }
-            list.add(new CaseRecords.EnforcementInstruction(UUID.randomUUID().toString(), item.action(),
-                    item.targetType(), item.targetId(), expected));
-        }
-        return list;
+        return CaseWriteSupport.actor(context);
     }
 
     private Long attachEvidence(WriteTransaction transaction, long caseId, long reporter, List<Long> fileIds) {
@@ -1698,10 +1345,7 @@ public class CaseApplication {
     }
 
     private JsonNode thread(long conversationId) {
-        var body = json.createObjectNode();
-        body.put("conversation_kind", "case");
-        body.put("conversation_id", Long.toString(conversationId));
-        return body;
+        return CaseWriteSupport.thread(json, conversationId);
     }
 
     private JsonNode closed(CaseRecords.Facts facts) {
@@ -1714,9 +1358,9 @@ public class CaseApplication {
 
     private Set<String> decisionBasisRefs(long caseId) {
         var allowed = new java.util.HashSet<String>();
-        store.actions(caseId).stream().filter(CaseRecords.Action::decisionBasis)
+        store.actions(caseId).stream().filter(component -> component.decisionBasis())
                 .forEach(action -> allowed.add("action:" + action.actionId()));
-        store.evidence(caseId).stream().filter(CaseRecords.Evidence::decisionBasis)
+        store.evidence(caseId).stream().filter(member -> member.decisionBasis())
                 .forEach(evidence -> allowed.add("evidence:" + evidence.evidenceId()));
         return allowed;
     }
@@ -1728,31 +1372,19 @@ public class CaseApplication {
     }
 
     private void audit(WriteTransaction transaction, String action, long caseId, long actor) {
-        var facts = json.createObjectNode();
-        facts.put("case_id", caseId);
-        facts.put("actor", actor);
-        transaction.audit(action, new ResourceRef("case", caseId), new ResourceRef("case", caseId), facts);
+        CaseWriteSupport.audit(json, transaction, action, caseId, actor);
     }
 
     private static void requireLifecycle(CaseRecords.Facts facts) {
-        if (!facts.lifecycle()) {
-            throw notVisible();
-        }
+        CaseWriteSupport.requireLifecycle(facts);
     }
 
     private Instant now() {
-        return clock.instant().truncatedTo(ChronoUnit.MICROS);
+        return CaseWriteSupport.now(clock);
     }
 
     private String requiredText(String value, int maxLength, String field) {
-        if (value == null || value.isBlank()) {
-            throw new BusinessError("INPUT_INVALID", 422, field + "不能为空");
-        }
-        String trimmed = value.trim();
-        if (trimmed.length() > maxLength) {
-            throw new BusinessError("INPUT_INVALID", 422, field + "超出长度限制");
-        }
-        return trimmed;
+        return CaseWriteSupport.requiredText(value, maxLength, field);
     }
 
     private String optionalText(String value, int maxLength, String field) {
@@ -1767,7 +1399,7 @@ public class CaseApplication {
     }
 
     private static BusinessError notVisible() {
-        return new BusinessError("RESOURCE_NOT_VISIBLE", 404, "事项不可见");
+        return CaseWriteSupport.notVisible();
     }
 
     private static BusinessError conflict() {

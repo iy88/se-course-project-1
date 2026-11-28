@@ -147,7 +147,7 @@ class EnforcementIT {
     static void stopApplication() {
         try {
             if (app != null) {
-                try (var context = app) {
+                try (var _ = app) {
                     cleanupInfrastructure();
                 }
             }
@@ -793,7 +793,7 @@ class EnforcementIT {
                     || decision.decisionKind().isBlank()) {
                 throw new BusinessError("CASE_NOT_DECIDED", 409, "case not decided");
             }
-            if (!command.basisRefs().equals(access.basis().stream().map(ResourceRef::id).toList())) {
+            if (!command.basisRefs().equals(access.basis().stream().map(element -> element.id()).toList())) {
                 throw new BusinessError("EVIDENCE_OUT_OF_SCOPE", 422, "basis is outside this case");
             }
         }

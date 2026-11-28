@@ -83,7 +83,7 @@ class ManagementTodoReadModel {
                 .query((row, index) -> Map.entry(row.getString("case_type"), row.getLong(2)))
                 .list().forEach(row -> counts.put(row.getKey(), row.getValue()));
         boolean all = TodoKinds.ALL_KINDS.equals(query.kind());
-        long total = all ? counts.values().stream().mapToLong(Long::longValue).sum()
+        long total = all ? counts.values().stream().mapToLong(element -> element.longValue()).sum()
                 : counts.getOrDefault(query.kind(), 0L);
         String order = switch (query.ownership()) {
             case UNCLAIMED, MINE -> "updated_at";

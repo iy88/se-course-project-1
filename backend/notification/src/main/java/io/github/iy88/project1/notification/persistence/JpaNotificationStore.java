@@ -30,7 +30,7 @@ class JpaNotificationStore implements NotificationStore {
     @Override
     public Optional<Stored> find(long recipientAccountId, String intentKey) {
         return repository.findByRecipientAccountIdAndIntentKey(recipientAccountId, intentKey)
-                .map(NotificationRecord::snapshot);
+                .map(entry -> entry.snapshot());
     }
 
     @Override
@@ -46,13 +46,13 @@ class JpaNotificationStore implements NotificationStore {
         var locked = new AtomicReference<Optional<NotificationRecord>>(Optional.empty());
         transaction.lock(new LockPlan.Key(LockPlan.Domain.NOTIFICATION, List.of(notificationId)),
                 () -> locked.set(repository.lockByIdAndRecipient(notificationId, recipientAccountId)));
-        return locked.get().map(NotificationRecord::snapshot);
+        return locked.get().map(entry -> entry.snapshot());
     }
 
     @Override
     public Optional<Stored> findForRecipient(long notificationId, long recipientAccountId) {
         return repository.findByIdAndRecipientAccountId(notificationId, recipientAccountId)
-                .map(NotificationRecord::snapshot);
+                .map(entry -> entry.snapshot());
     }
 
     @Override
@@ -67,7 +67,7 @@ class JpaNotificationStore implements NotificationStore {
                              int page, int pageSize, boolean management) {
         var pageable = PageRequest.of(page - 1, pageSize);
         return repository.pageFor(recipientAccountId, readState(filter), eventType, management, pageable).stream()
-                .map(NotificationRecord::snapshot)
+                .map(entry -> entry.snapshot())
                 .toList();
     }
 

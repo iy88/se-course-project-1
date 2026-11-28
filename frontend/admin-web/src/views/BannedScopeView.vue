@@ -18,7 +18,7 @@ import { formatDateTime } from "../app/format";
 import { IdempotencyKeys } from "../app/keys";
 import { bannedGroupLabels, bannedGroupOrder } from "../app/labels";
 import { problemMessage } from "../app/problems";
-import { notify } from "../app/toast";
+import { useToastStore } from "../app/toast";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
@@ -35,6 +35,8 @@ interface EditRow {
   savedOrder: number;
   saving: boolean;
 }
+
+const { notify } = useToastStore();
 
 const rows = ref<EditRow[]>([]);
 const loading = ref(false);

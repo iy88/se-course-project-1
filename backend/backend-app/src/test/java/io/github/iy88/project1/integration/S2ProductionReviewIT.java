@@ -346,7 +346,7 @@ class S2ProductionReviewIT {
         String range = path + "?time_scope=range&start_at=2026-10-03T00:00:00Z&end_at=2026-10-04T00:00:00Z";
         var before = get(manager, range, 200);
         assertThat(before.path("completed_by_day").size()).isEqualTo(1);
-        assertThat(before.at("/completed_by_day/0/day").asText()).isEqualTo("2026-10-03");
+        assertThat(before.at("/completed_by_day/0/day").asString()).isEqualTo("2026-10-03");
         long beforeCompletedOnDay = before.at("/completed_by_day/0/completed").asLong();
         long buyerId = buyer.account().id();
         long sellerId = manager.account().id();
@@ -371,14 +371,14 @@ class S2ProductionReviewIT {
             assertThat(selected.path("completed_in_selection").asLong())
                     .isEqualTo(before.path("completed_in_selection").asLong() + 1);
             assertThat(selected.path("completed_by_day").size()).isEqualTo(1);
-            assertThat(selected.at("/completed_by_day/0/day").asText()).isEqualTo("2026-10-03");
+            assertThat(selected.at("/completed_by_day/0/day").asString()).isEqualTo("2026-10-03");
             assertThat(selected.at("/completed_by_day/0/completed").asLong())
                     .isEqualTo(beforeCompletedOnDay + 1);
             var twoDays = get(manager, path
                     + "?time_scope=range&start_at=2026-10-03T00:00:00Z&end_at=2026-10-05T00:00:00Z", 200);
             assertThat(twoDays.path("completed_by_day").size()).isEqualTo(2);
-            assertThat(twoDays.at("/completed_by_day/0/day").asText()).isEqualTo("2026-10-03");
-            assertThat(twoDays.at("/completed_by_day/1/day").asText()).isEqualTo("2026-10-04");
+            assertThat(twoDays.at("/completed_by_day/0/day").asString()).isEqualTo("2026-10-03");
+            assertThat(twoDays.at("/completed_by_day/1/day").asString()).isEqualTo("2026-10-04");
             long dailyTotal = 0;
             for (var day : twoDays.path("completed_by_day")) {
                 dailyTotal += day.path("completed").asLong();
@@ -506,8 +506,8 @@ class S2ProductionReviewIT {
     }
 
     private static String text(JsonNode object, String property) {
-        assertThat(object.path(property).asText()).as("field %s in %s", property, object).isNotBlank();
-        return object.path(property).asText();
+        assertThat(object.path(property).asString()).as("field %s in %s", property, object).isNotBlank();
+        return object.path(property).asString();
     }
 
     private static String version(JsonNode product) {

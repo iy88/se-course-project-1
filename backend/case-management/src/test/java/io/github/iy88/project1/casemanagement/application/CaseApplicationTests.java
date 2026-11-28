@@ -588,8 +588,8 @@ class CaseApplicationTests {
         };
         var harness = harness(decided(), reversing);
         when(harness.store.enforcement(CASE_ID, "enf-1")).thenReturn(Optional.of(recordedEnforcement()));
-        when(harness.store.lift(CASE_ID, "enf-1")).thenReturn(Optional.empty(),
-                Optional.of(new CaseRecords.Lift(NOW, MANAGER)));
+        when(harness.store.lift(CASE_ID, "enf-1")).thenReturn(Optional.empty())
+                .thenReturn(Optional.of(new CaseRecords.Lift(NOW, MANAGER)));
 
         var result = harness.application.lift(context(MANAGER), "lift-1", CASE_ID, "enf-1", "解除封禁");
         assertThat(result.status()).isEqualTo(200);
@@ -764,7 +764,7 @@ class CaseApplicationTests {
                 transaction, facts);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     private static void stubRun(WriteExecutor writes, WriteTransaction transaction) {
         when(writes.run(any(), anyString(), anyString(), any(), any())).thenAnswer(invocation -> {
             ExecutionContext execution = invocation.getArgument(0);

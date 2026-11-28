@@ -127,9 +127,9 @@ class ProductServiceLifecycleTests {
             return history;
         });
         when(reviewCases.open(any())).thenReturn(CASE);
-        ObjectProvider<ProductReviewCaseLifecycle> reviewProvider = mock(ObjectProvider.class);
+        ObjectProvider<ProductReviewCaseLifecycle> reviewProvider = mock();
         when(reviewProvider.getIfAvailable()).thenReturn(reviewCases);
-        ObjectProvider<ProductTradeFreeze> freezeProvider = mock(ObjectProvider.class);
+        ObjectProvider<ProductTradeFreeze> freezeProvider = mock();
         when(freezeProvider.getIfAvailable()).thenReturn(freeze);
 
         PlatformTransactionManager manager = mock(PlatformTransactionManager.class);

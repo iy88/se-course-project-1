@@ -258,8 +258,4 @@ class BusinessRealtimeAccessTests {
         return new UserEvents.Event(UUID.randomUUID(), 1L, type, version, source, payload, sourceSequence,
                 null, OCCURRED_AT);
     }
-
-    private static UserEvents.Event event(String type, int version, ResourceRef source, ResourceRef payload) {
-        return event(type, version, source, payload, null);
-    }
 }

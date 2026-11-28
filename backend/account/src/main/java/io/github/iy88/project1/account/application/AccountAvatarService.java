@@ -96,7 +96,7 @@ public class AccountAvatarService {
     private void releaseCurrent(UploadRegistration.Target target) {
         var current = references.current(target, "avatar");
         if (!current.isEmpty()) {
-            references.release(target, current.stream().map(FileReferences.Reference::referenceId).toList(),
+            references.release(target, current.stream().map(entry -> entry.referenceId()).toList(),
                     new FileReferences.RetentionBasis("avatar_replaced", Set.of("s2-v1"), null, Set.of()));
         }
     }

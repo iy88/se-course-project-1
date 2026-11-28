@@ -1,7 +1,9 @@
 package io.github.iy88.project1.api.product;
 
+import static io.github.iy88.project1.api.product.ProductCorrectionNotificationSource.EVENT_TYPE;
+import static io.github.iy88.project1.api.product.ProductCorrectionNotificationSource.SOURCE_TYPE;
+
 import io.github.iy88.project1.core.EventIntent;
-import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.messaging.UserEvents;
 import io.github.iy88.project1.notification.application.NotificationApplication;
@@ -13,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.annotation.Bean;
@@ -32,12 +33,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 @Configuration(proxyBeanMethods = false)
 @Profile("infrastructure & !dependency-probe & !file-probe")
 class ProductCorrectionNotificationConfiguration {
-    static final String SOURCE_TYPE = "product_category_correction";
-    static final String EVENT_TYPE = "product.category_corrected";
     static final String TEMPLATE_KEY = "product.category_corrected";
     static final String TEMPLATE_VERSION = "1";
-    static final String SUMMARY = "商品分类已纠正";
-    static final String BODY = "管理员根据事项纠正了该商品的分类。你可以前往商品详情查看当前分类。";
 
     @Bean
     ProductCorrectionNotices productCorrectionNotices(NotificationApplication notifications, UserEvents events) {
@@ -64,21 +61,6 @@ class ProductCorrectionNotificationConfiguration {
     /** Projects the notice onto the product, and hides it from any reader but the seller. */
     @Bean
     NotificationSourcePort productCorrectionNotificationSource(JdbcClient jdbc) {
-        return (context, facts) -> {
-            if (!SOURCE_TYPE.equals(facts.source().type()) || !EVENT_TYPE.equals(facts.eventType())
-                    || context.actorKind() != ExecutionContext.ActorKind.ACCOUNT) {
-                return Optional.empty();
-            }
-            long accountId = Long.parseLong(context.actorId());
-            return jdbc.sql("""
-                            SELECT p.product_id, p.title
-                            FROM product_edit_history e JOIN product p ON p.product_id = e.product_id
-                            WHERE e.edit_id = ? AND p.seller_account_id = ? AND p.deleted_at IS NULL
-                            """)
-                    .param(facts.source().id()).param(accountId)
-                    .query((row, index) -> new NotificationSourcePort.NotificationSourceView(SUMMARY,
-                            new ResourceRef("product", row.getLong("product_id")), row.getString("title"), BODY))
-                    .optional();
-        };
+        return new ProductCorrectionNotificationSource(jdbc);
     }
 }

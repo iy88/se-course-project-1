@@ -166,7 +166,7 @@ class ProductInteractionIT {
         assertThat(thread.page()).isEqualTo(2);
         assertThat(thread.items()).singleElement().satisfies(root -> {
             assertThat(root.id()).isEqualTo(comment.id());
-            assertThat(root.replies()).extracting(ProductInteractions.CommentView::id).containsExactly(reply.id());
+            assertThat(root.replies()).extracting(entry -> entry.id()).containsExactly(reply.id());
         });
 
         interactions.deleteComment(seller, publicProduct, Long.parseLong(reply.id()));

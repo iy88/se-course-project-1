@@ -11,7 +11,9 @@ import { ApiError } from "../../api/errors";
 import { addFavorite, getFavoriteStatus, removeFavorite } from "../../api/products";
 import { IdempotencyKeys } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
+
+const { notify } = useToastStore();
 
 const props = defineProps<{ productId: string }>();
 

@@ -266,7 +266,7 @@ public final class EnforcementApplication implements WriteExecutor.UseCase<Enfor
     }
 
     private SubjectPlan evidenceLocks(EnforcementCommand command, CaseAccess access) {
-        var authorized = access.evidence().stream().map(CaseEvidence::fileId).collect(Collectors.toSet());
+        var authorized = access.evidence().stream().map(element -> element.fileId()).collect(Collectors.toSet());
         var plan = SubjectPlan.empty();
         for (long fileId : command.evidenceFileIds()) {
             if (!authorized.contains(fileId)) {
@@ -294,7 +294,7 @@ public final class EnforcementApplication implements WriteExecutor.UseCase<Enfor
             return List.of();
         }
         Map<Long, CaseEvidence> authorized = access.evidence().stream()
-                .collect(Collectors.toMap(CaseEvidence::fileId, Function.identity(), (first, second) -> first));
+                .collect(Collectors.toMap(element -> element.fileId(), Function.identity(), (first, second) -> first));
         var target = new UploadRegistration.Target("case", command.caseId());
         var references = new ArrayList<FileReferences.Reference>();
         for (long fileId : command.evidenceFileIds()) {

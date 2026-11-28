@@ -142,7 +142,7 @@ class ProductReviewIT {
     static void stopApplication() {
         try {
             if (app != null) {
-                try (var context = app) {
+                try (var _ = app) {
                     cleanupCases();
                 }
             }
@@ -319,9 +319,8 @@ class ProductReviewIT {
         port.failNotification(auditId);
         String key = "decide-rollback";
         var failure = org.assertj.core.api.Assertions.catchThrowableOfType(
-                () -> decide(MANAGER_1, MANAGER_1_SESSION, auditId, ReviewAction.APPROVE, null,
-                        ReviewAction.APPROVE, "new category accepted", key),
-                BusinessError.class);
+                BusinessError.class, () -> decide(MANAGER_1, MANAGER_1_SESSION, auditId, ReviewAction.APPROVE, null,
+                        ReviewAction.APPROVE, "new category accepted", key));
         assertThat(failure).isNotNull();
         assertThat(failure.status()).isEqualTo(503);
         assertThat(failure.operationId()).isNotNull();

@@ -94,7 +94,7 @@ public class ProductInteractions {
         if (anchorId != null) {
             var anchor = store.comment(anchorId).filter(comment -> comment.productId() == productId);
             if (scope != ProductInteractionStore.Scope.CASE) {
-                anchor = anchor.filter(ProductComment::published);
+                anchor = anchor.filter(item -> item.published());
             }
             var thread = anchor.flatMap(comment -> comment.topLevel() ? Optional.of(comment)
                     : store.comment(comment.parentCommentId()));
@@ -110,9 +110,9 @@ public class ProductInteractions {
         long offset = (long) (paging[0] - 1) * paging[1];
         List<ProductComment> topLevel = store.topLevelComments(productId, scope, viewerId, paging[1], offset);
         long total = store.countTopLevelComments(productId, scope, viewerId);
-        List<Long> parentIds = topLevel.stream().map(ProductComment::commentId).toList();
+        List<Long> parentIds = topLevel.stream().map(source -> source.commentId()).toList();
         Map<Long, List<ProductComment>> replies = store.replies(productId, parentIds, scope, viewerId).stream()
-                .collect(Collectors.groupingBy(ProductComment::parentCommentId, LinkedHashMap::new,
+                .collect(Collectors.groupingBy(component -> component.parentCommentId(), LinkedHashMap::new,
                         Collectors.toList()));
         Set<Long> authorIds = new java.util.LinkedHashSet<>();
         topLevel.forEach(comment -> authorIds.add(comment.authorAccountId()));
@@ -130,17 +130,17 @@ public class ProductInteractions {
 
     /** Returns the author if the published comment is in the viewer's ordinary comment scope. */
     public Optional<Long> reportableCommentAuthor(long viewerId, long commentId) {
-        return store.comment(commentId).filter(ProductComment::published)
+        return store.comment(commentId).filter(item -> item.published())
                 .filter(comment -> comment.authorAccountId() != viewerId)
                 .filter(comment -> products.findById(comment.productId())
                         .filter(product -> !product.deleted())
                         .filter(product -> reportableCommentThread(product, comment, viewerId)).isPresent())
-                .map(ProductComment::authorAccountId);
+                .map(subject -> subject.authorAccountId());
     }
 
     /** Resolves the author of a previously accepted report, even after the comment is removed. */
     public Optional<Long> commentAuthor(long commentId) {
-        return store.comment(commentId).map(ProductComment::authorAccountId);
+        return store.comment(commentId).map(subject -> subject.authorAccountId());
     }
 
     /** Product carrying a reported comment, including a removed comment's retained history. */
@@ -219,7 +219,7 @@ public class ProductInteractions {
                                 .filter(parent -> parent.productId() == productId && parent.topLevel()
                                         && parent.published() && parent.authorAccountId() == viewerId).isPresent()
                         : comment.topLevel())
-                .map(ProductComment::body);
+                .map(entry -> entry.body());
     }
 
     public void deleteComment(long viewerId, long productId, long commentId) {
@@ -301,7 +301,7 @@ public class ProductInteractions {
         String text = requiredReason(reason);
         return transaction.execute(status -> {
             // Resolve the product without a lock so the row lock order stays product -> comment.
-            long productId = store.comment(commentId).map(ProductComment::productId)
+            long productId = store.comment(commentId).map(mapped -> mapped.productId())
                     .orElseThrow(ProductInteractions::contentNotFound);
             products.lockById(productId)
                     .filter(product -> !product.deleted())
@@ -380,7 +380,7 @@ public class ProductInteractions {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public FavoritePage listFavorites(long accountId, Integer page, Integer pageSize) {
         var result = readFavorites(accountId, null, page, pageSize);
-        var items = result.items().stream().map(OwnedFavorite::item).toList();
+        var items = result.items().stream().map(candidate -> candidate.item()).toList();
         return new FavoritePage(items, result.page(), result.pageSize(), result.total());
     }
 
@@ -408,12 +408,12 @@ public class ProductInteractions {
         long offset = (long) (paging[0] - 1) * paging[1];
         List<ProductInteractionStore.FavoriteRow> rows = store.favorites(accountId, state, paging[1], offset);
         long total = store.countFavorites(accountId, state);
-        List<Long> productIds = rows.stream().map(ProductInteractionStore.FavoriteRow::productId).toList();
+        List<Long> productIds = rows.stream().map(member -> member.productId()).toList();
         if (productIds.isEmpty()) {
             return new FavoriteSelection(List.of(), paging[0], paging[1], total);
         }
         Map<Long, Product> productsById = products.findByIdIn(productIds).stream()
-                .collect(Collectors.toMap(Product::id, product -> product));
+                .collect(Collectors.toMap(value -> value.id(), product -> product));
         Set<Long> restricted = displayRestrictions.activeProductIds(productsById.keySet());
         List<Product> validProducts = rows.stream()
                 .map(row -> productsById.get(row.productId()))
@@ -442,7 +442,7 @@ public class ProductInteractions {
             throw notVisible();
         }
         return new FavoriteStatus(favorite.isPresent(), valid,
-                favorite.map(ProductInteractionStore.FavoriteRow::favoritedAt).orElse(null));
+                favorite.map(element -> element.favoritedAt()).orElse(null));
     }
 
     public FavoriteStatus addFavorite(long accountId, long productId) {

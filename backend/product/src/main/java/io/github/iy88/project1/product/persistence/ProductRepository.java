@@ -61,4 +61,20 @@ public interface ProductRepository extends Repository<Product, Long> {
     Page<Product> search(@Param("keyword") String keyword, @Param("categoryIds") List<Long> categoryIds,
                          @Param("categoryCount") long categoryCount, @Param("minPrice") Long minPrice,
                          @Param("maxPrice") Long maxPrice, Pageable pageable);
+
+    @Query("""
+            select p.lifecycleState as state, count(p) as total
+            from Product p
+            where p.sellerAccountId = :sellerId and p.deletedAt is null
+            group by p.lifecycleState
+            order by p.lifecycleState
+            """)
+    List<LifecycleStateCount> findLifecycleStateCountsForSeller(@Param("sellerId") long sellerId);
+
+    /** Closed projection for the grouped lifecycle counts. */
+    interface LifecycleStateCount {
+        String getState();
+
+        long getTotal();
+    }
 }

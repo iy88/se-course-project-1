@@ -1,5 +1,6 @@
 <script setup lang="ts">
 /* Administration shell: identity gate, navigation and the active page. */
+import { storeToRefs } from "pinia";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import BrandMark from "../../shared/BrandMark.vue";
 import MobileBackButton from "../../shared/MobileBackButton.vue";
@@ -15,10 +16,10 @@ import ManagementNotificationsView from "./views/ManagementNotificationsView.vue
 import ManagementStatisticsView from "./views/ManagementStatisticsView.vue";
 import ErrorNotice from "./components/ErrorNotice.vue";
 import LoadingBlock from "./components/LoadingBlock.vue";
-import { dismiss, toasts } from "./app/toast";
+import { useToastStore } from "./app/toast";
 import { navigate, route } from "./app/router";
 import { parseLocation, reviewWorkbench, routeHref } from "./app/routes";
-import { session } from "./app/session";
+import { useSessionStore } from "./app/session";
 import { listNotifications } from "./api/notifications";
 import "./styles/admin.css";
 
@@ -55,6 +56,15 @@ const navItems = [
   },
 ] as const;
 
+const toastStore = useToastStore();
+const { toasts } = storeToRefs(toastStore);
+const { dismiss } = toastStore;
+
+const session = useSessionStore();
+const { identity, state: sessionState, failure, displayName } = storeToRefs(session);
+// Register before the first session read; App setup runs with Pinia installed.
+session.installUnauthorizedHandler();
+
 const page = computed(() => route.value.name);
 const mobileNavOpen = ref(false);
 const unreadNotifications = ref(0);
@@ -63,7 +73,7 @@ let unreadTimer: ReturnType<typeof setInterval> | undefined;
 
 async function refreshUnread(): Promise<void> {
   unreadRequest?.abort();
-  if (session.state.value !== "signed-in") {
+  if (sessionState.value !== "signed-in") {
     unreadNotifications.value = 0;
     return;
   }
@@ -121,13 +131,10 @@ watch(
   },
 );
 
-watch(
-  () => session.state.value,
-  (state) => {
-    if (state !== "signed-in") mobileNavOpen.value = false;
-    void refreshUnread();
-  },
-);
+watch(sessionState, (nextState) => {
+  if (nextState !== "signed-in") mobileNavOpen.value = false;
+  void refreshUnread();
+});
 
 async function signOut(): Promise<void> {
   await session.signOut();
@@ -160,7 +167,7 @@ function goBack(): void {
 
 <template>
   <div class="admin-shell">
-    <header v-if="session.state.value === 'signed-in'" class="admin-header">
+    <header v-if="sessionState === 'signed-in'" class="admin-header">
       <div class="admin-header__inner">
         <div class="admin-header__leading">
           <MobileBackButton
@@ -214,7 +221,7 @@ function goBack(): void {
           </button>
         </nav>
         <div class="admin-account">
-          <span class="admin-account__name">{{ session.displayName.value }}</span>
+          <span class="admin-account__name">{{ displayName }}</span>
           <button
             type="button"
             class="btn btn--ghost admin-menu-toggle"
@@ -252,19 +259,15 @@ function goBack(): void {
     </header>
 
     <PageFeedback :messages="toasts" @dismiss="dismiss" />
-    <main class="admin-main" :class="{ 'admin-main--login': session.state.value === 'signed-out' }">
-      <LoadingBlock v-if="session.state.value === 'loading'" label="正在确认管理身份…" />
-      <ErrorNotice
-        v-else-if="session.state.value === 'failed'"
-        :error="session.failure.value"
-        @retry="session.load"
-      />
-      <LoginView v-else-if="session.state.value === 'signed-out'" />
-      <section v-else-if="session.state.value === 'forbidden'" class="card forbidden">
+    <main class="admin-main" :class="{ 'admin-main--login': sessionState === 'signed-out' }">
+      <LoadingBlock v-if="sessionState === 'loading'" label="正在确认管理身份…" />
+      <ErrorNotice v-else-if="sessionState === 'failed'" :error="failure" @retry="session.load" />
+      <LoginView v-else-if="sessionState === 'signed-out'" />
+      <section v-else-if="sessionState === 'forbidden'" class="card forbidden">
         <h1>需要平台管理权限</h1>
         <p class="muted">
           当前账号
-          <strong>{{ session.identity.value?.account.email }}</strong>
+          <strong>{{ identity?.account.email }}</strong>
           不是平台管理员。请退出后使用管理员账号登录。
         </p>
         <button type="button" class="btn btn--primary" @click="signOut">退出登录</button>

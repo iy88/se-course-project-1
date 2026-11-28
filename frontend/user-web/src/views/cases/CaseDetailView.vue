@@ -9,10 +9,9 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { getCase, postCaseMessage, supplementReport } from "../../api/cases";
+import { getCase } from "../../api/cases";
 import { listMyTodos } from "../../api/aggregation";
-import { listMessages } from "../../api/conversations";
-import type { CaseDetail, CaseMessage, CaseMessageKind, TodoItem } from "../../api/contracts";
+import type { CaseDetail, TodoItem } from "../../api/contracts";
 import { useAsyncData } from "../../app/async";
 import { caseHasScope } from "../../app/case-directory";
 import { caseActionAvailability } from "../../app/case-actions";
@@ -23,7 +22,6 @@ import {
   shouldLoadNextPage,
 } from "../../app/case-inquiries";
 import { formatDateTime, formatRemaining } from "../../app/format";
-import { newIdempotencyKey } from "../../app/keys";
 import {
   caseActionKindText,
   caseActorKindText,
@@ -34,42 +32,38 @@ import {
   enforcementActionText,
   enforcementStateText,
 } from "../../app/labels";
-import { problemMessage } from "../../app/problems";
 import { session } from "../../app/session";
-import { notify } from "../../app/toast";
-import { refreshBadges } from "../../app/badges";
 import ErrorNotice from "../../components/ErrorNotice.vue";
-import ImageUploader from "../../components/ImageUploader.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
 import StateBadge from "../../components/StateBadge.vue";
+import CaseSupplementDialog from "./CaseSupplementDialog.vue";
+import { useCaseThread } from "./useCaseThread";
+import { useCaseThreadReplies } from "./useCaseThreadReplies";
 
 const route = useRoute();
 const caseId = computed(() => String(route.params.caseId ?? ""));
 const detail = useAsyncData<CaseDetail>((signal) => getCase(caseId.value, signal));
 
-const threadMessages = ref<CaseMessage[]>([]);
-const threadStatus = ref<"idle" | "loading" | "ready" | "failed">("idle");
-const threadError = ref<unknown>(null);
-const anchorMessageId = computed(() => /^#case-message-([1-9][0-9]*)$/.exec(route.hash)?.[1]);
-let threadRequest: AbortController | undefined;
-
-/* One open reply form at a time, keyed by the inquiry action it answers. */
-const replyingTo = ref<string | null>(null);
-const replyBody = ref("");
-const replyPending = ref(false);
-const replyError = ref<string | null>(null);
-
-/* Appeals are a separate entry point and carry no inquiry reference. */
-const appealBody = ref("");
-const appealPending = ref(false);
-const appealError = ref<string | null>(null);
+const { threadMessages, threadStatus, threadError, anchorMessageId, loadThread, cancelThread } =
+  useCaseThread(() => detail.data.value?.thread);
 
 /* Pending inquiries come from the todo aggregation, not from the message list. */
 const pendingInquiryIds = ref<string[]>([]);
 
-const supplementDialog = ref<HTMLDialogElement | null>(null);
+const supplementDialog = ref<{
+  toggle: () => void;
+  close: () => void;
+} | null>(null);
 const supplementOpen = ref(false);
+// Preserve the draft and an in-flight request when the detail error hides the dialog.
+const emptySupplementState = () => ({
+  note: "",
+  files: [] as string[],
+  pending: false,
+  error: null as string | null,
+});
+const supplementState = ref(emptySupplementState());
 const reportMaterials = computed(() => detail.data.value?.report_materials);
 const caseTypeLabel = computed(() => {
   const kind = detail.data.value?.case_type;
@@ -90,20 +84,8 @@ function attachmentKindLabel(contentType?: string): string {
 }
 
 function toggleSupplement(): void {
-  const dialog = supplementDialog.value;
-  if (!dialog) return;
-  if (dialog.open) {
-    dialog.close();
-  } else {
-    dialog.showModal();
-    supplementOpen.value = true;
-  }
+  supplementDialog.value?.toggle();
 }
-
-const supplementNote = ref("");
-const supplementFiles = ref<string[]>([]);
-const supplementPending = ref(false);
-const supplementError = ref<string | null>(null);
 
 /*
  * The reporter viewpoint comes from the server projection when present, otherwise from
@@ -147,66 +129,11 @@ const availability = computed(() =>
   }),
 );
 
-const canSupplement = computed(() => availability.value.supplement);
+const canSupplement = computed(
+  () => detail.data.value?.case_id === caseId.value && availability.value.supplement,
+);
 const canRespond = computed(() => availability.value.respond);
 const canAppeal = computed(() => availability.value.appeal);
-
-async function loadThread(): Promise<void> {
-  threadRequest?.abort();
-  const thread = detail.data.value?.thread;
-  if (!thread) {
-    threadStatus.value = "ready";
-    threadMessages.value = [];
-    return;
-  }
-  const request = new AbortController();
-  threadRequest = request;
-  const anchor = anchorMessageId.value;
-  threadStatus.value = "loading";
-  threadError.value = null;
-  try {
-    const page = await listMessages(
-      thread.conversation_kind,
-      thread.conversation_id,
-      { limit: 100 },
-      request.signal,
-    );
-    const pages = [page.items];
-    let before = page.next_before_seq ?? null;
-    let found = page.items.some((message) => message.message_id === anchor);
-    while (anchor && !found && before !== null && before > 1) {
-      const older = await listMessages(
-        thread.conversation_kind,
-        thread.conversation_id,
-        { limit: 100, before_seq: before },
-        request.signal,
-      );
-      pages.push(older.items);
-      found = older.items.some((message) => message.message_id === anchor);
-      before =
-        older.next_before_seq != null && older.next_before_seq < before
-          ? older.next_before_seq
-          : null;
-    }
-    if (request.signal.aborted) return;
-    threadMessages.value = pages
-      .reverse()
-      .flat()
-      .map((message) => ({
-        case_message_id: message.message_id,
-        seq: message.seq,
-        message_kind: (message.message_type as CaseMessageKind) ?? "statement",
-        body: message.body,
-        sender: message.sender,
-        created_at: message.created_at,
-      }));
-    threadStatus.value = "ready";
-  } catch (caught) {
-    if (request.signal.aborted) return;
-    threadError.value = caught;
-    threadStatus.value = "failed";
-  }
-}
 
 /*
  * The todo projection is global, so the case is located by paging `inquiry_response`
@@ -270,6 +197,24 @@ async function load(): Promise<void> {
   }
 }
 
+const {
+  replyingTo,
+  replyBody,
+  replyPending,
+  replyError,
+  appealBody,
+  appealPending,
+  appealError,
+  openInquiryReply,
+  submitInquiryReply,
+  submitAppeal,
+} = useCaseThreadReplies({
+  detail: detail.data,
+  canRespond,
+  canAppeal,
+  reload: load,
+});
+
 onMounted(() => {
   // A one second tick is enough to hide the appeal entry at its deadline.
   clockTimer = setInterval(() => {
@@ -279,7 +224,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  threadRequest?.abort();
+  cancelThread();
   if (clockTimer !== null) {
     clearInterval(clockTimer);
     clockTimer = null;
@@ -288,10 +233,8 @@ onUnmounted(() => {
 
 watch(caseId, () => {
   supplementDialog.value?.close();
-  supplementNote.value = "";
-  supplementFiles.value = [];
-  supplementError.value = null;
-  threadRequest?.abort();
+  supplementState.value = emptySupplementState();
+  cancelThread();
   void load();
 });
 
@@ -312,104 +255,6 @@ watch([anchorMessageId, threadStatus], async ([anchor, status]) => {
     document.getElementById(`case-message-${anchor}`)?.scrollIntoView({ block: "start" });
   }
 });
-
-function openInquiryReply(actionId: string): void {
-  replyingTo.value = replyingTo.value === actionId ? null : actionId;
-  replyBody.value = "";
-  replyError.value = null;
-}
-
-async function submitInquiryReply(): Promise<void> {
-  const current = detail.data.value;
-  const thread = current?.thread;
-  const actionId = replyingTo.value;
-  if (!current || !thread || !actionId || !canRespond.value || replyPending.value) return;
-  if (!replyBody.value.trim()) {
-    replyError.value = "请填写说明内容。";
-    return;
-  }
-  replyError.value = null;
-  replyPending.value = true;
-  try {
-    await postCaseMessage(
-      current.case_id,
-      {
-        thread,
-        message_kind: "statement",
-        body: replyBody.value.trim(),
-        inquiry_action_id: actionId,
-      },
-      newIdempotencyKey(),
-    );
-    replyBody.value = "";
-    replyingTo.value = null;
-    notify.success("说明已提交。");
-    await load();
-    void refreshBadges();
-  } catch (caught) {
-    replyError.value = problemMessage(caught);
-  } finally {
-    replyPending.value = false;
-  }
-}
-
-async function submitAppeal(): Promise<void> {
-  const current = detail.data.value;
-  const thread = current?.thread;
-  if (!current || !thread || !canAppeal.value || appealPending.value) return;
-  if (!appealBody.value.trim()) {
-    appealError.value = "请填写申辩内容。";
-    return;
-  }
-  appealError.value = null;
-  appealPending.value = true;
-  try {
-    await postCaseMessage(
-      current.case_id,
-      { thread, message_kind: "appeal", body: appealBody.value.trim() },
-      newIdempotencyKey(),
-    );
-    appealBody.value = "";
-    notify.success("申辩已提交。");
-    await load();
-    void refreshBadges();
-  } catch (caught) {
-    appealError.value = problemMessage(caught);
-  } finally {
-    appealPending.value = false;
-  }
-}
-
-async function submitSupplement(): Promise<void> {
-  const current = detail.data.value;
-  if (!current || !canSupplement.value || supplementPending.value) return;
-  if (!supplementNote.value.trim() && !supplementFiles.value.length) {
-    supplementError.value = "请填写补充说明或上传证据。";
-    return;
-  }
-  supplementError.value = null;
-  supplementPending.value = true;
-  try {
-    const result = await supplementReport(
-      current.case_id,
-      {
-        note: supplementNote.value.trim() || undefined,
-        attachments: supplementFiles.value.map((fileId) => ({ file_id: fileId })),
-      },
-      newIdempotencyKey(),
-    );
-    if (current.case_id !== caseId.value) return;
-    supplementNote.value = "";
-    supplementFiles.value = [];
-    supplementDialog.value?.close();
-    notify.success(`已补充材料（第 ${result.supplement_count} 次）。`);
-    await load();
-  } catch (caught) {
-    supplementError.value = problemMessage(caught);
-  } finally {
-    supplementPending.value = false;
-  }
-}
 </script>
 
 <template>
@@ -751,50 +596,17 @@ async function submitSupplement(): Promise<void> {
         从「我的事项 → 我提交的」打开本事项，才能补充说明与证据。
       </p>
 
-      <dialog
+      <CaseSupplementDialog
         v-if="canSupplement"
-        id="case-supplement"
+        :key="detail.data.value.case_id"
         ref="supplementDialog"
-        class="card supplement-dialog"
-        aria-labelledby="case-supplement-title"
-        @close="supplementOpen = false"
-        @cancel="supplementPending && $event.preventDefault()"
-      >
-        <form class="stack" @submit.prevent="submitSupplement">
-          <h2 id="case-supplement-title">补充材料</h2>
-          <div class="field">
-            <label class="field__label" for="supplement-note">补充说明</label>
-            <textarea
-              id="supplement-note"
-              v-model="supplementNote"
-              class="textarea"
-              maxlength="1000"
-            />
-          </div>
-          <ImageUploader
-            v-model="supplementFiles"
-            purpose="case_evidence"
-            label="证据文件"
-            hint="支持 JPG、PNG、PDF"
-            :max-count="5"
-            :target="null"
-          />
-          <p v-if="supplementError" class="field__error" role="alert">{{ supplementError }}</p>
-          <div class="inline">
-            <button
-              type="button"
-              class="btn btn--ghost"
-              :disabled="supplementPending"
-              @click="toggleSupplement"
-            >
-              关闭
-            </button>
-            <button type="submit" class="btn btn--primary" :disabled="supplementPending">
-              {{ supplementPending ? "提交中…" : "提交补充" }}
-            </button>
-          </div>
-        </form>
-      </dialog>
+        :can-supplement="canSupplement"
+        :case-id="detail.data.value.case_id"
+        :is-current="(id, state) => id === caseId && state === supplementState"
+        :state="supplementState"
+        :reload="load"
+        @update:open="supplementOpen = $event"
+      />
     </template>
   </div>
 </template>
@@ -988,20 +800,6 @@ async function submitSupplement(): Promise<void> {
 .supplement-toggle {
   flex: 0 0 auto;
   align-self: flex-start;
-}
-
-.supplement-dialog {
-  position: fixed;
-  inset: 0;
-  margin: auto;
-  width: min(36rem, calc(100% - 2rem));
-  max-height: calc(100dvh - 2rem);
-  overflow: auto;
-  color: inherit;
-}
-
-.supplement-dialog::backdrop {
-  background: rgb(0 0 0 / 38%);
 }
 
 .reason {

@@ -1,7 +1,6 @@
 package io.github.iy88.project1.conversation.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -88,7 +87,7 @@ class ConversationTradePageTests {
 
         var page = queries.pageTrade(actor(7L), 2L, null, null, 20);
 
-        assertThat(page.items()).extracting(ConversationViews.Message::sourceRef)
+        assertThat(page.items()).extracting(entry -> entry.sourceRef())
                 .containsExactly(null, null, null, "completion_confirmation:12", null);
         assertThat(page.items().getLast().sender().senderKind()).isEqualTo("account");
         assertThat(page.items().getLast().body()).isEqualTo("不受影响");

@@ -117,7 +117,7 @@ class S2CoreIT {
             var detail = products.detail(account.id(), productId);
             assertThat(detail.lifecycleState()).isEqualTo("public");
             var mine = products.myResources(account.id(), null, 1, 10);
-            assertThat(mine.items()).extracting(ProductService.MyResourceItem::productId)
+            assertThat(mine.items()).extracting(element -> element.productId())
                     .contains(Long.toString(productId));
 
             var entry = app.getBean(EntryTokenService.class).issue();

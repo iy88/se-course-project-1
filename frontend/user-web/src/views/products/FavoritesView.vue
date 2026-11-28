@@ -15,12 +15,14 @@ import { usePagedList } from "../../app/async";
 import { formatCents, formatRelative } from "../../app/format";
 import { IdempotencyKeys } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import EmptyState from "../../components/EmptyState.vue";
 import ErrorNotice from "../../components/ErrorNotice.vue";
 import LoadingBlock from "../../components/LoadingBlock.vue";
 import PageHeader from "../../components/PageHeader.vue";
 import PaginationBar from "../../components/PaginationBar.vue";
+
+const { notify } = useToastStore();
 
 const favorites = usePagedList<FavoriteItem>((page, pageSize, signal) =>
   listMyFavorites({ page, page_size: pageSize }, signal),

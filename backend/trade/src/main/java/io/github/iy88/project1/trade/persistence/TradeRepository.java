@@ -521,13 +521,13 @@ public class TradeRepository {
     }
 
     public Optional<TradeModels.History> history(long historyId) {
-        return histories.findById(historyId).map(TradeHistoryRow::toHistory);
+        return histories.findById(historyId).map(entry -> entry.toHistory());
     }
 
     /** Returns the recorded freeze transition for one freeze row, if that exact association exists. */
     public Optional<TradeModels.History> freezeTransition(long freezeId) {
         return histories.findByFreezeIdAndAction(freezeId, "trade.freeze")
-                .map(TradeHistoryRow::toHistory);
+                .map(entry -> entry.toHistory());
     }
 
     /**
@@ -553,7 +553,7 @@ public class TradeRepository {
 
     public List<TradeModels.History> history(long tradeId, int limit) {
         return histories.findByTradeIdOrderById(tradeId, PageRequest.of(0, limit))
-                .stream().map(TradeHistoryRow::toHistory).toList();
+                .stream().map(entry -> entry.toHistory()).toList();
     }
 
     /**

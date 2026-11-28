@@ -1,6 +1,5 @@
 package io.github.iy88.project1.maintenance;
 
-import com.aliyun.sdk.service.oss2.OSSClient;
 import com.aliyun.sdk.service.oss2.models.HeadObjectRequest;
 import com.aliyun.sdk.service.oss2.models.ListObjectsV2Request;
 import com.aliyun.sdk.service.oss2.models.PutObjectRequest;

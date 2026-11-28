@@ -92,7 +92,7 @@ class CaseQueriesTests {
         var first = new CasePorts.Targets.DispositionProduct(99L, "First");
         var second = new CasePorts.Targets.DispositionProduct(100L, "Second");
         when(targets.dispositionProducts(facts))
-                .thenReturn(List.of(), List.of(first), List.of(first, second));
+                .thenReturn(List.of()).thenReturn(List.of(first)).thenReturn(List.of(first, second));
 
         var empty = queries.detail(context(MANAGER), CASE).path("disposition_targets");
         assertThat(empty.path("target_type").asString()).isEqualTo("comment");

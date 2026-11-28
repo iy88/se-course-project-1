@@ -51,7 +51,7 @@ public class CategoryService {
         for (Category category : categories.activeRecords()) {
             List<CategoryName> current = activeNames.getOrDefault(category.id(), List.of());
             String mainName = current.stream().filter(name -> "main".equals(name.nameKind())).findFirst()
-                    .map(CategoryName::name).orElse(null);
+                    .map(element -> element.name()).orElse(null);
             if (mainName == null) {
                 continue;
             }
@@ -61,7 +61,7 @@ public class CategoryService {
                 continue;
             }
             List<String> aliases = current.stream().filter(name -> "alias".equals(name.nameKind()))
-                    .map(CategoryName::name).toList();
+                    .map(element -> element.name()).toList();
             views.add(new CategoryView(Long.toString(category.id()), mainName, aliases, selectable,
                     hasPublicProducts));
         }
@@ -81,7 +81,7 @@ public class CategoryService {
     public Optional<Long> findActiveCategoryIdByName(String rawName) {
         String name = name(rawName);
         return names.findActiveByNormalizedName(name)
-                .map(CategoryName::categoryId)
+                .map(entry -> entry.categoryId())
                 .filter(categoryId -> categories.findById(categoryId)
                         .filter(category -> !category.deleted())
                         .isPresent());
@@ -249,7 +249,7 @@ public class CategoryService {
     private CategoryDetail detail(Category category) {
         List<CategoryName> all = names.findByCategoryIdOrderByIdAsc(category.id());
         String mainName = all.stream().filter(name -> name.active() && "main".equals(name.nameKind()))
-                .findFirst().map(CategoryName::name).orElse("");
+                .findFirst().map(element -> element.name()).orElse("");
         List<NameView> views = all.stream()
                 .map(name -> new NameView(Long.toString(name.id()), name.name(), name.nameKind(), name.active()))
                 .toList();

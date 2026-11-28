@@ -15,10 +15,12 @@ import { useAsyncData } from "../../app/async";
 import { formatDateTime } from "../../app/format";
 import { IdempotencyKeys } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import AvatarBadge from "../AvatarBadge.vue";
 import ErrorNotice from "../ErrorNotice.vue";
 import LoadingBlock from "../LoadingBlock.vue";
+
+const { notify } = useToastStore();
 
 const props = defineProps<{ tradeId: string; revieweeName: string }>();
 

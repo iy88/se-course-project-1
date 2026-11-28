@@ -1,7 +1,5 @@
 package io.github.iy88.project1.category.application;
 
-import io.github.iy88.project1.category.persistence.Category;
-import io.github.iy88.project1.category.persistence.CategoryName;
 import io.github.iy88.project1.category.persistence.CategoryNameRepository;
 import io.github.iy88.project1.category.persistence.CategoryRepository;
 import java.util.Collection;
@@ -39,7 +37,7 @@ public class CategoryDirectory {
 
     private Optional<String> mainName(long categoryId) {
         return names.findByCategoryIdAndNameKindAndDeactivatedAtIsNull(categoryId, "main")
-                .map(CategoryName::name);
+                .map(entry -> entry.name());
     }
 
     public record Info(long id, String mainName, boolean selectable) {

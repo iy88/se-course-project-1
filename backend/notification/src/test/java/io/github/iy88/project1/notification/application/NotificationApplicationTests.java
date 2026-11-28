@@ -52,7 +52,7 @@ class NotificationApplicationTests {
         var batch = application.createNotifications(transaction, intent);
 
         assertThat(batch.items()).hasSize(2);
-        assertThat(batch.items()).extracting(NotificationItem::recipientAccountId).containsExactly(3L, 7L);
+        assertThat(batch.items()).extracting(entry -> entry.recipientAccountId()).containsExactly(3L, 7L);
         assertThat(batch.items()).allSatisfy(item -> assertThat(item.readAt()).isNull());
         assertThat(store.size()).isEqualTo(2);
 

@@ -94,9 +94,9 @@ class ConversationCasePageTests {
         var sevenPage = queries.pageCase(actor(7L), 3L, null, null, 20);
         var eightPage = queries.pageCase(actor(8L), 4L, null, null, 20);
 
-        assertThat(sevenPage.items()).extracting(ConversationViews.Message::body)
+        assertThat(sevenPage.items()).extracting(entry -> entry.body())
                 .containsExactly("七号的线程");
-        assertThat(eightPage.items()).extracting(ConversationViews.Message::body)
+        assertThat(eightPage.items()).extracting(entry -> entry.body())
                 .containsExactly("八号的线程");
         assertThatThrownBy(() -> queries.pageCase(actor(7L), 4L, null, null, 20))
                 .isInstanceOfSatisfying(BusinessError.class,

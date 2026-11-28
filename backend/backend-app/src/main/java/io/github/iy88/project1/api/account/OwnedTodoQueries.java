@@ -81,7 +81,7 @@ public class OwnedTodoQueries {
                         instant(row, "updated_at"), nullableLong(row, "product_id"), row.getString("title")))
                 .list();
         long total = kind == null
-                ? counts.values().stream().mapToLong(Long::longValue).sum()
+                ? counts.values().stream().mapToLong(entry -> entry.longValue()).sum()
                 : counts.getOrDefault(kind, 0L);
         return new Page(items, total, counts);
     }

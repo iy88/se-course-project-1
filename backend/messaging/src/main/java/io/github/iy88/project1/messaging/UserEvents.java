@@ -42,7 +42,7 @@ public class UserEvents implements EventIntent.Writer {
     @Transactional(propagation = Propagation.MANDATORY)
     public void persist(ExecutionContext context, List<EventIntent> intents) {
         if (intents.isEmpty()) return;
-        var groups = intents.stream().collect(Collectors.groupingBy(EventIntent::recipientAccountId,
+        var groups = intents.stream().collect(Collectors.groupingBy(entry -> entry.recipientAccountId(),
                 TreeMap::new, Collectors.toList()));
         try {
             groups.forEach((account, events) -> append(account, events, context.originConnectionId()));
@@ -142,7 +142,7 @@ public class UserEvents implements EventIntent.Writer {
                     RETURNING e.account_seq
                     """).param("account", account).param("limit", remaining).query(Long.class).list();
             if (!removed.isEmpty()) {
-                long floor = removed.stream().mapToLong(Long::longValue).max().orElseThrow();
+                long floor = removed.stream().mapToLong(element -> element.longValue()).max().orElseThrow();
                 jdbc.sql("UPDATE account_event_head SET replay_floor = ? WHERE account_id = ?")
                         .param(floor).param(account).update();
                 deleted += removed.size();

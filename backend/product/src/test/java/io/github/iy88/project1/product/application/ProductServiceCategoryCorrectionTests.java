@@ -81,7 +81,7 @@ class ProductServiceCategoryCorrectionTests {
         when(products.lockById(PRODUCT)).thenReturn(Optional.of(product));
         when(products.save(any())).thenAnswer(call -> call.getArgument(0));
 
-        when(links.activeCategoryIds(PRODUCT)).thenReturn(List.of(OLD_CATEGORY), List.of(NEW_CATEGORY));
+        when(links.activeCategoryIds(PRODUCT)).thenReturn(List.of(OLD_CATEGORY)).thenReturn(List.of(NEW_CATEGORY));
         when(links.findByProductIdAndRemovedAtIsNullOrderByCategoryIdAsc(PRODUCT))
                 .thenReturn(List.of(new ProductCategory(PRODUCT, OLD_CATEGORY, SELLER, NOW)));
         when(links.save(any())).thenAnswer(call -> call.getArgument(0));
@@ -105,12 +105,12 @@ class ProductServiceCategoryCorrectionTests {
         var accounts = mock(AccountRepository.class);
         when(accounts.findById(anyLong())).thenReturn(Optional.empty());
         service = new ProductService(products, links, edits, mock(ProductAuditRepository.class),
-                mock(CategoryApplicationRepository.class), mock(org.springframework.beans.factory.ObjectProvider.class),
+                mock(CategoryApplicationRepository.class), mock(),
                 accounts, mock(AccountAvatarService.class), mock(AccountWriteGuard.class), directory,
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class),
                 mock(ProductTradeHistory.class), mock(ProductEditNotices.class), cases, notices,
-                mock(ProductDisplayRestrictions.class), mock(org.springframework.beans.factory.ObjectProvider.class), environment,
+                mock(ProductDisplayRestrictions.class), mock(), environment,
                 mock(JdbcClient.class), transactions, auditRecords);
     }
 
@@ -122,9 +122,9 @@ class ProductServiceCategoryCorrectionTests {
                 new ProductService.CorrectionCommand(List.of(String.valueOf(NEW_CATEGORY)), "分类放错了", "case", CASE),
                 context);
 
-        assertThat(result.previousCategories()).extracting(ProductService.CategoryRef::id)
+        assertThat(result.previousCategories()).extracting(entry -> entry.id())
                 .containsExactly(String.valueOf(OLD_CATEGORY));
-        assertThat(result.currentCategories()).extracting(ProductService.CategoryRef::id)
+        assertThat(result.currentCategories()).extracting(entry -> entry.id())
                 .containsExactly(String.valueOf(NEW_CATEGORY));
         verify(product).touchContentVersion(any());
         verify(products).save(product);
@@ -146,17 +146,15 @@ class ProductServiceCategoryCorrectionTests {
         var audit = ArgumentCaptor.forClass(AuditContext.class);
         var auditTarget = ArgumentCaptor.forClass(ResourceRef.class);
         var auditBasis = ArgumentCaptor.forClass(ResourceRef.class);
-        @SuppressWarnings("unchecked")
-        var auditFacts = ArgumentCaptor.forClass(Map.class);
+        var auditFacts = ArgumentCaptor.<Map<String, ?>>captor();
         verify(auditRecords).record(audit.capture(), eq(AuditActions.PRODUCT_CATEGORY_CORRECTED),
                 auditTarget.capture(), auditBasis.capture(), auditFacts.capture());
         assertThat(audit.getValue().execution()).isEqualTo(context);
         assertThat(auditTarget.getValue()).isEqualTo(new ResourceRef("product", PRODUCT));
         assertThat(auditBasis.getValue()).isEqualTo(new ResourceRef("case", CASE));
-        assertThat(auditFacts.getValue())
-                .containsEntry("edit_id", "99")
-                .containsEntry("previous_category_ids", List.of(String.valueOf(OLD_CATEGORY)))
-                .containsEntry("current_category_ids", List.of(String.valueOf(NEW_CATEGORY)));
+        assertThat(auditFacts.getValue().get("edit_id")).isEqualTo("99");
+        assertThat(auditFacts.getValue().get("previous_category_ids")).isEqualTo(List.of(String.valueOf(OLD_CATEGORY)));
+        assertThat(auditFacts.getValue().get("current_category_ids")).isEqualTo(List.of(String.valueOf(NEW_CATEGORY)));
     }
 
     @Test

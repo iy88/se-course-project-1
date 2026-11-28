@@ -15,12 +15,14 @@ import { IdempotencyKeys } from "../app/keys";
 import { bannedGroupLabels, reviewDecisionLabels, reviewStatusLabels } from "../app/labels";
 import { problemMessage } from "../app/problems";
 import { reviewWorkbench, routeHref } from "../app/routes";
-import { notify } from "../app/toast";
+import { useToastStore } from "../app/toast";
 import ErrorNotice from "../components/ErrorNotice.vue";
 import LoadingBlock from "../components/LoadingBlock.vue";
 import PageHeader from "../components/PageHeader.vue";
 
 const props = defineProps<{ auditId: string }>();
+
+const { notify } = useToastStore();
 
 const detail = ref<ReviewDetail | null>(null);
 const loading = ref(false);

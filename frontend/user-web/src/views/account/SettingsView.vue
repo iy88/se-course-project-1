@@ -29,10 +29,12 @@ import { ensureEntryContext, entryLimits, passwordRuleText } from "../../app/ent
 import { newIdempotencyKey } from "../../app/keys";
 import { problemMessage } from "../../app/problems";
 import { clearSession, refreshSession, session } from "../../app/session";
-import { notify } from "../../app/toast";
+import { useToastStore } from "../../app/toast";
 import AvatarBadge from "../../components/AvatarBadge.vue";
 import ImageCropper from "../../components/ImageCropper.vue";
 import PageHeader from "../../components/PageHeader.vue";
+
+const { notify } = useToastStore();
 
 const router = useRouter();
 

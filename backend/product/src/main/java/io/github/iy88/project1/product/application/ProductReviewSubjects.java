@@ -164,7 +164,7 @@ public class ProductReviewSubjects {
                 approveCategory, categoryReason, managerId, product, activeCategoryIds, categoryNames, updatedAt);
 
         boolean hasSelectableCategory = activeCategoryIds.stream()
-                .anyMatch(id -> directory.find(id).map(CategoryDirectory.Info::selectable).orElse(false));
+                .anyMatch(id -> directory.find(id).map(entry -> entry.selectable()).orElse(false));
         if (approve && !hasSelectableCategory) {
             throw new BusinessError("REVIEW_CATEGORY_INSUFFICIENT", 409,
                     "退回补充：请更换或补充分类");
@@ -272,7 +272,7 @@ public class ProductReviewSubjects {
     private List<Long> currentImageFileIds(long productId) {
         UploadRegistration.Target target = new UploadRegistration.Target("product", productId);
         return fileReferences.current(target, "image").stream()
-                .map(FileReferences.Reference::fileId)
+                .map(element -> element.fileId())
                 .toList();
     }
 

@@ -70,7 +70,7 @@ public final class InMemoryNotificationStore implements NotificationStore {
                 .filter(row -> NotificationStore.inAudience(row.eventType(), management))
                 .filter(row -> matchesRead(row, filter))
                 .filter(row -> eventType == null || row.eventType().equals(eventType))
-                .sorted(Comparator.comparingLong(Stored::notificationId).reversed())
+                .sorted(Comparator.comparingLong((Stored entry) -> entry.notificationId()).reversed())
                 .toList();
         int from = Math.min((page - 1) * pageSize, matching.size());
         int to = Math.min(from + pageSize, matching.size());

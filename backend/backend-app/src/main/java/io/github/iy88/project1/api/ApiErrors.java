@@ -65,10 +65,6 @@ public class ApiErrors {
         return business(new BusinessError("INTERNAL_ERROR", 500, "请求处理失败"), request);
     }
 
-    private static ResponseEntity<Envelope> respond(int status, Envelope body) {
-        return ResponseEntity.status(status).body(body);
-    }
-
     public record Error(String code, String message, Map<String, ?> details) {}
     public record Envelope(Error error, UUID request_id,
                            @JsonInclude(JsonInclude.Include.NON_NULL) UUID operation_id) {}

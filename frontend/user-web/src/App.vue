@@ -4,6 +4,7 @@
  *
  * Primary navigation sits at the bottom on mobile and in the header on desktop.
  */
+import { storeToRefs } from "pinia";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import BrandMark from "../../shared/BrandMark.vue";
@@ -21,9 +22,13 @@ import {
   subscribeRealtime,
 } from "./app/realtime";
 
-import { dismiss, toasts } from "./app/toast";
+import { useToastStore } from "./app/toast";
 import AvatarBadge from "./components/AvatarBadge.vue";
 import OfflineNotice from "./components/OfflineNotice.vue";
+
+const toastStore = useToastStore();
+const { toasts } = storeToRefs(toastStore);
+const { dismiss } = toastStore;
 
 const route = useRoute();
 const router = useRouter();

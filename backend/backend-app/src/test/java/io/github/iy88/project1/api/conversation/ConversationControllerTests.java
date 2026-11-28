@@ -184,7 +184,7 @@ class ConversationControllerTests {
     @Test
     void rejectsUnknownKindAndHidesCaseUntilTheCaseAdapterExists() throws Exception {
         mvc.perform(get("/api/v1/conversations/group/2/messages"))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("INPUT_INVALID"));
         mvc.perform(get("/api/v1/conversations/case/2/messages"))
                 .andExpect(status().isServiceUnavailable())
@@ -229,7 +229,7 @@ class ConversationControllerTests {
                         .header("X-CSRF-Token", CSRF_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"body\":\"在吗\"}"))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("INPUT_INVALID"));
         mvc.perform(post("/api/v1/conversations/trade/2/messages")
                         .header("Origin", ORIGIN)
@@ -237,7 +237,7 @@ class ConversationControllerTests {
                         .header("Idempotency-Key", "send-2")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"body\":\"  \"}"))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("INPUT_INVALID"));
     }
 

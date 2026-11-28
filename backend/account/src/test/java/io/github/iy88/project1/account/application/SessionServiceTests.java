@@ -68,7 +68,7 @@ class SessionServiceTests {
         when(guards.findById(guard.id())).thenReturn(Optional.of(guard));
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.requireCurrent(ACCOUNT_ID, guard.id(), 2, false), BusinessError.class);
+                BusinessError.class, () -> service.requireCurrent(ACCOUNT_ID, guard.id(), 2, false));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("AUTHENTICATION_REQUIRED");
@@ -94,7 +94,6 @@ class SessionServiceTests {
 
     @Test
     void aRevokedCookieCannotAuthenticateEvenWhenItsRedisValueStillExists() {
-        Account account = account(1);
         SessionGuard guard = guard(1);
         guard.revoke(Instant.now());
         when(guards.findById(guard.id())).thenReturn(Optional.of(guard));
@@ -104,7 +103,7 @@ class SessionServiceTests {
         when(values.get(key(SessionService.sha256(token))))
                 .thenReturn(guard.id() + "|" + Instant.now().getEpochSecond());
 
-        BusinessError failure = catchThrowableOfType(() -> service.authenticate(cookie), BusinessError.class);
+        BusinessError failure = catchThrowableOfType(BusinessError.class, () -> service.authenticate(cookie));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("AUTHENTICATION_REQUIRED");

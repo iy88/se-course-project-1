@@ -87,7 +87,7 @@ class CaseNotificationSource implements NotificationSourcePort {
         return cases.action(caseId, actionId)
                 .filter(action -> CaseVocabulary.ACTION_INQUIRE.equals(action.actionKind())
                         && Long.valueOf(accountId).equals(action.relatedAccountId()))
-                .map(CaseRecords.Action::messageId).orElse(null);
+                .map(entry -> entry.messageId()).orElse(null);
     }
 
     /** The result notification is reporter-only and uses the already-confirmed anonymous fields. */

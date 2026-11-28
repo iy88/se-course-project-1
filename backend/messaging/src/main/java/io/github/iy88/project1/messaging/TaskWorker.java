@@ -39,7 +39,7 @@ public class TaskWorker {
         this.json = json;
         this.settings = settings;
         this.configVersion = configVersion;
-        this.handlers = handlers.stream().collect(Collectors.toUnmodifiableMap(TaskHandler::kind, Function.identity()));
+        this.handlers = handlers.stream().collect(Collectors.toUnmodifiableMap(entry -> entry.kind(), Function.identity()));
     }
 
     public Set<String> kinds() { return handlers.keySet(); }

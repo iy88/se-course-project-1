@@ -76,7 +76,7 @@ public class FileReferences {
     public List<Reference> current(Target target, String slot) {
         requireText(slot);
         return references.findByTargetTypeAndTargetIdAndSlotOrderById(target.type(), target.id(), slot)
-                .stream().map(FileReference::snapshot).toList();
+                .stream().map(result -> result.snapshot()).toList();
     }
 
     /** Return the first reference per target in one query, ordered by target and reference ID. */
@@ -133,9 +133,9 @@ public class FileReferences {
     @Transactional(readOnly = true)
     public Optional<String> referencedContentType(Target target, long fileId) {
         return files.findReferenced(fileId, target.type(), target.id())
-                .map(FileRecord::snapshot)
+                .map(member -> member.snapshot())
                 .filter(entry -> "verified".equals(entry.state()))
-                .map(FileRegistry.Entry::content)
+                .map(element -> element.content())
                 .map(content -> content.contentType());
     }
 

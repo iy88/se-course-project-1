@@ -113,8 +113,7 @@ class EmailVerificationServiceTests {
         when(budget.reserve(eq("password_reset"), eq("missing@example.com"), any(), anyInt())).thenReturn(30L);
 
         BusinessError unknown = catchThrowableOfType(
-                () -> service.request("password_reset", "missing@example.com", entry, null),
-                BusinessError.class);
+                BusinessError.class, () -> service.request("password_reset", "missing@example.com", entry, null));
 
         Account account = account(EMAIL, 7L);
         when(accounts.findByEmail(EMAIL)).thenReturn(Optional.of(account));
@@ -122,7 +121,7 @@ class EmailVerificationServiceTests {
         when(budget.reserve(eq("password_reset"), eq(EMAIL), any(), anyInt())).thenReturn(30L);
 
         BusinessError known = catchThrowableOfType(
-                () -> service.request("password_reset", EMAIL, entry, null), BusinessError.class);
+                BusinessError.class, () -> service.request("password_reset", EMAIL, entry, null));
 
         assertThat(unknown.code()).isEqualTo("RATE_LIMITED");
         assertThat(known.code()).isEqualTo(unknown.code());
@@ -164,14 +163,14 @@ class EmailVerificationServiceTests {
 
         var result = service.request("email_change", "new@example.com", null, account);
 
-        assertThat(result.requests()).extracting(EmailVerificationService.Item::purpose)
+        assertThat(result.requests()).extracting(element -> element.purpose())
                 .containsExactly("email_change_old", "email_change_new");
         verify(budget).reserve(eq("email_change"), eq("account:7"), any(), eq(60));
         verify(budget).reserve(eq("email_change"), eq("new@example.com"), any(), eq(60));
         verify(verifications).invalidateEmailChange(eq(7L), any());
         ArgumentCaptor<EmailVerification> saved = ArgumentCaptor.forClass(EmailVerification.class);
         verify(verifications, org.mockito.Mockito.times(2)).save(saved.capture());
-        assertThat(saved.getAllValues()).extracting(EmailVerification::purpose)
+        assertThat(saved.getAllValues()).extracting(member -> member.purpose())
                 .containsExactly("email_change_old", "email_change_new");
     }
 
@@ -183,7 +182,7 @@ class EmailVerificationServiceTests {
         when(budget.reserve(eq("email_change"), eq("new@example.com"), any(), anyInt())).thenReturn(15L);
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.request("email_change", "new@example.com", null, account), BusinessError.class);
+                BusinessError.class, () -> service.request("email_change", "new@example.com", null, account));
 
         assertThat(failure.code()).isEqualTo("RATE_LIMITED");
         assertThat(failure.status()).isEqualTo(429);
@@ -199,8 +198,7 @@ class EmailVerificationServiceTests {
         when(budget.reserve(eq("email_change"), eq("account:7"), any(), anyInt())).thenReturn(20L);
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.request("email_change", "different@example.com", null, account),
-                BusinessError.class);
+                BusinessError.class, () -> service.request("email_change", "different@example.com", null, account));
 
         assertThat(failure.code()).isEqualTo("RATE_LIMITED");
         verify(budget, never()).reserve(eq("email_change"), eq("different@example.com"), any(), anyInt());
@@ -213,7 +211,7 @@ class EmailVerificationServiceTests {
         when(accounts.existsByEmail(EMAIL)).thenReturn(true);
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.request("registration", EMAIL, entry, null), BusinessError.class);
+                BusinessError.class, () -> service.request("registration", EMAIL, entry, null));
 
         assertThat(failure.code()).isEqualTo("EMAIL_IN_USE");
         assertThat(failure.status()).isEqualTo(409);

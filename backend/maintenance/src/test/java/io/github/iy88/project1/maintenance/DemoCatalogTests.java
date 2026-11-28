@@ -17,12 +17,12 @@ class DemoCatalogTests {
     @Test
     void fixtureReferencesAndPackagedAssetsAreCoherent() throws Exception {
         Set<String> accounts = DemoCatalog.ACCOUNTS.stream()
-                .map(DemoCatalog.Account::key)
+                .map(value -> value.key())
                 .collect(Collectors.toSet());
         assertThat(accounts).hasSize(DemoCatalog.ACCOUNTS.size());
 
         Map<String, DemoCatalog.Product> products = DemoCatalog.PRODUCTS.stream()
-                .collect(Collectors.toMap(DemoCatalog.Product::key, Function.identity()));
+                .collect(Collectors.toMap(element -> element.key(), Function.identity()));
         assertThat(products).hasSize(DemoCatalog.PRODUCTS.size()).hasSize(24);
         Set<String> assets = new HashSet<>();
         for (var product : DemoCatalog.PRODUCTS) {
@@ -50,7 +50,7 @@ class DemoCatalogTests {
                 assertThat(accounts).contains(message.sender());
             }
         }
-        assertThat(DemoCatalog.COMMENTS).filteredOn(DemoCatalog.Comment::deleted).hasSize(1);
+        assertThat(DemoCatalog.COMMENTS).filteredOn(entry -> entry.deleted()).hasSize(1);
     }
 
     @Test

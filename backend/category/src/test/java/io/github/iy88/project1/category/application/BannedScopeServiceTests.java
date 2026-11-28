@@ -42,13 +42,13 @@ class BannedScopeServiceTests {
         BannedScopeService.BannedScopeView view = service.view();
 
         assertThat(view.updatedAt()).isEqualTo(LATER);
-        assertThat(view.groups()).extracting(BannedScopeService.GroupView::group)
+        assertThat(view.groups()).extracting(element -> element.group())
                 .containsExactly("legal_prohibited", "medicine_device", "other");
         assertThat(view.groups().getFirst().items())
-                .extracting(BannedScopeService.ItemView::id)
+                .extracting(value -> value.id())
                 .containsExactly("13");
         assertThat(view.groups().get(1).items())
-                .extracting(BannedScopeService.ItemView::content)
+                .extracting(entry -> entry.content())
                 .containsExactly("Prescription drug");
     }
 
