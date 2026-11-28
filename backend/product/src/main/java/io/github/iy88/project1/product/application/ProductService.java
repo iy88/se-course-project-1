@@ -72,12 +72,13 @@ public class ProductService {
     private final ProductTradeHistory tradeHistory;
     private final ProductEditNotices editNotices;
     private final ProductEditHistoryQueries editHistoryQueries;
+    private final ProductCaseSnapshotQueries caseSnapshotQueries;
+    private final ProductCountQueries countQueries;
     private final CaseCommentAccess cases;
     private final ProductCorrectionNotices correctionNotices;
     private final ProductDisplayRestrictions displayRestrictions;
     private final ObjectProvider<ProductTradeFreeze> tradeFreezes;
     private final OssSettings oss;
-    private final JdbcClient jdbc;
     private final TransactionTemplate transaction;
     private final AuditStore auditRecords;
     private final ProductReviewSubmission reviewSubmission;
@@ -120,12 +121,13 @@ public class ProductService {
                 environment.getRequiredProperty("OSS_REGION"), environment.getRequiredProperty("OSS_BUCKET"),
                 environment.getRequiredProperty("OSS_PREFIX"), environment.getRequiredProperty("OSS_ACCESS_KEY_ID"),
                 environment.getRequiredProperty("OSS_ACCESS_KEY_SECRET"));
-        this.jdbc = jdbc;
         this.transaction = new TransactionTemplate(manager); // REQUIRED: joins a caller's write transaction.
         this.auditRecords = auditRecords;
         this.reviewSubmission = new ProductReviewSubmission(products, links, audits, applications, reviewCases,
                 writeGuard, directory, tradeFreezes, jdbc, transaction, auditRecords);
         this.editHistoryQueries = new ProductEditHistoryQueries(products, edits, tradeHistory, settings, cases);
+        this.caseSnapshotQueries = new ProductCaseSnapshotQueries(jdbc, audits, cases);
+        this.countQueries = new ProductCountQueries(products);
     }
 
     public ProductDetail create(long sellerId, CreateCommand command, AuditContext auditContext) {
@@ -547,43 +549,11 @@ public class ProductService {
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ProductDetail caseDetail(long managerId, long productId, long caseId) {
-        if (!cases.claimedForProduct(managerId, caseId, productId)) {
-            throw notVisible();
-        }
-        var snapshot = jdbc.sql("""
-                        select content_version, title, description, price_cents, captured_at
-                          from product_case_snapshot
-                         where case_id = :caseId and product_id = :productId
-                        """).param("caseId", caseId).param("productId", productId)
-                .query((row, index) -> new ProductTradeHistory.PurchaseSnapshot(row.getInt("content_version"),
-                        row.getString("title"), row.getString("description"), row.getLong("price_cents"),
-                        row.getTimestamp("captured_at").toInstant())).optional().or(() -> reviewedCaseSnapshot(productId, caseId))
-                .orElseThrow(ProductService::notVisible);
-        return historicalDetail(productId, snapshot);
-    }
-
-    private Optional<ProductTradeHistory.PurchaseSnapshot> reviewedCaseSnapshot(long productId, long caseId) {
-        return audits.findByCaseId(caseId)
-                .filter(audit -> audit.productId() == productId && audit.decidedAt() != null
-                        && audit.reviewedContentVersion() != null)
-                .flatMap(audit -> {
-                    Map<String, Object> content = audit.reviewedContent();
-                    if (content.get("title") instanceof String title
-                            && content.get("description") instanceof String description
-                            && content.get("price_cents") instanceof Number price) {
-                        return Optional.of(new ProductTradeHistory.PurchaseSnapshot(audit.reviewedContentVersion(),
-                                title, description, price.longValue(), audit.decidedAt()));
-                    }
-                    return Optional.empty();
-                });
+        return historicalDetail(productId, caseSnapshotQueries.managerSnapshot(managerId, productId, caseId));
     }
 
     public Optional<ReportSnapshot> reportSnapshot(long caseId) {
-        return jdbc.sql("""
-                        select product_id, title, description from product_case_snapshot where case_id = ?
-                        """).param(caseId)
-                .query((row, index) -> new ReportSnapshot(row.getLong("product_id"),
-                        row.getString("title"), row.getString("description"))).optional();
+        return caseSnapshotQueries.reportSnapshot(caseId);
     }
 
     public record ReportSnapshot(long id, String title, String description) {}
@@ -656,23 +626,7 @@ public class ProductService {
 
     /** Lifecycle counts for the account overview; one row per product, hidden products excluded. */
     public ProductCounts myCounts(long accountId) {
-        var rows = jdbc.sql("""
-                        select lifecycle_state, count(*) as total
-                          from product
-                         where seller_account_id = :account and deleted_at is null
-                         group by lifecycle_state
-                         order by lifecycle_state
-                        """)
-                .param("account", accountId)
-                .query((row, index) -> new StateCount(row.getString("lifecycle_state"), row.getLong("total")))
-                .list();
-        long total = 0;
-        Map<String, Long> byState = new LinkedHashMap<>();
-        for (StateCount row : rows) {
-            total += row.total();
-            byState.put(row.state(), row.total());
-        }
-        return new ProductCounts(total, byState);
+        return countQueries.counts(accountId);
     }
 
     public PageResult<EditView> editHistory(long viewerId, long productId, Integer page, Integer pageSize) {
@@ -1042,9 +996,6 @@ public class ProductService {
     }
 
     private record EditedContent(String title, String description, long priceCents) {
-    }
-
-    private record StateCount(String state, long total) {
     }
 
     public record EditView(String editId, Instant editedAt, String operatorKind, String editKind,
