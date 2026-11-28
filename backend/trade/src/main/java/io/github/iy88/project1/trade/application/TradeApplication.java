@@ -27,7 +27,6 @@ import io.github.iy88.project1.trade.domain.TradeVocabulary.WaitEndReason;
 import io.github.iy88.project1.trade.persistence.TradeRepository;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -63,6 +62,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     private final TradePorts.Cases cases;
     private final TradePorts.Notifications notifications;
     private final JsonMapper json;
+    private final TradeReviews reviews;
 
     public TradeApplication(TradeRepository repository, WriteExecutor writes, TaskSchedules schedules, Clock clock,
                             TradeSettings settings, TradePorts.Product product, TradePorts.Accounts accounts,
@@ -81,6 +81,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         this.cases = cases;
         this.notifications = notifications;
         this.json = json;
+        this.reviews = new TradeReviews(repository, views, accounts, settings, json, clock);
     }
 
     // ---------------------------------------------------------------- purchase requests
@@ -639,80 +640,18 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     // ---------------------------------------------------------------- reviews
 
     public WriteResult<JsonNode> submitReview(ExecutionContext context, String key, TradeCommands.SubmitReview command) {
-        long reviewer = actor(context);
-        return run(context, "trade.review.submit", key, command,
-                (ctx, request) -> prepareReview(reviewer, request.tradeId()),
-                (ctx, request) -> qualifyReview(ctx, request.tradeId()),
-                this::replayTrade,
-                (transaction, request, qualification) -> {
-                    int rating = rating(request.rating());
-                    String content = requiredTrimmedText(request.content(), 2000, "评价内容");
-                    var trade = repository.lockTrade(transaction, request.tradeId());
-                    requireReviewParticipant(trade, reviewer);
-                    requireWrite(reviewer);
-                    if (trade.status() != TradeStatus.COMPLETED) {
-                        throw reviewNotCompleted();
-                    }
-                    if (repository.review(trade.id(), reviewer).isPresent()) {
-                        throw reviewAlreadySubmitted();
-                    }
-                    long reviewee = other(trade, reviewer);
-                    var now = now();
-                    var review = new TradeModels.Review(0, trade.id(), reviewer, reviewee, rating, content, true, now);
-                    review = withReviewId(review, repository.insertReview(review));
-                    var profiles = accounts.profiles(Set.of(reviewer, reviewee));
-                    var body = json.createObjectNode();
-                    body.set("review", views.reviewView(review, profiles));
-                    audit(transaction, "trade.review.submit", trade.id(), new ResourceRef("trade_review", review.id()));
-                    return new WriteResult.Response<>(201, body, new ResourceRef("trade", trade.id()));
-                });
+        actor(context);
+        return writes.run(context, "trade.review.submit", key, command, reviews);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode getTradeReviews(ExecutionContext context, long tradeId) {
-        long viewer = actor(context);
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        trade.requireParticipant(viewer);
-        long counterpart = other(trade, viewer);
-        var written = repository.review(tradeId, viewer).orElse(null);
-        var received = repository.review(tradeId, counterpart).orElse(null);
-        var profiles = accounts.profiles(Set.of(trade.buyerId(), trade.sellerId()));
-        var qualification = accounts.qualification(viewer);
-        boolean canReview = trade.status() == TradeStatus.COMPLETED && written == null
-                && qualification.exists() && !qualification.writeRestricted();
-        var node = json.createObjectNode();
-        node.put("can_review", canReview);
-        node.set("written", written == null ? json.nullNode() : views.reviewView(written, profiles));
-        node.set("received", received == null ? json.nullNode() : views.reviewView(received, profiles));
-        return node;
+        return reviews.getTradeReviews(context, tradeId);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode listMyReviews(ExecutionContext context, String direction, Integer page, Integer pageSize) {
-        long viewer = actor(context);
-        String normalized = direction == null || direction.isBlank() ? "written" : direction;
-        if (!Set.of("written", "received").contains(normalized)) {
-            throw inputInvalid("direction 参数无效");
-        }
-        int size = pageSize == null ? settings.pageSizeDefault() : pageSize;
-        int number = page == null ? 1 : page;
-        if (number < 1 || size < 1 || size > settings.pageSizeMax()) {
-            throw inputInvalid("分页参数无效");
-        }
-        var result = repository.pageReviews(viewer, normalized, size, (number - 1L) * size);
-        var accountIds = new TreeSet<Long>();
-        for (var review : result.reviews()) {
-            accountIds.add(review.reviewerId());
-            accountIds.add(review.revieweeId());
-        }
-        var profiles = accounts.profiles(accountIds);
-        var node = json.createObjectNode();
-        var items = node.putArray("items");
-        result.reviews().forEach(review -> items.add(views.reviewView(review, profiles)));
-        node.put("page", number);
-        node.put("page_size", size);
-        node.put("total", result.total());
-        return node;
+        return reviews.listMyReviews(context, direction, page, pageSize);
     }
 
     // ---------------------------------------------------------------- disputes
@@ -1642,27 +1581,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     public TradeModels.ReviewEligibility reviewEligibility(long tradeId, long reviewerId) {
-        var found = repository.find(tradeId);
-        if (found.isEmpty()) {
-            return new TradeModels.ReviewEligibility(tradeId, reviewerId, 0, false, "trade_not_found");
-        }
-        var trade = found.orElseThrow();
-        if (!trade.isParticipant(reviewerId)) {
-            return new TradeModels.ReviewEligibility(tradeId, reviewerId, 0, false, "not_participant");
-        }
-        long reviewee = trade.buyerId() == reviewerId ? trade.sellerId() : trade.buyerId();
-        if (trade.status() != TradeStatus.COMPLETED) {
-            return new TradeModels.ReviewEligibility(tradeId, reviewerId, reviewee, false, "trade_not_completed");
-        }
-        if (repository.review(tradeId, reviewerId).isPresent()) {
-            return new TradeModels.ReviewEligibility(tradeId, reviewerId, reviewee, false, "already_reviewed");
-        }
-        var qualification = accounts.qualification(reviewerId);
-        if (!qualification.exists() || qualification.writeRestricted()) {
-            return new TradeModels.ReviewEligibility(tradeId, reviewerId, reviewee, false,
-                    "account_write_restricted");
-        }
-        return new TradeModels.ReviewEligibility(tradeId, reviewerId, reviewee, true, "eligible");
+        return reviews.reviewEligibility(tradeId, reviewerId);
     }
 
     // ---------------------------------------------------------------- internals
@@ -1717,12 +1636,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
             conversations.find(id).ifPresent(conversationId -> resources.add(conversationKey(conversationId)));
         }
         return new LockPlan(sharedAccounts(accountsSet), resources);
-    }
-
-    private LockPlan prepareReview(long reviewer, long tradeId) {
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        var accountsSet = new TreeSet<Long>(List.of(reviewer, trade.buyerId(), trade.sellerId()));
-        return new LockPlan(sharedAccounts(accountsSet), Set.of(tradeKey(tradeId)));
     }
 
     private LockPlan prepareTrade(long actor, long tradeId, boolean product, Long caseId) {
@@ -1782,19 +1695,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return null;
     }
 
-    private Void qualifyReview(ExecutionContext context, long tradeId) {
-        accounts.requireCurrentSession(context);
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        requireReviewParticipant(trade, actor(context));
-        return null;
-    }
-
-    private static void requireReviewParticipant(Trade trade, long reviewer) {
-        if (!trade.isParticipant(reviewer)) {
-            throw Trade.actionNotAllowed();
-        }
-    }
-
     private Void qualifyGovernance(ExecutionContext context, long tradeId) {
         accounts.requireCurrentSession(context);
         repository.find(tradeId).orElseThrow(Trade::notVisible);
@@ -1802,13 +1702,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private void replayTrade(ExecutionContext context, Object qualification, ResourceRef resource) {
-        if (context.actorKind() != ExecutionContext.ActorKind.ACCOUNT || resource == null
-                || !"trade".equals(resource.type())) {
-            return;
-        }
-        long actor = actor(context);
-        var trade = repository.find(resource.id()).orElseThrow(Trade::notVisible);
-        trade.requireParticipant(actor);
+        TradeWriteSupport.replayTrade(repository, context, resource);
     }
 
     private void replayGovernance(ExecutionContext context, Object qualification, ResourceRef resource) {
@@ -1816,11 +1710,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private Map<Long, LockPlan.AccountMode> sharedAccounts(Collection<Long> accountIds) {
-        var map = new TreeMap<Long, LockPlan.AccountMode>();
-        for (long id : accountIds) {
-            map.put(id, LockPlan.AccountMode.SHARED);
-        }
-        return map;
+        return TradeWriteSupport.sharedAccounts(accountIds);
     }
 
     /**
@@ -1845,13 +1735,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private void requireWrite(long accountId) {
-        var qualification = accounts.qualification(accountId);
-        if (!qualification.exists()) {
-            throw Trade.actionNotAllowed();
-        }
-        if (qualification.writeRestricted()) {
-            throw new BusinessError("ACCOUNT_WRITE_RESTRICTED", 403, "账户当前受限");
-        }
+        TradeWriteSupport.requireWrite(accounts, accountId);
     }
 
     private Trade requireLockedTrade(WriteTransaction transaction, long caseId, long tradeId) {
@@ -2118,8 +2002,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
 
     private void audit(WriteTransaction transaction, String action, long tradeId,
                        ResourceRef basis) {
-        transaction.audit(action, new ResourceRef("trade", tradeId), basis, object("audit")
-                .put("trade_id", tradeId));
+        TradeWriteSupport.audit(json, transaction, action, tradeId, basis);
     }
 
     private ObjectNode view(long tradeId, long viewer, Long knownConversationId) {
@@ -2194,11 +2077,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 confirmation.invalidatedAt(), confirmation.invalidationReason(), confirmation.businessEventId());
     }
 
-    private static TradeModels.Review withReviewId(TradeModels.Review review, long id) {
-        return new TradeModels.Review(id, review.tradeId(), review.reviewerId(), review.revieweeId(),
-                review.rating(), review.content(), review.visible(), review.createdAt());
-    }
-
     private void requireRequestOpen(Trade trade) {
         if (trade.status().isTerminal()) {
             throw new BusinessError("TRADE_TERMINAL", 409, "交易已结束");
@@ -2248,14 +2126,11 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private long actor(ExecutionContext context) {
-        if (context.actorKind() != ExecutionContext.ActorKind.ACCOUNT) {
-            throw new IllegalStateException("Account execution context required");
-        }
-        return Long.parseLong(context.actorId());
+        return TradeWriteSupport.actor(context);
     }
 
     private long other(Trade trade, long accountId) {
-        return trade.buyerId() == accountId ? trade.sellerId() : trade.buyerId();
+        return TradeWriteSupport.other(trade, accountId);
     }
 
     private static Decision decision(String value) {
@@ -2287,31 +2162,12 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return new BusinessError("TRADE_FREEZE_NOT_ACTIVE", 409, "冻结不存在或已解除");
     }
 
-    private static BusinessError reviewNotCompleted() {
-        return new BusinessError("TRADE_NOT_COMPLETED", 409, "交易完成后才能评价");
-    }
-
-    private static BusinessError reviewAlreadySubmitted() {
-        return new BusinessError("REVIEW_ALREADY_SUBMITTED", 409, "本人已评价本笔交易");
-    }
-
-    private static int rating(Integer value) {
-        if (value == null || value < 1 || value > 5) {
-            throw inputInvalid("评分须为1到5的整数");
-        }
-        return value;
-    }
-
     private Instant now() {
-        return clock == null ? repository.databaseNow() : clock.instant().truncatedTo(ChronoUnit.MICROS);
-    }
-
-    private ObjectNode object(String action) {
-        return json.createObjectNode().put("action", action);
+        return TradeWriteSupport.now(clock, repository);
     }
 
     private static BusinessError inputInvalid(String message) {
-        return new BusinessError("INPUT_INVALID", 422, message);
+        return TradeWriteSupport.inputInvalid(message);
     }
 
     private static BusinessError versionConflict() {
@@ -2329,17 +2185,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return value.trim();
     }
 
-    private static String requiredTrimmedText(String value, int max, String field) {
-        if (value == null || value.isBlank()) {
-            throw inputInvalid(field + "不能为空");
-        }
-        String trimmed = value.trim();
-        if (trimmed.length() > max) {
-            throw inputInvalid(field + "长度不能超过" + max);
-        }
-        return trimmed;
-    }
-
     private static String optionalText(String value, int max, String field) {
         if (value == null) {
             return null;
@@ -2355,7 +2200,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static LockPlan.Key tradeKey(long tradeId) {
-        return new LockPlan.Key(LockPlan.Domain.TRADE, List.of(tradeId));
+        return TradeWriteSupport.tradeKey(tradeId);
     }
 
     private static LockPlan.Key caseKey(long caseId) {
