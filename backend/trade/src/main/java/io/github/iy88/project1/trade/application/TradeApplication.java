@@ -51,6 +51,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     private final TradeHistoryWriter historyWriter;
     private final TradeViews views;
     private final TradeQueries queries;
+    private final TradeGovernancePlanning governancePlanning;
     private final TradeCancellation cancellation;
     private final WriteExecutor writes;
     private final TaskSchedules schedules;
@@ -86,6 +87,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         this.json = json;
         this.reviews = new TradeReviews(repository, views, accounts, settings, json, clock);
         this.queries = new TradeQueries(repository, views, accounts, product, conversations, settings, json, clock);
+        this.governancePlanning = new TradeGovernancePlanning(repository, conversations, queries);
         this.confirmation = new TradeConfirmation(repository, historyWriter, views, queries, accounts, product,
                 conversations, notifications, schedules, settings, clock, json);
         this.cancellation = new TradeCancellation(repository, historyWriter, views, queries, accounts,
@@ -472,7 +474,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     public WriteResult<JsonNode> freeze(ExecutionContext context, String key, TradeCommands.Freeze command) {
         long manager = actor(context);
         return run(context, "trade.freeze", key, command,
-                (ctx, request) -> prepareFreezeChange(manager, request.tradeId(), request.caseId()),
+                (ctx, request) -> governancePlanning.freezeChange(manager, request.tradeId(), request.caseId()),
                 (ctx, request) -> qualifyGovernance(ctx, request.tradeId()),
                 this::replayGovernance,
                 (transaction, request, qualification) -> {
@@ -485,24 +487,12 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
 
     @Override
     public LockPlan governancePlan(long managerId, long tradeId, long caseId, boolean product) {
-        return prepareGovernance(managerId, tradeId, caseId, product);
+        return governancePlanning.governance(managerId, tradeId, caseId, product);
     }
 
     @Override
     public TradePorts.CaseEnforcementPlan prepare(long managerId, long tradeId, long caseId, boolean product) {
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        long conversationId = requireConversationId(tradeId);
-        var resources = new TreeSet<LockPlan.Key>();
-        if (product) {
-            resources.add(productKey(trade.productId()));
-        }
-        resources.add(tradeKey(tradeId));
-        resources.add(caseKey(caseId));
-        resources.add(conversationKey(conversationId));
-        // Freeze/lift/adjust changes a party's qualification, so both trade parties take the
-        // exclusive account lock while the manager remains shared.
-        return new TradePorts.CaseEnforcementPlan(new LockPlan(partyAccounts(managerId, trade, true), resources),
-                conversationId, product ? trade.productId() : null);
+        return governancePlanning.enforcement(managerId, tradeId, caseId, product);
     }
 
     @Override
@@ -575,7 +565,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                                             TradeCommands.LiftFreeze command) {
         long manager = actor(context);
         return run(context, "trade.freeze.lift", key, command,
-                (ctx, request) -> prepareFreezeChange(manager, request.tradeId(), request.caseId()),
+                (ctx, request) -> governancePlanning.freezeChange(manager, request.tradeId(), request.caseId()),
                 (ctx, request) -> qualifyGovernance(ctx, request.tradeId()),
                 this::replayGovernance,
                 (transaction, request, qualification) -> {
@@ -654,7 +644,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                                               TradeCommands.AdjustStatus command) {
         long manager = actor(context);
         return run(context, "trade.adjust", key, command,
-                (ctx, request) -> prepareGovernance(manager, request.tradeId(), request.caseId(), true),
+                (ctx, request) -> governancePlanning.governance(manager, request.tradeId(), request.caseId(), true),
                 (ctx, request) -> qualifyGovernance(ctx, request.tradeId()),
                 this::replayGovernance,
                 (transaction, request, qualification) -> {
@@ -707,7 +697,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     public WriteResult<JsonNode> restore(ExecutionContext context, String key, TradeCommands.Restore command) {
         long manager = actor(context);
         return run(context, "trade.restore", key, command,
-                (ctx, request) -> prepareGovernance(manager, request.tradeId(), request.caseId(), false),
+                (ctx, request) -> governancePlanning.governance(manager, request.tradeId(), request.caseId(), false),
                 (ctx, request) -> qualifyGovernance(ctx, request.tradeId()),
                 this::replayGovernance,
                 (transaction, request, qualification) -> {
@@ -791,7 +781,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 (ctx, request) -> {
                     var dispute = repository.dispute(request.disputeId())
                             .orElseThrow(() -> new BusinessError("DISPUTE_NOT_OPEN", 409, "争议不存在"));
-                    return prepareGovernance(manager, dispute.tradeId(), request.caseId(), false);
+                    return governancePlanning.governance(manager, dispute.tradeId(), request.caseId(), false);
                 },
                 (ctx, request) -> {
                     var dispute = repository.dispute(request.disputeId())
@@ -1228,27 +1218,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return TradeWriteSupport.prepareTrade(repository, conversations, actor, tradeId, product, caseId);
     }
 
-    private LockPlan prepareGovernance(long manager, long tradeId, long caseId, boolean product) {
-        return prepareGovernance(manager, tradeId, caseId, product, false);
-    }
-
-    private LockPlan prepareGovernance(long manager, long tradeId, long caseId, boolean product,
-                                       boolean exclusiveParties) {
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        var resources = new TreeSet<LockPlan.Key>();
-        if (product) {
-            resources.add(productKey(trade.productId()));
-        }
-        resources.add(tradeKey(tradeId));
-        resources.add(caseKey(caseId));
-        conversations.find(tradeId).ifPresent(id -> resources.add(conversationKey(id)));
-        return new LockPlan(partyAccounts(manager, trade, exclusiveParties), resources);
-    }
-
-    private LockPlan prepareFreezeChange(long manager, long tradeId, long caseId) {
-        return prepareGovernance(manager, tradeId, caseId, false, true);
-    }
-
     private Void qualifyTrade(ExecutionContext context, long tradeId) {
         accounts.requireCurrentSession(context);
         repository.find(tradeId).orElseThrow(Trade::notVisible).requireParticipant(actor(context));
@@ -1271,23 +1240,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
 
     private Map<Long, LockPlan.AccountMode> sharedAccounts(Collection<Long> accountIds) {
         return TradeWriteSupport.sharedAccounts(accountIds);
-    }
-
-    /**
-     * Manager plus both trade parties. A qualification-changing action takes the exclusive lock
-     * for the parties, so product writes and new purchases that read the party freeze under their
-     * shared account lock either finish before the freeze or observe it after it commits.
-     */
-    private static Map<Long, LockPlan.AccountMode> partyAccounts(long managerId, Trade trade,
-                                                                 boolean exclusiveParties) {
-        var accounts = partyAccounts(trade, exclusiveParties);
-        // A manager who is also a party keeps the stronger party mode.
-        accounts.putIfAbsent(managerId, LockPlan.AccountMode.SHARED);
-        return accounts;
-    }
-
-    private static Map<Long, LockPlan.AccountMode> partyAccounts(Trade trade, boolean exclusiveParties) {
-        return TradeWriteSupport.partyAccounts(trade, exclusiveParties);
     }
 
     private void requireWrite(long accountId) {
