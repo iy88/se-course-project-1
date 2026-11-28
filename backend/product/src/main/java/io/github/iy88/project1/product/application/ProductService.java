@@ -178,75 +178,120 @@ public class ProductService {
 
     public ProductDetail edit(long sellerId, long productId, EditCommand command, AuditContext auditContext) {
         ExecutionContext caller = auditContext.execution();
-        return transaction.execute(status -> {
-            writeGuard.requireWritable(sellerId);
-            Product product = lockForSeller(sellerId, productId);
-            if (Product.IN_TRADE.equals(product.lifecycleState())) {
-                throw new BusinessError("EDIT_NOT_ALLOWED_IN_TRADE", 409, "交易中不能修改商品");
+        return transaction.execute(status -> editSellerProduct(sellerId, productId, command, auditContext, caller));
+    }
+
+    /**
+     * Applies the seller edit steps in their original order inside the caller's transaction. The
+     * lifecycle check rejects only in-trade products; pending, rejected and off-shelf products remain
+     * editable.
+     */
+    private ProductDetail editSellerProduct(long sellerId, long productId, EditCommand command,
+                                            AuditContext auditContext, ExecutionContext caller) {
+        Product product = lockSellerEditableProduct(sellerId, productId, command);
+        ProductAudit latest = latestAudit(productId);
+        Instant now = Instant.now();
+        int versionBefore = product.contentVersion();
+        Set<Long> currentCategories = new LinkedHashSet<>(links.activeCategoryIds(productId));
+        Map<String, Object> before = snapshot(product, currentCategories);
+        EditedContent content = resolveEditedContent(product, command);
+        applyCategoryReplacement(productId, sellerId, command.categoryIds(), now);
+        CategoryApplication createdApplication = createCategoryApplication(productId, sellerId, product, latest,
+                command, now);
+        if (command.imageFileIds() != null) {
+            imageReferences.replaceImages(productId, sellerId, command.imageFileIds());
+        }
+        Map<String, Object> after = applyContentAndSave(productId, product, content, now);
+        ProductEditHistory edit = edits.save(new ProductEditHistory(productId, sellerId, before, after, now));
+        notifyProductEdited(caller, sellerId, productId, edit, product, now);
+        ProductDetail detail = detail(product, sellerId, latest);
+        recordEditAudit(auditContext, productId, edit, versionBefore, product, before, after, createdApplication);
+        return detail;
+    }
+
+    private Product lockSellerEditableProduct(long sellerId, long productId, EditCommand command) {
+        writeGuard.requireWritable(sellerId);
+        Product product = lockForSeller(sellerId, productId);
+        if (Product.IN_TRADE.equals(product.lifecycleState())) {
+            throw new BusinessError("EDIT_NOT_ALLOWED_IN_TRADE", 409, "交易中不能修改商品");
+        }
+        requireVersion(product, command.expectedVersion());
+        if (command.title() == null && command.description() == null && command.priceCents() == null
+                && command.categoryIds() == null && command.proposedCategoryName() == null
+                && command.imageFileIds() == null) {
+            throw new BusinessError("INPUT_INVALID", 422, "没有可更新的内容");
+        }
+        return product;
+    }
+
+    private EditedContent resolveEditedContent(Product product, EditCommand command) {
+        String title = command.title() == null ? product.title() : title(command.title());
+        String description = command.description() == null ? product.description()
+                : description(command.description());
+        long price = command.priceCents() == null ? product.priceCents() : price(command.priceCents());
+        return new EditedContent(title, description, price);
+    }
+
+    private void applyCategoryReplacement(long productId, long sellerId, List<String> categoryIds, Instant now) {
+        if (categoryIds == null) {
+            return;
+        }
+        Set<Long> replacement = parseIds(categoryIds);
+        if (replacement.isEmpty()) {
+            throw new BusinessError("CATEGORY_REQUIRED", 422, "商品至少需要一个分类");
+        }
+        requireSelectable(replacement);
+        for (ProductCategory link : links.findByProductIdAndRemovedAtIsNullOrderByCategoryIdAsc(productId)) {
+            if (!replacement.contains(link.categoryId())) {
+                link.remove(now, "seller", sellerId);
+                links.save(link);
             }
-            requireVersion(product, command.expectedVersion());
-            if (command.title() == null && command.description() == null && command.priceCents() == null
-                    && command.categoryIds() == null && command.proposedCategoryName() == null
-                    && command.imageFileIds() == null) {
-                throw new BusinessError("INPUT_INVALID", 422, "没有可更新的内容");
-            }
-            ProductAudit latest = latestAudit(productId);
-            Instant now = Instant.now();
-            int versionBefore = product.contentVersion();
-            Set<Long> currentCategories = new LinkedHashSet<>(links.activeCategoryIds(productId));
-            Map<String, Object> before = snapshot(product, currentCategories);
-            String title = command.title() == null ? product.title() : title(command.title());
-            String description = command.description() == null ? product.description()
-                    : description(command.description());
-            long price = command.priceCents() == null ? product.priceCents() : price(command.priceCents());
-            if (command.categoryIds() != null) {
-                Set<Long> replacement = parseIds(command.categoryIds());
-                if (replacement.isEmpty()) {
-                    throw new BusinessError("CATEGORY_REQUIRED", 422, "商品至少需要一个分类");
-                }
-                requireSelectable(replacement);
-                for (ProductCategory link : links.findByProductIdAndRemovedAtIsNullOrderByCategoryIdAsc(productId)) {
-                    if (!replacement.contains(link.categoryId())) {
-                        link.remove(now, "seller", sellerId);
-                        links.save(link);
-                    }
-                }
-                saveLinks(productId, sellerId, replacement, now);
-            }
-            CategoryApplication createdApplication = null;
-            if (command.proposedCategoryName() != null) {
-                if (!categoryApplicationAllowed(product, latest)) {
-                    throw new BusinessError("CATEGORY_APPLICATION_NOT_ALLOWED", 409, "当前状态不能提交分类申请");
-                }
-                if (applications.lockPending(productId).isEmpty()) {
-                    createdApplication = applications.save(new CategoryApplication(productId, sellerId,
-                            proposedName(command.proposedCategoryName()), now));
-                }
-            }
-            if (command.imageFileIds() != null) {
-                imageReferences.replaceImages(productId, sellerId, command.imageFileIds());
-            }
-            product.editContent(title, description, price, now);
-            products.save(product);
-            Set<Long> afterCategories = new LinkedHashSet<>(links.activeCategoryIds(productId));
-            Map<String, Object> after = snapshot(product, afterCategories);
-            ProductEditHistory edit = edits.save(new ProductEditHistory(productId, sellerId, before, after, now));
-            editNotices.productEdited(caller, sellerId, productId, edit.id(), product.title(),
-                    Product.PUBLIC.equals(product.lifecycleState()), now);
-            ProductDetail detail = detail(product, sellerId, latest);
-            Map<String, Object> facts = new LinkedHashMap<>();
-            facts.put("edit_id", Long.toString(edit.id()));
-            facts.put("content_version_before", versionBefore);
-            facts.put("content_version_after", product.contentVersion());
-            facts.put("lifecycle_state", product.lifecycleState());
-            facts.put("changed_fields", changedFields(before, after));
-            if (createdApplication != null) {
-                facts.put("category_application_id", Long.toString(createdApplication.id()));
-            }
-            auditRecords.record(auditContext, AuditActions.PRODUCT_EDITED,
-                    new ResourceRef("product", productId), null, facts);
-            return detail;
-        });
+        }
+        saveLinks(productId, sellerId, replacement, now);
+    }
+
+    private CategoryApplication createCategoryApplication(long productId, long sellerId, Product product,
+                                                          ProductAudit latest, EditCommand command, Instant now) {
+        if (command.proposedCategoryName() == null) {
+            return null;
+        }
+        if (!categoryApplicationAllowed(product, latest)) {
+            throw new BusinessError("CATEGORY_APPLICATION_NOT_ALLOWED", 409, "当前状态不能提交分类申请");
+        }
+        if (applications.lockPending(productId).isEmpty()) {
+            return applications.save(new CategoryApplication(productId, sellerId,
+                    proposedName(command.proposedCategoryName()), now));
+        }
+        return null;
+    }
+
+    private Map<String, Object> applyContentAndSave(long productId, Product product, EditedContent content,
+                                                    Instant now) {
+        product.editContent(content.title(), content.description(), content.priceCents(), now);
+        products.save(product);
+        return snapshot(product, new LinkedHashSet<>(links.activeCategoryIds(productId)));
+    }
+
+    private void notifyProductEdited(ExecutionContext caller, long sellerId, long productId,
+                                     ProductEditHistory edit, Product product, Instant now) {
+        editNotices.productEdited(caller, sellerId, productId, edit.id(), product.title(),
+                Product.PUBLIC.equals(product.lifecycleState()), now);
+    }
+
+    private void recordEditAudit(AuditContext auditContext, long productId, ProductEditHistory edit,
+                                 int versionBefore, Product product, Map<String, Object> before,
+                                 Map<String, Object> after, CategoryApplication createdApplication) {
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("edit_id", Long.toString(edit.id()));
+        facts.put("content_version_before", versionBefore);
+        facts.put("content_version_after", product.contentVersion());
+        facts.put("lifecycle_state", product.lifecycleState());
+        facts.put("changed_fields", changedFields(before, after));
+        if (createdApplication != null) {
+            facts.put("category_application_id", Long.toString(createdApplication.id()));
+        }
+        auditRecords.record(auditContext, AuditActions.PRODUCT_EDITED,
+                new ResourceRef("product", productId), null, facts);
     }
 
     /**
@@ -994,6 +1039,9 @@ public class ProductService {
         public ProductCounts {
             byState = Map.copyOf(byState);
         }
+    }
+
+    private record EditedContent(String title, String description, long priceCents) {
     }
 
     private record StateCount(String state, long total) {
