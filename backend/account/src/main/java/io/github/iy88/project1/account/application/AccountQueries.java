@@ -1,6 +1,5 @@
 package io.github.iy88.project1.account.application;
 
-import io.github.iy88.project1.account.persistence.Account;
 import io.github.iy88.project1.account.persistence.AccountRepository;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -40,7 +39,7 @@ public class AccountQueries {
         }
         var foundAccounts = accounts.findByIdIn(accountIds);
         Map<Long, String> avatarUrls = avatars.currentUrls(
-                foundAccounts.stream().map(Account::id).toList());
+                foundAccounts.stream().map(entry -> entry.id()).toList());
         var found = new LinkedHashMap<Long, Profile>();
         for (var account : foundAccounts) {
             found.put(account.id(), new Profile(account.id(), account.displayName(),

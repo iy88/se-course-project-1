@@ -4,7 +4,6 @@ import io.github.iy88.project1.account.application.AccountQueries;
 import io.github.iy88.project1.conversation.application.AccountDirectory;
 import io.github.iy88.project1.conversation.application.CaseConversations;
 import io.github.iy88.project1.conversation.application.CaseParticipation;
-import io.github.iy88.project1.conversation.application.ConversationQueries;
 import io.github.iy88.project1.conversation.application.Conversations;
 import io.github.iy88.project1.conversation.application.TradeChats;
 import io.github.iy88.project1.conversation.application.TradeParticipation;

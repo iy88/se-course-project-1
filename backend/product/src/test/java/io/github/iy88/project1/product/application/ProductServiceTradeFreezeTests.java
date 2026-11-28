@@ -28,7 +28,6 @@ import io.github.iy88.project1.product.persistence.ProductEditHistoryRepository;
 import io.github.iy88.project1.product.persistence.ProductRepository;
 import io.github.iy88.project1.storage.application.FileRead;
 import io.github.iy88.project1.storage.persistence.FileReferences;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,7 +45,6 @@ class ProductServiceTradeFreezeTests {
     private static final long SELLER = 7L;
     private static final long PRODUCT = 10L;
     private static final long CATEGORY = 3L;
-    private static final Instant NOW = Instant.parse("2026-11-26T03:00:00Z");
 
     private final ProductRepository products = mock(ProductRepository.class);
     private final ProductCategoryRepository links = mock(ProductCategoryRepository.class);
@@ -60,7 +58,6 @@ class ProductServiceTradeFreezeTests {
     private ProductService service;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
         when(links.activeCategoryIds(anyLong())).thenReturn(List.of(CATEGORY));
         when(links.findByProductIdAndRemovedAtIsNullOrderByCategoryIdAsc(anyLong())).thenReturn(List.of());
@@ -73,7 +70,7 @@ class ProductServiceTradeFreezeTests {
         when(edits.save(any())).thenReturn(history);
         when(products.save(any())).thenAnswer(call -> call.getArgument(0));
 
-        ObjectProvider<ProductTradeFreeze> provider = mock(ObjectProvider.class);
+        ObjectProvider<ProductTradeFreeze> provider = mock();
         when(provider.getIfAvailable()).thenReturn(freeze);
 
         var manager = mock(PlatformTransactionManager.class);
@@ -86,7 +83,7 @@ class ProductServiceTradeFreezeTests {
         when(environment.getRequiredProperty("OSS_ACCESS_KEY_ID")).thenReturn("id");
         when(environment.getRequiredProperty("OSS_ACCESS_KEY_SECRET")).thenReturn("secret");
         service = new ProductService(products, links, edits, audits,
-                mock(CategoryApplicationRepository.class), mock(ObjectProvider.class), accounts,
+                mock(CategoryApplicationRepository.class), mock(), accounts,
                 mock(AccountAvatarService.class), mock(AccountWriteGuard.class), directory,
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), fileReferences, mock(FileRead.class),

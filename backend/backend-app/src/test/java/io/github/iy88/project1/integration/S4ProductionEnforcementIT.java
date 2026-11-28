@@ -80,7 +80,7 @@ class S4ProductionEnforcementIT {
         if (app == null) {
             return;
         }
-        try (var context = app; var client = http) {
+        try (var context = app; var _ = http) {
             var sessions = context.getBean(SessionService.class);
             for (var session : SESSIONS) {
                 try {
@@ -834,7 +834,7 @@ class S4ProductionEnforcementIT {
                 select count(*) from notification where source_type = 'case' and source_id = ?
                   and event_type in ('management.case_decide', 'management.case_execute', 'management.case_lift')
                 """).param(firstCase).query(Long.class).single()).isZero();
-        assertThat(get(manager, "/cases/" + firstCase, 200).path("archived_at").asText())
+        assertThat(get(manager, "/cases/" + firstCase, 200).path("archived_at").asString())
                 .isNotBlank();
         assertThat(get(otherManager, "/cases/" + secondCase, 200).path("archived_at").isNull())
                 .isTrue();
@@ -1001,7 +1001,7 @@ class S4ProductionEnforcementIT {
         assertThat(page.path("total").asLong()).isEqualTo(1);
         assertThat(page.at("/counts_by_kind/inquiry_response").asLong()).isEqualTo(1);
         assertThat(page.at("/items/0/source/case_id").asLong()).isEqualTo(caseId);
-        assertThat(page.at("/items/0/source/inquiry_action_ids").valueStream().map(JsonNode::asString).toList())
+        assertThat(page.at("/items/0/source/inquiry_action_ids").valueStream().map(element -> element.asString()).toList())
                 .containsExactly(first.path("inquiry_action_id").asString(), second.path("inquiry_action_id").asString());
         assertThat(get(reporter, todos, 200).path("total").asLong()).isZero();
         assertThat(get(recipient, "/account/overview", 200).path("todo_count").asLong()).isEqualTo(1);
@@ -1010,7 +1010,7 @@ class S4ProductionEnforcementIT {
                 {"thread":%s,"message_kind":"statement","body":"说明第一项","inquiry_action_id":"%s"}
                 """.formatted(first.path("thread"), first.path("inquiry_action_id").asString()), key(), 201);
         assertThat(get(recipient, todos, 200).at("/items/0/source/inquiry_action_ids")
-                .valueStream().map(JsonNode::asString).toList()).containsExactly(second.path("inquiry_action_id").asString());
+                .valueStream().map(element -> element.asString()).toList()).containsExactly(second.path("inquiry_action_id").asString());
         long branch = statement.at("/thread/conversation_id").asLong();
         long message = statement.path("case_message_id").asLong();
         assertThat(db.sql("""

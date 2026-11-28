@@ -16,7 +16,6 @@ import io.github.iy88.project1.notification.application.NotificationIntent;
 import io.github.iy88.project1.notification.application.NotificationPage;
 import io.github.iy88.project1.notification.application.NotificationQueries;
 import io.github.iy88.project1.notification.application.NotificationQuery;
-import io.github.iy88.project1.notification.application.NotificationView;
 import io.github.iy88.project1.notification.persistence.NotificationStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -97,7 +96,7 @@ class NotificationPersistenceIT {
     @AfterAll
     static void cleanUp() {
         if (app == null) return;
-        try (var context = app) {
+        try (var _ = app) {
             for (long account : List.of(SELLER, SECOND_RECIPIENT, OTHER_ACCOUNT, PAGE_RECIPIENT)) {
                 db.sql("DELETE FROM notification WHERE recipient_account_id = ?").param(account).update();
                 db.sql("DELETE FROM user_event WHERE recipient_account_id = ?").param(account).update();
@@ -250,7 +249,7 @@ class NotificationPersistenceIT {
         assertThat(byEvent.total()).isEqualTo(1);
         assertThat(byEvent.items()).hasSize(1);
         assertThat(byEvent.items().get(0).eventType()).isEqualTo("case.inquiry_created");
-        assertThat(unread.items()).extracting(NotificationView::notificationId).doesNotContain(newest);
+        assertThat(unread.items()).extracting(entry -> entry.notificationId()).doesNotContain(newest);
     }
 
     @Test

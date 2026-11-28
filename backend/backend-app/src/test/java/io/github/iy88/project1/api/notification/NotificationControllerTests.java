@@ -18,7 +18,6 @@ import io.github.iy88.project1.core.WriteResult;
 import io.github.iy88.project1.notification.application.NotificationPage;
 import io.github.iy88.project1.notification.application.NotificationQueries;
 import io.github.iy88.project1.notification.application.NotificationView;
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -125,7 +124,7 @@ class NotificationControllerTests {
     @Test
     void rejectsAnUnknownReadFilter() throws Exception {
         mvc.perform(get("/api/v1/account/notifications").param("read", "sometimes"))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("INPUT_INVALID"))
                 .andExpect(jsonPath("$.request_id").exists());
     }
@@ -133,7 +132,7 @@ class NotificationControllerTests {
     @Test
     void rejectsAPageSizeAboveTheLimit() throws Exception {
         mvc.perform(get("/api/v1/account/notifications").param("page_size", "500"))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("INPUT_INVALID"));
     }
 
@@ -167,7 +166,7 @@ class NotificationControllerTests {
         mvc.perform(put("/api/v1/account/notifications/11/read")
                         .header("Origin", ORIGIN)
                         .header("X-CSRF-Token", CSRF_TOKEN))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.error.code").value("INPUT_INVALID"));
     }
 

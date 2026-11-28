@@ -15,7 +15,6 @@ import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.LockPlan;
-import io.github.iy88.project1.core.ResourceRef;
 import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.application.CaseCommentAccess;
 import java.net.URI;
@@ -112,7 +111,7 @@ class CaseLifecycleIT {
     @AfterAll
     static void stopApplication() {
         if (app != null) {
-            try (var context = app) {
+            try (var _ = app) {
                 // The isolated database is dropped by the handover script after this process exits.
             }
         }
@@ -252,19 +251,19 @@ class CaseLifecycleIT {
         assertThat(resolution.status()).isEqualTo(201);
         var resolutionAction = store.action(caseId, resolution.data().path("case_action_id").asLong()).orElseThrow();
         var recordedBasis = app.getBean(JsonMapper.class).readTree(resolutionAction.basisRef());
-        assertThat(recordedBasis).extracting(JsonNode::asString).containsExactlyElementsOf(basisRefs);
+        assertThat(recordedBasis).extracting(element -> element.asString()).containsExactlyElementsOf(basisRefs);
         assertThat(queries.detail(context(manager), caseId).path("pending_appeals")).isEmpty();
 
         var repeat = new CaseCommands.Message(threadId, CaseVocabulary.KIND_APPEAL,
                 "补充申辩理由", null, null, null, null);
         assertThat(queries.detail(context(related), caseId).path("available_actions"))
-                .extracting(JsonNode::asString).contains(CaseVocabulary.SUBMIT_APPEAL);
+                .extracting(element -> element.asString()).contains(CaseVocabulary.SUBMIT_APPEAL);
         var secondAppeal = cases.postMessage(context(related), "appeal-second", caseId, repeat);
         assertThat(secondAppeal.status()).isEqualTo(201);
         long secondAppealId = secondAppeal.data().path("case_action_id").asLong();
         assertThat(secondAppealId).isNotEqualTo(appealActionId);
         assertThat(queries.detail(context(related), caseId).path("available_actions"))
-                .extracting(JsonNode::asString).doesNotContain(CaseVocabulary.SUBMIT_APPEAL);
+                .extracting(element -> element.asString()).doesNotContain(CaseVocabulary.SUBMIT_APPEAL);
         assertThatThrownBy(() -> cases.postMessage(context(related), "appeal-third", caseId, repeat))
                 .isInstanceOfSatisfying(BusinessError.class,
                         error -> assertThat(error.code()).isEqualTo("STATE_CONFLICT"));
@@ -716,7 +715,7 @@ class CaseLifecycleIT {
         var reporter = queries.detail(context(buyer), report);
         assertThat(reporter.path("viewpoint").asString()).isEqualTo("reporter");
         assertThat(reporter.path("pending_inquiries").isEmpty()).isTrue();
-        assertThat(reporter.path("available_actions").valueStream().map(JsonNode::asString).toList())
+        assertThat(reporter.path("available_actions").valueStream().map(element -> element.asString()).toList())
                 .containsExactly(CaseVocabulary.SUPPLEMENT_EVIDENCE);
     }
 

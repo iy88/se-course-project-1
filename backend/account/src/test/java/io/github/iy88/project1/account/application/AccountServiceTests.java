@@ -91,9 +91,8 @@ class AccountServiceTests {
 
         service.register("new@example.com", "New User", PASSWORD, verification.id(), "123456", entry());
         BusinessError failure = catchThrowableOfType(
-                () -> service.register("new@example.com", "New User", PASSWORD, verification.id(), "123456",
-                        entry()),
-                BusinessError.class);
+                BusinessError.class, () -> service.register("new@example.com", "New User", PASSWORD, verification.id(), "123456",
+                        entry()));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("VERIFICATION_NOT_USABLE");
@@ -109,9 +108,8 @@ class AccountServiceTests {
                 .thenThrow(new DataIntegrityViolationException("account email unique"));
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.register("taken@example.com", "Taken User", PASSWORD, verification.id(), "123456",
-                        entry()),
-                BusinessError.class);
+                BusinessError.class, () -> service.register("taken@example.com", "Taken User", PASSWORD, verification.id(), "123456",
+                        entry()));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("EMAIL_IN_USE");
@@ -124,9 +122,8 @@ class AccountServiceTests {
         when(verifications.lockById(verification.id())).thenReturn(Optional.of(verification));
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.register("new@example.com", "New User", PASSWORD, verification.id(), "999999",
-                        entry()),
-                BusinessError.class);
+                BusinessError.class, () -> service.register("new@example.com", "New User", PASSWORD, verification.id(), "999999",
+                        entry()));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("VERIFICATION_CODE_INVALID");
@@ -141,9 +138,8 @@ class AccountServiceTests {
         when(verifications.lockById(verification.id())).thenReturn(Optional.of(verification));
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.register("new@example.com", "New User", PASSWORD, verification.id(), "123456",
-                        entry()),
-                BusinessError.class);
+                BusinessError.class, () -> service.register("new@example.com", "New User", PASSWORD, verification.id(), "123456",
+                        entry()));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("VERIFICATION_NOT_USABLE");
@@ -156,7 +152,7 @@ class AccountServiceTests {
         when(accounts.findByEmail("user@example.com")).thenReturn(Optional.of(account));
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.login("user@example.com", "WrongPassword123"), BusinessError.class);
+                BusinessError.class, () -> service.login("user@example.com", "WrongPassword123"));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("CREDENTIALS_INVALID");
@@ -189,8 +185,7 @@ class AccountServiceTests {
         Account account = account("user@example.com", 7L, PASSWORD);
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.changePassword(account, "WrongPassword123", "AnotherPassword123"),
-                BusinessError.class);
+                BusinessError.class, () -> service.changePassword(account, "WrongPassword123", "AnotherPassword123"));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("CURRENT_PASSWORD_INVALID");
@@ -264,9 +259,8 @@ class AccountServiceTests {
         when(verifications.lockById(newRow.id())).thenReturn(Optional.of(newRow));
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.changeEmail(account, new AccountService.ChangeEmailCommand(
-                        "new@example.com", oldRow.id(), "111111", newRow.id(), "222222")),
-                BusinessError.class);
+                BusinessError.class, () -> service.changeEmail(account, new AccountService.ChangeEmailCommand(
+                        "new@example.com", oldRow.id(), "111111", newRow.id(), "222222")));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("VERIFICATION_CODE_INVALID");
@@ -280,9 +274,8 @@ class AccountServiceTests {
         Account account = account("same@example.com", 7L, PASSWORD);
 
         BusinessError failure = catchThrowableOfType(
-                () -> service.changeEmail(account, new AccountService.ChangeEmailCommand(
-                        " SAME@example.com ", 1L, "111111", 2L, "222222")),
-                BusinessError.class);
+                BusinessError.class, () -> service.changeEmail(account, new AccountService.ChangeEmailCommand(
+                        " SAME@example.com ", 1L, "111111", 2L, "222222")));
 
         assertThat(failure).isNotNull();
         assertThat(failure.code()).isEqualTo("EMAIL_UNCHANGED");

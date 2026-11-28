@@ -74,11 +74,11 @@ class ProductServiceDisplayRestrictionTests {
         when(environment.getRequiredProperty("OSS_ACCESS_KEY_SECRET")).thenReturn("secret");
         @SuppressWarnings("unchecked")
         org.springframework.beans.factory.ObjectProvider<ProductTradeFreeze> freezeProvider =
-                mock(org.springframework.beans.factory.ObjectProvider.class);
+                mock();
         when(freezeProvider.getIfAvailable()).thenReturn(mock(ProductTradeFreeze.class));
         service = new ProductService(products, links, mock(ProductEditHistoryRepository.class), audits,
                 mock(CategoryApplicationRepository.class),
-                mock(org.springframework.beans.factory.ObjectProvider.class), accounts,
+                mock(), accounts,
                 mock(AccountAvatarService.class), mock(AccountWriteGuard.class), directory,
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), fileReferences, mock(FileRead.class),

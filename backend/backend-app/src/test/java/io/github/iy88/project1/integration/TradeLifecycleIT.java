@@ -18,15 +18,10 @@ import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.messaging.TaskWorker;
 import io.github.iy88.project1.notification.application.NotificationQueries;
 import io.github.iy88.project1.notification.application.NotificationQuery;
-import io.github.iy88.project1.notification.application.NotificationView;
 import io.github.iy88.project1.trade.application.TradeApplication;
 import io.github.iy88.project1.trade.application.TradeCommands;
 import io.github.iy88.project1.trade.application.TradePorts;
-import io.github.iy88.project1.trade.domain.TradeModels;
-import io.github.iy88.project1.trade.domain.TradeStatus;
-import io.github.iy88.project1.trade.domain.TradeVocabulary;
 import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -39,7 +34,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -149,14 +143,14 @@ class TradeLifecycleIT {
             ready.await(5, TimeUnit.SECONDS);
             start.countDown();
             var results = List.of(one.get(15, TimeUnit.SECONDS), two.get(15, TimeUnit.SECONDS));
-            assertThat(results.stream().filter(Result::ok).count()).isEqualTo(1);
+            assertThat(results.stream().filter(component -> component.ok()).count()).isEqualTo(1);
             var loser = results.stream().filter(result -> !result.ok()).findFirst().orElseThrow();
             assertThat(loser.error()).isEqualTo("REQUEST_ALREADY_ENDED");
         }
         var rows = db.sql("SELECT id, status FROM trade WHERE product_id = ? ORDER BY id")
                 .param(product).query((row, index) -> new TradeRow(row.getLong("id"),
                         row.getString("status"))).list();
-        assertThat(rows).extracting(TradeRow::status)
+        assertThat(rows).extracting(member -> member.status())
                 .containsExactlyInAnyOrder("in_progress", "closed");
         assertThat(db.sql("SELECT count(*) FROM trade_item_snapshot WHERE product_id = ?").param(product)
                 .query(Long.class).single()).isEqualTo(1);
@@ -223,7 +217,7 @@ class TradeLifecycleIT {
                 .contains("可以在图书馆取吗？");
 
         var buyerNotices = queries.list(account(BUYER_ONE), NotificationQuery.firstPage()).items();
-        assertThat(buyerNotices).extracting(NotificationView::summary)
+        assertThat(buyerNotices).extracting(entry -> entry.summary())
                 .containsExactlyInAnyOrder("购买请求已接受", "收到交易约定");
         assertThat(buyerNotices).allSatisfy(notice -> {
             assertThat(notice.subject()).isEqualTo(accepted.data().at("/product/title").stringValue());
@@ -925,7 +919,7 @@ class TradeLifecycleIT {
         ready.await(5, TimeUnit.SECONDS);
         start.await(5, TimeUnit.SECONDS);
         try {
-            var result = trades.accept(account(SELLER), "concurrent-" + tradeId,
+            trades.accept(account(SELLER), "concurrent-" + tradeId,
                     new TradeCommands.Versioned(tradeId, 1));
             return new Result(true, null);
         } catch (BusinessError error) {
@@ -1095,7 +1089,7 @@ class TradeLifecycleIT {
             boolean released = writes.isPresent() && "fixture.product.release".equals(writes.orElseThrow().action());
             boolean releasedToPublic = writes.isPresent()
                     && "fixture.product.release_to_public".equals(writes.orElseThrow().action());
-            Long holder = released || releasedToPublic ? null : writes.map(ProductWrite::tradeId).orElse(null);
+            Long holder = released || releasedToPublic ? null : writes.map(element -> element.tradeId()).orElse(null);
             String lifecycle = released ? "off_shelf"
                     : releasedToPublic ? "on_sale" : state.lifecycleState();
             return new TradePorts.ProductState(state.productId(), state.sellerId(), state.contentVersion(),

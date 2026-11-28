@@ -4,7 +4,6 @@ import io.github.iy88.project1.casemanagement.CaseVocabulary;
 import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.OptionalLong;
@@ -306,7 +305,7 @@ final class CaseDetailQueries {
 
     private void appendAppealDeadline(ObjectNode body, DetailAccess access) {
         var deadline = store.appealEligibility(access.caseId(), access.actor())
-                .map(CaseRecords.AppealEligibility::appealDeadlineAt)
+                .map(element -> element.appealDeadlineAt())
                 .orElse(null);
         body.put("appeal_deadline_at", text(deadline));
     }
@@ -362,7 +361,7 @@ final class CaseDetailQueries {
         var resolved = actions.stream()
                 .filter(action -> CaseVocabulary.ACTION_MANAGER_REPLY.equals(action.actionKind())
                         && action.appealActionId() != null)
-                .map(CaseRecords.Action::appealActionId).collect(java.util.stream.Collectors.toSet());
+                .map(result -> result.appealActionId()).collect(java.util.stream.Collectors.toSet());
         for (var action : actions) {
             if (!CaseVocabulary.ACTION_APPEAL.equals(action.actionKind())
                     || action.relatedAccountId() == null || resolved.contains(action.actionId())) {
@@ -498,10 +497,6 @@ final class CaseDetailQueries {
 
     private static String text(Instant value) {
         return value == null ? null : value.toString();
-    }
-
-    private static String text(OffsetDateTime value) {
-        return value == null ? null : value.toInstant().toString();
     }
 
     /** The resolved requester viewpoint; sections read the same facts and flags. */

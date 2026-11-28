@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.UUID;
 
 /** Persistent, coherent campus demo data rendered by the current user and management UI. */
@@ -202,7 +201,7 @@ final class DemoSeed {
             long authorId = users.get(comment.author());
             Instant createdAt = now.minusSeconds((long) (comment.daysAgo() * 86_400));
             Long parentId = comment.replyTo() == null ? null : commentIds.get(comment.replyTo());
-            int local = localCounts.merge(comment.product(), 1, Integer::sum);
+            int local = localCounts.merge(comment.product(), 1, (count, increment) -> count + increment);
             long commentId = database.insert("""
                     insert into product_comment (product_id, author_account_id, parent_comment_id, body,
                         created_at, deleted_at, removed_at, removed_by_admin_id, removed_reason, basis_ref)

@@ -2,8 +2,6 @@ package io.github.iy88.project1.conversation.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -112,9 +110,9 @@ class ConversationQueriesTests {
         assertThat(summary.peer().avatarUrl()).isEqualTo("https://img.example/peer.png");
         assertThat(summary.branches()).hasSize(2);
         assertThat(summary.branches().getFirst().conversationKind()).isEqualTo("trade");
-        assertThat(summary.branches()).extracting(ConversationViews.Branch::sourceRef)
+        assertThat(summary.branches()).extracting(element -> element.sourceRef())
                 .containsExactly("trade:9", null);
-        assertThat(summary.branches()).extracting(ConversationViews.Branch::unreadCount)
+        assertThat(summary.branches()).extracting(entry -> entry.unreadCount())
                 .containsExactly(1L, 2L);
     }
 

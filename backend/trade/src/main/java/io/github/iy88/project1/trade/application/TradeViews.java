@@ -2,7 +2,6 @@ package io.github.iy88.project1.trade.application;
 
 import io.github.iy88.project1.trade.domain.Trade;
 import io.github.iy88.project1.trade.domain.TradeModels;
-import io.github.iy88.project1.trade.domain.TradeStatus;
 import io.github.iy88.project1.trade.domain.TradeVocabulary;
 import java.time.Instant;
 import java.util.List;

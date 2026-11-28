@@ -139,7 +139,7 @@ class S3OwnedReadModelIT {
 
         var buyer = trades.todos(buyerA, null, true, 20, 0);
         assertThat(buyer.total()).isEqualTo(3);
-        assertThat(buyer.items()).extracting(TradeOwnedReadModel.TodoRow::kind)
+        assertThat(buyer.items()).extracting(element -> element.kind())
                 .containsExactly("cancellation_response", "completion_response", "agreement_response");
         assertThat(buyer.countsByKind()).containsEntry("agreement_response", 1L)
                 .containsEntry("completion_response", 1L)
@@ -155,7 +155,7 @@ class S3OwnedReadModelIT {
         db.sql("update trade set status = 'completed', terminal_reason = 'completed', ended_at = ? where id = ?")
                 .param(at(BASE.plusSeconds(90))).param(tradeTwo).update();
         try {
-            assertThat(trades.productNoticeTargets(productOne)).extracting(TradeOwnedReadModel.ProductNoticeTarget::tradeId)
+            assertThat(trades.productNoticeTargets(productOne)).extracting(entry -> entry.tradeId())
                     .containsExactly(tradeOne);
             assertThat(trades.totals(seller).total()).isEqualTo(5);
         } finally {
@@ -214,7 +214,7 @@ class S3OwnedReadModelIT {
         tradeFour = trade(productThree, buyerA, "in_progress", BASE.plusSeconds(40));
         tradeFive = trade(productFour, buyerA, "in_progress", BASE.plusSeconds(50));
 
-        long agreementThree = agreement(tradeThree, null, "proposed", seller, BASE.plusSeconds(60));
+        agreement(tradeThree, null, "proposed", seller, BASE.plusSeconds(60));
         long agreementFour = agreement(tradeFour, null, "effective", seller, BASE.plusSeconds(70));
         long agreementFive = agreement(tradeFive, null, "effective", seller, BASE.plusSeconds(80));
         db.sql("update trade set active_agreement_id = ? where id = ?").param(agreementFour).param(tradeFour).update();

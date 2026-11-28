@@ -12,7 +12,6 @@ import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import io.github.iy88.project1.core.LockPlan;
 import io.github.iy88.project1.core.ResourceRef;
-import io.github.iy88.project1.core.WriteTransaction;
 import io.github.iy88.project1.product.ProductSettings;
 import io.github.iy88.project1.product.persistence.CategoryApplication;
 import io.github.iy88.project1.product.persistence.CategoryApplicationRepository;
@@ -577,7 +576,7 @@ public class ProductService {
 
     public Optional<String> notificationTitle(long viewerId, long productId) {
         return products.findById(productId).filter(product -> detailVisibleTo(product, viewerId))
-                .map(Product::title);
+                .map(member -> member.title());
     }
 
     private boolean detailVisibleTo(Product product, long viewerId) {
@@ -719,7 +718,7 @@ public class ProductService {
         if (page.isEmpty()) {
             return List.of();
         }
-        List<Long> productIds = page.stream().map(Product::id).toList();
+        List<Long> productIds = page.stream().map(subject -> subject.id()).toList();
         Map<Long, List<Long>> categoriesByProduct = new LinkedHashMap<>();
         for (ProductCategory link : links.findByProductIdInAndRemovedAtIsNullOrderByProductIdAscCategoryIdAsc(
                 productIds)) {
@@ -728,7 +727,7 @@ public class ProductService {
         Set<Long> allCategories = new LinkedHashSet<>();
         categoriesByProduct.values().forEach(allCategories::addAll);
         Map<Long, String> names = directory.mainNames(allCategories);
-        Set<Long> sellerIds = page.stream().map(Product::sellerAccountId).collect(java.util.stream.Collectors.toSet());
+        Set<Long> sellerIds = page.stream().map(element -> element.sellerAccountId()).collect(java.util.stream.Collectors.toSet());
         Map<Long, String> sellers = new LinkedHashMap<>();
         for (Account account : accounts.findByIdIn(sellerIds)) {
             sellers.put(account.id(), account.displayName());

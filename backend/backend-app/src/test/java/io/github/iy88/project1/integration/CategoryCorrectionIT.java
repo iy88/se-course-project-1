@@ -125,9 +125,9 @@ class CategoryCorrectionIT {
                 new ProductService.CorrectionCommand(List.of(Long.toString(newCategory)), "分类放错了", "case", caseId),
                 accountContext(manager));
 
-        assertThat(result.previousCategories()).extracting(ProductService.CategoryRef::id)
+        assertThat(result.previousCategories()).extracting(entry -> entry.id())
                 .containsExactly(Long.toString(oldCategory));
-        assertThat(result.currentCategories()).extracting(ProductService.CategoryRef::id)
+        assertThat(result.currentCategories()).extracting(entry -> entry.id())
                 .containsExactly(Long.toString(newCategory));
 
         assertThat(db.sql("select content_version from product where product_id = ?")

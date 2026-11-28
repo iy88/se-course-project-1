@@ -3,7 +3,6 @@ package io.github.iy88.project1.api.cases;
 import io.github.iy88.project1.account.application.AccountRestrictions;
 import io.github.iy88.project1.casemanagement.application.CasePorts;
 import io.github.iy88.project1.casemanagement.application.CaseRecords;
-import io.github.iy88.project1.casemanagement.application.SubjectPlan;
 import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.LockPlan;

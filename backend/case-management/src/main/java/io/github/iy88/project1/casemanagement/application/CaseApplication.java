@@ -623,7 +623,7 @@ public class CaseApplication {
             String sourceNote = "original_enforcement_id=" + recorded.enforcementId();
             if (!replacements.isEmpty()) {
                 sourceNote += ";replacement_enforcement_ids=" + replacements.stream()
-                        .map(CaseRecords.EnforcementInstruction::enforcementId)
+                        .map(element -> element.enforcementId())
                         .collect(Collectors.joining(","));
             }
             store.markEnforcementLifted(facts.caseId(), recorded.enforcementId(), manager, basisRef, now);
@@ -1157,17 +1157,15 @@ public class CaseApplication {
         var recorded = store.enforcement(caseId, enforcementId).orElse(null);
         // The store lookup is already scoped by case, but the selected record must still prove
         // its case and appellant linkage before it can be reversed.
-        boolean sameCase = recorded != null && recorded.caseId() == caseId;
-        boolean affected = sameCase && appellant != null
-                && recorded.affectedAccountIds().contains(appellant);
-        if (!sameCase || (appellant != null && !affected)) {
+        if (recorded == null || recorded.caseId() != caseId
+                || (appellant != null && !recorded.affectedAccountIds().contains(appellant))) {
             if (requireEligible) {
                 throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "执行记录不存在");
             }
             return null;
         }
         if (requireEligible) {
-            if (!affected) {
+            if (appellant == null) {
                 throw new BusinessError("RESOURCE_NOT_VISIBLE", 404, "执行记录不存在");
             }
             if (!"applied".equals(recorded.resultStatus())
@@ -1232,7 +1230,7 @@ public class CaseApplication {
         }
         return store.action(caseId, appealActionId)
                 .filter(action -> CaseVocabulary.ACTION_APPEAL.equals(action.actionKind()))
-                .map(CaseRecords.Action::relatedAccountId)
+                .map(result -> result.relatedAccountId())
                 .orElse(null);
     }
 
@@ -1360,9 +1358,9 @@ public class CaseApplication {
 
     private Set<String> decisionBasisRefs(long caseId) {
         var allowed = new java.util.HashSet<String>();
-        store.actions(caseId).stream().filter(CaseRecords.Action::decisionBasis)
+        store.actions(caseId).stream().filter(component -> component.decisionBasis())
                 .forEach(action -> allowed.add("action:" + action.actionId()));
-        store.evidence(caseId).stream().filter(CaseRecords.Evidence::decisionBasis)
+        store.evidence(caseId).stream().filter(member -> member.decisionBasis())
                 .forEach(evidence -> allowed.add("evidence:" + evidence.evidenceId()));
         return allowed;
     }

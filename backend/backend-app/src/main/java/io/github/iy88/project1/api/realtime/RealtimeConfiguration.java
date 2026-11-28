@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadPoolExecutor;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -152,7 +153,7 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
 
                     @Override
                     public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response,
-                                               WebSocketHandler handler, Exception failure) {}
+                                               WebSocketHandler handler, @Nullable Exception failure) {}
                 });
     }
 }

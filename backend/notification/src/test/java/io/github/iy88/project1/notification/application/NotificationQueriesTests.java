@@ -44,7 +44,7 @@ class NotificationQueriesTests {
 
         assertThat(page.items()).hasSize(3);
         assertThat(page.total()).isEqualTo(3);
-        assertThat(page.items()).extracting(NotificationView::notificationId).isSortedAccordingTo(
+        assertThat(page.items()).extracting(element -> element.notificationId()).isSortedAccordingTo(
                 java.util.Comparator.reverseOrder());
     }
 

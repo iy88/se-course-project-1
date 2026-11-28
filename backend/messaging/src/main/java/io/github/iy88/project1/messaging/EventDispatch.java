@@ -2,6 +2,7 @@ package io.github.iy88.project1.messaging;
 
 import java.util.Map;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -72,8 +73,8 @@ public class EventDispatch {
         }
     }
 
-    private Claimed claim(UUID token) {
-        return jdbc.sql("""
+    private @Nullable Claimed claim(UUID token) {
+        var claimed = jdbc.sql("""
                 WITH candidate AS (
                     SELECT event_id FROM user_event WHERE published_at IS NULL
                         AND next_attempt_at <= statement_timestamp() AND expires_at > statement_timestamp()
@@ -86,7 +87,8 @@ public class EventDispatch {
                 RETURNING e.event_id, e.recipient_account_id, e.account_seq, e.attempts
                 """).param("token", token).param("lease", settings.leaseSeconds()).query((row, index) ->
                 new Claimed(row.getObject(1, UUID.class), row.getLong(2), row.getLong(3), row.getInt(4)))
-                .optional().orElse(null);
+                .optional();
+        return claimed.isPresent() ? claimed.get() : null;
     }
 
     private void retry(Claimed event, UUID token) {

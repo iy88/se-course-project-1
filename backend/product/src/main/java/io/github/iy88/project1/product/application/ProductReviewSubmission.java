@@ -71,7 +71,7 @@ final class ProductReviewSubmission {
                 throw new BusinessError("PRODUCT_NOT_RESUBMITTABLE", 409, "当前商品不能重新提交审核");
             }
             boolean hasSelectableCategory = links.activeCategoryIds(productId).stream()
-                    .anyMatch(id -> directory.find(id).map(CategoryDirectory.Info::selectable).orElse(false));
+                    .anyMatch(id -> directory.find(id).map(element -> element.selectable()).orElse(false));
             if (!hasSelectableCategory && applications.lockPending(productId).isEmpty()) {
                 throw new BusinessError("CATEGORY_REQUIRED", 422, "请至少选择一个分类或提交新分类申请");
             }

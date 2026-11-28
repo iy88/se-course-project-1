@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.lang.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 
 /** Read-only conversation queries; they never advance read progress. */
@@ -162,14 +162,14 @@ public class ConversationQueries {
 
     private static List<ConversationViews.Branch> sortedBranches(List<ConversationViews.Branch> branches) {
         return branches.stream()
-                .sorted(Comparator.comparing(ConversationViews.Branch::lastMessageAt,
+                .sorted(Comparator.comparing((ConversationViews.Branch element) -> element.lastMessageAt(),
                         Comparator.nullsFirst(Comparator.naturalOrder())).reversed())
                 .toList();
     }
 
     private static Instant latest(List<ConversationViews.Branch> branches) {
         return branches.stream()
-                .map(ConversationViews.Branch::lastMessageAt)
+                .map(element -> element.lastMessageAt())
                 .filter(java.util.Objects::nonNull)
                 .max(Comparator.naturalOrder())
                 .orElse(Instant.EPOCH);

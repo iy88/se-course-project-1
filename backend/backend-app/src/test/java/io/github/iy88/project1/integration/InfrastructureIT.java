@@ -114,7 +114,7 @@ class InfrastructureIT {
     @AfterAll
     static void cleanUp() {
         if (app == null) return;
-        try (var context = app) {
+        try (var _ = app) {
             db.sql("DELETE FROM user_event WHERE recipient_account_id IN (?, ?)")
                     .param(ACCOUNT).param(WRITE_EVENT_RECIPIENT).update();
             db.sql("DELETE FROM account_event_head WHERE account_id IN (?, ?)")

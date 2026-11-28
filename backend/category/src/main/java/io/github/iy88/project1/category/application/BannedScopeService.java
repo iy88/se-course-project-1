@@ -40,7 +40,7 @@ public class BannedScopeService {
 
     public BannedScopeView view() {
         List<BannedItem> current = items.findByDeletedAtIsNullOrderByDisplayOrderAscIdAsc();
-        Instant updatedAt = current.stream().map(BannedItem::updatedAt).max(Instant::compareTo).orElse(null);
+        Instant updatedAt = current.stream().map(entry -> entry.updatedAt()).max((left, right) -> left.compareTo(right)).orElse(null);
         List<GroupView> groups = new ArrayList<>();
         for (String group : GROUPS) {
             List<ItemView> grouped = current.stream().filter(item -> group.equals(item.group()))

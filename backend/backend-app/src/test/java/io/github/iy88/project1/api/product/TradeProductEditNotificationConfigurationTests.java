@@ -62,11 +62,11 @@ class TradeProductEditNotificationConfigurationTests {
 
         ArgumentCaptor<NotificationIntent> intents = ArgumentCaptor.forClass(NotificationIntent.class);
         verify(notifications, times(2)).createNotifications(any(NotificationEventSink.class), intents.capture());
-        assertThat(intents.getAllValues()).extracting(NotificationIntent::intentKey)
+        assertThat(intents.getAllValues()).extracting(element -> element.intentKey())
                 .containsExactly("trade.product_updated:99:11", "trade.product_updated:99:12");
-        assertThat(intents.getAllValues()).extracting(NotificationIntent::eventType)
+        assertThat(intents.getAllValues()).extracting(entry -> entry.eventType())
                 .containsOnly("trade.product_updated");
-        assertThat(intents.getAllValues()).extracting(NotificationIntent::source)
+        assertThat(intents.getAllValues()).extracting(value -> value.source())
                 .containsExactly(new ResourceRef("trade_product_edit", 11),
                         new ResourceRef("trade_product_edit", 12));
         verify(events).persist(eq(context), anyList());

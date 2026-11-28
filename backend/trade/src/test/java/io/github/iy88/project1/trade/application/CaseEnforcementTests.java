@@ -284,7 +284,7 @@ class CaseEnforcementTests {
     void ordinaryLiftAcceptsTheSystemTimeoutSourceWithoutRestoringTheTrade() {
         when(repository.find(TRADE_ID)).thenReturn(Optional.of(trade(TradeStatus.ABNORMAL)));
         var timeout = freeze(73, FreezeSource.TIMEOUT, CASE_ID, true);
-        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(timeout), List.of());
+        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(timeout)).thenReturn(List.of());
         when(repository.insertHistory(any())).thenReturn(711L);
 
         var outcome = application.liftCaseFreezeLocked(transaction, CASE_ID, TRADE_ID, "basis-21", "release");
@@ -304,7 +304,7 @@ class CaseEnforcementTests {
     @Test
     void ordinaryLiftResumesThePausedWaitOnlyAfterTheLastSource() {
         var own = freeze(71, FreezeSource.ADMIN_CASE, CASE_ID, true);
-        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(own), List.of(), List.of());
+        when(repository.activeFreezes(TRADE_ID)).thenReturn(List.of(own)).thenReturn(List.of()).thenReturn(List.of());
         when(repository.waitFor(TRADE_ID)).thenReturn(Optional.of(new TradeModels.Wait(TRADE_ID,
                 NOW.minusSeconds(100), null, 10, 100, "s2-v1", null, null)));
         when(repository.currentConfirmations(TRADE_ID)).thenReturn(List.of(new TradeModels.Confirmation(1,

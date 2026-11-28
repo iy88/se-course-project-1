@@ -38,7 +38,7 @@ public class AccountTradeService {
             return Map.of();
         }
         List<Account> found = accounts.findByIdIn(accountIds);
-        Map<Long, String> urls = avatars.currentUrls(found.stream().map(Account::id).toList());
+        Map<Long, String> urls = avatars.currentUrls(found.stream().map(entry -> entry.id()).toList());
         Map<Long, Profile> profiles = new LinkedHashMap<>();
         for (Account account : found) {
             profiles.put(account.id(), new Profile(account.id(), account.displayName(), urls.get(account.id())));

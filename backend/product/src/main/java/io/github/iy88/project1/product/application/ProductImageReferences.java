@@ -51,7 +51,7 @@ final class ProductImageReferences {
         var current = fileReferences.current(target, "image");
         if (!current.isEmpty()) {
             fileReferences.release(target,
-                    current.stream().map(FileReferences.Reference::referenceId).toList(),
+                    current.stream().map(entry -> entry.referenceId()).toList(),
                     new FileReferences.RetentionBasis("product_image_replaced", Set.of("s2-v1"), null, Set.of()));
         }
         if (!ids.isEmpty()) {

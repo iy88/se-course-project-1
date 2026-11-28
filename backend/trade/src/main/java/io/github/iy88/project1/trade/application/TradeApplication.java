@@ -11,7 +11,6 @@ import io.github.iy88.project1.messaging.TaskSchedules;
 import io.github.iy88.project1.trade.domain.Trade;
 import io.github.iy88.project1.trade.domain.TradeModels;
 import io.github.iy88.project1.trade.domain.TradeStatus;
-import io.github.iy88.project1.trade.domain.TradeVocabulary;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.ActorKind;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.AgreementStatus;
 import io.github.iy88.project1.trade.domain.TradeVocabulary.CloseReason;
@@ -56,7 +55,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     private final WriteExecutor writes;
     private final TaskSchedules schedules;
     private final Clock clock;
-    private final TradeSettings settings;
     private final TradePorts.Product product;
     private final TradePorts.Accounts accounts;
     private final TradePorts.Conversation conversations;
@@ -78,7 +76,6 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         this.writes = writes;
         this.schedules = schedules;
         this.clock = clock;
-        this.settings = settings;
         this.product = product;
         this.accounts = accounts;
         this.conversations = conversations;
@@ -805,7 +802,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         String validatedReason = requiredText(reason, 500, "处理原因");
         var found = repository.dispute(disputeId)
                 .orElseThrow(() -> new BusinessError("DISPUTE_NOT_OPEN", 409, "争议不存在"));
-        var pre = repository.find(found.tradeId()).orElseThrow(Trade::notVisible);
+        repository.find(found.tradeId()).orElseThrow(Trade::notVisible);
         requireWrite(manager);
         var trade = repository.lockTrade(transaction, found.tradeId());
         trade.requireNotTerminal();
@@ -1127,9 +1124,9 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         return repository.find(tradeId)
                 .filter(trade -> trade.isParticipant(viewerId))
                 .map(trade -> {
-                    String title = repository.snapshot(tradeId).map(TradeModels.Snapshot::title)
+                    String title = repository.snapshot(tradeId).map(element -> element.title())
                             .or(() -> product.visibleSummary(trade.productId(), viewerId)
-                                    .map(TradePorts.ProductSummary::title))
+                                    .map(entry -> entry.title()))
                             .orElse(null);
                     return new NotificationContext(title, trade.requestNote());
                 });

@@ -27,7 +27,6 @@ import io.github.iy88.project1.storage.application.FileRead;
 import io.github.iy88.project1.storage.persistence.FileReferences;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,7 +48,7 @@ class ProductServiceEditNoticeTests {
     private final ProductEditHistoryRepository edits = mock(ProductEditHistoryRepository.class);
     private final ProductEditNotices notices = mock(ProductEditNotices.class);
     private final ProductAuditRepository audits = mock(ProductAuditRepository.class);
-    private final ObjectProvider<ProductReviewCaseLifecycle> reviewCases = mock(ObjectProvider.class);
+    private final ObjectProvider<ProductReviewCaseLifecycle> reviewCases = mock();
     private ProductService service;
     private Product product;
 
@@ -85,7 +84,7 @@ class ProductServiceEditNoticeTests {
                 new ProductSettings(100, 5_000, 100_000_000, 20, 100, 9, 500, 10, 60),
                 new CategorySettings(50, 100), mock(FileReferences.class), mock(FileRead.class),
                 mock(ProductTradeHistory.class), notices, mock(CaseCommentAccess.class),
-                mock(ProductCorrectionNotices.class), mock(ProductDisplayRestrictions.class), mock(org.springframework.beans.factory.ObjectProvider.class), environment,
+                mock(ProductCorrectionNotices.class), mock(ProductDisplayRestrictions.class), mock(), environment,
                 mock(JdbcClient.class), manager, mock(AuditStore.class));
     }
 

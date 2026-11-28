@@ -322,7 +322,7 @@ class ReviewApplicationTests {
         return new Harness(writes, cases, products, managers, notifications, transaction, context, application);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     private static void stubRun(Harness harness) {
         when(harness.writes.run(any(), anyString(), anyString(), any(), any())).thenAnswer(invocation -> {
             WriteExecutor.UseCase<Object, Object> useCase =

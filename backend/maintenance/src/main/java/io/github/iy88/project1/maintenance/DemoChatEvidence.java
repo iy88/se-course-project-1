@@ -22,7 +22,7 @@ final class DemoChatEvidence {
 
     static byte[] render(DemoCatalog.Chat conversation, List<DemoCatalog.Account> accounts) {
         Map<String, String> names = accounts.stream()
-                .collect(Collectors.toMap(DemoCatalog.Account::key, DemoCatalog.Account::displayName));
+                .collect(Collectors.toMap(element -> element.key(), entry -> entry.displayName()));
         int width = 840;
         int height = 118 + 84 * conversation.messages().size();
         var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);

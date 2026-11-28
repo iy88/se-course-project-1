@@ -39,7 +39,6 @@ import io.github.iy88.project1.trade.application.TradeReviewModeration;
 import io.github.iy88.project1.trade.application.TradeReviewReadModel;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -240,7 +239,7 @@ public class CaseHttpConfiguration {
             var recipients = new TreeSet<Long>();
             recipients.add(relatedAccountId);
             store.find(caseId)
-                    .map(CaseRecords.Facts::claimedManagerId)
+                    .map(element -> element.claimedManagerId())
                     .filter(manager -> participation.canAccess(caseId, relatedAccountId, manager))
                     .ifPresent(recipients::add);
             BusinessEventIntents.messageCreated(transaction, recipients,
@@ -309,7 +308,7 @@ public class CaseHttpConfiguration {
             var target = new UploadRegistration.Target("case", caseId);
             try {
                 return files.attach(submitterId, target, FilePurpose.CASE_EVIDENCE, fileIds, "evidence").stream()
-                        .map(FileReferences.Reference::referenceId).toList();
+                        .map(entry -> entry.referenceId()).toList();
             } catch (FileRegistry.Rejected rejected) {
                 throw evidenceError(rejected);
             }

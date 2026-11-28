@@ -6,7 +6,6 @@ import io.github.iy88.project1.casemanagement.persistence.CaseLifecycleStore;
 import io.github.iy88.project1.core.BusinessError;
 import io.github.iy88.project1.core.ExecutionContext;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,9 +25,7 @@ public class CaseQueries {
     private final CasePorts.Threads threads;
     private final CasePorts.Managers managers;
     private final CasePorts.Targets targets;
-    private final CasePorts.EvidenceFiles files;
     private final CaseSettings settings;
-    private final Clock clock;
     private final JsonMapper json;
     private final CaseDetailQueries detailQueries;
 
@@ -40,9 +37,7 @@ public class CaseQueries {
         this.threads = threads;
         this.managers = managers;
         this.targets = targets;
-        this.files = files;
         this.settings = settings;
-        this.clock = clock;
         this.json = json;
         this.detailQueries = new CaseDetailQueries(store, threads, targets, files, json, clock);
     }
@@ -270,10 +265,6 @@ public class CaseQueries {
         body.put("conversation_kind", "case");
         body.put("conversation_id", Long.toString(conversationId));
         return body;
-    }
-
-    private static String text(Instant value) {
-        return value == null ? null : value.toString();
     }
 
     private static String text(OffsetDateTime value) {

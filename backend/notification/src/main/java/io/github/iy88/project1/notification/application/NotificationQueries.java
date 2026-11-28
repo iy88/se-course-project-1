@@ -64,7 +64,7 @@ public class NotificationQueries {
         long accountId = recipientOf(context);
         return store.findForRecipient(notificationId, accountId)
                 .filter(row -> NotificationStore.inAudience(row.eventType(), false))
-                .map(NotificationStore.Stored::item);
+                .map(element -> element.item());
     }
 
     private NotificationView project(ExecutionContext context, NotificationStore.Stored row, boolean includeBody) {

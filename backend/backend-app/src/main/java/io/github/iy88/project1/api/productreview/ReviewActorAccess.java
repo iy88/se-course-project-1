@@ -1,7 +1,6 @@
 package io.github.iy88.project1.api.productreview;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.Objects;
 import java.util.UUID;
 
 /**

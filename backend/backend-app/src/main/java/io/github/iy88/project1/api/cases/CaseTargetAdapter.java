@@ -117,7 +117,7 @@ record CaseTargetAdapter(ProductRepository products, AccountRepository accounts,
             case "trade" -> trades.productId(facts.targetId()).stream().boxed().findFirst();
             default -> Optional.empty();
         };
-        return productId.flatMap(products::findById).filter(product -> !product.deleted())
+        return productId.flatMap(id -> products.findById(id)).filter(product -> !product.deleted())
                 .map(product -> new DispositionProduct(product.id(), product.title())).stream().toList();
     }
 

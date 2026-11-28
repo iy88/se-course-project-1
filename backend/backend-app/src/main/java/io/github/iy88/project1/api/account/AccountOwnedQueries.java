@@ -241,7 +241,7 @@ public class AccountOwnedQueries {
             return List.of();
         }
         return java.util.Arrays.stream(value.split(","))
-                .map(String::trim)
+                .map(entry -> entry.trim())
                 .filter(id -> !id.isEmpty())
                 .toList();
     }

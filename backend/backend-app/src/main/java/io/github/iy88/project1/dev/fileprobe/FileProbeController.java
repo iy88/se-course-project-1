@@ -61,7 +61,7 @@ public class FileProbeController {
                         FileRegistry registry, FileReferences references, FileRulesProperties rules,
                         TransactionTemplate transaction, EntityManager entities) {
         if (!"dev".equals(env.getProperty("APP_ENV"))
-                || !"127.0.0.1".equals(env.getProperty("server.address", env.getProperty("HTTP_BIND_HOST")))) {
+                || !"127.0.0.1".equals(env.getProperty("server.address", env.getProperty("HTTP_BIND_HOST", "")))) {
             throw new IllegalArgumentException("file-probe requires APP_ENV=dev and server.address=127.0.0.1");
         }
         this.upload = upload;

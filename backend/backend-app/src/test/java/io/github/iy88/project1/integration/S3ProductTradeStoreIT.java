@@ -65,8 +65,8 @@ class S3ProductTradeStoreIT {
     @Test
     void occupancyIsAcquiredByOneConcurrentTradeAndReleasedByEndState() throws Exception {
         long seller = account("seller");
-        long buyerOne = account("buyer-one");
-        long buyerTwo = account("buyer-two");
+        account("buyer-one");
+        account("buyer-two");
         long category = category(seller);
         long product = product(seller, category);
 

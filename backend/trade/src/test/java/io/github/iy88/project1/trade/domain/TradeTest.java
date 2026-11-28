@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.iy88.project1.core.BusinessError;
 import java.time.Instant;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class TradeTest {

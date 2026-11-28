@@ -22,7 +22,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 class CategoryPaginationTests {
     private final CategoryRepository categories = mock(CategoryRepository.class);
     private final CategoryNameRepository names = mock(CategoryNameRepository.class);
-    private final ObjectProvider<CategoryProductVisibility> productVisibility = mock(ObjectProvider.class);
+    private final ObjectProvider<CategoryProductVisibility> productVisibility = mock();
     private final CategoryService service = new CategoryService(categories, names,
             new CategorySettings(80, 200), productVisibility, mock(PlatformTransactionManager.class),
             mock(AuditStore.class));
