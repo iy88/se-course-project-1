@@ -64,6 +64,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     private final TradePorts.Notifications notifications;
     private final JsonMapper json;
     private final TradeReviews reviews;
+    private final TradeDisputes disputes;
     private final TradeConfirmationTimeout timeout;
 
     public TradeApplication(TradeRepository repository, WriteExecutor writes, TaskSchedules schedules, Clock clock,
@@ -85,6 +86,8 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
         this.json = json;
         this.reviews = new TradeReviews(repository, views, accounts, settings, json, clock);
         this.queries = new TradeQueries(repository, views, accounts, product, conversations, settings, json, clock);
+        this.disputes = new TradeDisputes(repository, historyWriter, views, queries, accounts, conversations,
+                cases, clock, json);
         this.timeout = new TradeConfirmationTimeout(repository, historyWriter, queries, schedules, clock,
                 conversations, cases, notifications, json);
     }
@@ -668,119 +671,17 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
                 (ctx, request) -> prepareTrade(actor, request.tradeId(), false, null),
                 (ctx, request) -> qualifyTrade(ctx, request.tradeId()),
                 this::replayTrade,
-                (transaction, request, qualification) -> {
-                    String statement = requiredText(request.statement(), 2000, "争议说明");
-                    requireWrite(actor);
-                    var trade = repository.lockTrade(transaction, request.tradeId());
-                    trade.requireNotTerminal();
-                    if (trade.status() == TradeStatus.DISPUTED) {
-                        throw new BusinessError("DISPUTE_ALREADY_OPEN", 409, "已有未解决争议");
-                    }
-                    trade.requireInProgress();
-                    requireNotFrozen(transaction, trade.id());
-                    trade.requireVersion(request.expectedVersion());
-                    long conversationId = requireConversation(transaction, trade.id());
-                    var now = now();
-                    endWait(transaction, trade.id(), WaitEndReason.DISPUTED, now);
-                    long disputeId = repository.insertDispute(trade.id(), actor, statement, now);
-                    long caseId = cases.openDisputeCase(transaction, context, trade.id(), disputeId, now);
-                    repository.attachDisputeCase(disputeId, caseId);
-                    var dispute = repository.dispute(disputeId).orElseThrow();
-                    var disputed = changed(trade, TradeStatus.DISPUTED, trade.activeAgreementId(), trade.closeReason(),
-                            trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
-                    repository.save(disputed);
-                    UUID eventId = UUID.randomUUID();
-                    long disputeHistory = historyWriter.historyDispute(transaction, trade, disputed, "dispute.open",
-                        trade.actorKind(actor), actor, statement, null, caseId, disputeId, null, eventId, now);
-                    conversations.append(transaction, conversationId, eventId, "dispute_opened", "交易争议已发起",
-                            new ResourceRef("trade_transition", disputeHistory));
-                    audit(transaction, "trade.dispute.open", trade.id(), new ResourceRef("case", caseId));
-                    var body = json.createObjectNode();
-                    body.set("dispute", views.disputeRecord(dispute));
-                    body.set("trade", view(trade.id(), actor, conversationId));
-                    return new WriteResult.Response<>(201, body, new ResourceRef("trade", trade.id()));
-                });
+                (transaction, request, qualification) -> disputes.openDispute(context, transaction, request));
     }
 
     public WriteResult<JsonNode> confirmResolution(ExecutionContext context, String key,
                                                    TradeCommands.ConfirmResolution command) {
         long actor = actor(context);
         return run(context, "trade.dispute.resolve", key, command,
-                (ctx, request) -> prepareConfirmResolution(actor, request.tradeId(), request.disputeId()),
+                (ctx, request) -> disputes.prepareConfirmResolution(actor, request.tradeId(), request.disputeId()),
                 (ctx, request) -> qualifyTrade(ctx, request.tradeId()),
                 this::replayTrade,
-                (transaction, request, qualification) -> {
-                    requireWrite(actor);
-                    var trade = repository.lockTrade(transaction, request.tradeId());
-                    trade.requireParticipant(actor);
-                    trade.requireNotTerminal();
-                    if (trade.status() != TradeStatus.DISPUTED) {
-                        throw new BusinessError("DISPUTE_NOT_OPEN", 409, "争议已解决或不存在");
-                    }
-                    requireNotFrozen(transaction, trade.id());
-                    trade.requireVersion(request.expectedVersion());
-                    var dispute = repository.dispute(request.disputeId())
-                            .orElseThrow(() -> new BusinessError("DISPUTE_NOT_OPEN", 409, "争议已解决或不存在"));
-                    if (dispute.tradeId() != trade.id() || dispute.status() != DisputeStatus.OPEN) {
-                        throw new BusinessError("DISPUTE_NOT_OPEN", 409, "争议已解决或不存在");
-                    }
-                    Long caseId = dispute.caseId();
-                    if (caseId != null) {
-                        transaction.lock(caseKey(caseId),
-                                () -> cases.lockSelfResolution(transaction, caseId, trade.id(), dispute.id()));
-                    }
-                    long conversationId = requireConversation(transaction, trade.id());
-                    var now = now();
-                    var existing = repository.resolutionConfirmations(dispute.id()).stream()
-                            .filter(item -> item.confirmerId() == actor).findFirst();
-                    if (existing.isPresent()) {
-                        var body = json.createObjectNode();
-                        body.set("dispute", views.disputeRecord(dispute));
-                        body.set("trade", view(trade.id(), actor, conversationId));
-                        return new WriteResult.Response<>(200, body, new ResourceRef("trade", trade.id()));
-                    }
-                    UUID eventId = UUID.randomUUID();
-                    var confirmation = new TradeModels.ResolutionConfirmation(0, dispute.id(), actor, now, eventId);
-                    long confirmationId = repository.insertResolutionConfirmation(confirmation);
-                    var confirmations = repository.resolutionConfirmations(dispute.id());
-                    if (confirmations.size() >= 2) {
-                        repository.resolveDispute(dispute.id(), ResolutionMode.SELF, actor, null, now);
-                        repository.invalidateConfirmations(trade.id(), InvalidationReason.DISPUTE_RESOLVED, now);
-                        var resolved = changed(trade, TradeStatus.IN_PROGRESS, trade.activeAgreementId(),
-                                trade.closeReason(), trade.terminalReason(), trade.respondedAt(), trade.endedAt(),
-                                now);
-                        repository.save(resolved);
-                        historyWriter.historyDispute(transaction, trade, resolved, "dispute.resolution_confirm",
-                                trade.actorKind(actor), actor, null, null, null, dispute.id(), confirmationId,
-                                eventId, now);
-                        UUID resolvedEvent = UUID.randomUUID();
-                        long resolvedHistory = historyWriter.historyDispute(transaction,
-                                trade, resolved, "dispute.resolve",
-                                ActorKind.SYSTEM, null, null, null, null, dispute.id(), confirmationId,
-                                resolvedEvent, now);
-                        conversations.append(transaction, conversationId, resolvedEvent, "dispute_resolved",
-                                "双方确认争议已解决，交易恢复进行",
-                                new ResourceRef("trade_transition", resolvedHistory));
-                        if (caseId != null) {
-                            cases.archiveSelfResolved(transaction, caseId, trade.id(), dispute.id(), now);
-                        }
-                    } else {
-                        var updated = changed(trade, trade.status(), trade.activeAgreementId(), trade.closeReason(),
-                                trade.terminalReason(), trade.respondedAt(), trade.endedAt(), now);
-                        repository.save(updated);
-                        historyWriter.historyDispute(transaction, trade, updated, "dispute.resolution_confirm",
-                                trade.actorKind(actor), actor, null, null, null, dispute.id(), confirmationId,
-                                eventId, now);
-                        conversations.append(transaction, conversationId, eventId, "dispute_resolution_confirmed",
-                                "一方已确认争议解决", new ResourceRef("dispute_resolution_confirmation",
-                                        confirmationId));
-                    }
-                    audit(transaction, "trade.dispute.resolve", trade.id(), null);
-                    var body = json.createObjectNode();
-                    body.set("dispute", views.disputeRecord(repository.dispute(dispute.id()).orElseThrow()));
-                    body.set("trade", view(trade.id(), actor, conversationId));
-                    return new WriteResult.Response<>(200, body, new ResourceRef("trade", trade.id()));
-                });
+                (transaction, request, qualification) -> disputes.confirmResolution(context, transaction, request));
     }
 
     // ---------------------------------------------------------------- governance commands
@@ -1541,33 +1442,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private LockPlan prepareTrade(long actor, long tradeId, boolean product, Long caseId) {
-        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
-        var accountsSet = new TreeSet<Long>(List.of(actor, trade.buyerId(), trade.sellerId()));
-        var resources = new TreeSet<LockPlan.Key>();
-        if (product) {
-            resources.add(productKey(trade.productId()));
-        }
-        resources.add(tradeKey(tradeId));
-        conversations.find(tradeId).ifPresent(id -> resources.add(conversationKey(id)));
-        if (caseId != null) {
-            resources.add(caseKey(caseId));
-        }
-        return new LockPlan(sharedAccounts(accountsSet), resources);
-    }
-
-    /**
-     * Keeps the original trade and account plan and adds only the dispute case's own keys. A
-     * historical dispute without a case is left as-is: prepare must stay replayable and must not
-     * create a case outside the dispute-opening transaction.
-     */
-    private LockPlan prepareConfirmResolution(long actor, long tradeId, long disputeId) {
-        var plan = prepareTrade(actor, tradeId, false, null);
-        var dispute = repository.dispute(disputeId).orElse(null);
-        if (dispute == null || dispute.tradeId() != tradeId || dispute.caseId() == null) {
-            return plan;
-        }
-        LockPlan casePlan = cases.prepareSelfResolution(dispute.caseId());
-        return casePlan == null ? plan : plan.merge(casePlan);
+        return TradeWriteSupport.prepareTrade(repository, conversations, actor, tradeId, product, caseId);
     }
 
     private LockPlan prepareGovernance(long manager, long tradeId, long caseId, boolean product) {
@@ -1963,9 +1838,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private void requireNotFrozen(WriteTransaction transaction, long tradeId) {
-        if (!repository.activeFreezes(tradeId).isEmpty()) {
-            throw new BusinessError("TRADE_FROZEN", 409, "交易已冻结");
-        }
+        TradeWriteSupport.requireNotFrozen(repository, tradeId);
     }
 
     /**
@@ -2042,10 +1915,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static String requiredText(String value, int max, String field) {
-        if (value == null || value.isBlank() || value.length() > max) {
-            throw inputInvalid(field + "不能为空且长度不能超过" + max);
-        }
-        return value.trim();
+        return TradeWriteSupport.requiredText(value, max, field);
     }
 
     private static String optionalText(String value, int max, String field) {
@@ -2059,7 +1929,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static LockPlan.Key productKey(long productId) {
-        return new LockPlan.Key(LockPlan.Domain.PRODUCT, List.of(productId));
+        return TradeWriteSupport.productKey(productId);
     }
 
     private static LockPlan.Key tradeKey(long tradeId) {
@@ -2067,7 +1937,7 @@ public class TradeApplication implements TradePorts.Governance, TradePorts.Gover
     }
 
     private static LockPlan.Key caseKey(long caseId) {
-        return new LockPlan.Key(LockPlan.Domain.CASE, List.of(caseId));
+        return TradeWriteSupport.caseKey(caseId);
     }
 
     private static LockPlan.Key conversationKey(long conversationId) {

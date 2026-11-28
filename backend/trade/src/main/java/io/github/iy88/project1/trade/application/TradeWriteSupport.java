@@ -18,6 +18,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Package-private helpers shared by the trade write use cases. */
@@ -50,6 +51,12 @@ final class TradeWriteSupport {
         }
     }
 
+    static void requireNotFrozen(TradeRepository repository, long tradeId) {
+        if (!repository.activeFreezes(tradeId).isEmpty()) {
+            throw new BusinessError("TRADE_FROZEN", 409, "交易已冻结");
+        }
+    }
+
     static Map<Long, LockPlan.AccountMode> sharedAccounts(Collection<Long> accountIds) {
         var map = new TreeMap<Long, LockPlan.AccountMode>();
         for (long id : accountIds) {
@@ -58,8 +65,36 @@ final class TradeWriteSupport {
         return map;
     }
 
+    static LockPlan.Key productKey(long productId) {
+        return new LockPlan.Key(LockPlan.Domain.PRODUCT, List.of(productId));
+    }
+
     static LockPlan.Key tradeKey(long tradeId) {
         return new LockPlan.Key(LockPlan.Domain.TRADE, List.of(tradeId));
+    }
+
+    static LockPlan.Key caseKey(long caseId) {
+        return new LockPlan.Key(LockPlan.Domain.CASE, List.of(caseId));
+    }
+
+    /**
+     * Participant trade plan: caller plus both parties, optional product and case keys, and the
+     * trade conversation when one already exists.
+     */
+    static LockPlan prepareTrade(TradeRepository repository, TradePorts.Conversation conversations,
+                                 long actor, long tradeId, boolean product, Long caseId) {
+        var trade = repository.find(tradeId).orElseThrow(Trade::notVisible);
+        var accountIds = new TreeSet<Long>(List.of(actor, trade.buyerId(), trade.sellerId()));
+        var resources = new TreeSet<LockPlan.Key>();
+        if (product) {
+            resources.add(productKey(trade.productId()));
+        }
+        resources.add(tradeKey(tradeId));
+        conversations.find(tradeId).ifPresent(id -> resources.add(conversationKey(id)));
+        if (caseId != null) {
+            resources.add(caseKey(caseId));
+        }
+        return new LockPlan(sharedAccounts(accountIds), resources);
     }
 
     static void audit(JsonMapper json, WriteTransaction transaction, String action, long tradeId, ResourceRef basis) {
@@ -81,6 +116,13 @@ final class TradeWriteSupport {
 
     static BusinessError inputInvalid(String message) {
         return new BusinessError("INPUT_INVALID", 422, message);
+    }
+
+    static String requiredText(String value, int max, String field) {
+        if (value == null || value.isBlank() || value.length() > max) {
+            throw inputInvalid(field + "不能为空且长度不能超过" + max);
+        }
+        return value.trim();
     }
 
     static Map<Long, LockPlan.AccountMode> partyAccounts(Trade trade, boolean exclusiveParties) {
