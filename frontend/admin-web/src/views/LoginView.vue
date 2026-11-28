@@ -5,8 +5,9 @@ import AuthLayout from "../../../shared/AuthLayout.vue";
 import UiIcon from "../../../shared/UiIcon.vue";
 import { IdempotencyKeys } from "../app/keys";
 import { problemMessage } from "../app/problems";
-import { session } from "../app/session";
+import { useSessionStore } from "../app/session";
 
+const session = useSessionStore();
 const email = ref("");
 const password = ref("");
 const error = ref<string | null>(null);
