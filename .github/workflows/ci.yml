@@ -185,6 +185,8 @@ jobs:
         run: |
           pnpm run lint
           pnpm run format:check
+      - name: Type-check applications and browser tests
+        run: pnpm run typecheck
       - name: Run unit tests
         run: pnpm run test
       - name: Install Playwright Chromium

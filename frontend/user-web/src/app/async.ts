@@ -14,24 +14,29 @@ export function useAsyncData<TValue>(loader: (signal: AbortSignal) => Promise<TV
   const state = ref<LoadState>("idle");
   const error = ref<unknown>(null);
   let controller: AbortController | null = null;
+  let generation = 0;
 
   async function run(): Promise<void> {
+    const currentGeneration = ++generation;
     controller?.abort();
     controller = new AbortController();
     state.value = "loading";
     error.value = null;
     try {
       const result = await loader(controller.signal);
+      if (currentGeneration !== generation) return;
       data.value = result;
       state.value = "ready";
     } catch (caught) {
       if (caught instanceof AbortedError) return;
+      if (currentGeneration !== generation) return;
       error.value = caught;
       state.value = "failed";
     }
   }
 
   function cancel(): void {
+    generation++;
     controller?.abort();
     controller = null;
   }
@@ -65,14 +70,17 @@ export function usePagedList<TItem>(
   const error = ref<unknown>(null);
   const paging = reactive({ page: 1, pageSize, total: 0 });
   let controller: AbortController | null = null;
+  let generation = 0;
 
   async function load(page = paging.page): Promise<void> {
+    const currentGeneration = ++generation;
     controller?.abort();
     controller = new AbortController();
     state.value = "loading";
     error.value = null;
     try {
       const result = await loader(page, paging.pageSize, controller.signal);
+      if (currentGeneration !== generation) return;
       items.value = result.items;
       paging.page = result.page;
       paging.pageSize = result.page_size;
@@ -80,6 +88,7 @@ export function usePagedList<TItem>(
       state.value = "ready";
     } catch (caught) {
       if (caught instanceof AbortedError) return;
+      if (currentGeneration !== generation) return;
       error.value = caught;
       state.value = "failed";
     }
@@ -96,6 +105,7 @@ export function usePagedList<TItem>(
   }
 
   function cancel(): void {
+    generation++;
     controller?.abort();
     controller = null;
   }

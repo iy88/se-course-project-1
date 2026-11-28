@@ -1,10 +1,7 @@
 import { expect, test, waitForPost } from "../support/fixtures";
 
 test.describe("frontend resilience", () => {
-  test("keeps the newest search result when an older response finishes last", async ({
-    page,
-    api,
-  }) => {
+  test("cancels a superseded search before its delayed response arrives", async ({ page, api }) => {
     api.signedIn = true;
     const oldResponse = api.holdNext(
       "GET /products",
@@ -14,12 +11,74 @@ test.describe("frontend resilience", () => {
     await page.goto("/search?q=old");
     await oldResponse.reached;
 
+    const oldRequestFailed = page.waitForEvent("requestfailed", {
+      predicate: (request) => {
+        const url = new URL(request.url());
+        return url.pathname === "/api/v1/products" && url.searchParams.get("keyword") === "old";
+      },
+    });
     await page.getByLabel("搜索商品").fill("new");
     await page.getByRole("button", { name: "搜索", exact: true }).click();
 
+    const cancelled = await oldRequestFailed;
+    expect(cancelled.failure()?.errorText).toMatch(/ABORTED/i);
     await expect(page.getByRole("heading", { name: "新搜索结果" })).toBeVisible();
     oldResponse.release();
     await oldResponse.settled;
+
+    await expect(page.getByRole("heading", { name: "新搜索结果" })).toBeVisible();
+    await expect(page.getByText("旧搜索结果", { exact: true })).toHaveCount(0);
+  });
+
+  test("ignores a late old response even when the transport does not honour abort", async ({
+    page,
+    api,
+  }) => {
+    api.signedIn = true;
+    await page.addInitScript(() => {
+      type E2EExperiment = XMLHttpRequest & { ignoreE2EAbort?: boolean };
+      const originalOpen = XMLHttpRequest.prototype.open;
+      const originalAbort = XMLHttpRequest.prototype.abort;
+      const state = window as Window & { __e2eOldSearchLoadEnd?: number };
+      const openWithExperiment = function (
+        this: E2EExperiment,
+        method: string,
+        url: string | URL,
+        async?: boolean,
+        username?: string | null,
+        password?: string | null,
+      ): void {
+        this.ignoreE2EAbort = String(url).includes("keyword=old");
+        if (this.ignoreE2EAbort) {
+          this.addEventListener("loadend", () => {
+            state.__e2eOldSearchLoadEnd = (state.__e2eOldSearchLoadEnd ?? 0) + 1;
+          });
+        }
+        originalOpen.call(this, method, url, async ?? true, username, password);
+      };
+      XMLHttpRequest.prototype.open = openWithExperiment as typeof XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.abort = function (this: E2EExperiment) {
+        if (this.ignoreE2EAbort) return;
+        originalAbort.call(this);
+      };
+    });
+
+    const oldResponse = api.holdNext(
+      "GET /products",
+      (url) => url.searchParams.get("keyword") === "old",
+    );
+    await page.goto("/search?q=old");
+    await oldResponse.reached;
+
+    await page.getByLabel("搜索商品").fill("new");
+    await page.getByRole("button", { name: "搜索", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "新搜索结果" })).toBeVisible();
+
+    const oldClientCompleted = page.waitForFunction(
+      () => (window as Window & { __e2eOldSearchLoadEnd?: number }).__e2eOldSearchLoadEnd === 1,
+    );
+    oldResponse.release();
+    await oldClientCompleted;
 
     await expect(page.getByRole("heading", { name: "新搜索结果" })).toBeVisible();
     await expect(page.getByText("旧搜索结果", { exact: true })).toHaveCount(0);

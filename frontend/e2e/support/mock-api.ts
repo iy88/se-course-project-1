@@ -210,6 +210,20 @@ interface NetworkFailure {
   matches: (url: URL) => boolean;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRouteCancellation(route: Route, error: unknown): boolean {
+  if (route.request().failure() !== null) return true;
+  const message = errorMessage(error);
+  return [
+    "Request context disposed",
+    "Target page, context or browser has been closed",
+    "Request is already handled",
+  ].some((fragment) => message.includes(fragment));
+}
+
 interface RealtimeConnection {
   readonly socket: WebSocketRoute;
   readonly frames: Record<string, unknown>[];
@@ -269,6 +283,8 @@ export class MockRealtime {
 export class MockApi {
   readonly requests: string[] = [];
   readonly unhandled: string[] = [];
+  readonly unexpected: string[] = [];
+  readonly offlineApiRequests: string[] = [];
   readonly entryToken = ENTRY_TOKEN;
   readonly realtime = new MockRealtime();
 
@@ -285,6 +301,7 @@ export class MockApi {
   private readonly networkFailures: NetworkFailure[] = [];
 
   unreadCount = 2;
+  offline = false;
 
   get account(): AccountProfile {
     return this.primarySession.account;
@@ -324,6 +341,14 @@ export class MockApi {
       if (url.origin !== baseURL) {
         await route.abort("blockedbyclient");
       } else if (url.pathname.startsWith("/api/v1/")) {
+        if (this.offline) {
+          const request = route.request();
+          this.offlineApiRequests.push(
+            `${request.method()} ${url.pathname.slice("/api/v1".length)}`,
+          );
+          await route.abort("internetdisconnected");
+          return;
+        }
         await this.handle(route, url, pageSession);
       } else {
         await route.continue();
@@ -390,15 +415,23 @@ export class MockApi {
     try {
       await this.handleOperation(route, url, session);
     } catch (error) {
-      await route.fulfill({
-        status: 500,
-        json: {
-          error: {
-            code: "MOCK_HANDLER_FAILED",
-            message: error instanceof Error ? error.message : String(error),
+      if (isRouteCancellation(route, error)) return;
+      this.unexpected.push(`${operation}: ${errorMessage(error)}`);
+      try {
+        await route.fulfill({
+          status: 500,
+          json: {
+            error: {
+              code: "MOCK_HANDLER_FAILED",
+              message: errorMessage(error),
+            },
           },
-        },
-      });
+        });
+      } catch (fulfillError) {
+        if (!isRouteCancellation(route, fulfillError)) {
+          this.unexpected.push(`${operation}: ${errorMessage(fulfillError)}`);
+        }
+      }
     } finally {
       hold?.settled.resolve();
     }
@@ -528,11 +561,9 @@ export class MockApi {
         } else if (keyword === "new") {
           products = [productSummary(productFixture({ id: "3002", title: "新搜索结果" }))];
         }
-        return route
-          .fulfill({
-            json: { items: products, page: 1, page_size: 20, total: products.length },
-          })
-          .catch(() => undefined);
+        return route.fulfill({
+          json: { items: products, page: 1, page_size: 20, total: products.length },
+        });
       }
       case "POST /products": {
         const payload = request.postDataJSON() as {

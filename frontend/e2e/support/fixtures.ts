@@ -17,6 +17,7 @@ export const test = base.extend<{ api: MockApi }>({
     await api.install(page, baseURL);
     await use(api);
     expect(api.unhandled, "every API request must be mocked").toEqual([]);
+    expect(api.unexpected, "mock handlers must not throw unexpected errors").toEqual([]);
   },
 });
 
