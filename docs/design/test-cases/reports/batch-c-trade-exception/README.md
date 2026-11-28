@@ -1,6 +1,6 @@
 <!--
-Version: 0.3.2
-Version-Datetime: 2026-11-28T10:33:33+08:00
+Version: 0.3.3
+Version-Datetime: 2026-11-28T10:39:42+08:00
 -->
 
 # [测试主验证][C] US-05／06／14 交易与异常处理 执行报告
@@ -72,7 +72,7 @@ Version-Datetime: 2026-11-28T10:33:33+08:00
 | 合成数据 | 复用 RUN-C1 数据并新增一笔未形成约定的交易 |
 | 前端步骤 | 无约定交易详情查看确认入口；一方提交完成确认后另一方提交；无关账户打开「我的交易」与交易详情 |
 | 接口／DB／Redis／OSS 核对 | `trade_confirmation` 条数与确认人；`trade.status`；他人交易详情可见性 |
-| 实际结果 | C10、C11 页面通过；C12 原页面证据及 #185 修复后权限集成测试均通过 |
+| 实际结果 | C10、C11 页面通过；C12 原页面证据、#185 权限集成测试和 Chrome 管理端复测均通过 |
 | 结论 | 通过 |
 | 缺陷 | #185（旧版本失败，修复后定向复测通过） |
 | 证据 | `evidence/RUN-C2/`、[#185 定向复测](evidence/RUN-C2/RUN-C2-c12-c15-trade-history.md) |
@@ -292,7 +292,7 @@ Version-Datetime: 2026-11-28T10:33:33+08:00
 
 | 证据 | 位置 |
 |---|---|
-| 报告 | `README.md`（本文件，0.3.2） |
+| 报告 | `README.md`（本文件，0.3.3） |
 | 首轮步骤与接口记录 | `evidence/RUN-C1/RUN-C1-steps.md`、`RUN-C1b-steps.md`、`RUN-C1c-steps.md`、`RUN-C1d-steps.md`、`RUN-C1-egf-steps.md`、`RUN-C1-c17-steps.md`、`RUN-C1-c18-steps.md` |
 | 首轮页面处置 | `evidence/RUN-C1/RUN-C1-c09-page-steps.md`、`RUN-C1-c09b-steps.md`、`RUN-C3/RUN-C3-c15-claim-steps.md` |
 | 第二轮复测（C16／C17／IM） | `evidence/RUN-C3/RUN-C3-retest-2nd.md`、`evidence/RUN-C3/RUN-C3-retest-2nd.jsonl` |
@@ -314,7 +314,7 @@ Version-Datetime: 2026-11-28T10:33:33+08:00
 | #162 | 上传失败提示把对象存储跨域拦截误报为网络问题 | PR #163 待合入；桶 CORS 白名单需主账号补充 | 不在本批路径 | 未复测 |
 | #142 | 纠类缺少依据返回 422 | 已由 #143 修复并合入 `main`（B 批记录） | 不在本批路径 | — |
 | #183 | 管理员处置完成交易时显示「结束原因：双方确认完成」，与同页「1/2 已确认」不一致 | 已由 #184 修复（`2fcdde63`，合入 `main@6296eb4e`） | RUN-C1 第二轮复测（`RUN-C1-retest-2nd.md`） | 通过：页面显示「结束原因：管理员处置完成」，完成确认仍「1/2 已确认」 |
-| #185 | 旧版本认领管理员无法读取目标交易确认历史 | 修复提交 `6b0e1588`，新增事项专用查询 | [#185 定向复测](evidence/RUN-C2/RUN-C2-c12-c15-trade-history.md) | 本地集成复测通过。旧版本失败见 [第二轮复测](evidence/RUN-C1/RUN-C1-retest-2nd.md) |
+| #185 | 旧版本认领管理员无法读取目标交易确认历史 | 修复提交 `6b0e1588`，新增事项专用查询 | [#185 定向复测](evidence/RUN-C2/RUN-C2-c12-c15-trade-history.md) | 本地集成和 Chrome 管理端复测通过，认领及越权拒绝页面截图已归档。旧版本失败见 [第二轮复测](evidence/RUN-C1/RUN-C1-retest-2nd.md) |
 
 ## 未覆盖与阻塞
 
@@ -327,7 +327,7 @@ Version-Datetime: 2026-11-28T10:33:33+08:00
 
 | 字段 | 内容 |
 |---|---|
-| 通过项／总项 | 18 / 18（累计判定，C12 由既有页面证据和本次定向集成复测共同覆盖） |
+| 通过项／总项 | 18 / 18（累计判定；C12／C15 的 #185 权限断言已通过 Chrome 管理端和定向 HTTP 复测） |
 | 通过 RUN | RUN-C1（C01—C09）、RUN-C2（C10—C12）、RUN-C3（C13—C18，C16／C17 已按 #168 复测）；对应执行测试项的前端 RUN C-RUN-01—03 |
 | 未执行项及原因 | 无整项未执行；#162 待 OSS 白名单 |
 | 证据目录 | `reports/batch-c-trade-exception/evidence/` |
